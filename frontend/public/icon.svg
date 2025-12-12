@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#2563eb"/>
+  <g fill="#ffffff">
+    <!-- Document shape -->
+    <path d="M 140 100 L 300 100 L 372 172 L 372 412 L 140 412 Z" stroke="#ffffff" stroke-width="4" fill="none"/>
+
+    <!-- Folded corner -->
+    <path d="M 300 100 L 300 172 L 372 172" fill="#ffffff" opacity="0.3"/>
+
+    <!-- Document lines -->
+    <line x1="180" y1="220" x2="332" y2="220" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+    <line x1="180" y1="260" x2="332" y2="260" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+    <line x1="180" y1="300" x2="280" y2="300" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- AI Sparkle -->
+    <g transform="translate(340, 350)">
+      <path d="M 0,-20 L 5,-5 L 20,0 L 5,5 L 0,20 L -5,5 L -20,0 L -5,-5 Z" fill="#fbbf24"/>
+      <circle cx="0" cy="0" r="8" fill="#fbbf24"/>
+    </g>
+  </g>
+</svg>

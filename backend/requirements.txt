@@ -1,0 +1,60 @@
+# =========================
+# FastAPI & Server
+# =========================
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12
+
+# =========================
+# LangChain (locked set)
+# =========================
+langchain==0.3.7
+langchain-core==0.3.17
+langchain-community==0.3.7
+langchain-openai==0.2.9
+langchain-text-splitters==0.3.2
+
+# =========================
+# Vector DB
+# =========================
+chromadb==0.5.5
+
+# =========================
+# OpenAI SDK (compatible with langchain-openai 0.2.9)
+# =========================
+openai==1.54.4    # >=1.54.0 to satisfy langchain-openai 0.2.9
+
+# =========================
+# Document loaders / parsing
+# =========================
+pypdf==4.3.1
+docx2txt==0.8
+
+# =========================
+# Enhanced PDF processing with OCR
+# (system deps for poppler & tesseract must be installed outside pip)
+# =========================
+PyMuPDF==1.24.10
+pdf2image==1.17.0
+pytesseract==0.3.13
+Pillow==10.4.0
+
+# =========================
+# Google Drive integration (optional)
+# =========================
+google-auth==2.35.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0
+google-api-python-client==2.149.0
+
+# =========================
+# Utilities
+# =========================
+python-dotenv==1.0.1
+tiktoken==0.8.0
+
+# =========================
+# Pydantic (align with LangChain)
+# =========================
+pydantic==2.9.2
+pydantic-core==2.23.4
