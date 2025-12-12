@@ -185,7 +185,16 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
         }
 
         // Fetch participant details
-        const participantDetails = await fetchUserDetails(participant.id, igAccount.accessToken);
+        let participantDetails = await fetchUserDetails(participant.id, igAccount.accessToken);
+
+        // If fetchUserDetails failed (returns unknown), try to use data from participant object itself if available
+        if (participantDetails.username === 'unknown' && participant.username) {
+          participantDetails = {
+            id: participant.id,
+            username: participant.username,
+            name: participant.name || participant.username || 'Instagram User'
+          };
+        }
 
         // Create or update conversation in database
         let conversation = await Conversation.findOne({
