@@ -36,7 +36,7 @@ const SyncConversations: React.FC = () => {
       setLoading(true);
       setError(null);
       const response = await instagramSyncAPI.getAvailableConversations(currentWorkspace!._id);
-      setConversations(response.data);
+      setConversations(response);
     } catch (err: any) {
       console.error('Error fetching conversations:', err);
       setError('Failed to load conversations from Instagram. Please try again.');
@@ -180,8 +180,8 @@ const SyncConversations: React.FC = () => {
                         onClick={() => handleSyncOne(conv)}
                         disabled={!!syncing}
                         className={`text-sm font-medium hover:underline ${conv.isSynced
-                            ? 'text-gray-500 hover:text-gray-700'
-                            : 'text-indigo-600 hover:text-indigo-800'
+                          ? 'text-gray-500 hover:text-gray-700'
+                          : 'text-indigo-600 hover:text-indigo-800'
                           }`}
                       >
                         {syncing === conv.instagramConversationId
