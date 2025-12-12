@@ -91,10 +91,10 @@ echo "🚀 Launching Node.js + Express Backend"
 echo "========================================="
 echo "   Host: 0.0.0.0"
 echo "   Port: $PORT"
-echo "   Backend: backend-new/dist"
+echo "   Backend: backend/dist"
 echo ""
 
-cd backend-new
+cd backend
 
 # Export PORT for the Node app
 export PORT="$PORT"

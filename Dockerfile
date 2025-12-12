@@ -15,12 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package*.json* ./
 
 # Copy backend
-COPY backend-new/package*.json ./backend-new/
-WORKDIR /app/backend-new
+COPY backend/package*.json ./backend/
+WORKDIR /app/backend
 RUN npm install
 
 # Copy backend source
-COPY backend-new/ ./
+COPY backend/ ./
 
 # Build backend TypeScript
 RUN npm run build
