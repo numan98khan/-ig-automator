@@ -47,6 +47,11 @@ router.get('/available-conversations', authenticate, async (req: AuthRequest, re
     // Fetch conversations from Instagram
     const instagramConversations = await fetchConversations(igAccount.accessToken);
 
+    // Fetch confirmed "me" details from API to ensure correct filtering
+    const me = await fetchUserDetails('me', igAccount.accessToken);
+    const myId = me.id;
+    const myUsername = me.username;
+
     // Get existing conversations from DB
     const existingConversations = await Conversation.find({
       workspaceId,
@@ -59,17 +64,17 @@ router.get('/available-conversations', authenticate, async (req: AuthRequest, re
     const results = await Promise.all(instagramConversations.map(async (igConv: any) => {
       const participants = igConv.participants?.data || [];
 
-      // Robust filtering: Exclude the business account by ID AND Username
+      // Robust filtering: Exclude the business account using confirmed API details
       let participant = participants.find((p: any) => {
-        const isMeById = igAccount.instagramUserId && p.id === igAccount.instagramUserId;
-        const isMeByUsername = igAccount.username && p.username === igAccount.username;
+        const isMeById = p.id === myId;
+        const isMeByUsername = p.username && myUsername && p.username.toLowerCase() === myUsername.toLowerCase();
         return !isMeById && !isMeByUsername;
       });
 
       // Fallback: If filtering failed (all excluded, or list empty), take the one that is NOT the username if possible
       if (!participant && participants.length > 0) {
         // Try finding one that doesn't match username (if ID check failed previously)
-        participant = participants.find((p: any) => p.username !== igAccount.username) || participants[0];
+        participant = participants.find((p: any) => p.username !== myUsername) || participants[0];
       }
 
       if (!participant) return null;
@@ -127,6 +132,12 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
 
     console.log('✅ Found Instagram account:', igAccount.username);
 
+    // Fetch confirmed "me" details from API
+    const me = await fetchUserDetails('me', igAccount.accessToken);
+    const myId = me.id;
+    const myUsername = me.username;
+    console.log(`✅ Confirmed Business Identity: ${myUsername} (${myId})`);
+
     let conversationsToProcess: any[] = [];
 
     if (specificConversationId) {
@@ -135,7 +146,6 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
       // We need to fetch just this one or filter from list. 
       // Graph API: /{conversation_id}
       // For now, simpler to fetch all and filter, or fetch messages directly if we knew participant.
-      // Let's fetch all (usually fast enough) or assume valid ID and just fetch messages?
       // We need conversation metadata (participants) which comes from conversation endpoint.
       // Let's fetch all for now to be safe and simple
       const allConversations = await fetchConversations(igAccount.accessToken);
@@ -158,16 +168,16 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
         // Get participant
         const participants = igConv.participants?.data || [];
 
-        // Robust filtering: Exclude by ID AND Username
+        // Robust filtering: Exclude using confirmed API details
         let participant = participants.find((p: any) => {
-          const isMeById = igAccount.instagramUserId && p.id === igAccount.instagramUserId;
-          const isMeByUsername = igAccount.username && p.username === igAccount.username;
+          const isMeById = p.id === myId;
+          const isMeByUsername = p.username && myUsername && p.username.toLowerCase() === myUsername.toLowerCase();
           return !isMeById && !isMeByUsername;
         });
 
         // Fallback
         if (!participant && participants.length > 0) {
-          participant = participants.find((p: any) => p.username !== igAccount.username) || participants[0];
+          participant = participants.find((p: any) => p.username !== myUsername) || participants[0];
         }
 
         if (!participant) {
