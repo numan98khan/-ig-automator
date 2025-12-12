@@ -38,6 +38,19 @@ const Inbox: React.FC = () => {
     }
   }, [currentWorkspace]);
 
+  // Check for Instagram OAuth success
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('instagram_connected') === 'true') {
+      // Remove the query parameter
+      window.history.replaceState({}, '', window.location.pathname);
+      // Reload data to show the connected account
+      if (currentWorkspace) {
+        loadData();
+      }
+    }
+  }, [currentWorkspace]);
+
   const loadData = async () => {
     if (!currentWorkspace) return;
 
@@ -140,32 +153,53 @@ const Inbox: React.FC = () => {
     );
   }
 
+  const handleConnectInstagram = async () => {
+    if (!currentWorkspace) return;
+
+    try {
+      setLoading(true);
+      const { authUrl } = await instagramAPI.getAuthUrl(currentWorkspace._id);
+      // Redirect to Instagram OAuth
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error('Error initiating Instagram connection:', error);
+      alert('Failed to connect Instagram. Please try again.');
+      setLoading(false);
+    }
+  };
+
   if (instagramAccounts.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center max-w-md">
-          <Instagram className="w-16 h-16 text-purple-600 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">No Instagram Account Connected</h2>
-          <p className="text-gray-600 mb-6">
-            Connect your Instagram account to start managing conversations.
+      <div className="flex items-center justify-center h-full bg-gradient-to-br from-purple-50 to-blue-50">
+        <div className="text-center max-w-md bg-white rounded-lg shadow-xl p-8">
+          <div className="bg-gradient-to-br from-purple-600 to-pink-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Instagram className="w-12 h-12 text-white" />
+          </div>
+          <h2 className="text-3xl font-bold text-gray-900 mb-3">Connect Your Instagram</h2>
+          <p className="text-gray-600 mb-8">
+            Connect your Instagram Business account to start managing DMs and comments with AI-powered responses.
           </p>
           <button
-            onClick={() => setShowConnectModal(true)}
-            className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 font-medium transition"
+            onClick={handleConnectInstagram}
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-4 rounded-lg hover:from-purple-700 hover:to-pink-700 font-semibold transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Connect Instagram (Demo)
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Connecting...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <Instagram className="w-5 h-5" />
+                Connect Instagram Account
+              </span>
+            )}
           </button>
+          <p className="text-xs text-gray-500 mt-4">
+            You'll be redirected to Instagram to authorize access
+          </p>
         </div>
-        {showConnectModal && (
-          <ConnectInstagramModal
-            workspaceId={currentWorkspace._id}
-            onClose={() => setShowConnectModal(false)}
-            onSuccess={() => {
-              setShowConnectModal(false);
-              loadData();
-            }}
-          />
-        )}
       </div>
     );
   }

@@ -14,4 +14,8 @@ NODE_ENV = "production"
 # MONGODB_URI = "mongodb+srv://user:pass@cluster.mongodb.net/instagram-inbox" (required)
 # OPENAI_API_KEY = "sk-..." (required for AI reply generation)
 # JWT_SECRET = "your-secure-random-secret" (recommended for session persistence)
+# INSTAGRAM_CLIENT_ID = "your-instagram-app-id" (required for Instagram OAuth)
+# INSTAGRAM_CLIENT_SECRET = "your-instagram-app-secret" (required for Instagram OAuth)
+# INSTAGRAM_REDIRECT_URI = "https://your-app.railway.app/api/instagram/callback" (required)
+# FRONTEND_URL = "https://your-app.railway.app" (required for OAuth redirects)
 # PORT will be set automatically by Railway

@@ -8,6 +8,7 @@ import { connectDB } from './config/database';
 import authRoutes from './routes/auth';
 import workspaceRoutes from './routes/workspaces';
 import instagramRoutes from './routes/instagram';
+import instagramOAuthRoutes from './routes/instagram-oauth';
 import conversationRoutes from './routes/conversations';
 import messageRoutes from './routes/messages';
 import knowledgeRoutes from './routes/knowledge';
@@ -29,7 +30,8 @@ connectDB();
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/workspaces', workspaceRoutes);
-app.use('/api/instagram', instagramRoutes);
+app.use('/api/instagram', instagramOAuthRoutes); // OAuth routes (auth, callback)
+app.use('/api/instagram', instagramRoutes);       // Legacy mock routes
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
