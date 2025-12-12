@@ -178,3 +178,188 @@ export async function sendMessage(
     throw new Error(`Failed to send message: ${error.response?.data?.error?.message || error.message}`);
   }
 }
+
+/**
+ * Fetch details for a specific message
+ */
+export async function fetchMessageDetails(
+  messageId: string,
+  accessToken: string
+): Promise<any> {
+  const endpoint = `${BASE_URL}/${messageId}`;
+  const params = {
+    access_token: accessToken,
+    fields: 'id,created_time,from,to,message',
+  };
+
+  webhookLogger.logApiCall(endpoint, 'GET', params);
+
+  try {
+    const response = await axios.get(endpoint, { params });
+    webhookLogger.logApiResponse(endpoint, response.status, response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching message details:', error.response?.data || error.message);
+    webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
+    throw new Error(`Failed to fetch message details: ${error.response?.data?.error?.message || error.message}`);
+  }
+}
+
+/**
+ * Send a media message (image, video, or audio)
+ */
+export async function sendMediaMessage(
+  instagramAccountId: string,
+  recipientId: string,
+  mediaType: 'image' | 'video' | 'audio',
+  mediaUrl: string,
+  accessToken: string
+): Promise<any> {
+  const endpoint = `${BASE_URL}/${instagramAccountId}/messages`;
+  const payload = {
+    recipient: { id: recipientId },
+    message: {
+      attachment: {
+        type: mediaType,
+        payload: {
+          url: mediaUrl,
+        },
+      },
+    },
+  };
+
+  webhookLogger.logApiCall(endpoint, 'POST', payload);
+
+  try {
+    const response = await axios.post(endpoint, payload, {
+      params: {
+        access_token: accessToken,
+      },
+    });
+
+    webhookLogger.logApiResponse(endpoint, response.status, response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error sending media message:', error.response?.data || error.message);
+    webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
+    throw new Error(`Failed to send media message: ${error.response?.data?.error?.message || error.message}`);
+  }
+}
+
+/**
+ * Send a message with button template (max 3 buttons)
+ */
+export async function sendButtonMessage(
+  instagramAccountId: string,
+  recipientId: string,
+  text: string,
+  buttons: Array<{
+    type: 'web_url' | 'postback';
+    title: string;
+    url?: string;
+    payload?: string;
+  }>,
+  accessToken: string
+): Promise<any> {
+  const endpoint = `${BASE_URL}/${instagramAccountId}/messages`;
+
+  // Limit to 3 buttons (Instagram API constraint)
+  const limitedButtons = buttons.slice(0, 3);
+
+  const payload = {
+    recipient: { id: recipientId },
+    message: {
+      attachment: {
+        type: 'template',
+        payload: {
+          template_type: 'button',
+          text: text,
+          buttons: limitedButtons,
+        },
+      },
+    },
+  };
+
+  webhookLogger.logApiCall(endpoint, 'POST', payload);
+
+  try {
+    const response = await axios.post(endpoint, payload, {
+      params: {
+        access_token: accessToken,
+      },
+    });
+
+    webhookLogger.logApiResponse(endpoint, response.status, response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error sending button message:', error.response?.data || error.message);
+    webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
+    throw new Error(`Failed to send button message: ${error.response?.data?.error?.message || error.message}`);
+  }
+}
+
+/**
+ * Send a private reply to a comment (bypasses 24-hour window)
+ */
+export async function sendCommentReply(
+  instagramAccountId: string,
+  commentId: string,
+  text: string,
+  accessToken: string
+): Promise<any> {
+  const endpoint = `${BASE_URL}/${instagramAccountId}/messages`;
+  const payload = {
+    recipient: { comment_id: commentId },
+    message: { text: text },
+  };
+
+  webhookLogger.logApiCall(endpoint, 'POST', payload);
+
+  try {
+    const response = await axios.post(endpoint, payload, {
+      params: {
+        access_token: accessToken,
+      },
+    });
+
+    webhookLogger.logApiResponse(endpoint, response.status, response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error sending comment reply:', error.response?.data || error.message);
+    webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
+    throw new Error(`Failed to send comment reply: ${error.response?.data?.error?.message || error.message}`);
+  }
+}
+
+/**
+ * Mark a message/conversation as read
+ */
+export async function markMessageAsRead(
+  instagramAccountId: string,
+  messageId: string,
+  accessToken: string
+): Promise<boolean> {
+  const endpoint = `${BASE_URL}/${instagramAccountId}/messages`;
+  const payload = {
+    recipient: { id: messageId },
+    sender_action: 'mark_seen',
+  };
+
+  webhookLogger.logApiCall(endpoint, 'POST', payload);
+
+  try {
+    const response = await axios.post(endpoint, payload, {
+      params: {
+        access_token: accessToken,
+      },
+    });
+
+    webhookLogger.logApiResponse(endpoint, response.status, response.data);
+    return response.status === 200;
+  } catch (error: any) {
+    console.error('Error marking message as read:', error.response?.data || error.message);
+    webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
+    return false;
+  }
+}
+
