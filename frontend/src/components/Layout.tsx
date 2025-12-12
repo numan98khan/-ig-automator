@@ -36,22 +36,20 @@ const Layout: React.FC = () => {
             <nav className="flex space-x-1">
               <Link
                 to="/"
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
-                  isActive('/') || isActive('/inbox')
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${isActive('/') || isActive('/inbox')
                     ? 'bg-purple-100 text-purple-700'
                     : 'text-gray-600 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <MessageSquare className="w-4 h-4" />
                 Inbox
               </Link>
               <Link
                 to="/knowledge"
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
-                  isActive('/knowledge')
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${isActive('/knowledge')
                     ? 'bg-purple-100 text-purple-700'
                     : 'text-gray-600 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <BookOpen className="w-4 h-4" />
                 Knowledge
@@ -64,7 +62,7 @@ const Layout: React.FC = () => {
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition"
               >
                 <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                  {user?.email[0].toUpperCase()}
+                  {user?.email?.[0]?.toUpperCase() || 'U'}
                 </div>
                 <span className="text-sm font-medium text-gray-700">{user?.email}</span>
                 <ChevronDown className="w-4 h-4 text-gray-500" />
