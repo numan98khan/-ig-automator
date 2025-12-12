@@ -59,8 +59,8 @@ const Inbox: React.FC = () => {
         conversationAPI.getByWorkspace(currentWorkspace._id),
       ]);
 
-      setInstagramAccounts(accountsData);
-      setConversations(conversationsData);
+      setInstagramAccounts(accountsData || []);
+      setConversations(conversationsData || []);
 
       if (conversationsData.length > 0 && !selectedConversation) {
         setSelectedConversation(conversationsData[0]);
@@ -209,7 +209,7 @@ const Inbox: React.FC = () => {
         <div className="p-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Conversations</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Connected: @{instagramAccounts[0]?.username} (Demo)
+            Connected: @{instagramAccounts?.[0]?.username || '...'} (Demo)
           </p>
         </div>
 
@@ -218,9 +218,8 @@ const Inbox: React.FC = () => {
             <div
               key={conv._id}
               onClick={() => setSelectedConversation(conv)}
-              className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition ${
-                selectedConversation?._id === conv._id ? 'bg-purple-50' : ''
-              }`}
+              className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition ${selectedConversation?._id === conv._id ? 'bg-purple-50' : ''
+                }`}
             >
               <div className="flex items-start justify-between mb-1">
                 <h3 className="font-semibold text-gray-900">{conv.participantName}</h3>
@@ -253,13 +252,12 @@ const Inbox: React.FC = () => {
                   className={`flex ${msg.from === 'customer' ? 'justify-start' : 'justify-end'}`}
                 >
                   <div
-                    className={`max-w-md px-4 py-2 rounded-lg ${
-                      msg.from === 'customer'
+                    className={`max-w-md px-4 py-2 rounded-lg ${msg.from === 'customer'
                         ? 'bg-white text-gray-900 border border-gray-200'
                         : msg.from === 'ai'
-                        ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                        : 'bg-blue-600 text-white'
-                    }`}
+                          ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                          : 'bg-blue-600 text-white'
+                      }`}
                   >
                     {msg.from === 'ai' && (
                       <div className="flex items-center gap-1 mb-1">
@@ -269,9 +267,8 @@ const Inbox: React.FC = () => {
                     )}
                     <p className="text-sm">{msg.text}</p>
                     <p
-                      className={`text-xs mt-1 ${
-                        msg.from === 'user' ? 'text-blue-100' : 'text-gray-500'
-                      }`}
+                      className={`text-xs mt-1 ${msg.from === 'user' ? 'text-blue-100' : 'text-gray-500'
+                        }`}
                     >
                       {formatTime(msg.createdAt)}
                     </p>
