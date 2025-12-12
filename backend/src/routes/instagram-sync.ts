@@ -47,12 +47,6 @@ router.get('/available-conversations', authenticate, async (req: AuthRequest, re
     // Fetch conversations from Instagram
     const instagramConversations = await fetchConversations(igAccount.accessToken);
 
-    console.log('--- DEBUG: Available Conversations Payload ---');
-    console.log('Business Account ID (DB):', igAccount.instagramUserId);
-    console.log('Business Username (DB):', igAccount.username);
-    console.log('Raw Conversations Payload:', JSON.stringify(instagramConversations, null, 2));
-    console.log('--------------------------------------------');
-
     // Get existing conversations from DB
     const existingConversations = await Conversation.find({
       workspaceId,
@@ -64,19 +58,18 @@ router.get('/available-conversations', authenticate, async (req: AuthRequest, re
     // detailed list with status
     const results = await Promise.all(instagramConversations.map(async (igConv: any) => {
       const participants = igConv.participants?.data || [];
-      // Try to find the "other" participant (not the business account)
-      let participant = participants.find((p: any) => p.id !== igAccount.instagramUserId);
 
-      // Fallback: if we can't filter by ID (e.g. it's null), filter by username
-      if ((!participant || participant.id === igAccount.instagramUserId) && igAccount.username) {
-        const found = participants.find((p: any) => p.username !== igAccount.username);
-        if (found) participant = found;
-      }
+      // Robust filtering: Exclude the business account by ID AND Username
+      let participant = participants.find((p: any) => {
+        const isMeById = igAccount.instagramUserId && p.id === igAccount.instagramUserId;
+        const isMeByUsername = igAccount.username && p.username === igAccount.username;
+        return !isMeById && !isMeByUsername;
+      });
 
-      // If still nothing and we have exactly 2 participants, pick the one that doesn't look like us?
-      // Or just pick the first one if we really can't tell.
+      // Fallback: If filtering failed (all excluded, or list empty), take the one that is NOT the username if possible
       if (!participant && participants.length > 0) {
-        participant = participants[0];
+        // Try finding one that doesn't match username (if ID check failed previously)
+        participant = participants.find((p: any) => p.username !== igAccount.username) || participants[0];
       }
 
       if (!participant) return null;
@@ -164,18 +157,17 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
       try {
         // Get participant
         const participants = igConv.participants?.data || [];
-        // Try to filter by ID first
-        let participant = participants.find((p: any) => p.id !== igAccount.instagramUserId);
 
-        // Fallback: filter by username if available
-        if ((!participant || participant.id === igAccount.instagramUserId) && igAccount.username) {
-          const found = participants.find((p: any) => p.username !== igAccount.username);
-          if (found) participant = found;
-        }
+        // Robust filtering: Exclude by ID AND Username
+        let participant = participants.find((p: any) => {
+          const isMeById = igAccount.instagramUserId && p.id === igAccount.instagramUserId;
+          const isMeByUsername = igAccount.username && p.username === igAccount.username;
+          return !isMeById && !isMeByUsername;
+        });
 
-        // Fallback: pick first one if we can't determine (though risky, better than skipping)
+        // Fallback
         if (!participant && participants.length > 0) {
-          participant = participants[0];
+          participant = participants.find((p: any) => p.username !== igAccount.username) || participants[0];
         }
 
         if (!participant) {
