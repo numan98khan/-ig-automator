@@ -46,6 +46,7 @@ export interface Conversation {
   participantHandle: string;
   workspaceId: string;
   instagramAccountId: string;
+  instagramConversationId?: string;
   lastMessageAt: string;
   lastMessage?: string;
   createdAt: string;
