@@ -5,6 +5,8 @@ import Layout from './components/Layout';
 import Landing from './pages/Landing';
 import Inbox from './pages/Inbox';
 import Knowledge from './pages/Knowledge';
+import Automations from './pages/Automations';
+import Categories from './pages/Categories';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 
 function App() {
@@ -25,6 +27,8 @@ function App() {
             <Route index element={<Navigate to="/inbox" replace />} />
             <Route path="inbox" element={<Inbox />} />
             <Route path="knowledge" element={<Knowledge />} />
+            <Route path="automations" element={<Automations />} />
+            <Route path="categories" element={<Categories />} />
           </Route>
           <Route path="*" element={<Navigate to="/landing" />} />
         </Routes>

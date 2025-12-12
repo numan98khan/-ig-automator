@@ -13,6 +13,11 @@ export interface IConversation extends Document {
   participantInstagramId?: string;       // Participant's Instagram ID
   platform: 'instagram' | 'mock';        // Platform identifier
 
+  // Phase 2: Automation tracking
+  lastCustomerMessageAt?: Date;          // Last message from customer (for 24h window)
+  lastBusinessMessageAt?: Date;          // Last message from business/AI
+  autoReplyDisabled?: boolean;           // Manually disable auto-reply for this conversation
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +63,18 @@ const conversationSchema = new Schema<IConversation>({
     type: String,
     enum: ['instagram', 'mock'],
     default: 'mock',
+  },
+
+  // Phase 2: Automation tracking
+  lastCustomerMessageAt: {
+    type: Date,
+  },
+  lastBusinessMessageAt: {
+    type: Date,
+  },
+  autoReplyDisabled: {
+    type: Boolean,
+    default: false,
   },
 
   createdAt: {

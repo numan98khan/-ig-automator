@@ -16,6 +16,9 @@ import instagramLogsRoutes from './routes/instagram-logs';
 import conversationRoutes from './routes/conversations';
 import messageRoutes from './routes/messages';
 import knowledgeRoutes from './routes/knowledge';
+import settingsRoutes from './routes/settings';
+import categoriesRoutes from './routes/categories';
+import { scheduler } from './services/scheduler';
 
 // Load environment variables
 dotenv.config();
@@ -43,6 +46,8 @@ app.use('/api/instagram', instagramRoutes);       // Legacy mock routes
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/categories', categoriesRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -66,4 +71,7 @@ app.listen(PORT, () => {
   if (isProduction) {
     console.log('Serving frontend from ../frontend/dist');
   }
+
+  // Start background job scheduler
+  scheduler.start();
 });

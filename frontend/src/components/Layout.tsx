@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown } from 'lucide-react';
+import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags } from 'lucide-react';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -53,6 +53,26 @@ const Layout: React.FC = () => {
               >
                 <BookOpen className="w-4 h-4" />
                 Knowledge
+              </Link>
+              <Link
+                to="/categories"
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${isActive('/categories')
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+              >
+                <Tags className="w-4 h-4" />
+                Categories
+              </Link>
+              <Link
+                to="/automations"
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${isActive('/automations')
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+              >
+                <Settings className="w-4 h-4" />
+                Automations
               </Link>
             </nav>
 

@@ -1,0 +1,621 @@
+import OpenAI from 'openai';
+import mongoose from 'mongoose';
+import WorkspaceSettings from '../models/WorkspaceSettings';
+import MessageCategory from '../models/MessageCategory';
+import CategoryKnowledge from '../models/CategoryKnowledge';
+import KnowledgeItem from '../models/KnowledgeItem';
+import Message from '../models/Message';
+import Conversation from '../models/Conversation';
+import InstagramAccount from '../models/InstagramAccount';
+import CommentDMLog from '../models/CommentDMLog';
+import FollowupTask from '../models/FollowupTask';
+import {
+  sendMessage as sendInstagramMessage,
+  sendCommentReply,
+} from '../utils/instagram-api';
+import {
+  categorizeMessage,
+  getOrCreateCategory,
+  incrementCategoryCount,
+} from './aiCategorization';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+/**
+ * Get or create workspace settings
+ */
+export async function getWorkspaceSettings(
+  workspaceId: mongoose.Types.ObjectId | string
+): Promise<any> {
+  let settings = await WorkspaceSettings.findOne({ workspaceId });
+
+  if (!settings) {
+    settings = await WorkspaceSettings.create({ workspaceId });
+    console.log(`Created default settings for workspace ${workspaceId}`);
+  }
+
+  return settings;
+}
+
+/**
+ * Feature 1: Comment → DM Automation
+ * Send DM to user who commented on a post
+ */
+export async function processCommentDMAutomation(
+  comment: {
+    commentId: string;
+    commenterId: string;
+    commenterUsername?: string;
+    commentText: string;
+    mediaId: string;
+  },
+  instagramAccountId: mongoose.Types.ObjectId | string,
+  workspaceId: mongoose.Types.ObjectId | string
+): Promise<{ success: boolean; message: string; dmMessageId?: string }> {
+  try {
+    // Check if comment was already processed
+    const existingLog = await CommentDMLog.findOne({ commentId: comment.commentId });
+    if (existingLog) {
+      return { success: false, message: 'Comment already processed' };
+    }
+
+    // Get workspace settings
+    const settings = await getWorkspaceSettings(workspaceId);
+
+    // Check if comment DM automation is enabled
+    if (!settings.commentDmEnabled) {
+      // Log as skipped
+      await CommentDMLog.create({
+        workspaceId,
+        instagramAccountId,
+        commentId: comment.commentId,
+        commenterId: comment.commenterId,
+        commenterUsername: comment.commenterUsername,
+        commentText: comment.commentText,
+        mediaId: comment.mediaId,
+        status: 'skipped',
+        processedAt: new Date(),
+      });
+      return { success: false, message: 'Comment DM automation is disabled' };
+    }
+
+    // Get Instagram account with access token
+    const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
+    if (!igAccount || !igAccount.accessToken) {
+      throw new Error('Instagram account not found or no access token');
+    }
+
+    // Create log entry as pending
+    const logEntry = await CommentDMLog.create({
+      workspaceId,
+      instagramAccountId,
+      commentId: comment.commentId,
+      commenterId: comment.commenterId,
+      commenterUsername: comment.commenterUsername,
+      commentText: comment.commentText,
+      mediaId: comment.mediaId,
+      status: 'pending',
+    });
+
+    try {
+      // Send DM using comment reply API (this works for comment DMs)
+      const result = await sendCommentReply(
+        igAccount.instagramAccountId!,
+        comment.commentId,
+        settings.commentDmTemplate,
+        igAccount.accessToken!
+      );
+
+      // Update log entry with success
+      logEntry.dmSent = true;
+      logEntry.dmMessageId = result.message_id;
+      logEntry.dmText = settings.commentDmTemplate;
+      logEntry.status = 'sent';
+      logEntry.processedAt = new Date();
+      await logEntry.save();
+
+      // Get or create conversation with commenter and save the DM as a message
+      let conversation = await Conversation.findOne({
+        instagramAccountId: igAccount._id,
+        participantInstagramId: comment.commenterId,
+      });
+
+      if (!conversation) {
+        conversation = await Conversation.create({
+          workspaceId,
+          instagramAccountId: igAccount._id,
+          participantName: comment.commenterUsername || 'Unknown User',
+          participantHandle: `@${comment.commenterUsername || 'unknown'}`,
+          participantInstagramId: comment.commenterId,
+          instagramConversationId: `${igAccount.instagramAccountId}_${comment.commenterId}`,
+          platform: 'instagram',
+          lastMessageAt: new Date(),
+          lastMessage: settings.commentDmTemplate,
+          lastBusinessMessageAt: new Date(),
+        });
+      } else {
+        conversation.lastMessageAt = new Date();
+        conversation.lastMessage = settings.commentDmTemplate;
+        conversation.lastBusinessMessageAt = new Date();
+        await conversation.save();
+      }
+
+      // Save the DM as a message in the conversation
+      await Message.create({
+        conversationId: conversation._id,
+        text: settings.commentDmTemplate,
+        from: 'ai',
+        platform: 'instagram',
+        instagramMessageId: result.message_id,
+        automationSource: 'comment_dm',
+      });
+
+      return {
+        success: true,
+        message: 'DM sent successfully',
+        dmMessageId: result.message_id,
+      };
+    } catch (sendError: any) {
+      // Update log entry with failure
+      logEntry.status = 'failed';
+      logEntry.errorMessage = sendError.message;
+      logEntry.processedAt = new Date();
+      await logEntry.save();
+
+      throw sendError;
+    }
+  } catch (error: any) {
+    console.error('Error processing comment DM automation:', error);
+    return {
+      success: false,
+      message: `Failed to send DM: ${error.message}`,
+    };
+  }
+}
+
+/**
+ * Feature 2: Inbound DM Auto-Reply
+ * Process incoming DM and send AI-generated reply
+ */
+export async function processAutoReply(
+  conversationId: mongoose.Types.ObjectId | string,
+  messageText: string,
+  workspaceId: mongoose.Types.ObjectId | string
+): Promise<{
+  success: boolean;
+  message: string;
+  reply?: string;
+  categoryId?: mongoose.Types.ObjectId;
+  detectedLanguage?: string;
+}> {
+  try {
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      return { success: false, message: 'Conversation not found' };
+    }
+
+    // Check if auto-reply is disabled for this conversation
+    if (conversation.autoReplyDisabled) {
+      return { success: false, message: 'Auto-reply disabled for this conversation' };
+    }
+
+    // Get workspace settings
+    const settings = await getWorkspaceSettings(workspaceId);
+
+    // Check if DM auto-reply is enabled
+    if (!settings.dmAutoReplyEnabled) {
+      return { success: false, message: 'DM auto-reply is disabled' };
+    }
+
+    // Get Instagram account
+    const igAccount = await InstagramAccount.findById(conversation.instagramAccountId).select('+accessToken');
+    if (!igAccount || !igAccount.accessToken) {
+      return { success: false, message: 'Instagram account not found' };
+    }
+
+    // Categorize the message
+    const categorization = await categorizeMessage(messageText, workspaceId);
+
+    // Get or create category
+    const categoryId = await getOrCreateCategory(workspaceId, categorization.categoryName);
+
+    // Increment category count
+    await incrementCategoryCount(categoryId);
+
+    // Check if auto-reply is enabled for this category
+    const category = await MessageCategory.findById(categoryId);
+    if (category && !category.autoReplyEnabled) {
+      return {
+        success: false,
+        message: 'Auto-reply disabled for this category',
+        categoryId,
+        detectedLanguage: categorization.detectedLanguage,
+      };
+    }
+
+    // Build AI context
+    const aiReply = await generateAutoReply(
+      conversation,
+      messageText,
+      categoryId,
+      workspaceId,
+      settings.defaultLanguage,
+      categorization
+    );
+
+    if (!aiReply) {
+      return {
+        success: false,
+        message: 'Failed to generate reply',
+        categoryId,
+        detectedLanguage: categorization.detectedLanguage,
+      };
+    }
+
+    // Send the reply via Instagram API
+    const result = await sendInstagramMessage(
+      conversation.participantInstagramId!,
+      aiReply,
+      igAccount.accessToken
+    );
+
+    if (!result || (!result.message_id && !result.recipient_id)) {
+      return {
+        success: false,
+        message: 'Failed to send reply to Instagram',
+        categoryId,
+        detectedLanguage: categorization.detectedLanguage,
+      };
+    }
+
+    // Save the reply as a message
+    await Message.create({
+      conversationId: conversation._id,
+      text: aiReply,
+      from: 'ai',
+      platform: 'instagram',
+      instagramMessageId: result.message_id,
+      automationSource: 'auto_reply',
+    });
+
+    // Update conversation
+    conversation.lastMessageAt = new Date();
+    conversation.lastMessage = aiReply;
+    conversation.lastBusinessMessageAt = new Date();
+    await conversation.save();
+
+    return {
+      success: true,
+      message: 'Auto-reply sent successfully',
+      reply: aiReply,
+      categoryId,
+      detectedLanguage: categorization.detectedLanguage,
+    };
+  } catch (error: any) {
+    console.error('Error processing auto-reply:', error);
+    return {
+      success: false,
+      message: `Auto-reply failed: ${error.message}`,
+    };
+  }
+}
+
+/**
+ * Generate AI reply with category knowledge
+ */
+async function generateAutoReply(
+  conversation: any,
+  messageText: string,
+  categoryId: mongoose.Types.ObjectId,
+  workspaceId: mongoose.Types.ObjectId | string,
+  defaultLanguage: string,
+  categorization: { categoryName: string; detectedLanguage: string; translatedText?: string }
+): Promise<string | null> {
+  try {
+    // Get conversation history (last 10 messages)
+    const messages = await Message.find({ conversationId: conversation._id })
+      .sort({ createdAt: -1 })
+      .limit(10);
+    messages.reverse();
+
+    // Get general knowledge base
+    const knowledgeItems = await KnowledgeItem.find({ workspaceId });
+
+    // Get category-specific knowledge
+    const categoryKnowledge = await CategoryKnowledge.findOne({
+      workspaceId,
+      categoryId,
+    });
+
+    // Get category name
+    const category = await MessageCategory.findById(categoryId);
+
+    // Build knowledge context
+    let knowledgeContext = '';
+
+    if (knowledgeItems.length > 0) {
+      knowledgeContext += '\n\nGeneral Knowledge Base:\n';
+      knowledgeContext += knowledgeItems.map((item: any) => `- ${item.title}: ${item.content}`).join('\n');
+    }
+
+    if (categoryKnowledge && categoryKnowledge.content) {
+      knowledgeContext += `\n\nInstructions for "${category?.nameEn || 'this category'}" messages:\n`;
+      knowledgeContext += categoryKnowledge.content;
+    }
+
+    // Build conversation history
+    const conversationHistory = messages.map((msg: any) => {
+      const role = msg.from === 'customer' ? 'Customer' : msg.from === 'ai' ? 'AI' : 'Business';
+      return `${role}: ${msg.text}`;
+    }).join('\n');
+
+    // Build prompt with language instruction
+    const languageInstruction = defaultLanguage !== 'en'
+      ? `\nIMPORTANT: Always respond in ${getLanguageName(defaultLanguage)}.`
+      : '';
+
+    const prompt = `You are an AI assistant for a business's Instagram inbox. Your job is to help respond to customer messages professionally and helpfully.
+${knowledgeContext}
+
+Message Category: ${categorization.categoryName}
+Customer's Language: ${getLanguageName(categorization.detectedLanguage)}
+${categorization.translatedText ? `Translated message (English): "${categorization.translatedText}"` : ''}
+${languageInstruction}
+
+Conversation History:
+${conversationHistory}
+
+Latest Customer Message: "${messageText}"
+
+Based on the conversation history, knowledge base, and category instructions, generate a helpful and professional response. Keep it concise and friendly.
+
+Response:`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      max_tokens: 250,
+    });
+
+    return completion.choices[0].message.content?.trim() || null;
+  } catch (error) {
+    console.error('Error generating auto-reply:', error);
+    return null;
+  }
+}
+
+/**
+ * Feature 3: 24h Follow-up Automation
+ * Schedule or send follow-up messages
+ */
+export async function scheduleFollowup(
+  conversationId: mongoose.Types.ObjectId | string,
+  workspaceId: mongoose.Types.ObjectId | string
+): Promise<{ success: boolean; message: string; taskId?: mongoose.Types.ObjectId }> {
+  try {
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      return { success: false, message: 'Conversation not found' };
+    }
+
+    // Get workspace settings
+    const settings = await getWorkspaceSettings(workspaceId);
+
+    if (!settings.followupEnabled) {
+      return { success: false, message: 'Follow-up automation is disabled' };
+    }
+
+    // Cancel any existing scheduled follow-ups for this conversation
+    await FollowupTask.updateMany(
+      {
+        conversationId,
+        status: 'scheduled',
+      },
+      { status: 'cancelled' }
+    );
+
+    // Calculate timing
+    const lastCustomerMessageAt = conversation.lastCustomerMessageAt || conversation.createdAt;
+    const windowExpiresAt = new Date(lastCustomerMessageAt.getTime() + 24 * 60 * 60 * 1000);
+    const hoursBeforeExpiry = settings.followupHoursBeforeExpiry || 2;
+    const scheduledFollowupAt = new Date(windowExpiresAt.getTime() - hoursBeforeExpiry * 60 * 60 * 1000);
+
+    // Don't schedule if follow-up time is in the past
+    if (scheduledFollowupAt <= new Date()) {
+      return { success: false, message: 'Follow-up time would be in the past' };
+    }
+
+    // Create follow-up task
+    const task = await FollowupTask.create({
+      workspaceId,
+      conversationId: conversation._id,
+      instagramAccountId: conversation.instagramAccountId,
+      participantInstagramId: conversation.participantInstagramId,
+      lastCustomerMessageAt,
+      lastBusinessMessageAt: conversation.lastBusinessMessageAt,
+      windowExpiresAt,
+      scheduledFollowupAt,
+      status: 'scheduled',
+    });
+
+    return {
+      success: true,
+      message: `Follow-up scheduled for ${scheduledFollowupAt.toISOString()}`,
+      taskId: task._id as mongoose.Types.ObjectId,
+    };
+  } catch (error: any) {
+    console.error('Error scheduling follow-up:', error);
+    return { success: false, message: `Failed to schedule follow-up: ${error.message}` };
+  }
+}
+
+/**
+ * Process due follow-up tasks
+ * This should be called by a background job
+ */
+export async function processDueFollowups(): Promise<{
+  processed: number;
+  sent: number;
+  failed: number;
+  cancelled: number;
+}> {
+  const stats = { processed: 0, sent: 0, failed: 0, cancelled: 0 };
+
+  try {
+    // Find all scheduled follow-ups that are due
+    const dueTasks = await FollowupTask.find({
+      status: 'scheduled',
+      scheduledFollowupAt: { $lte: new Date() },
+    });
+
+    for (const task of dueTasks) {
+      stats.processed++;
+
+      try {
+        // Get conversation to check if customer replied
+        const conversation = await Conversation.findById(task.conversationId);
+        if (!conversation) {
+          task.status = 'cancelled';
+          task.errorMessage = 'Conversation not found';
+          await task.save();
+          stats.cancelled++;
+          continue;
+        }
+
+        // Check if customer replied since we scheduled
+        const customerMessageSince = await Message.findOne({
+          conversationId: task.conversationId,
+          from: 'customer',
+          createdAt: { $gt: task.lastCustomerMessageAt },
+        });
+
+        if (customerMessageSince) {
+          task.status = 'customer_replied';
+          await task.save();
+          stats.cancelled++;
+          continue;
+        }
+
+        // Check if window expired
+        if (new Date() > task.windowExpiresAt) {
+          task.status = 'expired';
+          await task.save();
+          stats.cancelled++;
+          continue;
+        }
+
+        // Get workspace settings for template
+        const settings = await getWorkspaceSettings(task.workspaceId);
+
+        // Get Instagram account
+        const igAccount = await InstagramAccount.findById(task.instagramAccountId).select('+accessToken');
+        if (!igAccount || !igAccount.accessToken) {
+          task.status = 'cancelled';
+          task.errorMessage = 'Instagram account not found';
+          await task.save();
+          stats.cancelled++;
+          continue;
+        }
+
+        // Send follow-up message
+        const result = await sendInstagramMessage(
+          task.participantInstagramId,
+          settings.followupTemplate,
+          igAccount.accessToken
+        );
+
+        if (!result || (!result.message_id && !result.recipient_id)) {
+          task.status = 'cancelled';
+          task.errorMessage = 'Failed to send message';
+          await task.save();
+          stats.failed++;
+          continue;
+        }
+
+        // Save the follow-up as a message
+        await Message.create({
+          conversationId: conversation._id,
+          text: settings.followupTemplate,
+          from: 'ai',
+          platform: 'instagram',
+          instagramMessageId: result.message_id,
+          automationSource: 'followup',
+        });
+
+        // Update conversation
+        conversation.lastMessageAt = new Date();
+        conversation.lastMessage = settings.followupTemplate;
+        conversation.lastBusinessMessageAt = new Date();
+        await conversation.save();
+
+        // Update task
+        task.status = 'sent';
+        task.followupMessageId = result.message_id;
+        task.followupText = settings.followupTemplate;
+        task.sentAt = new Date();
+        await task.save();
+
+        stats.sent++;
+      } catch (taskError: any) {
+        console.error(`Error processing follow-up task ${task._id}:`, taskError);
+        task.status = 'cancelled';
+        task.errorMessage = taskError.message;
+        await task.save();
+        stats.failed++;
+      }
+    }
+
+    console.log(`Follow-up processing complete: ${JSON.stringify(stats)}`);
+    return stats;
+  } catch (error) {
+    console.error('Error processing due follow-ups:', error);
+    return stats;
+  }
+}
+
+/**
+ * Cancel follow-up when customer replies
+ */
+export async function cancelFollowupOnCustomerReply(
+  conversationId: mongoose.Types.ObjectId | string
+): Promise<void> {
+  await FollowupTask.updateMany(
+    {
+      conversationId,
+      status: 'scheduled',
+    },
+    { status: 'customer_replied' }
+  );
+}
+
+/**
+ * Helper: Get language name from ISO code
+ */
+function getLanguageName(code: string): string {
+  const languages: Record<string, string> = {
+    en: 'English',
+    ar: 'Arabic',
+    es: 'Spanish',
+    fr: 'French',
+    de: 'German',
+    it: 'Italian',
+    pt: 'Portuguese',
+    ru: 'Russian',
+    zh: 'Chinese',
+    ja: 'Japanese',
+    ko: 'Korean',
+    hi: 'Hindi',
+    tr: 'Turkish',
+    nl: 'Dutch',
+    pl: 'Polish',
+    vi: 'Vietnamese',
+    th: 'Thai',
+    id: 'Indonesian',
+    ms: 'Malay',
+    tl: 'Filipino',
+  };
+  return languages[code] || code;
+}

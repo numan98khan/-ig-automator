@@ -4,6 +4,17 @@ import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import { fetchUserDetails } from '../utils/instagram-api';
 import { webhookLogger } from '../utils/webhook-logger';
+import {
+  processCommentDMAutomation,
+  processAutoReply,
+  scheduleFollowup,
+  cancelFollowupOnCustomerReply,
+} from '../services/automationService';
+import {
+  categorizeMessage,
+  getOrCreateCategory,
+  incrementCategoryCount,
+} from '../services/aiCategorization';
 
 const router = express.Router();
 
@@ -137,6 +148,7 @@ async function handleMessagingEvent(messaging: any) {
       platform: 'instagram',
     });
 
+    let isNewConversation = false;
     if (!conversation) {
       // Fetch sender details from Instagram API
       webhookLogger.logApiCall(`User ${senderId}`, 'GET', { fields: 'id,username,name' });
@@ -153,15 +165,21 @@ async function handleMessagingEvent(messaging: any) {
         platform: 'instagram',
         lastMessageAt: timestamp,
         lastMessage: messageText,
+        lastCustomerMessageAt: timestamp, // Track for 24h follow-up
       });
 
+      isNewConversation = true;
       console.log(`✨ Created new conversation with ${conversation.participantHandle}`);
     } else {
       // Update existing conversation
       conversation.lastMessageAt = timestamp;
       conversation.lastMessage = messageText;
+      conversation.lastCustomerMessageAt = timestamp; // Track for 24h follow-up
       await conversation.save();
       console.log(`🔄 Updated conversation with ${conversation.participantHandle}`);
+
+      // Cancel any pending follow-ups since customer replied
+      await cancelFollowupOnCustomerReply(conversation._id);
     }
 
     // Handle attachments
@@ -177,7 +195,7 @@ async function handleMessagingEvent(messaging: any) {
       }
     }
 
-    // Create message
+    // Create message (we'll update with categorization data)
     const savedMessage = await Message.create({
       conversationId: conversation._id,
       text: messageText,
@@ -197,9 +215,78 @@ async function handleMessagingEvent(messaging: any) {
       participantHandle: conversation.participantHandle,
     });
 
+    // === PHASE 2: AUTOMATION PROCESSING ===
+    // Process automations asynchronously to not block webhook response
+    processMessageAutomations(
+      conversation,
+      savedMessage,
+      messageText,
+      igAccount.workspaceId.toString(),
+      isNewConversation
+    ).catch(error => {
+      console.error('❌ Error processing message automations:', error);
+      webhookLogger.logWebhookError(error, { eventType: 'automation', conversationId: conversation._id });
+    });
+
   } catch (error) {
     console.error('❌ Error handling messaging event:', error);
     webhookLogger.logWebhookError(error, { eventType: 'messaging', messaging });
+  }
+}
+
+/**
+ * Process message automations (categorization, auto-reply, follow-up scheduling)
+ */
+async function processMessageAutomations(
+  conversation: any,
+  savedMessage: any,
+  messageText: string,
+  workspaceId: string,
+  isNewConversation: boolean
+) {
+  try {
+    console.log(`🤖 Processing automations for conversation ${conversation._id}`);
+
+    // 1. Categorize the message
+    const categorization = await categorizeMessage(messageText, workspaceId);
+    console.log(`📋 Message categorized as: ${categorization.categoryName} (${categorization.detectedLanguage})`);
+
+    // 2. Get or create category and update message
+    const categoryId = await getOrCreateCategory(workspaceId, categorization.categoryName);
+    await incrementCategoryCount(categoryId);
+
+    // Update the saved message with categorization data
+    savedMessage.categoryId = categoryId;
+    savedMessage.detectedLanguage = categorization.detectedLanguage;
+    if (categorization.translatedText) {
+      savedMessage.translatedText = categorization.translatedText;
+    }
+    await savedMessage.save();
+
+    // 3. Process auto-reply if enabled
+    const autoReplyResult = await processAutoReply(
+      conversation._id,
+      messageText,
+      workspaceId
+    );
+
+    if (autoReplyResult.success) {
+      console.log(`✅ Auto-reply sent: ${autoReplyResult.reply?.substring(0, 50)}...`);
+    } else {
+      console.log(`⏭️ Auto-reply skipped: ${autoReplyResult.message}`);
+    }
+
+    // 4. Schedule follow-up if auto-reply was sent
+    if (autoReplyResult.success) {
+      const followupResult = await scheduleFollowup(conversation._id, workspaceId);
+      if (followupResult.success) {
+        console.log(`⏰ Follow-up scheduled: ${followupResult.message}`);
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error in processMessageAutomations:', error);
+    throw error;
   }
 }
 
@@ -251,9 +338,16 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
         platform: 'instagram',
         lastMessageAt: new Date(),
         lastMessage: commentText,
+        lastCustomerMessageAt: new Date(), // Track for 24h follow-up
       });
 
       console.log(`✨ Created conversation for commenter ${conversation.participantHandle}`);
+    } else {
+      // Update existing conversation
+      conversation.lastMessageAt = new Date();
+      conversation.lastMessage = commentText;
+      conversation.lastCustomerMessageAt = new Date();
+      await conversation.save();
     }
 
     // Store comment as a message
@@ -277,6 +371,29 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
       messageId: savedMessage._id,
       participantHandle: conversation.participantHandle,
       mediaId,
+    });
+
+    // === PHASE 2: COMMENT → DM AUTOMATION ===
+    // Process Comment → DM automation asynchronously
+    processCommentDMAutomation(
+      {
+        commentId,
+        commenterId,
+        commenterUsername: comment.from?.username,
+        commentText,
+        mediaId,
+      },
+      igAccount._id,
+      igAccount.workspaceId
+    ).then(result => {
+      if (result.success) {
+        console.log(`✅ Comment DM automation sent: ${result.dmMessageId}`);
+      } else {
+        console.log(`⏭️ Comment DM automation skipped: ${result.message}`);
+      }
+    }).catch(error => {
+      console.error('❌ Error in comment DM automation:', error);
+      webhookLogger.logWebhookError(error, { eventType: 'comment_dm_automation', commentId });
     });
 
   } catch (error) {

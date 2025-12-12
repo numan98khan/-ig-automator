@@ -67,6 +67,58 @@ export interface KnowledgeItem {
   createdAt: string;
 }
 
+// Phase 2: Automation Types
+export interface WorkspaceSettings {
+  _id: string;
+  workspaceId: string;
+  defaultLanguage: string;
+  uiLanguage: string;
+  commentDmEnabled: boolean;
+  commentDmTemplate: string;
+  dmAutoReplyEnabled: boolean;
+  followupEnabled: boolean;
+  followupHoursBeforeExpiry: number;
+  followupTemplate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MessageCategory {
+  _id: string;
+  workspaceId: string;
+  nameEn: string;
+  description?: string;
+  isSystem: boolean;
+  autoReplyEnabled: boolean;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CategoryKnowledge {
+  _id: string;
+  workspaceId: string;
+  categoryId: string;
+  content: string;
+  language: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutomationStats {
+  commentDm: {
+    sent: number;
+    failed: number;
+  };
+  autoReply: {
+    sent: number;
+  };
+  followup: {
+    sent: number;
+    pending: number;
+  };
+}
+
 // Auth API
 export const authAPI = {
   signup: async (email: string, password: string) => {
@@ -216,6 +268,61 @@ export const instagramSyncAPI = {
 
   markAsRead: async (conversationId: string): Promise<{ success: boolean }> => {
     const { data } = await api.post('/api/instagram/mark-as-read', { conversationId });
+    return data;
+  },
+};
+
+// Settings API (Phase 2)
+export const settingsAPI = {
+  getByWorkspace: async (workspaceId: string): Promise<WorkspaceSettings> => {
+    const { data } = await api.get(`/api/settings/workspace/${workspaceId}`);
+    return data;
+  },
+
+  update: async (workspaceId: string, settings: Partial<WorkspaceSettings>): Promise<WorkspaceSettings> => {
+    const { data } = await api.put(`/api/settings/workspace/${workspaceId}`, settings);
+    return data;
+  },
+
+  getStats: async (workspaceId: string): Promise<AutomationStats> => {
+    const { data } = await api.get(`/api/settings/workspace/${workspaceId}/stats`);
+    return data;
+  },
+};
+
+// Categories API (Phase 2)
+export const categoriesAPI = {
+  getByWorkspace: async (workspaceId: string): Promise<MessageCategory[]> => {
+    const { data } = await api.get(`/api/categories/workspace/${workspaceId}`);
+    return data;
+  },
+
+  getById: async (id: string): Promise<MessageCategory> => {
+    const { data } = await api.get(`/api/categories/${id}`);
+    return data;
+  },
+
+  create: async (workspaceId: string, nameEn: string, description?: string): Promise<MessageCategory> => {
+    const { data } = await api.post('/api/categories', { workspaceId, nameEn, description });
+    return data;
+  },
+
+  update: async (id: string, updates: Partial<MessageCategory>): Promise<MessageCategory> => {
+    const { data } = await api.put(`/api/categories/${id}`, updates);
+    return data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/api/categories/${id}`);
+  },
+
+  getKnowledge: async (categoryId: string): Promise<CategoryKnowledge> => {
+    const { data } = await api.get(`/api/categories/${categoryId}/knowledge`);
+    return data;
+  },
+
+  updateKnowledge: async (categoryId: string, content: string): Promise<CategoryKnowledge> => {
+    const { data } = await api.put(`/api/categories/${categoryId}/knowledge`, { content });
     return data;
   },
 };
