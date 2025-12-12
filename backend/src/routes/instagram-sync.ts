@@ -250,9 +250,9 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
           }
 
           // Safe date parsing using created_time
-          let messageDate = new Date(igMsg.created_time || igMsg.timestamp); // Fallback to timestamp if created_time missing (unlikely)
+          let messageDate = new Date(igMsg.created_time);
           if (isNaN(messageDate.getTime())) {
-            console.warn(`⚠️ Invalid timestamp for message ${igMsg.id}: ${igMsg.created_time || igMsg.timestamp}. Using current time.`);
+            console.warn(`⚠️ Invalid timestamp for message ${igMsg.id}: ${igMsg.created_time}. Using current time.`);
             messageDate = new Date();
           }
 
