@@ -225,8 +225,8 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
 
         conversationsSynced++;
 
-        // Fetch messages
-        const messages = await fetchConversationMessages(igConv.id, igAccount.accessToken);
+        // Fetch messages (historically, so fetchAll = true)
+        const messages = await fetchConversationMessages(igConv.id, igAccount.accessToken, 100, true);
 
         // Process messages
         for (const igMsg of messages) {
