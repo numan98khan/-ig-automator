@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags } from 'lucide-react';
+import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags, ArrowPathIcon } from 'lucide-react';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -37,8 +37,8 @@ const Layout: React.FC = () => {
               <Link
                 to="/"
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${isActive('/') || isActive('/inbox')
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                  ? 'bg-purple-100 text-purple-700'
+                  : 'text-gray-600 hover:bg-gray-100'
                   }`}
               >
                 <MessageSquare className="w-4 h-4" />
@@ -47,8 +47,8 @@ const Layout: React.FC = () => {
               <Link
                 to="/knowledge"
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${isActive('/knowledge')
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                  ? 'bg-purple-100 text-purple-700'
+                  : 'text-gray-600 hover:bg-gray-100'
                   }`}
               >
                 <BookOpen className="w-4 h-4" />
@@ -57,18 +57,28 @@ const Layout: React.FC = () => {
               <Link
                 to="/categories"
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${isActive('/categories')
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                  ? 'bg-purple-100 text-purple-700'
+                  : 'text-gray-600 hover:bg-gray-100'
                   }`}
               >
                 <Tags className="w-4 h-4" />
                 Categories
               </Link>
               <Link
+                to="/sync"
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${isActive('/sync')
+                  ? 'bg-purple-100 text-purple-700'
+                  : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+              >
+                <ArrowPathIcon className="w-4 h-4" />
+                Sync
+              </Link>
+              <Link
                 to="/automations"
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${isActive('/automations')
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                  ? 'bg-purple-100 text-purple-700'
+                  : 'text-gray-600 hover:bg-gray-100'
                   }`}
               >
                 <Settings className="w-4 h-4" />

@@ -231,12 +231,18 @@ export const knowledgeAPI = {
 // Instagram Sync API
 export const instagramSyncAPI = {
   syncMessages: async (workspaceId: string): Promise<{
-    success: boolean;
-    conversationsSynced: number;
-    messagesSynced: number;
-    lastSyncedAt: string;
-  }> => {
-    const { data } = await api.post('/api/instagram/sync-messages', { workspaceId });
+    syncMessages: async (workspaceId: string, conversationId?: string): Promise<{
+      success: boolean;
+      conversationsSynced: number;
+      messagesSynced: number;
+      lastSyncedAt: string;
+    }> => {
+    const { data } = await api.post('/api/instagram/sync-messages', { workspaceId, conversationId });
+    return data;
+  },
+
+  getAvailableConversations: async (workspaceId: string): Promise<Conversation[]> => {
+    const { data } = await api.get('/api/instagram/available-conversations', { params: { workspaceId } });
     return data;
   },
 
