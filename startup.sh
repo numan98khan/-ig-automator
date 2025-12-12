@@ -26,19 +26,19 @@ echo "   Node environment: $NODE_ENV"
 echo ""
 echo "🔗 Database Configuration..."
 
-if [[ -n "${DATABASE_URL:-}" ]]; then
-  # Railway PostgreSQL URL - convert to MongoDB if needed
-  # Or use MONGODB_URI if Railway provides it
-  echo "   Using DATABASE_URL from Railway"
-  export MONGODB_URI="${DATABASE_URL}"
-elif [[ -n "${MONGODB_URI:-}" ]]; then
+# Prefer MONGODB_URI over DATABASE_URL (Railway's PostgreSQL URL)
+if [[ -n "${MONGODB_URI:-}" ]]; then
   echo "   Using MONGODB_URI"
   # Show first 30 chars only for security
   echo "   MongoDB: ${MONGODB_URI:0:30}..."
 else
-  echo "⚠️  No MongoDB URI found!"
+  echo "⚠️  No MONGODB_URI found!"
   echo "   Set MONGODB_URI in Railway dashboard"
-  echo "   Example: mongodb+srv://user:pass@cluster.mongodb.net/instagram-inbox"
+  echo "   Example: mongodb://user:pass@host:port/database"
+  echo "   Or: mongodb+srv://user:pass@cluster.mongodb.net/instagram-inbox"
+  echo ""
+  echo "   Note: Railway's DATABASE_URL is for PostgreSQL, not MongoDB."
+  echo "   You must add a MongoDB service and set MONGODB_URI."
   exit 1
 fi
 
