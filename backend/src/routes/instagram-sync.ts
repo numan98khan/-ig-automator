@@ -246,6 +246,13 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
             }
           }
 
+          // Safe date parsing
+          let messageDate = new Date(igMsg.timestamp);
+          if (isNaN(messageDate.getTime())) {
+            console.warn(`⚠️ Invalid timestamp for message ${igMsg.id}: ${igMsg.timestamp}. Using current time.`);
+            messageDate = new Date();
+          }
+
           await Message.create({
             conversationId: conversation._id,
             text: igMsg.message || '[Attachment]',
@@ -253,7 +260,7 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
             instagramMessageId: igMsg.id,
             platform: 'instagram',
             attachments: attachments.length > 0 ? attachments : undefined,
-            createdAt: new Date(igMsg.timestamp),
+            createdAt: messageDate,
           });
           messagesSynced++;
         }
