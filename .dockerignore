@@ -1,0 +1,57 @@
+# Node modules
+node_modules/
+*/node_modules/
+
+# Build outputs
+frontend/dist/
+backend/dist/
+dist/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+*.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python (old backend)
+__pycache__/
+*.py[cod]
+venv/
+*.egg-info/
+
+# Old backends
+demo_chroma/
+data/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+
+# Config files not needed in production
+.eslintrc*
+.prettierrc*
+tsconfig.tsbuildinfo
