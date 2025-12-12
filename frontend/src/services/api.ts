@@ -188,8 +188,34 @@ export const instagramSyncAPI = {
     return data;
   },
 
-  sendMessage: async (conversationId: string, text: string): Promise<any> => {
-    const { data } = await api.post('/api/instagram/send-message', { conversationId, text });
+  sendMessage: async (
+    conversationId: string,
+    text: string,
+    options?: {
+      messageType?: 'text' | 'image' | 'video' | 'audio';
+      mediaUrl?: string;
+      buttons?: Array<{
+        title: string;
+        actionType: 'url' | 'postback' | 'tag' | 'next_step';
+        url?: string;
+        tag?: string;
+        payload?: string;
+        nextStepId?: string;
+      }>;
+      isCommentReply?: boolean;
+      commentId?: string;
+    }
+  ): Promise<any> => {
+    const { data } = await api.post('/api/instagram/send-message', {
+      conversationId,
+      text,
+      ...options,
+    });
+    return data;
+  },
+
+  markAsRead: async (conversationId: string): Promise<{ success: boolean }> => {
+    const { data } = await api.post('/api/instagram/mark-as-read', { conversationId });
     return data;
   },
 };

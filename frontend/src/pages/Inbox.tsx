@@ -119,11 +119,16 @@ const Inbox: React.FC = () => {
 
     setSendingMessage(true);
     try {
-      const message = await messageAPI.send(selectedConversation._id, newMessage);
+      // Use Instagram API to send message
+      const message = await instagramSyncAPI.sendMessage(selectedConversation._id, newMessage);
       setMessages([...messages, message]);
       setNewMessage('');
-    } catch (error) {
+
+      // Scroll to bottom after sending
+      setTimeout(scrollToBottom, 100);
+    } catch (error: any) {
       console.error('Error sending message:', error);
+      alert(error.response?.data?.error || 'Failed to send message. Please try again.');
     } finally {
       setSendingMessage(false);
     }
