@@ -3,11 +3,10 @@ import { useAuth } from '../context/AuthContext';
 import { instagramSyncAPI } from '../services/api';
 import { formatDistanceToNow } from 'date-fns';
 import {
-  ArrowPathIcon,
-  CheckCircleIcon,
-  ExclamationCircleIcon,
-  ChatBubbleLeftRightIcon
-} from '@heroicons/react/24/outline';
+  RefreshCw,
+  CheckCircle,
+  AlertCircle
+} from 'lucide-react';
 
 interface ConversationItem {
   instagramConversationId: string;
@@ -180,8 +179,8 @@ const SyncConversations: React.FC = () => {
                         onClick={() => handleSyncOne(conv)}
                         disabled={!!syncing}
                         className={`text-sm font-medium hover:underline ${conv.isSynced
-                          ? 'text-gray-500 hover:text-gray-700'
-                          : 'text-indigo-600 hover:text-indigo-800'
+                            ? 'text-gray-500 hover:text-gray-700'
+                            : 'text-indigo-600 hover:text-indigo-800'
                           }`}
                       >
                         {syncing === conv.instagramConversationId
