@@ -1,26 +1,45 @@
-import { Sparkles } from 'lucide-react'
-import ChatInterface from './components/ChatInterface'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import PrivateRoute from './components/PrivateRoute';
+import Layout from './components/Layout';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import CreateWorkspace from './pages/CreateWorkspace';
+import Inbox from './pages/Inbox';
+import Knowledge from './pages/Knowledge';
 
 function App() {
   return (
-    <div className="h-full flex flex-col bg-gray-50">
-      {/* Header */}
-      <header className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center space-x-3">
-          <Sparkles className="w-8 h-8 text-blue-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">AI Assistant</h1>
-            <p className="text-sm text-gray-600">Powered by RAG</p>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden">
-        <ChatInterface />
-      </main>
-    </div>
-  )
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route
+            path="/workspace/create"
+            element={
+              <PrivateRoute>
+                <CreateWorkspace />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/"
+            element={
+              <PrivateRoute requireWorkspace>
+                <Layout />
+              </PrivateRoute>
+            }
+          >
+            <Route index element={<Inbox />} />
+            <Route path="inbox" element={<Inbox />} />
+            <Route path="knowledge" element={<Knowledge />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
 }
 
-export default App
+export default App;
