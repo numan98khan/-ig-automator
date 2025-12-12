@@ -74,7 +74,7 @@ export async function fetchConversations(accessToken: string): Promise<Instagram
   const endpoint = `${BASE_URL}/me/conversations`;
   const params = {
     access_token: accessToken,
-    fields: 'id,participants,updated_time',
+    fields: 'id,participants{username,name,id},updated_time',
     limit: 100,
   };
 

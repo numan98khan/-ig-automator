@@ -58,16 +58,27 @@ router.get('/available-conversations', authenticate, async (req: AuthRequest, re
     // detailed list with status
     const results = await Promise.all(instagramConversations.map(async (igConv: any) => {
       const participants = igConv.participants?.data || [];
-      const participant = participants.find((p: any) => p.id !== igAccount.instagramUserId);
+      // Try to find the "other" participant (not the business account)
+      let participant = participants.find((p: any) => p.id !== igAccount.instagramUserId);
+
+      // Fallback: if we can't filter by ID (e.g. it's null), filter by username
+      if ((!participant || participant.id === igAccount.instagramUserId) && igAccount.username) {
+        const found = participants.find((p: any) => p.username !== igAccount.username);
+        if (found) participant = found;
+      }
+
+      // If still nothing and we have exactly 2 participants, pick the one that doesn't look like us?
+      // Or just pick the first one if we really can't tell.
+      if (!participant && participants.length > 0) {
+        participant = participants[0];
+      }
 
       if (!participant) return null;
 
       const existing = existingMap.get(igConv.id);
 
-      // If we don't have existing details, we might want to fetch them
-      // But to be fast, we'll try to use what's in igConv or wait for sync
-      // For the list view, we need a name. 
-      let name = 'Instagram User';
+      // Use name from API if available, otherwise existing name, otherwise generic
+      let name = participant.name || participant.username || 'Instagram User';
       if (existing) {
         name = existing.participantName;
       }
@@ -147,7 +158,19 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
       try {
         // Get participant
         const participants = igConv.participants?.data || [];
-        const participant = participants.find((p: any) => p.id !== igAccount.instagramUserId);
+        // Try to filter by ID first
+        let participant = participants.find((p: any) => p.id !== igAccount.instagramUserId);
+
+        // Fallback: filter by username if available
+        if ((!participant || participant.id === igAccount.instagramUserId) && igAccount.username) {
+          const found = participants.find((p: any) => p.username !== igAccount.username);
+          if (found) participant = found;
+        }
+
+        // Fallback: pick first one if we can't determine (though risky, better than skipping)
+        if (!participant && participants.length > 0) {
+          participant = participants[0];
+        }
 
         if (!participant) {
           continue;
