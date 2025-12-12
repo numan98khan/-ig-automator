@@ -47,6 +47,12 @@ router.get('/available-conversations', authenticate, async (req: AuthRequest, re
     // Fetch conversations from Instagram
     const instagramConversations = await fetchConversations(igAccount.accessToken);
 
+    console.log('--- DEBUG: Available Conversations Payload ---');
+    console.log('Business Account ID (DB):', igAccount.instagramUserId);
+    console.log('Business Username (DB):', igAccount.username);
+    console.log('Raw Conversations Payload:', JSON.stringify(instagramConversations, null, 2));
+    console.log('--------------------------------------------');
+
     // Get existing conversations from DB
     const existingConversations = await Conversation.find({
       workspaceId,
