@@ -176,4 +176,22 @@ export const knowledgeAPI = {
   },
 };
 
+// Instagram Sync API
+export const instagramSyncAPI = {
+  syncMessages: async (workspaceId: string): Promise<{
+    success: boolean;
+    conversationsSynced: number;
+    messagesSynced: number;
+    lastSyncedAt: string;
+  }> => {
+    const { data } = await api.post('/api/instagram/sync-messages', { workspaceId });
+    return data;
+  },
+
+  sendMessage: async (conversationId: string, text: string): Promise<any> => {
+    const { data } = await api.post('/api/instagram/send-message', { conversationId, text });
+    return data;
+  },
+};
+
 export default api;
