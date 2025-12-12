@@ -1,15 +1,46 @@
 import express, { Request, Response } from 'express';
 import InstagramAccount from '../models/InstagramAccount';
 import Workspace from '../models/Workspace';
+import User from '../models/User';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import jwt from 'jsonwebtoken';
 import axios from 'axios';
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // Instagram OAuth Configuration
 const INSTAGRAM_CLIENT_ID = process.env.INSTAGRAM_CLIENT_ID;
 const INSTAGRAM_CLIENT_SECRET = process.env.INSTAGRAM_CLIENT_SECRET;
 const INSTAGRAM_REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI || 'http://localhost:5000/api/instagram/callback';
+
+// Generate Instagram OAuth authorization URL for login (no authentication required)
+router.get('/auth-login', async (req: Request, res: Response) => {
+  try {
+    if (!INSTAGRAM_CLIENT_ID) {
+      return res.status(500).json({ error: 'Instagram OAuth not configured' });
+    }
+
+    // Generate state parameter for OAuth flow (no user/workspace info yet)
+    const state = Buffer.from(JSON.stringify({
+      isLogin: true,
+      timestamp: Date.now()
+    })).toString('base64');
+
+    // Instagram OAuth URL
+    const authUrl = 'https://api.instagram.com/oauth/authorize' +
+      `?client_id=${INSTAGRAM_CLIENT_ID}` +
+      `&redirect_uri=${encodeURIComponent(INSTAGRAM_REDIRECT_URI)}` +
+      '&scope=instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments' +
+      '&response_type=code' +
+      `&state=${state}`;
+
+    res.json({ authUrl });
+  } catch (error) {
+    console.error('Instagram auth-login error:', error);
+    res.status(500).json({ error: 'Failed to generate authorization URL' });
+  }
+});
 
 // Generate Instagram OAuth authorization URL
 router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
@@ -70,9 +101,9 @@ router.get('/callback', async (req: Request, res: Response) => {
       return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}?error=missing_code_or_state`);
     }
 
-    // Decode state to get workspace and user info
+    // Decode state to get flow type and info
     const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
-    const { workspaceId, userId } = stateData;
+    const { isLogin, workspaceId, userId } = stateData;
 
     // Exchange code for access token
     const tokenResponse = await axios.post('https://api.instagram.com/oauth/access_token', new URLSearchParams({
@@ -114,6 +145,100 @@ router.get('/callback', async (req: Request, res: Response) => {
     // Calculate token expiration
     const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
 
+    // Handle login flow - create user + workspace if needed
+    if (isLogin) {
+      // Check if user exists with this Instagram ID
+      let user = await User.findOne({ instagramUserId: accountData.user_id || user_id });
+
+      if (!user) {
+        // Create new user
+        user = await User.create({
+          instagramUserId: accountData.user_id || user_id,
+          instagramUsername: accountData.username,
+        });
+        console.log('✅ Created new user via Instagram OAuth:', user._id);
+      }
+
+      // Check if user has a workspace
+      let workspace = await Workspace.findOne({ userId: user._id });
+
+      if (!workspace) {
+        // Create new workspace
+        workspace = await Workspace.create({
+          userId: user._id,
+          name: `${accountData.username}'s Workspace`,
+        });
+        console.log('✅ Created new workspace:', workspace._id);
+      }
+
+      // Check if Instagram account already connected
+      let instagramAccount = await InstagramAccount.findOne({
+        workspaceId: workspace._id,
+        $or: [
+          { instagramAccountId: accountData.user_id || user_id },
+          { username: accountData.username },
+        ],
+      });
+
+      if (instagramAccount) {
+        // Update existing account
+        instagramAccount.username = accountData.username;
+        instagramAccount.name = accountData.name || accountData.username;
+        instagramAccount.instagramAccountId = accountData.user_id || user_id;
+        instagramAccount.instagramUserId = accountData.id;
+        instagramAccount.profilePictureUrl = accountData.profile_picture_url;
+        instagramAccount.followersCount = accountData.followers_count || 0;
+        instagramAccount.followsCount = accountData.follows_count || 0;
+        instagramAccount.mediaCount = accountData.media_count || 0;
+        instagramAccount.accountType = accountData.account_type;
+        instagramAccount.accessToken = finalAccessToken;
+        instagramAccount.tokenExpiresAt = tokenExpiresAt;
+        instagramAccount.lastSyncedAt = new Date();
+        instagramAccount.status = 'connected';
+
+        await instagramAccount.save();
+        console.log('✅ Updated existing Instagram account:', instagramAccount._id);
+      } else {
+        // Create new Instagram account
+        instagramAccount = await InstagramAccount.create({
+          workspaceId: workspace._id,
+          username: accountData.username,
+          name: accountData.name || accountData.username,
+          instagramAccountId: accountData.user_id || user_id,
+          instagramUserId: accountData.id,
+          profilePictureUrl: accountData.profile_picture_url,
+          followersCount: accountData.followers_count || 0,
+          followsCount: accountData.follows_count || 0,
+          mediaCount: accountData.media_count || 0,
+          accountType: accountData.account_type,
+          accessToken: finalAccessToken,
+          tokenExpiresAt,
+          lastSyncedAt: new Date(),
+          status: 'connected',
+        });
+        console.log('✅ Created new Instagram account:', instagramAccount._id);
+      }
+
+      // Subscribe to webhooks
+      try {
+        const webhookUrl = `https://graph.instagram.com/v21.0/${accountData.user_id || user_id}/subscribed_apps`;
+        await axios.post(webhookUrl, new URLSearchParams({
+          subscribed_fields: 'comments,messages',
+          access_token: finalAccessToken,
+        }));
+        console.log('✅ Successfully subscribed to Instagram webhooks');
+      } catch (webhookError) {
+        console.error('⚠️ Failed to subscribe to webhooks (non-fatal):', webhookError);
+      }
+
+      // Generate JWT token
+      const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
+
+      // Redirect to frontend with token and success
+      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}?token=${token}&instagram_connected=true`);
+    }
+
+    // Original flow - connecting Instagram to existing workspace
     // Check if account already exists
     const existingAccount = await InstagramAccount.findOne({
       workspaceId,

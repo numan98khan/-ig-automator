@@ -51,6 +51,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const initAuth = async () => {
+      // Check for token in URL params (from Instagram OAuth callback)
+      const params = new URLSearchParams(window.location.search);
+      const urlToken = params.get('token');
+
+      if (urlToken) {
+        // Store token from OAuth callback
+        localStorage.setItem('token', urlToken);
+        setToken(urlToken);
+
+        // Clean up URL
+        window.history.replaceState({}, '', window.location.pathname);
+
+        // Fetch user data
+        await refreshUser();
+        setLoading(false);
+        return;
+      }
+
+      // Otherwise use stored token
       if (token) {
         await refreshUser();
       }
@@ -58,7 +77,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     initAuth();
-  }, [token]);
+  }, []);
 
   const login = async (email: string, password: string) => {
     const data = await authAPI.login(email, password);

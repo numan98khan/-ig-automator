@@ -49,15 +49,17 @@ const PrivateRoute: React.FC<Props> = ({
   }
 
   if (!user) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/landing" />;
   }
 
   if (requireWorkspace && !currentWorkspace) {
-    return <Navigate to="/workspace/create" />;
+    // User should have workspace created automatically via Instagram OAuth
+    return <Navigate to="/landing" />;
   }
 
   if (requireInstagram && !hasInstagram) {
-    return <Navigate to="/connect-instagram" />;
+    // User should have Instagram connected via OAuth login
+    return <Navigate to="/landing" />;
   }
 
   return <>{children}</>;
