@@ -28,13 +28,9 @@ class WebhookLogger {
     }
   }
 
-  private formatLog(entry: LogEntry): string {
-    return JSON.stringify(entry, null, 2);
-  }
-
   private writeToFile(entry: LogEntry) {
     try {
-      const logLine = this.formatLog(entry) + ',\n';
+      const logLine = JSON.stringify(entry, null, 2) + ',\n';
       fs.appendFileSync(this.logFile, logLine);
     } catch (error) {
       console.error('Failed to write to log file:', error);
@@ -42,39 +38,15 @@ class WebhookLogger {
   }
 
   private log(entry: LogEntry) {
-    // Console log with color coding
     const timestamp = new Date().toISOString();
-    const color = this.getColorForType(entry.type);
 
-    console.log(`\n${color}========================================`);
-    console.log(`🕐 ${timestamp}`);
-    console.log(`📋 TYPE: ${entry.type}`);
-
-    if (entry.method && entry.url) {
-      console.log(`🌐 ${entry.method} ${entry.url}`);
-    }
-
-    if (entry.payload) {
-      console.log(`📥 PAYLOAD:`);
-      console.log(JSON.stringify(entry.payload, null, 2));
-    }
-
-    if (entry.response) {
-      console.log(`📤 RESPONSE:`);
-      console.log(JSON.stringify(entry.response, null, 2));
-    }
-
-    if (entry.error) {
-      console.log(`❌ ERROR:`);
-      console.log(JSON.stringify(entry.error, null, 2));
-    }
-
-    if (entry.metadata) {
-      console.log(`ℹ️  METADATA:`);
-      console.log(JSON.stringify(entry.metadata, null, 2));
-    }
-
-    console.log(`========================================\x1b[0m\n`);
+    // Simple console output - just dump everything raw
+    console.log('\n' + '='.repeat(80));
+    console.log(`[${timestamp}] ${entry.type.toUpperCase()}`);
+    console.log('='.repeat(80));
+    console.log('RAW DATA:');
+    console.log(JSON.stringify(entry, null, 2));
+    console.log('='.repeat(80) + '\n');
 
     // Write to file
     this.writeToFile({
@@ -83,65 +55,59 @@ class WebhookLogger {
     });
   }
 
-  private getColorForType(type: LogEntry['type']): string {
-    const colors = {
-      webhook_verification: '\x1b[36m', // Cyan
-      webhook_received: '\x1b[34m',     // Blue
-      webhook_processed: '\x1b[32m',    // Green
-      webhook_error: '\x1b[31m',        // Red
-      api_call: '\x1b[33m',             // Yellow
-      api_response: '\x1b[35m',         // Magenta
-    };
-    return colors[type] || '\x1b[37m'; // Default white
-  }
-
   // Public logging methods
   logWebhookVerification(query: any) {
+    console.log('\n🔔 WEBHOOK VERIFICATION');
+    console.log('RAW QUERY:', JSON.stringify(query, null, 2));
+
     this.log({
       timestamp: new Date().toISOString(),
       type: 'webhook_verification',
       method: 'GET',
       url: '/api/instagram/webhook',
       payload: query,
-      metadata: {
-        mode: query['hub.mode'],
-        challenge: query['hub.challenge'],
-        verify_token: query['hub.verify_token'] ? '***' : undefined,
-      },
     });
   }
 
   logWebhookReceived(headers: any, body: any) {
+    console.log('\n📨 WEBHOOK RECEIVED');
+    console.log('RAW HEADERS:', JSON.stringify(headers, null, 2));
+    console.log('RAW BODY:', JSON.stringify(body, null, 2));
+
     this.log({
       timestamp: new Date().toISOString(),
       type: 'webhook_received',
       method: 'POST',
       url: '/api/instagram/webhook',
-      payload: body,
-      metadata: {
-        headers: {
-          'x-hub-signature': headers['x-hub-signature'],
-          'content-type': headers['content-type'],
-        },
-        entryCount: body?.entry?.length || 0,
-      },
+      payload: { headers, body },
     });
   }
 
   logWebhookProcessed(eventType: string, data: any, result: any) {
+    console.log('\n✅ WEBHOOK PROCESSED');
+    console.log('EVENT TYPE:', eventType);
+    console.log('RAW DATA:', JSON.stringify(data, null, 2));
+    console.log('RAW RESULT:', JSON.stringify(result, null, 2));
+
     this.log({
       timestamp: new Date().toISOString(),
       type: 'webhook_processed',
       payload: data,
       response: result,
-      metadata: {
-        eventType,
-        success: true,
-      },
+      metadata: { eventType },
     });
   }
 
   logWebhookError(error: any, context?: any) {
+    console.log('\n❌ WEBHOOK ERROR');
+    console.log('RAW ERROR:', JSON.stringify({
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      ...error
+    }, null, 2));
+    console.log('RAW CONTEXT:', JSON.stringify(context, null, 2));
+
     this.log({
       timestamp: new Date().toISOString(),
       type: 'webhook_error',
@@ -149,25 +115,41 @@ class WebhookLogger {
         message: error.message,
         stack: error.stack,
         name: error.name,
+        raw: error,
       },
       metadata: context,
     });
   }
 
   logApiCall(endpoint: string, method: string, params: any) {
+    console.log('\n🌐 API CALL');
+    console.log('METHOD:', method);
+    console.log('ENDPOINT:', endpoint);
+    console.log('RAW PARAMS:', JSON.stringify(params, null, 2));
+
     this.log({
       timestamp: new Date().toISOString(),
       type: 'api_call',
       method,
       url: endpoint,
       payload: params,
-      metadata: {
-        apiType: 'Instagram Graph API',
-      },
     });
   }
 
   logApiResponse(endpoint: string, status: number, data: any, error?: any) {
+    console.log('\n📡 API RESPONSE');
+    console.log('ENDPOINT:', endpoint);
+    console.log('STATUS:', status);
+    if (error) {
+      console.log('RAW ERROR:', JSON.stringify({
+        message: error.message,
+        response: error.response?.data,
+        raw: error
+      }, null, 2));
+    } else {
+      console.log('RAW DATA:', JSON.stringify(data, null, 2));
+    }
+
     this.log({
       timestamp: new Date().toISOString(),
       type: 'api_response',
@@ -179,10 +161,8 @@ class WebhookLogger {
       error: error ? {
         message: error.message,
         response: error.response?.data,
+        raw: error,
       } : undefined,
-      metadata: {
-        success: !error,
-      },
     });
   }
 
