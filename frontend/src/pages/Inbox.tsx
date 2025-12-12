@@ -8,7 +8,6 @@ import {
   Message,
   InstagramAccount,
 } from '../services/api';
-import ConnectInstagramModal from '../components/ConnectInstagramModal';
 import { Send, Sparkles, Instagram, Loader2 } from 'lucide-react';
 
 const Inbox: React.FC = () => {
@@ -18,7 +17,6 @@ const Inbox: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [instagramAccounts, setInstagramAccounts] = useState<InstagramAccount[]>([]);
-  const [showConnectModal, setShowConnectModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
