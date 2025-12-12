@@ -96,7 +96,7 @@ const SyncConversations: React.FC = () => {
             className="flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
             disabled={loading || !!syncing}
           >
-            <ArrowPathIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
           <button
@@ -111,7 +111,7 @@ const SyncConversations: React.FC = () => {
 
       {error && (
         <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg flex items-center gap-2">
-          <ExclamationCircleIcon className="w-5 h-5" />
+          <AlertCircle className="w-5 h-5" />
           {error}
         </div>
       )}
@@ -157,7 +157,7 @@ const SyncConversations: React.FC = () => {
                     <td className="px-6 py-4">
                       {conv.isSynced ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          <CheckCircleIcon className="w-3.5 h-3.5" />
+                          <CheckCircle className="w-3.5 h-3.5" />
                           Synced
                         </span>
                       ) : (
