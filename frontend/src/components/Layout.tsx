@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags, ArrowPathIcon } from 'lucide-react';
+import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags, RefreshCw } from 'lucide-react';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -71,7 +71,7 @@ const Layout: React.FC = () => {
                   : 'text-gray-600 hover:bg-gray-100'
                   }`}
               >
-                <ArrowPathIcon className="w-4 h-4" />
+                <RefreshCw className="w-4 h-4" />
                 Sync
               </Link>
               <Link

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { instagramSyncAPI } from '../services/api';
-import { formatDistanceToNow } from 'date-fns';
 import {
   RefreshCw,
   CheckCircle,
@@ -15,6 +14,21 @@ interface ConversationItem {
   isSynced: boolean;
   categoryId?: string;
   categoryName?: string;
+}
+
+function timeAgo(date: Date) {
+  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+  let interval = seconds / 31536000;
+  if (interval > 1) return Math.floor(interval) + " years ago";
+  interval = seconds / 2592000;
+  if (interval > 1) return Math.floor(interval) + " months ago";
+  interval = seconds / 86400;
+  if (interval > 1) return Math.floor(interval) + " days ago";
+  interval = seconds / 3600;
+  if (interval > 1) return Math.floor(interval) + " hours ago";
+  interval = seconds / 60;
+  if (interval > 1) return Math.floor(interval) + " minutes ago";
+  return Math.floor(seconds) + " seconds ago";
 }
 
 const SyncConversations: React.FC = () => {
@@ -151,7 +165,7 @@ const SyncConversations: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
-                      {formatDistanceToNow(new Date(conv.updatedAt), { addSuffix: true })}
+                      {timeAgo(new Date(conv.updatedAt))}
                     </td>
                     <td className="px-6 py-4">
                       {conv.isSynced ? (
@@ -179,8 +193,8 @@ const SyncConversations: React.FC = () => {
                         onClick={() => handleSyncOne(conv)}
                         disabled={!!syncing}
                         className={`text-sm font-medium hover:underline ${conv.isSynced
-                            ? 'text-gray-500 hover:text-gray-700'
-                            : 'text-indigo-600 hover:text-indigo-800'
+                          ? 'text-gray-500 hover:text-gray-700'
+                          : 'text-indigo-600 hover:text-indigo-800'
                           }`}
                       >
                         {syncing === conv.instagramConversationId
