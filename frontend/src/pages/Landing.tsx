@@ -1,20 +1,56 @@
-import React, { useState } from 'react';
-import { Instagram, Loader2, Sparkles, MessageSquare, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Instagram, Loader2, Sparkles, MessageSquare, Zap, AlertCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const Landing: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { user, currentWorkspace } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check for errors in URL params
+    const params = new URLSearchParams(window.location.search);
+    const errorParam = params.get('error');
+    const instagramConnected = params.get('instagram_connected');
+
+    if (errorParam) {
+      setError(`Authentication failed: ${errorParam}`);
+      console.error('OAuth error:', errorParam);
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    // If user is already logged in with workspace, redirect to inbox
+    if (user && currentWorkspace && instagramConnected === 'true') {
+      console.log('User authenticated, redirecting to inbox');
+      navigate('/inbox');
+    }
+  }, [user, currentWorkspace, navigate]);
 
   const handleInstagramLogin = async () => {
     try {
       setLoading(true);
+      setError(null);
+
       // Redirect directly to backend OAuth without workspace ID
       // Backend will create user + workspace on first login
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/instagram/auth-login`);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      console.log('Initiating Instagram OAuth, API URL:', apiUrl);
+
+      const response = await fetch(`${apiUrl}/api/instagram/auth-login`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       const data = await response.json();
+      console.log('Redirecting to Instagram OAuth:', data.authUrl);
       window.location.href = data.authUrl;
     } catch (error) {
       console.error('Error initiating Instagram login:', error);
-      alert('Failed to connect Instagram. Please try again.');
+      setError('Failed to connect Instagram. Please check your connection and try again.');
       setLoading(false);
     }
   };
@@ -73,6 +109,19 @@ const Landing: React.FC = () => {
               <p className="text-white/80 text-sm mt-4">
                 Free • No credit card required • Connect in 30 seconds
               </p>
+
+              {/* Error Message */}
+              {error && (
+                <div className="mt-4 max-w-md mx-auto">
+                  <div className="bg-red-500/20 backdrop-blur-md border border-red-400/50 rounded-xl p-4 flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-red-200 flex-shrink-0 mt-0.5" />
+                    <div className="text-left">
+                      <p className="text-red-100 font-semibold text-sm">Error</p>
+                      <p className="text-red-200 text-sm mt-1">{error}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Features Grid */}
