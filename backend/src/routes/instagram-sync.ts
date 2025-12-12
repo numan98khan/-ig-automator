@@ -233,6 +233,9 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
           const existingMessage = await Message.findOne({ instagramMessageId: igMsg.id });
           if (existingMessage) continue;
 
+          // Debug log for sender identification
+          console.log(`🔍 Checking msg ${igMsg.id}: from=${igMsg.from?.id}, myId=${myId}, match=${igMsg.from?.id === myId}`);
+
           const isFromCustomer = igMsg.from.id !== myId;
 
           // Extract attachments (same logic as before)
@@ -246,10 +249,10 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
             }
           }
 
-          // Safe date parsing
-          let messageDate = new Date(igMsg.timestamp);
+          // Safe date parsing using created_time
+          let messageDate = new Date(igMsg.created_time || igMsg.timestamp); // Fallback to timestamp if created_time missing (unlikely)
           if (isNaN(messageDate.getTime())) {
-            console.warn(`⚠️ Invalid timestamp for message ${igMsg.id}: ${igMsg.timestamp}. Using current time.`);
+            console.warn(`⚠️ Invalid timestamp for message ${igMsg.id}: ${igMsg.created_time || igMsg.timestamp}. Using current time.`);
             messageDate = new Date();
           }
 

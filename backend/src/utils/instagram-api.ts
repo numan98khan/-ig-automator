@@ -27,7 +27,7 @@ export interface InstagramConversation {
         id: string;
         username?: string;
       };
-      timestamp: string;
+      created_time: string; // Changed from timestamp
       attachments?: {
         data: Array<{
           image_url?: string;
@@ -55,7 +55,7 @@ export interface InstagramMessage {
     id: string;
     username?: string;
   };
-  timestamp: string;
+  created_time: string; // Changed from timestamp
   attachments?: {
     data: Array<{
       image_url?: string;
@@ -111,7 +111,7 @@ export async function fetchConversationMessages(
 
   const params = {
     access_token: accessToken,
-    fields: 'messages{id,message,from,timestamp,attachments}',
+    fields: 'messages{id,message,from,created_time,attachments}',
     limit: limit, // Apply limit to the messages edge if possible, or just limit payload size
   };
 
