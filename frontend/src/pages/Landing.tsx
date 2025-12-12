@@ -36,7 +36,7 @@ const Landing: React.FC = () => {
     }
 
     // If user is already logged in with workspace, redirect to inbox
-    if (user && currentWorkspace && instagramConnected === 'true') {
+    if (user && currentWorkspace) {
       console.log('✅ User authenticated, redirecting to inbox');
       navigate('/inbox');
     }
