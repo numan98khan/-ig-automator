@@ -2,100 +2,72 @@
 set -euo pipefail
 
 echo "========================================="
-echo "🚀 Starting Document RAG Application"
-
+echo "🚀 Starting AI Instagram Inbox"
 echo "========================================="
-
-# Activate Python virtual environment if it exists (Railway auto-detect creates this)
-if [ -d "/opt/venv" ]; then
-  echo "✅ Activating Python virtual environment..."
-  export VIRTUAL_ENV="/opt/venv"
-  export PATH="/opt/venv/bin:$PATH"
-elif [ -n "${VIRTUAL_ENV:-}" ]; then
-  echo "✅ Using Railway-provided virtual environment"
-else
-  echo "ℹ️  Using system Python (no virtual environment detected)"
-fi
 
 # Ensure script runs from project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 echo "📂 Working directory: $SCRIPT_DIR"
 
-# ---- Runtime environment & paths -----------------------------------------------
+# ---- Runtime environment -----------------------------------------------
 echo ""
 echo "⚙️  Configuring runtime environment..."
 
-# Railway injects $PORT; default to 8000 for local development
-: "${PORT:=8000}"
-: "${WEB_CONCURRENCY:=1}"
+# Railway injects $PORT; default to 5000 for local development
+: "${PORT:=5000}"
 echo "   Port: $PORT"
-echo "   Workers: $WEB_CONCURRENCY"
 
-# Ensure system binaries (tesseract, pdftoppm, etc. from Aptfile) are on PATH
-export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
+# Set Node environment
+export NODE_ENV="${NODE_ENV:-production}"
+echo "   Node environment: $NODE_ENV"
 
-# Ensure Python can import the application modules
-export PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}"
-
-# Application directories (can be overridden via environment variables)
-export CHROMA_DIR="${CHROMA_DIR:-/app/demo_chroma}"
-export DATA_DIR="${DATA_DIR:-/app/data}"
-export GDRIVE_FOLDER_NAME="${GDRIVE_FOLDER_NAME:-documents}"
-
-
-# NOTE: Auto-build disabled for PostgreSQL migration - use /api/index/build endpoint instead
-export AUTO_BUILD_INDEX="${AUTO_BUILD_INDEX:-false}"
-
-echo "   Chroma DB: $CHROMA_DIR"
-echo "   Data directory: $DATA_DIR"
-echo "   Auto-build index: $AUTO_BUILD_INDEX"
-
-# Create directories if they don't exist
-mkdir -p "$DATA_DIR"
-echo "✅ Directories initialized"
-
-# ---- Google credentials -------------------------------------------------------
+# ---- MongoDB Connection -----------------------------------------------
 echo ""
-echo "🔐 Setting up Google Drive credentials..."
+echo "🔗 Database Configuration..."
 
-# Option A: Service Account JSON from Railway environment variable (recommended)
-if [[ -n "${GOOGLE_SERVICE_ACCOUNT_JSON:-}" ]]; then
-  echo "   Using GOOGLE_SERVICE_ACCOUNT_JSON environment variable"
-  echo "$GOOGLE_SERVICE_ACCOUNT_JSON" > /tmp/google.json
-  export GOOGLE_APPLICATION_CREDENTIALS="/tmp/google.json"
-  echo "✅ Google service account credentials configured"
-elif [[ -n "${GOOGLE_OAUTH_TOKEN_JSON:-}" ]]; then
-  # Option B: OAuth token (alternative method)
-  echo "   Using GOOGLE_OAUTH_TOKEN_JSON environment variable"
-  echo "$GOOGLE_OAUTH_TOKEN_JSON" > /app/token.json
-  echo "✅ Google OAuth token configured"
+if [[ -n "${DATABASE_URL:-}" ]]; then
+  # Railway PostgreSQL URL - convert to MongoDB if needed
+  # Or use MONGODB_URI if Railway provides it
+  echo "   Using DATABASE_URL from Railway"
+  export MONGODB_URI="${DATABASE_URL}"
+elif [[ -n "${MONGODB_URI:-}" ]]; then
+  echo "   Using MONGODB_URI"
+  # Show first 30 chars only for security
+  echo "   MongoDB: ${MONGODB_URI:0:30}..."
 else
-  echo "⚠️  No Google Drive credentials found (this is optional)"
-  echo "   Set GOOGLE_SERVICE_ACCOUNT_JSON in Railway dashboard to enable sync"
+  echo "⚠️  No MongoDB URI found!"
+  echo "   Set MONGODB_URI in Railway dashboard"
+  echo "   Example: mongodb+srv://user:pass@cluster.mongodb.net/instagram-inbox"
+  exit 1
 fi
 
-# Run credential setup script if it exists
-if [[ -f "setup_credentials.py" ]]; then
-  echo "   Running setup_credentials.py..."
-  python setup_credentials.py || echo "⚠️  setup_credentials.py failed; continuing..."
-fi
-
-# ---- Vector index check (PostgreSQL + pgvector) -------------------------------
+# ---- OpenAI API Key -----------------------------------------------
 echo ""
-echo "🔍 Vector Database Status..."
-echo "   ℹ️  Using PostgreSQL + pgvector (migrated from local Chroma)"
-echo "   ℹ️  Database URL: ${DATABASE_URL:0:30}..." # Show first 30 chars only
+echo "🤖 AI Configuration..."
 
-if [[ "$AUTO_BUILD_INDEX" == "true" ]]; then
-  echo "⚠️  AUTO_BUILD_INDEX is enabled but not recommended for Railway deployments"
-  echo "   Use the API endpoint instead: POST /api/index/build"
+if [[ -n "${OPENAI_API_KEY:-}" ]]; then
+  echo "   OpenAI API Key: ${OPENAI_API_KEY:0:10}..."
+  echo "✅ OpenAI configured"
 else
-  echo "✅ Use POST /api/index/build to build index after deployment"
-  echo "   Or upload documents via POST /api/upload endpoint"
+  echo "⚠️  OPENAI_API_KEY not set!"
+  echo "   AI reply generation will not work"
+  echo "   Set OPENAI_API_KEY in Railway dashboard"
 fi
 
-# ---- Check Frontend Build ---------------------------------------------------
+# ---- JWT Secret -----------------------------------------------
+echo ""
+echo "🔐 Authentication Configuration..."
+
+if [[ -z "${JWT_SECRET:-}" ]]; then
+  echo "⚠️  JWT_SECRET not set, generating random secret..."
+  export JWT_SECRET="$(openssl rand -hex 32 2>/dev/null || echo 'default-jwt-secret-please-change')"
+  echo "   Generated JWT secret (set JWT_SECRET in Railway for persistence)"
+else
+  echo "✅ JWT secret configured"
+fi
+
+# ---- Frontend Check ---------------------------------------------------
 echo ""
 echo "========================================="
 echo "🎨 Checking React Frontend Build"
@@ -106,25 +78,33 @@ if [[ -d "frontend/dist" ]]; then
   echo "   (Built during Railway build phase)"
 else
   echo "⚠️  Frontend dist not found"
-  echo "   Frontend will not be served (API-only mode)"
+  echo "   Attempting to build now..."
+  cd frontend
+  npm run build || echo "⚠️  Frontend build failed"
+  cd ..
 fi
 
-
-##
-# ---- Launch FastAPI application -----------------------------------------------
+# ---- Launch Node.js Backend -----------------------------------------------
 echo ""
 echo "========================================="
-echo "🚀 Launching FastAPI with Uvicorn"
+echo "🚀 Launching Node.js + Express Backend"
 echo "========================================="
 echo "   Host: 0.0.0.0"
 echo "   Port: $PORT"
-echo "   Workers: $WEB_CONCURRENCY"
-echo "   Log level: info"
+echo "   Backend: backend-new/dist"
 echo ""
 
-exec uvicorn backend.main:app \
-  --host 0.0.0.0 \
-  --port "$PORT" \
-  --workers "$WEB_CONCURRENCY" \
-  --proxy-headers \
-  --log-level info
+cd backend-new
+
+# Export PORT for the Node app
+export PORT="$PORT"
+
+# Start the Node.js backend
+if [[ -d "dist" ]]; then
+  echo "✅ Starting production server..."
+  exec node dist/index.js
+else
+  echo "⚠️  No dist found, attempting TypeScript compilation..."
+  npm run build
+  exec node dist/index.js
+fi

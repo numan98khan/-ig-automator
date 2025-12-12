@@ -1,26 +1,17 @@
 [deploy]
 # Dockerfile handles build and start
 # Railway will automatically use the Dockerfile
-healthcheckPath = "/"
+healthcheckPath = "/health"
 healthcheckTimeout = 10
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-
 [env]
-# Python version (Railway auto-detect will use this)
-PYTHON_VERSION = "3.11"
-
-# Python runtime optimization
-PYTHONUNBUFFERED = "1"
-PIP_PREFER_BINARY = "1"
-
-# Application paths (create a Railway Volume and mount it at /app/demo_chroma for persistence)
-CHROMA_PERSIST_DIR = "/app/demo_chroma"
-DATA_DIR = "/app/data"
+# Node.js configuration
+NODE_ENV = "production"
 
 # Additional environment variables to set in Railway dashboard:
-# OPENAI_API_KEY = "sk-..." (required for embeddings)
-# ALLOWED_ORIGINS = "https://your-frontend-service.railway.app" (for CORS, comma-separated)
-# GOOGLE_SERVICE_ACCOUNT_JSON = "{'type': 'service_account', ...}" (optional, for Google Drive sync)
-# GOOGLE_APPLICATION_CREDENTIALS = "/tmp/google.json" (set automatically by startup.sh if GOOGLE_SERVICE_ACCOUNT_JSON is provided)
+# MONGODB_URI = "mongodb+srv://user:pass@cluster.mongodb.net/instagram-inbox" (required)
+# OPENAI_API_KEY = "sk-..." (required for AI reply generation)
+# JWT_SECRET = "your-secure-random-secret" (recommended for session persistence)
+# PORT will be set automatically by Railway

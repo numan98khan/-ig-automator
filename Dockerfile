@@ -1,71 +1,47 @@
-# Railway Dockerfile for Document RAG Application
+# Railway Dockerfile for AI Instagram Inbox
+# Node.js + Express + TypeScript backend with React frontend
 
-FROM python:3.11-slim
+FROM node:20-slim
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies in stages for better debugging
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
+# Copy root package files (if any)
+COPY package*.json* ./
 
-# Install core dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    poppler-utils \
-    tesseract-ocr \
-    tesseract-ocr-eng \
-    build-essential \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
+# Copy backend
+COPY backend-new/package*.json ./backend-new/
+WORKDIR /app/backend-new
+RUN npm install
 
-# Install OpenGL and graphics libraries
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender1 \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+# Copy backend source
+COPY backend-new/ ./
 
-# Install image processing and development libraries
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libjpeg62-turbo \
-    libpng16-16 \
-    libtiff6 \
-    libfreetype6 \
-    zlib1g \
-    libbz2-1.0 \
-    liblzma5 \
-    libxml2 \
-    libxslt1.1 \
-    libssl3 \
-    libffi8 \
-    && rm -rf /var/lib/apt/lists/*
+# Build backend TypeScript
+RUN npm run build
 
-# Copy Python requirements
-COPY requirements.txt .
+# Copy and build frontend
+WORKDIR /app
+COPY frontend/package*.json ./frontend/
+WORKDIR /app/frontend
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Back to app root
+WORKDIR /app
 
-# Copy application code
-COPY . .
-
-# Build frontend
-RUN cd frontend && npm install && npm run build && cd ..
-
-# Make startup script executable
+# Copy startup script
+COPY startup.sh ./
 RUN chmod +x startup.sh
 
-# Expose port (Railway will set PORT env var)
-EXPOSE 8000
+# Expose port (Railway will set PORT env var, but we default to 5000)
+EXPOSE 5000
 
 # Use startup script
 CMD ["./startup.sh"]
