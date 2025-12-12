@@ -3,7 +3,9 @@ import Message from '../models/Message';
 import Conversation from '../models/Conversation';
 import Workspace from '../models/Workspace';
 import KnowledgeItem from '../models/KnowledgeItem';
+import InstagramAccount from '../models/InstagramAccount';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { sendMessage as sendInstagramMessage } from '../utils/instagram-api';
 import OpenAI from 'openai';
 
 const router = express.Router();
@@ -97,6 +99,11 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
+    // Check if this is an Instagram conversation
+    if (conversation.platform !== 'instagram' || !conversation.participantInstagramId) {
+      return res.status(400).json({ error: 'AI reply only supported for Instagram conversations' });
+    }
+
     // Verify workspace belongs to user
     const workspace = await Workspace.findOne({
       _id: conversation.workspaceId,
@@ -107,6 +114,12 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
       return res.status(404).json({ error: 'Unauthorized' });
     }
 
+    // Get Instagram account
+    const igAccount = await InstagramAccount.findById(conversation.instagramAccountId).select('+accessToken');
+    if (!igAccount || !igAccount.accessToken) {
+      return res.status(404).json({ error: 'Instagram account not found or not connected' });
+    }
+
     // Get conversation history
     const messages = await Message.find({ conversationId }).sort({ createdAt: 1 });
 
@@ -115,11 +128,11 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
 
     // Build knowledge base context
     const knowledgeContext = knowledgeItems.length > 0
-      ? `\n\nKnowledge Base:\n${knowledgeItems.map(item => `- ${item.title}: ${item.content}`).join('\n')}`
+      ? `\n\nKnowledge Base:\n${knowledgeItems.map((item: any) => `- ${item.title}: ${item.content}`).join('\n')}`
       : '';
 
     // Build conversation history
-    const conversationHistory = messages.map(msg => {
+    const conversationHistory = messages.map((msg: any) => {
       const role = msg.from === 'customer' ? 'Customer' : msg.from === 'ai' ? 'AI' : 'You';
       return `${role}: ${msg.text}`;
     }).join('\n');
@@ -146,22 +159,63 @@ Response:`;
 
     const aiResponse = completion.choices[0].message.content?.trim() || 'I apologize, but I am unable to generate a response at this time.';
 
-    // Create AI message
-    const message = await Message.create({
-      conversationId,
-      text: aiResponse,
-      from: 'ai',
-    });
+    console.log('🤖 AI generated response:', aiResponse);
 
-    // Update conversation's lastMessageAt
-    await Conversation.findByIdAndUpdate(conversationId, {
-      lastMessageAt: new Date(),
-    });
+    // Send message via Instagram API first (same pattern as manual send)
+    console.log('📤 Sending AI-generated message to Instagram...');
+    const result = await sendInstagramMessage(
+      conversation.participantInstagramId,
+      aiResponse,
+      igAccount.accessToken
+    );
+
+    // Verify Instagram API returned success
+    if (!result || (!result.message_id && !result.recipient_id)) {
+      throw new Error('Instagram API did not return a valid response. Message may not have been sent.');
+    }
+
+    console.log('✅ Instagram API confirmed AI message sent');
+
+    // Only save to database AFTER successful send to Instagram
+    let message;
+    try {
+      message = await Message.create({
+        conversationId,
+        text: aiResponse,
+        from: 'ai',
+        platform: 'instagram',
+        instagramMessageId: result.message_id || undefined,
+      });
+
+      // Update conversation's lastMessageAt
+      conversation.lastMessage = aiResponse;
+      conversation.lastMessageAt = new Date();
+      await conversation.save();
+
+      console.log('✅ AI message saved to database');
+    } catch (dbError: any) {
+      // Message was sent to Instagram but failed to save to DB
+      console.error('⚠️ AI message sent to Instagram but failed to save to database:', dbError);
+      return res.status(200).json({
+        success: true,
+        warning: 'Message sent successfully but database save failed',
+        instagramMessageId: result.message_id,
+        text: aiResponse,
+        error: dbError.message,
+      });
+    }
 
     res.status(201).json(message);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Generate AI reply error:', error);
-    res.status(500).json({ error: 'Failed to generate AI reply' });
+
+    // Check if error is from Instagram API or AI generation
+    const isInstagramError = error.message?.includes('Failed to send') || error.response?.data?.error;
+
+    res.status(500).json({
+      error: isInstagramError ? 'Generated reply but failed to send to Instagram' : 'Failed to generate AI reply',
+      details: error.message,
+    });
   }
 });
 
