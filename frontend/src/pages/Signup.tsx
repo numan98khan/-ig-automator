@@ -30,7 +30,7 @@ const Signup: React.FC = () => {
 
     try {
       await signup(email, password);
-      navigate('/workspace/create');
+      navigate('/connect-instagram');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to sign up');
     } finally {

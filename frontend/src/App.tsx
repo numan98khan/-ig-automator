@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import CreateWorkspace from './pages/CreateWorkspace';
+import ConnectInstagram from './pages/ConnectInstagram';
 import Inbox from './pages/Inbox';
 import Knowledge from './pages/Knowledge';
 
@@ -16,6 +17,14 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route
+            path="/connect-instagram"
+            element={
+              <PrivateRoute>
+                <ConnectInstagram />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/workspace/create"
             element={
               <PrivateRoute>
@@ -26,12 +35,12 @@ function App() {
           <Route
             path="/"
             element={
-              <PrivateRoute requireWorkspace>
+              <PrivateRoute requireWorkspace requireInstagram>
                 <Layout />
               </PrivateRoute>
             }
           >
-            <Route index element={<Inbox />} />
+            <Route index element={<Navigate to="/inbox" replace />} />
             <Route path="inbox" element={<Inbox />} />
             <Route path="knowledge" element={<Knowledge />} />
           </Route>
