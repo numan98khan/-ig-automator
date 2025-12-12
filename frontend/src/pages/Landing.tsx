@@ -13,18 +13,31 @@ const Landing: React.FC = () => {
     // Check for errors in URL params
     const params = new URLSearchParams(window.location.search);
     const errorParam = params.get('error');
+    const tokenParam = params.get('token');
     const instagramConnected = params.get('instagram_connected');
+
+    // DEBUG: Log all URL parameters
+    console.log('🔍 Landing page URL params:', {
+      error: errorParam,
+      token: tokenParam ? 'PRESENT' : 'MISSING',
+      instagram_connected: instagramConnected,
+      full_url: window.location.href,
+      all_params: Object.fromEntries(params.entries())
+    });
 
     if (errorParam) {
       setError(`Authentication failed: ${errorParam}`);
-      console.error('OAuth error:', errorParam);
-      // Clean up URL
-      window.history.replaceState({}, '', window.location.pathname);
+      console.error('❌ OAuth error:', errorParam);
+      // Keep error in URL for 5 seconds before cleaning
+      setTimeout(() => {
+        window.history.replaceState({}, '', window.location.pathname);
+      }, 5000);
+      return;
     }
 
     // If user is already logged in with workspace, redirect to inbox
     if (user && currentWorkspace && instagramConnected === 'true') {
-      console.log('User authenticated, redirecting to inbox');
+      console.log('✅ User authenticated, redirecting to inbox');
       navigate('/inbox');
     }
   }, [user, currentWorkspace, navigate]);

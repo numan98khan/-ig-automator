@@ -55,7 +55,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const params = new URLSearchParams(window.location.search);
       const urlToken = params.get('token');
 
+      console.log('🔍 AuthContext initAuth:', {
+        urlToken: urlToken ? 'PRESENT' : 'MISSING',
+        storedToken: token ? 'PRESENT' : 'MISSING',
+        currentUrl: window.location.href
+      });
+
       if (urlToken) {
+        console.log('✅ Token found in URL, storing and fetching user data...');
         // Store token from OAuth callback
         localStorage.setItem('token', urlToken);
         setToken(urlToken);
@@ -64,14 +71,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         window.history.replaceState({}, '', window.location.pathname);
 
         // Fetch user data
-        await refreshUser();
+        try {
+          await refreshUser();
+          console.log('✅ User data fetched successfully');
+        } catch (error) {
+          console.error('❌ Failed to fetch user data after OAuth:', error);
+        }
         setLoading(false);
         return;
       }
 
       // Otherwise use stored token
       if (token) {
+        console.log('📦 Using stored token from localStorage');
         await refreshUser();
+      } else {
+        console.log('⚠️ No token found in URL or localStorage');
       }
       setLoading(false);
     };
