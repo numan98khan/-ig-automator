@@ -10,6 +10,7 @@ import workspaceRoutes from './routes/workspaces';
 import instagramRoutes from './routes/instagram';
 import instagramOAuthRoutes from './routes/instagram-oauth';
 import instagramSyncRoutes from './routes/instagram-sync';
+import instagramDebugRoutes from './routes/instagram-debug';
 import conversationRoutes from './routes/conversations';
 import messageRoutes from './routes/messages';
 import knowledgeRoutes from './routes/knowledge';
@@ -33,6 +34,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/instagram', instagramOAuthRoutes); // OAuth routes (auth, callback)
 app.use('/api/instagram', instagramSyncRoutes);   // Sync routes (sync-messages, send-message)
+app.use('/api/instagram', instagramDebugRoutes);  // Debug routes
 app.use('/api/instagram', instagramRoutes);       // Legacy mock routes
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/messages', messageRoutes);
