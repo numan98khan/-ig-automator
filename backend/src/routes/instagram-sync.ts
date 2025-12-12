@@ -233,7 +233,7 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
           const existingMessage = await Message.findOne({ instagramMessageId: igMsg.id });
           if (existingMessage) continue;
 
-          const isFromCustomer = igMsg.from.id !== igAccount.instagramUserId;
+          const isFromCustomer = igMsg.from.id !== myId;
 
           // Extract attachments (same logic as before)
           const attachments = [];
