@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { webhookLogger } from './webhook-logger';
 
 /**
  * Instagram Graph API v24 Service
@@ -70,18 +71,22 @@ export interface InstagramMessage {
  * Fetch all conversations for an Instagram account
  */
 export async function fetchConversations(accessToken: string): Promise<InstagramConversation[]> {
-  try {
-    const response = await axios.get(`${BASE_URL}/me/conversations`, {
-      params: {
-        access_token: accessToken,
-        fields: 'id,participants,updated_time',
-        limit: 100,
-      },
-    });
+  const endpoint = `${BASE_URL}/me/conversations`;
+  const params = {
+    access_token: accessToken,
+    fields: 'id,participants,updated_time',
+    limit: 100,
+  };
 
+  webhookLogger.logApiCall(endpoint, 'GET', params);
+
+  try {
+    const response = await axios.get(endpoint, { params });
+    webhookLogger.logApiResponse(endpoint, response.status, response.data);
     return response.data.data || [];
   } catch (error: any) {
     console.error('Error fetching Instagram conversations:', error.response?.data || error.message);
+    webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
     throw new Error(`Failed to fetch conversations: ${error.response?.data?.error?.message || error.message}`);
   }
 }
@@ -94,18 +99,22 @@ export async function fetchConversationMessages(
   accessToken: string,
   limit: number = 100
 ): Promise<InstagramMessage[]> {
-  try {
-    const response = await axios.get(`${BASE_URL}/${conversationId}`, {
-      params: {
-        access_token: accessToken,
-        fields: 'messages{id,message,from,timestamp,attachments}',
-        limit,
-      },
-    });
+  const endpoint = `${BASE_URL}/${conversationId}`;
+  const params = {
+    access_token: accessToken,
+    fields: 'messages{id,message,from,timestamp,attachments}',
+    limit,
+  };
 
+  webhookLogger.logApiCall(endpoint, 'GET', params);
+
+  try {
+    const response = await axios.get(endpoint, { params });
+    webhookLogger.logApiResponse(endpoint, response.status, response.data);
     return response.data.messages?.data || [];
   } catch (error: any) {
     console.error('Error fetching conversation messages:', error.response?.data || error.message);
+    webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
     throw new Error(`Failed to fetch messages: ${error.response?.data?.error?.message || error.message}`);
   }
 }
@@ -114,17 +123,21 @@ export async function fetchConversationMessages(
  * Fetch participant details (username, name)
  */
 export async function fetchUserDetails(userId: string, accessToken: string) {
-  try {
-    const response = await axios.get(`${BASE_URL}/${userId}`, {
-      params: {
-        access_token: accessToken,
-        fields: 'id,username,name',
-      },
-    });
+  const endpoint = `${BASE_URL}/${userId}`;
+  const params = {
+    access_token: accessToken,
+    fields: 'id,username,name',
+  };
 
+  webhookLogger.logApiCall(endpoint, 'GET', params);
+
+  try {
+    const response = await axios.get(endpoint, { params });
+    webhookLogger.logApiResponse(endpoint, response.status, response.data);
     return response.data;
   } catch (error: any) {
     console.error('Error fetching user details:', error.response?.data || error.message);
+    webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
     // Return minimal data if user details can't be fetched
     return {
       id: userId,
@@ -142,19 +155,26 @@ export async function sendMessage(
   messageText: string,
   accessToken: string
 ): Promise<any> {
+  const endpoint = `${BASE_URL}/me/messages`;
+  const payload = {
+    recipient: { id: recipientId },
+    message: { text: messageText },
+  };
+
+  webhookLogger.logApiCall(endpoint, 'POST', payload);
+
   try {
-    const response = await axios.post(`${BASE_URL}/me/messages`, {
-      recipient: { id: recipientId },
-      message: { text: messageText },
-    }, {
+    const response = await axios.post(endpoint, payload, {
       params: {
         access_token: accessToken,
       },
     });
 
+    webhookLogger.logApiResponse(endpoint, response.status, response.data);
     return response.data;
   } catch (error: any) {
     console.error('Error sending Instagram message:', error.response?.data || error.message);
+    webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
     throw new Error(`Failed to send message: ${error.response?.data?.error?.message || error.message}`);
   }
 }

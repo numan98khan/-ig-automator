@@ -2,7 +2,8 @@ import express, { Request, Response } from 'express';
 import InstagramAccount from '../models/InstagramAccount';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
-import axios from 'axios';
+import { fetchUserDetails } from '../utils/instagram-api';
+import { webhookLogger } from '../utils/webhook-logger';
 
 const router = express.Router();
 
@@ -16,6 +17,9 @@ router.get('/webhook', (req: Request, res: Response) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
+
+  // Log verification attempt
+  webhookLogger.logWebhookVerification(req.query);
 
   if (mode === 'subscribe' && token === WEBHOOK_VERIFY_TOKEN) {
     console.log('✅ Webhook verified successfully');
@@ -34,6 +38,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
   try {
     const payload = req.body;
 
+    // Log incoming webhook
+    webhookLogger.logWebhookReceived(req.headers, payload);
+
     console.log('📥 Instagram webhook received');
     console.log('📦 Payload:', JSON.stringify(payload, null, 2));
 
@@ -43,10 +50,12 @@ router.post('/webhook', async (req: Request, res: Response) => {
     // Process webhook asynchronously
     processWebhookPayload(payload).catch(error => {
       console.error('❌ Error processing webhook:', error);
+      webhookLogger.logWebhookError(error, { payload });
     });
 
   } catch (error) {
     console.error('❌ Webhook error:', error);
+    webhookLogger.logWebhookError(error, { source: 'webhook_post_endpoint' });
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
@@ -130,7 +139,9 @@ async function handleMessagingEvent(messaging: any) {
 
     if (!conversation) {
       // Fetch sender details from Instagram API
+      webhookLogger.logApiCall(`User ${senderId}`, 'GET', { fields: 'id,username,name' });
       const senderDetails = await fetchUserDetails(senderId, igAccount.accessToken!);
+      webhookLogger.logApiResponse(`User ${senderId}`, 200, senderDetails);
 
       conversation = await Conversation.create({
         workspaceId: igAccount.workspaceId,
@@ -167,7 +178,7 @@ async function handleMessagingEvent(messaging: any) {
     }
 
     // Create message
-    await Message.create({
+    const savedMessage = await Message.create({
       conversationId: conversation._id,
       text: messageText,
       from: 'customer',
@@ -179,8 +190,16 @@ async function handleMessagingEvent(messaging: any) {
 
     console.log(`💾 Saved message to conversation ${conversation._id}`);
 
+    // Log successful processing
+    webhookLogger.logWebhookProcessed('messaging', messaging, {
+      conversationId: conversation._id,
+      messageId: savedMessage._id,
+      participantHandle: conversation.participantHandle,
+    });
+
   } catch (error) {
     console.error('❌ Error handling messaging event:', error);
+    webhookLogger.logWebhookError(error, { eventType: 'messaging', messaging });
   }
 }
 
@@ -238,7 +257,7 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
     }
 
     // Store comment as a message
-    await Message.create({
+    const savedMessage = await Message.create({
       conversationId: conversation._id,
       text: commentText,
       from: 'customer',
@@ -252,32 +271,20 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
 
     console.log(`💾 Saved comment to conversation ${conversation._id}`);
 
-  } catch (error) {
-    console.error('❌ Error handling comment event:', error);
-  }
-}
-
-/**
- * Fetch user details from Instagram API
- */
-async function fetchUserDetails(userId: string, accessToken: string) {
-  try {
-    const response = await axios.get(`https://graph.instagram.com/v24.0/${userId}`, {
-      params: {
-        access_token: accessToken,
-        fields: 'id,username,name',
-      },
+    // Log successful processing
+    webhookLogger.logWebhookProcessed('comment', comment, {
+      conversationId: conversation._id,
+      messageId: savedMessage._id,
+      participantHandle: conversation.participantHandle,
+      mediaId,
     });
 
-    return response.data;
-  } catch (error: any) {
-    console.error('Error fetching user details:', error.response?.data || error.message);
-    return {
-      id: userId,
-      username: 'unknown',
-      name: 'Unknown User',
-    };
+  } catch (error) {
+    console.error('❌ Error handling comment event:', error);
+    webhookLogger.logWebhookError(error, { eventType: 'comment', comment });
   }
 }
+
+
 
 export default router;
