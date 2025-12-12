@@ -4,7 +4,7 @@ node_modules/
 
 # Build outputs
 frontend/dist/
-backend-new/dist/
+backend/dist/
 dist/
 
 # Environment files
@@ -19,7 +19,6 @@ dist/
 
 # Documentation
 README.md
-README-NEW.md
 *.md
 
 # IDE
@@ -35,7 +34,6 @@ venv/
 *.egg-info/
 
 # Old backends
-backend/
 demo_chroma/
 data/
 
