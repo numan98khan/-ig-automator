@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import Landing from './pages/Landing';
 import Inbox from './pages/Inbox';
 import Knowledge from './pages/Knowledge';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/landing" element={<Landing />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route
             path="/"
             element={
