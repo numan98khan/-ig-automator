@@ -15,14 +15,104 @@ import {
   fetchMessageDetails,
 } from '../utils/instagram-api';
 
+import {
+  categorizeMessage,
+  getOrCreateCategory,
+  incrementCategoryCount
+} from '../services/aiCategorization';
+
 const router = express.Router();
 
 /**
- * Sync Instagram messages - Fetch all conversations and messages from Instagram Graph API
+ * Get available conversations from Instagram for syncing
+ */
+router.get('/available-conversations', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { workspaceId } = req.query;
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'workspaceId is required' });
+    }
+
+    // Get Instagram account
+    const igAccount = await InstagramAccount.findOne({
+      workspaceId: workspaceId as string,
+      status: 'connected',
+    }).select('+accessToken');
+
+    if (!igAccount || !igAccount.accessToken) {
+      return res.status(404).json({ error: 'No connected Instagram account found' });
+    }
+
+    // Fetch conversations from Instagram
+    const instagramConversations = await fetchConversations(igAccount.accessToken);
+
+    // Fetch confirmed "me" details from API to ensure correct filtering
+    const me = await fetchUserDetails('me', igAccount.accessToken);
+    const myId = me.id;
+    const myUsername = me.username;
+
+    // Get existing conversations from DB
+    const existingConversations = await Conversation.find({
+      workspaceId,
+      platform: 'instagram',
+    });
+
+    const existingMap = new Map(existingConversations.map(c => [c.instagramConversationId, c]));
+
+    // detailed list with status
+    const results = await Promise.all(instagramConversations.map(async (igConv: any) => {
+      const participants = igConv.participants?.data || [];
+
+      // Robust filtering: Exclude the business account using confirmed API details
+      let participant = participants.find((p: any) => {
+        const isMeById = p.id === myId;
+        const isMeByUsername = p.username && myUsername && p.username.toLowerCase() === myUsername.toLowerCase();
+        return !isMeById && !isMeByUsername;
+      });
+
+      // Fallback: If filtering failed (all excluded, or list empty), take the one that is NOT the username if possible
+      if (!participant && participants.length > 0) {
+        // Try finding one that doesn't match username (if ID check failed previously)
+        participant = participants.find((p: any) => p.username !== myUsername) || participants[0];
+      }
+
+      if (!participant) return null;
+
+      const existing = existingMap.get(igConv.id);
+
+      // Use name from API if available, otherwise existing name, otherwise generic
+      let name = participant.name || participant.username || 'Instagram User';
+      if (existing) {
+        name = existing.participantName;
+      }
+
+      return {
+        instagramConversationId: igConv.id,
+        participantName: name, // Will be updated on sync
+        participantId: participant.id,
+        updatedAt: igConv.updated_time,
+        lastMessage: existing?.lastMessage,
+        isSynced: !!existing,
+        categoryId: existing?.categoryId,
+        categoryName: existing?.categoryId ? 'Categorized' : 'Uncategorized', // We'd need to populate to get name
+      };
+    }));
+
+    res.json(results.filter(Boolean));
+
+  } catch (error: any) {
+    console.error('Error fetching available conversations:', error);
+    res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+/**
+ * Sync Instagram messages - Fetch all or specific conversation
  */
 router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { workspaceId } = req.body;
+    const { workspaceId, conversationId: specificConversationId } = req.body;
 
     if (!workspaceId) {
       return res.status(400).json({ error: 'workspaceId is required' });
@@ -34,7 +124,7 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
     const igAccount = await InstagramAccount.findOne({
       workspaceId,
       status: 'connected',
-    }).select('+accessToken'); // Include accessToken field
+    }).select('+accessToken');
 
     if (!igAccount || !igAccount.accessToken) {
       return res.status(404).json({ error: 'No connected Instagram account found for this workspace' });
@@ -42,28 +132,69 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
 
     console.log('✅ Found Instagram account:', igAccount.username);
 
-    // Fetch conversations from Instagram
-    console.log('🔄 Fetching conversations from Instagram...');
-    const instagramConversations = await fetchConversations(igAccount.accessToken);
-    console.log(`✅ Found ${instagramConversations.length} Instagram conversations`);
+    // Fetch confirmed "me" details from API
+    const me = await fetchUserDetails('me', igAccount.accessToken);
+    const myId = me.id;
+    const myUsername = me.username;
+    console.log(`✅ Confirmed Business Identity: ${myUsername} (${myId})`);
+
+    let conversationsToProcess: any[] = [];
+
+    if (specificConversationId) {
+      // Sync single conversation
+      console.log(`🔄 Syncing specific conversation: ${specificConversationId}`);
+      // We need to fetch just this one or filter from list. 
+      // Graph API: /{conversation_id}
+      // For now, simpler to fetch all and filter, or fetch messages directly if we knew participant.
+      // We need conversation metadata (participants) which comes from conversation endpoint.
+      // Let's fetch all for now to be safe and simple
+      const allConversations = await fetchConversations(igAccount.accessToken);
+      const found = allConversations.find((c: any) => c.id === specificConversationId);
+      if (found) conversationsToProcess = [found];
+    } else {
+      // Sync all
+      console.log('🔄 Fetching all conversations from Instagram...');
+      conversationsToProcess = await fetchConversations(igAccount.accessToken);
+    }
+
+    console.log(`✅ Processing ${conversationsToProcess.length} conversations`);
 
     let conversationsSynced = 0;
     let messagesSynced = 0;
 
     // Process each conversation
-    for (const igConv of instagramConversations) {
+    for (const igConv of conversationsToProcess) {
       try {
-        // Get participant (the other person in the conversation)
+        // Get participant
         const participants = igConv.participants?.data || [];
-        const participant = participants.find(p => p.id !== igAccount.instagramUserId);
+
+        // Robust filtering: Exclude using confirmed API details
+        let participant = participants.find((p: any) => {
+          const isMeById = p.id === myId;
+          const isMeByUsername = p.username && myUsername && p.username.toLowerCase() === myUsername.toLowerCase();
+          return !isMeById && !isMeByUsername;
+        });
+
+        // Fallback
+        if (!participant && participants.length > 0) {
+          participant = participants.find((p: any) => p.username !== myUsername) || participants[0];
+        }
 
         if (!participant) {
-          console.log(`⚠️ Skipping conversation ${igConv.id} - no valid participant found`);
           continue;
         }
 
         // Fetch participant details
-        const participantDetails = await fetchUserDetails(participant.id, igAccount.accessToken);
+        let participantDetails = await fetchUserDetails(participant.id, igAccount.accessToken);
+
+        // If fetchUserDetails failed (returns unknown), try to use data from participant object itself if available
+        if (participantDetails.username === 'unknown' && participant.username) {
+          participantDetails = {
+            id: participant.id,
+            username: participant.username,
+            name: participant.name || participant.username || 'Instagram User'
+          };
+        }
 
         // Create or update conversation in database
         let conversation = await Conversation.findOne({
@@ -72,16 +203,14 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
         });
 
         if (conversation) {
-          // Update existing conversation
           conversation.participantName = participantDetails.name || participantDetails.username || 'Unknown';
           conversation.participantHandle = `@${participantDetails.username || 'unknown'}`;
           conversation.participantInstagramId = participant.id;
           conversation.lastMessageAt = new Date(igConv.updated_time);
           conversation.platform = 'instagram';
+
           await conversation.save();
-          console.log(`📝 Updated conversation with ${participantDetails.username}`);
         } else {
-          // Create new conversation
           conversation = await Conversation.create({
             workspaceId,
             instagramAccountId: igAccount._id,
@@ -92,47 +221,45 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
             platform: 'instagram',
             lastMessageAt: new Date(igConv.updated_time),
           });
-          console.log(`✨ Created new conversation with ${participantDetails.username}`);
         }
 
         conversationsSynced++;
 
-        // Fetch messages for this conversation
-        console.log(`🔄 Fetching messages for conversation with ${participantDetails.username}...`);
-        const messages = await fetchConversationMessages(igConv.id, igAccount.accessToken);
-        console.log(`✅ Found ${messages.length} messages`);
+        // Fetch messages (historically, so fetchAll = true)
+        const messages = await fetchConversationMessages(igConv.id, igAccount.accessToken, 100, true);
 
-        // Process each message
+        // Process messages
         for (const igMsg of messages) {
-          // Check if message already exists
-          const existingMessage = await Message.findOne({
-            instagramMessageId: igMsg.id,
-          });
+          const existingMessage = await Message.findOne({ instagramMessageId: igMsg.id });
+          if (existingMessage) continue;
 
-          if (existingMessage) {
-            continue; // Skip duplicate messages
-          }
+          // Debug log for sender identification
+          console.log(`🔍 Checking msg ${igMsg.id}: from=${igMsg.from?.username} (${igMsg.from?.id}), me=${myUsername} (${myId})`);
 
-          // Determine message sender
-          const isFromCustomer = igMsg.from.id !== igAccount.instagramUserId;
+          // Check if message is from me (match ID OR Username)
+          const isFromMe = (igMsg.from?.id === myId) ||
+            (igMsg.from?.username && myUsername && igMsg.from.username.toLowerCase() === myUsername.toLowerCase());
 
-          // Extract attachments
+          const isFromCustomer = !isFromMe;
+
+          // Extract attachments (same logic as before)
           const attachments = [];
           if (igMsg.attachments?.data) {
             for (const att of igMsg.attachments.data) {
-              if (att.image_url) {
-                attachments.push({ type: 'image', url: att.image_url });
-              } else if (att.video_url) {
-                attachments.push({ type: 'video', url: att.video_url });
-              } else if (att.audio_url) {
-                attachments.push({ type: 'audio', url: att.audio_url });
-              } else if (att.file_url) {
-                attachments.push({ type: 'file', url: att.file_url });
-              }
+              if (att.image_url) attachments.push({ type: 'image', url: att.image_url });
+              else if (att.video_url) attachments.push({ type: 'video', url: att.video_url });
+              else if (att.audio_url) attachments.push({ type: 'audio', url: att.audio_url });
+              else if (att.file_url) attachments.push({ type: 'file', url: att.file_url });
             }
           }
 
-          // Create message
+          // Safe date parsing using created_time
+          let messageDate = new Date(igMsg.created_time);
+          if (isNaN(messageDate.getTime())) {
+            console.warn(`⚠️ Invalid timestamp for message ${igMsg.id}: ${igMsg.created_time}. Using current time.`);
+            messageDate = new Date();
+          }
+
           await Message.create({
             conversationId: conversation._id,
             text: igMsg.message || '[Attachment]',
@@ -140,30 +267,43 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
             instagramMessageId: igMsg.id,
             platform: 'instagram',
             attachments: attachments.length > 0 ? attachments : undefined,
-            createdAt: new Date(igMsg.timestamp),
+            createdAt: messageDate,
           });
-
           messagesSynced++;
         }
 
-        // Update conversation's last message
+        // Finalize Conversation & Run AI Categorization
         if (messages.length > 0) {
-          const lastMessage = messages[0]; // Instagram returns messages in reverse chronological order
-          conversation.lastMessage = lastMessage.message || '[Attachment]';
+          const lastMsg = messages[0]; // Newest first
+          conversation.lastMessage = lastMsg.message || '[Attachment]';
+
+          // If last message is from customer, categorize it
+          if (lastMsg.from.id !== igAccount.instagramUserId && lastMsg.message) {
+            console.log(`🤖 Categorizing conversation ${conversation._id}...`);
+            const catResult = await categorizeMessage(lastMsg.message, workspaceId);
+
+            const categoryId = await getOrCreateCategory(workspaceId, catResult.categoryName);
+
+            conversation.categoryId = categoryId;
+            conversation.detectedLanguage = catResult.detectedLanguage;
+            conversation.categoryConfidence = catResult.confidence;
+
+            // Increment stats
+            await incrementCategoryCount(categoryId);
+            console.log(`✅ Conversation categorized as: ${catResult.categoryName}`);
+          }
+
           await conversation.save();
         }
 
       } catch (convError) {
         console.error(`❌ Error processing conversation ${igConv.id}:`, convError);
-        // Continue with next conversation
       }
     }
 
     // Update last sync time
     igAccount.lastSyncedAt = new Date();
     await igAccount.save();
-
-    console.log(`🎉 Sync complete! Conversations: ${conversationsSynced}, Messages: ${messagesSynced}`);
 
     res.json({
       success: true,
@@ -174,10 +314,7 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
 
   } catch (error: any) {
     console.error('❌ Instagram sync error:', error);
-    res.status(500).json({
-      error: 'Failed to sync Instagram messages',
-      details: error.message,
-    });
+    res.status(500).json({ error: 'Failed to sync Instagram messages', details: error.message });
   }
 });
 

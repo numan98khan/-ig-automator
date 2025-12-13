@@ -9,7 +9,7 @@ import {
   Message,
   InstagramAccount,
 } from '../services/api';
-import { Send, Sparkles, Instagram, Loader2 } from 'lucide-react';
+import { Send, Sparkles, Instagram, Loader2, RefreshCw } from 'lucide-react';
 
 const Inbox: React.FC = () => {
   const { currentWorkspace } = useAuth();
@@ -21,7 +21,23 @@ const Inbox: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleSyncConversation = async () => {
+    if (!selectedConversation) return;
+
+    setSyncing(true);
+    try {
+      await instagramSyncAPI.syncMessages(currentWorkspace?._id || '', selectedConversation.instagramConversationId);
+      await loadMessages();
+    } catch (error) {
+      console.error('Error syncing individual conversation:', error);
+      alert('Failed to sync messages. Please try again.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -269,8 +285,20 @@ const Inbox: React.FC = () => {
           <>
             {/* Chat Header */}
             <div className="bg-white border-b border-gray-200 p-4">
-              <h2 className="font-semibold text-gray-900">{selectedConversation.participantName}</h2>
-              <p className="text-sm text-gray-500">{selectedConversation.participantHandle}</p>
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="font-semibold text-gray-900">{selectedConversation.participantName}</h2>
+                  <p className="text-sm text-gray-500">{selectedConversation.participantHandle}</p>
+                </div>
+                <button
+                  onClick={handleSyncConversation}
+                  disabled={syncing}
+                  className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition disabled:opacity-50"
+                  title="Sync Messages"
+                >
+                  <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin text-purple-600' : ''}`} />
+                </button>
+              </div>
             </div>
 
             {/* Messages */}

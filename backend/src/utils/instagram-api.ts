@@ -27,7 +27,7 @@ export interface InstagramConversation {
         id: string;
         username?: string;
       };
-      timestamp: string;
+      created_time: string; // Changed from timestamp
       attachments?: {
         data: Array<{
           image_url?: string;
@@ -55,7 +55,7 @@ export interface InstagramMessage {
     id: string;
     username?: string;
   };
-  timestamp: string;
+  created_time: string; // Changed from timestamp
   attachments?: {
     data: Array<{
       image_url?: string;
@@ -74,7 +74,7 @@ export async function fetchConversations(accessToken: string): Promise<Instagram
   const endpoint = `${BASE_URL}/me/conversations`;
   const params = {
     access_token: accessToken,
-    fields: 'id,participants,updated_time',
+    fields: 'id,participants{username,name,id},updated_time',
     limit: 100,
   };
 
@@ -97,13 +97,22 @@ export async function fetchConversations(accessToken: string): Promise<Instagram
 export async function fetchConversationMessages(
   conversationId: string,
   accessToken: string,
-  limit: number = 100
+  limit: number = 100, // Instagram max per request is usually 100
+  fetchAll: boolean = false
 ): Promise<InstagramMessage[]> {
   const endpoint = `${BASE_URL}/${conversationId}`;
+  // For the first request, we fetch the conversation node with the messages edge
+  // This is slightly different from direct edge fetching but consistent with current usage
+
+  // Note: To paginate properly, we should probably fetch the edge directly: /{id}/messages
+  // But current implementation does /{id}?fields=messages
+  // Let's stick to the current structure first, but for pagination we'll likely need to follow the 'next' links
+  // which usually point to the edge endpoint.
+
   const params = {
     access_token: accessToken,
-    fields: 'messages{id,message,from,timestamp,attachments}',
-    limit,
+    fields: 'messages{id,message,from,created_time,attachments}',
+    limit: limit, // Apply limit to the messages edge if possible, or just limit payload size
   };
 
   webhookLogger.logApiCall(endpoint, 'GET', params);
@@ -111,7 +120,44 @@ export async function fetchConversationMessages(
   try {
     const response = await axios.get(endpoint, { params });
     webhookLogger.logApiResponse(endpoint, response.status, response.data);
-    return response.data.messages?.data || [];
+
+    let messages = response.data.messages?.data || [];
+    let paging = response.data.messages?.paging;
+
+    if (fetchAll && paging?.next) {
+      console.log(`🔄 Fetching history for conversation ${conversationId}...`);
+      let nextUrl = paging.next;
+      let pageCount = 1;
+
+      while (nextUrl) {
+        try {
+          console.log(`📄 Fetching page ${pageCount + 1}...`);
+          const nextResponse = await axios.get(nextUrl);
+          const nextData = nextResponse.data;
+
+          if (nextData.data && Array.isArray(nextData.data)) {
+            messages = [...messages, ...nextData.data];
+            console.log(`   + ${nextData.data.length} messages (Total: ${messages.length})`);
+          }
+
+          nextUrl = nextData.paging?.next;
+          pageCount++;
+
+          // Safety break to prevent infinite loops if something goes wrong
+          if (pageCount > 50) {
+            console.warn('⚠️ Reached recursion limit (50 pages) for message history.');
+            break;
+          }
+
+        } catch (pageError: any) {
+          console.error('❌ Error fetching next page:', pageError.message);
+          break; // Stop fetching on error
+        }
+      }
+      console.log(`✅ Finished fetching history: ${messages.length} total messages.`);
+    }
+
+    return messages;
   } catch (error: any) {
     console.error('Error fetching conversation messages:', error.response?.data || error.message);
     webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);

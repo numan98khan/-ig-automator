@@ -15,6 +15,14 @@ export interface IMessage extends Document {
   }[];
   metadata?: Record<string, any>;       // Additional Instagram data
 
+  // Categorization fields (Phase 2)
+  categoryId?: mongoose.Types.ObjectId;  // Reference to MessageCategory
+  detectedLanguage?: string;             // ISO language code (e.g., 'en', 'ar', 'es')
+  translatedText?: string;               // English translation for analysis
+
+  // Automation source tracking
+  automationSource?: 'comment_dm' | 'auto_reply' | 'followup';  // Source of automated message
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +66,28 @@ const messageSchema = new Schema<IMessage>({
     type: Schema.Types.Mixed,
   },
 
+  // Categorization fields (Phase 2)
+  categoryId: {
+    type: Schema.Types.ObjectId,
+    ref: 'MessageCategory',
+    sparse: true,
+  },
+  detectedLanguage: {
+    type: String,
+    sparse: true,
+  },
+  translatedText: {
+    type: String,
+    sparse: true,
+  },
+
+  // Automation source tracking
+  automationSource: {
+    type: String,
+    enum: ['comment_dm', 'auto_reply', 'followup'],
+    sparse: true,
+  },
+
   createdAt: {
     type: Date,
     default: Date.now,
@@ -72,6 +102,5 @@ const messageSchema = new Schema<IMessage>({
 
 // Create compound index for efficient lookups
 messageSchema.index({ conversationId: 1, createdAt: -1 });
-messageSchema.index({ instagramMessageId: 1 }, { sparse: true });
 
 export default mongoose.model<IMessage>('Message', messageSchema);
