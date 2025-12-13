@@ -234,9 +234,13 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
           if (existingMessage) continue;
 
           // Debug log for sender identification
-          console.log(`🔍 Checking msg ${igMsg.id}: from=${igMsg.from?.id}, myId=${myId}, match=${igMsg.from?.id === myId}`);
+          console.log(`🔍 Checking msg ${igMsg.id}: from=${igMsg.from?.username} (${igMsg.from?.id}), me=${myUsername} (${myId})`);
 
-          const isFromCustomer = igMsg.from.id !== myId;
+          // Check if message is from me (match ID OR Username)
+          const isFromMe = (igMsg.from?.id === myId) ||
+            (igMsg.from?.username && myUsername && igMsg.from.username.toLowerCase() === myUsername.toLowerCase());
+
+          const isFromCustomer = !isFromMe;
 
           // Extract attachments (same logic as before)
           const attachments = [];
