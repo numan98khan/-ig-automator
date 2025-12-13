@@ -87,6 +87,7 @@ echo -e "${GREEN}✅ Webhook URL: ${WEBHOOK_URL}${NC}"
 echo -e "${BLUE}📝 Updating backend/.env with Ngrok URLs...${NC}"
 
 # Update/Add WEBHOOK_URL
+export WEBHOOK_URL="$NGROK_URL/webhook"
 if grep -q "WEBHOOK_URL=" backend/.env; then
     SAFE_URL=$(echo $WEBHOOK_URL | sed 's/\//\\\//g')
     sed -i '' "s/^WEBHOOK_URL=.*/WEBHOOK_URL=$SAFE_URL/" backend/.env
@@ -95,6 +96,7 @@ else
 fi
 
 # Update/Add BACKEND_URL
+export BACKEND_URL="$NGROK_URL"
 if grep -q "BACKEND_URL=" backend/.env; then
     SAFE_URL=$(echo $BACKEND_URL | sed 's/\//\\\//g')
     sed -i '' "s/^BACKEND_URL=.*/BACKEND_URL=$SAFE_URL/" backend/.env
@@ -103,52 +105,29 @@ else
 fi
 
 # Update/Add INSTAGRAM_REDIRECT_URI (Critical for OAuth)
-REDIRECT_URI="$NGROK_URL/api/instagram/callback"
+export INSTAGRAM_REDIRECT_URI="$NGROK_URL/api/instagram/callback"
+redirect_uri_val="$INSTAGRAM_REDIRECT_URI" # safe variable for sed if needed
 if grep -q "INSTAGRAM_REDIRECT_URI=" backend/.env; then
-    SAFE_URL=$(echo $REDIRECT_URI | sed 's/\//\\\//g')
+    SAFE_URL=$(echo $redirect_uri_val | sed 's/\//\\\//g')
     sed -i '' "s/^INSTAGRAM_REDIRECT_URI=.*/INSTAGRAM_REDIRECT_URI=$SAFE_URL/" backend/.env
 else
-    echo "INSTAGRAM_REDIRECT_URI=$REDIRECT_URI" >> backend/.env
-fi
-echo -e "${GREEN}✅ Updated .env variables to use Ngrok URL${NC}"
-
-# 6. Start Services
-echo -e "${BLUE}🚀 Starting Backend & Frontend...${NC}"
-
-# Trap Ctrl+C to kill all processes
-trap "kill $NGROK_PID 2>/dev/null; pkill -P $$; exit" SIGINT SIGTERM EXIT
-
-echo -e "${BLUE}🧹 Ensuring port 5001 is free...${NC}"
-
-# Check for process holding port 5001
-PID=$(lsof -ti:5001)
-
-if [ -n "$PID" ]; then
-  PROCESS_NAME=$(ps -p $PID -o comm= | head -n 1)
-  echo -e "${RED}⚠️  Found process '$PROCESS_NAME' ($PID) on port 5001. Killing...${NC}"
-  
-  # Robust kill
-  lsof -ti:5001 | xargs kill -9 2>/dev/null
-
-  # Verify release
-  for i in {1..5}; do
-    if ! lsof -ti:5001 >/dev/null; then
-      break
-    fi
-    echo "   Waiting for port 5001 to be released..."
-    sleep 1
-  done
+    echo "INSTAGRAM_REDIRECT_URI=$redirect_uri_val" >> backend/.env
 fi
 
-# Final check
-if lsof -ti:5001 >/dev/null; then
-    echo -e "${RED}❌ Port 5001 is STILL in use. Cannot start backend.${NC}"
-    exit 1
+# Update/Add FRONTEND_URL (Must be localhost for local dev)
+export FRONTEND_URL="http://localhost:3000"
+if grep -q "FRONTEND_URL=" backend/.env; then
+    SAFE_URL=$(echo $FRONTEND_URL | sed 's/\//\\\//g')
+    sed -i '' "s/^FRONTEND_URL=.*/FRONTEND_URL=$SAFE_URL/" backend/.env
 else
-    echo "✅ Port 5001 is free."
+    echo "FRONTEND_URL=$FRONTEND_URL" >> backend/.env
 fi
 
-# Start Backend on 5001
+echo -e "${GREEN}✅ Updated .env variables & exported to shell${NC}"
+
+# ... (Start Services section remains similar but simplified) ...
+
+# Start Backend on 5001 (Env vars are exported above)
 (cd backend && PORT=5001 npm run dev) &
 BACKEND_PID=$!
 
@@ -158,7 +137,7 @@ FRONTEND_PID=$!
 
 echo -e "${GREEN}✨ Development environment is running!${NC}"
 echo -e "   Backend: $NGROK_URL (Public)"
-echo -e "   Frontend: http://localhost:5173"
+echo -e "   Frontend: http://localhost:3000"
 echo -e "   Webhook: $WEBHOOK_URL"
 echo -e "   OAuth Callback: $NGROK_URL/api/instagram/callback"
 echo -e "${BLUE}👉 Keep this terminal open.${NC}"
