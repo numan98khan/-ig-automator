@@ -89,7 +89,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
               workspaceId: workspaceId,
             };
           })
-          .filter(Boolean);
+          .filter((conv): conv is NonNullable<typeof conv> => conv !== null);
 
         // Merge synced and unsynced conversations
         const allConversations = [...conversationsWithLastMessage, ...unsyncedConversations];
