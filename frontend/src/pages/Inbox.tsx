@@ -485,11 +485,14 @@ const Inbox: React.FC = () => {
                         </p>
                         {/* Seen indicator for messages sent by user/AI */}
                         {msg.from !== 'customer' && (
-                          <span className={msg.from === 'user' ? 'text-blue-100' : 'text-purple-600'}>
+                          <span
+                            className={msg.from === 'user' ? 'text-blue-100' : 'text-purple-600'}
+                            title={msg.seenAt ? `Seen ${formatTime(msg.seenAt)}` : 'Delivered'}
+                          >
                             {msg.seenAt ? (
-                              <CheckCheck className="w-3 h-3" title={`Seen ${formatTime(msg.seenAt)}`} />
+                              <CheckCheck className="w-3 h-3" />
                             ) : (
-                              <Check className="w-3 h-3" title="Delivered" />
+                              <Check className="w-3 h-3" />
                             )}
                           </span>
                         )}
