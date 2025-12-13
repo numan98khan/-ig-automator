@@ -32,6 +32,7 @@ function App() {
             }
           >
             <Route index element={<Navigate to="/inbox" replace />} />
+            {/* <Route index element={<Navigate to="/categories" replace />} /> */}
             <Route path="inbox" element={<Inbox />} />
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="settings" element={<Settings />} />

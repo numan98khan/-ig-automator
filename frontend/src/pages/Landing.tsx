@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Instagram, Loader2, Sparkles, MessageSquare, Zap, AlertCircle } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Instagram, Loader2, Sparkles, MessageSquare, Zap, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { Button } from '../components/ui/Button';
 
 const Landing: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -9,21 +10,12 @@ const Landing: React.FC = () => {
   const { user, currentWorkspace } = useAuth();
   const navigate = useNavigate();
 
+  const location = useLocation();
+
   useEffect(() => {
     // Check for errors in URL params
     const params = new URLSearchParams(window.location.search);
     const errorParam = params.get('error');
-    const tokenParam = params.get('token');
-    const instagramConnected = params.get('instagram_connected');
-
-    // DEBUG: Log all URL parameters
-    console.log('🔍 Landing page URL params:', {
-      error: errorParam,
-      token: tokenParam ? 'PRESENT' : 'MISSING',
-      instagram_connected: instagramConnected,
-      full_url: window.location.href,
-      all_params: Object.fromEntries(params.entries())
-    });
 
     if (errorParam) {
       setError(`Authentication failed: ${errorParam}`);
@@ -35,23 +27,22 @@ const Landing: React.FC = () => {
       return;
     }
 
-    // If user is already logged in with workspace, redirect to inbox
+    // If user is already logged in with workspace, redirect to inbox or original destination
     if (user && currentWorkspace) {
-      console.log('✅ User authenticated, redirecting to inbox');
-      navigate('/inbox');
+      console.log('✅ User authenticated, redirecting...');
+      const from = location.state?.from?.pathname || '/inbox';
+      // If the destination is same as landing (shouldn't happen), go to inbox
+      const target = from === '/landing' ? '/inbox' : from;
+      navigate(target, { replace: true });
     }
-  }, [user, currentWorkspace, navigate]);
+  }, [user, currentWorkspace, navigate, location]);
 
   const handleInstagramLogin = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Redirect directly to backend OAuth without workspace ID
-      // Backend will create user + workspace on first login
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      console.log('Initiating Instagram OAuth, API URL:', apiUrl);
-
       const response = await fetch(`${apiUrl}/api/instagram/auth-login`);
 
       if (!response.ok) {
@@ -59,7 +50,6 @@ const Landing: React.FC = () => {
       }
 
       const data = await response.json();
-      console.log('Redirecting to Instagram OAuth:', data.authUrl);
       window.location.href = data.authUrl;
     } catch (error) {
       console.error('Error initiating Instagram login:', error);
@@ -69,124 +59,128 @@ const Landing: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500 overflow-y-auto">
+    <div className="min-h-screen bg-background relative overflow-hidden flex flex-col selection:bg-primary/30">
+
+      {/* Background Ambience */}
+      <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary/20 rounded-full blur-[120px] animate-pulse-slow pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-accent/20 rounded-full blur-[120px] animate-pulse-slow pointer-events-none" />
+
+
       {/* Header */}
-      <header className="p-4 md:p-6">
-        <div className="max-w-7xl mx-auto flex items-center gap-2 md:gap-3">
-          <Instagram className="w-8 h-8 md:w-10 md:h-10 text-white" />
-          <span className="text-lg md:text-2xl font-bold text-white">AI Instagram Inbox</span>
+      <header className="p-6 relative z-10">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-primary rounded-xl shadow-glow">
+              <Instagram className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-xl font-bold text-white tracking-tight">AI Inbox</span>
+          </div>
+          <Button variant="ghost" className="text-sm">Contact Support</Button>
         </div>
       </header>
 
       {/* Main Content */}
-      <div className="px-4 py-8 md:py-12 pb-24">
-        <div className="max-w-5xl w-full mx-auto">
-          <div className="text-center mb-8 md:mb-12">
-            {/* Hero */}
-            <div className="mb-6 md:mb-8">
-              <div className="inline-block bg-white/20 backdrop-blur-sm rounded-full p-4 md:p-6 mb-4 md:mb-6">
-                <Instagram className="w-16 h-16 md:w-24 md:h-24 text-white" />
-              </div>
-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-3 md:mb-4 px-4">
-                Manage Instagram DMs
-                <br />
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-yellow-200 to-pink-200">
-                  with AI
-                </span>
-              </h1>
-              <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-purple-100 mb-6 md:mb-8 max-w-2xl mx-auto px-4">
-                Automate your Instagram customer support with AI-powered responses
-              </p>
-            </div>
+      <div className="flex-1 flex flex-col justify-center px-4 py-12 md:py-20 relative z-10">
+        <div className="max-w-5xl w-full mx-auto text-center">
 
-            {/* Sign in Button */}
-            <div className="mb-8 md:mb-12 px-4">
-              <button
-                onClick={handleInstagramLogin}
-                disabled={loading}
-                className="group relative inline-flex items-center gap-2 md:gap-4 bg-white text-purple-600 px-6 py-4 md:px-12 md:py-6 rounded-xl md:rounded-2xl font-bold text-base md:text-xl shadow-2xl hover:shadow-3xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-6 h-6 md:w-8 md:h-8 animate-spin" />
-                    <span>Connecting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Instagram className="w-6 h-6 md:w-8 md:h-8" />
-                    <span>Sign in with Instagram</span>
-                    <div className="absolute inset-0 rounded-xl md:rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 opacity-0 group-hover:opacity-10 transition-opacity" />
-                  </>
-                )}
-              </button>
-              <p className="text-white/80 text-xs md:text-sm mt-3 md:mt-4">
-                Free • No credit card required • Connect in 30 seconds
-              </p>
-
-              {/* Error Message */}
-              {error && (
-                <div className="mt-4 max-w-md mx-auto">
-                  <div className="bg-red-500/20 backdrop-blur-md border border-red-400/50 rounded-xl p-3 md:p-4 flex items-start gap-2 md:gap-3">
-                    <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-red-200 flex-shrink-0 mt-0.5" />
-                    <div className="text-left">
-                      <p className="text-red-100 font-semibold text-xs md:text-sm">Error</p>
-                      <p className="text-red-200 text-xs md:text-sm mt-1">{error}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Features Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 max-w-4xl mx-auto px-4">
-              <div className="bg-white/10 backdrop-blur-md rounded-xl md:rounded-2xl p-4 md:p-6 text-white border border-white/20">
-                <div className="bg-white/20 rounded-full w-12 h-12 md:w-14 md:h-14 flex items-center justify-center mb-3 md:mb-4 mx-auto">
-                  <MessageSquare className="w-6 h-6 md:w-7 md:h-7" />
-                </div>
-                <h3 className="font-bold text-base md:text-lg mb-2">AI-Powered Replies</h3>
-                <p className="text-purple-100 text-xs md:text-sm">
-                  Automatically respond to DMs with intelligent, context-aware messages
-                </p>
-              </div>
-
-              <div className="bg-white/10 backdrop-blur-md rounded-xl md:rounded-2xl p-4 md:p-6 text-white border border-white/20">
-                <div className="bg-white/20 rounded-full w-12 h-12 md:w-14 md:h-14 flex items-center justify-center mb-3 md:mb-4 mx-auto">
-                  <Sparkles className="w-6 h-6 md:w-7 md:h-7" />
-                </div>
-                <h3 className="font-bold text-base md:text-lg mb-2">Custom Knowledge Base</h3>
-                <p className="text-purple-100 text-xs md:text-sm">
-                  Train AI with your FAQs and brand voice for personalized responses
-                </p>
-              </div>
-
-              <div className="bg-white/10 backdrop-blur-md rounded-xl md:rounded-2xl p-4 md:p-6 text-white border border-white/20">
-                <div className="bg-white/20 rounded-full w-12 h-12 md:w-14 md:h-14 flex items-center justify-center mb-3 md:mb-4 mx-auto">
-                  <Zap className="w-6 h-6 md:w-7 md:h-7" />
-                </div>
-                <h3 className="font-bold text-base md:text-lg mb-2">Instant Setup</h3>
-                <p className="text-purple-100 text-xs md:text-sm">
-                  Connect your Instagram Business account and start in minutes
-                </p>
-              </div>
-            </div>
+          {/* Hero Badge */}
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-primary-foreground/80 text-xs font-medium mb-8 animate-fade-in backdrop-blur-md">
+            <Sparkles className="w-3 h-3 text-accent" />
+            <span>Now with GPT-4 Turbo Integration</span>
           </div>
 
-          {/* Requirements */}
-          <div className="bg-white/10 backdrop-blur-md rounded-lg md:rounded-xl p-3 md:p-4 max-w-2xl mx-auto border border-white/20 mx-4">
-            <p className="text-white/90 text-xs md:text-sm text-center">
-              <strong>Requirements:</strong> Instagram Business or Creator account connected to a Facebook Page
-            </p>
+          {/* Hero Title */}
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold text-white mb-6 tracking-tight leading-tight animate-slide-up">
+            Master your DMs
+            <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-secondary-hover">
+              using Intelligence.
+            </span>
+          </h1>
+
+          <p className="text-lg md:text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '0.1s' }}>
+            Automate your Instagram customer support with AI-powered responses. Train your assistant, manage conversations, and scale effortlessly.
+          </p>
+
+          {/* CTA Section */}
+          <div className="flex flex-col items-center gap-4 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+            <button
+              onClick={handleInstagramLogin}
+              disabled={loading}
+              className="group relative inline-flex items-center gap-3 px-8 py-4 bg-gradient-primary rounded-2xl text-white font-semibold text-lg hover:shadow-glow hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Connecting secure session...</span>
+                </>
+              ) : (
+                <>
+                  <Instagram className="w-5 h-5" />
+                  <span>Continue with Instagram</span>
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
+            </button>
+            <div className="flex items-center gap-4 text-xs text-slate-500 mt-4">
+              <span className="flex items-center gap-1"><Zap className="w-3 h-3" /> Instant Setup</span>
+              <span className="w-1 h-1 bg-slate-700 rounded-full" />
+              <span>No credit card required</span>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="mt-6 animate-fade-in">
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center gap-3 text-left max-w-md">
+                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-red-200 text-sm font-medium">Authentication Failed</p>
+                    <p className="text-red-300/80 text-xs mt-0.5">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Features Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-20 md:mt-32 px-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
+            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-white/5 transition-colors group">
+              <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
+                <MessageSquare className="w-6 h-6" />
+              </div>
+              <h3 className="font-semibold text-lg text-white mb-2">Smart Replies</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Context-aware responses that sound just like you, generated in milliseconds.
+              </p>
+            </div>
+
+            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-white/5 transition-colors group">
+              <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center mb-4 text-accent group-hover:scale-110 transition-transform">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <h3 className="font-semibold text-lg text-white mb-2">Knowledge Base</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Feed the AI your documents and guidelines to ensure accurate information.
+              </p>
+            </div>
+
+            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-white/5 transition-colors group">
+              <div className="w-12 h-12 rounded-xl bg-secondary/20 flex items-center justify-center mb-4 text-slate-300 group-hover:scale-110 transition-transform">
+                <Zap className="w-6 h-6" />
+              </div>
+              <h3 className="font-semibold text-lg text-white mb-2">24/7 Automation</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Never miss a DM. Handle thousands of conversations simultaneously, day or night.
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Footer */}
-      <footer className="p-4 md:p-6 pb-6 md:pb-8">
-        <div className="max-w-7xl mx-auto text-center">
-          <p className="text-white/60 text-xs md:text-sm">
-            Secure OAuth authentication • No password required
-          </p>
-        </div>
+      <footer className="p-8 text-center text-slate-600 text-sm relative z-10">
+        <p>© 2024 AI Automator. Built for creators.</p>
       </footer>
     </div>
   );
