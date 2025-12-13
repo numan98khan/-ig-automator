@@ -189,6 +189,31 @@ export const authAPI = {
     const { data } = await api.get('/api/auth/me');
     return data;
   },
+
+  secureAccount: async (email: string, password: string) => {
+    const { data } = await api.post('/api/auth/secure-account', { email, password });
+    return data;
+  },
+
+  verifyEmail: async (token: string) => {
+    const { data } = await api.get(`/api/auth/verify-email?token=${token}`);
+    return data;
+  },
+
+  resendVerification: async () => {
+    const { data } = await api.post('/api/auth/resend-verification');
+    return data;
+  },
+
+  requestPasswordReset: async (email: string) => {
+    const { data } = await api.post('/api/auth/reset-password-request', { email });
+    return data;
+  },
+
+  resetPassword: async (token: string, newPassword: string) => {
+    const { data } = await api.post('/api/auth/reset-password', { token, newPassword });
+    return data;
+  },
 };
 
 // Workspace API

@@ -21,7 +21,7 @@ const Layout: React.FC = () => {
     { to: '/', label: 'Inbox', icon: MessageSquare, isActive: isActive('/') || isActive('/inbox') },
     { to: '/knowledge', label: 'Knowledge', icon: BookOpen, isActive: isActive('/knowledge') },
     { to: '/categories', label: 'Categories', icon: Tags, isActive: isActive('/categories') },
-    { to: '/automations', label: 'Automations', icon: Settings, isActive: isActive('/automations') },
+    { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
     { to: '/escalations', label: 'Human Alerts', icon: AlertCircle, isActive: isActive('/escalations') },
   ];
 

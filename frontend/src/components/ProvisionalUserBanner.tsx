@@ -44,15 +44,12 @@ const ProvisionalUserBanner: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => {
-                // TODO: Navigate to secure account page
-                alert('Secure account flow coming soon!');
-              }}
+            <a
+              href="/settings"
               className="px-3 py-1.5 text-sm font-medium text-amber-900 bg-amber-100 hover:bg-amber-200 rounded-lg transition border border-amber-300"
             >
               Secure My Account
-            </button>
+            </a>
             <button
               onClick={handleDismiss}
               className="p-1 text-amber-600 hover:text-amber-900 rounded-lg hover:bg-amber-100 transition"
