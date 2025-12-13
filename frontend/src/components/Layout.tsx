@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags, RefreshCw } from 'lucide-react';
+import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags } from 'lucide-react';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -63,16 +63,6 @@ const Layout: React.FC = () => {
               >
                 <Tags className="w-4 h-4" />
                 Categories
-              </Link>
-              <Link
-                to="/sync"
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${isActive('/sync')
-                  ? 'bg-purple-100 text-purple-700'
-                  : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-              >
-                <RefreshCw className="w-4 h-4" />
-                Sync
               </Link>
               <Link
                 to="/automations"

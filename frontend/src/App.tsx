@@ -7,7 +7,6 @@ import Inbox from './pages/Inbox';
 import Knowledge from './pages/Knowledge';
 import Automations from './pages/Automations';
 import Categories from './pages/Categories';
-import SyncConversations from './pages/SyncConversations';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 
 function App() {
@@ -30,7 +29,6 @@ function App() {
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="automations" element={<Automations />} />
             <Route path="categories" element={<Categories />} />
-            <Route path="sync" element={<SyncConversations />} />
           </Route>
           <Route path="*" element={<Navigate to="/landing" />} />
         </Routes>

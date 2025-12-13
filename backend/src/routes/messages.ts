@@ -34,10 +34,61 @@ router.get('/conversation/:conversationId', authenticate, async (req: AuthReques
       return res.status(404).json({ error: 'Unauthorized' });
     }
 
-    const messages = await Message.find({ conversationId }).sort({ createdAt: 1 });
+    const messages = await Message.find({ conversationId })
+      .sort({ createdAt: 1 })
+      .populate('categoryId');
     res.json(messages);
   } catch (error) {
     console.error('Get messages error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update message category
+router.patch('/:messageId/category', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { messageId } = req.params;
+    const { categoryId } = req.body;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    const conversation = await Conversation.findById(message.conversationId);
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    // Verify workspace belongs to user
+    const workspace = await Workspace.findOne({
+      _id: conversation.workspaceId,
+      userId: req.userId,
+    });
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Unauthorized' });
+    }
+
+    // Update message category
+    message.categoryId = categoryId;
+    await message.save();
+
+    // Also update conversation category if this is the last customer message
+    const lastCustomerMessage = await Message.findOne({
+      conversationId: conversation._id,
+      from: 'customer'
+    }).sort({ createdAt: -1 }).limit(1);
+
+    if (lastCustomerMessage && lastCustomerMessage._id.toString() === message._id.toString()) {
+      conversation.categoryId = categoryId;
+      await conversation.save();
+    }
+
+    const updatedMessage = await Message.findById(messageId).populate('categoryId');
+    res.json(updatedMessage);
+  } catch (error) {
+    console.error('Update message category error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

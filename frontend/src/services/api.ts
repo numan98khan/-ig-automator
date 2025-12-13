@@ -50,6 +50,9 @@ export interface Conversation {
   lastMessageAt: string;
   lastMessage?: string;
   createdAt: string;
+  isSynced?: boolean;
+  categoryName?: string;
+  categoryId?: any;
 }
 
 export interface Message {
@@ -58,6 +61,7 @@ export interface Message {
   text: string;
   from: 'customer' | 'user' | 'ai';
   createdAt: string;
+  categoryId?: any;
 }
 
 export interface KnowledgeItem {
@@ -203,6 +207,11 @@ export const messageAPI = {
 
   generateAIReply: async (conversationId: string): Promise<Message> => {
     const { data } = await api.post('/api/messages/generate-ai-reply', { conversationId });
+    return data;
+  },
+
+  updateCategory: async (messageId: string, categoryId: string): Promise<Message> => {
+    const { data } = await api.patch(`/api/messages/${messageId}/category`, { categoryId });
     return data;
   },
 };

@@ -5,11 +5,13 @@ import {
   messageAPI,
   instagramAPI,
   instagramSyncAPI,
+  categoriesAPI,
   Conversation,
   Message,
   InstagramAccount,
+  MessageCategory,
 } from '../services/api';
-import { Send, Sparkles, Instagram, Loader2, RefreshCw } from 'lucide-react';
+import { Send, Sparkles, Instagram, Loader2, RefreshCw, CheckCircle, Tag } from 'lucide-react';
 
 const Inbox: React.FC = () => {
   const { currentWorkspace } = useAuth();
@@ -18,11 +20,16 @@ const Inbox: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [instagramAccounts, setInstagramAccounts] = useState<InstagramAccount[]>([]);
+  const [categories, setCategories] = useState<MessageCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncingAll, setSyncingAll] = useState(false);
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
   const handleSyncConversation = async () => {
     if (!selectedConversation) return;
@@ -31,11 +38,41 @@ const Inbox: React.FC = () => {
     try {
       await instagramSyncAPI.syncMessages(currentWorkspace?._id || '', selectedConversation.instagramConversationId);
       await loadMessages();
+      await loadConversations(); // Reload to update sync status
     } catch (error) {
       console.error('Error syncing individual conversation:', error);
       alert('Failed to sync messages. Please try again.');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleSyncAll = async () => {
+    if (!currentWorkspace) return;
+
+    setSyncingAll(true);
+    try {
+      await instagramSyncAPI.syncMessages(currentWorkspace._id);
+      await loadConversations();
+      alert('All conversations synced successfully!');
+    } catch (error) {
+      console.error('Error syncing all conversations:', error);
+      alert('Failed to sync all conversations. Please try again.');
+    } finally {
+      setSyncingAll(false);
+    }
+  };
+
+  const handleCategoryChange = async (messageId: string, categoryId: string) => {
+    try {
+      await messageAPI.updateCategory(messageId, categoryId);
+      // Reload messages to show updated category
+      await loadMessages();
+      await loadConversations(); // Update conversation list too
+      setCategoryDropdownOpen(null);
+    } catch (error) {
+      console.error('Error updating category:', error);
+      alert('Failed to update category. Please try again.');
     }
   };
 
@@ -52,6 +89,32 @@ const Inbox: React.FC = () => {
       loadData();
     }
   }, [currentWorkspace]);
+
+  // Real-time polling for new messages
+  useEffect(() => {
+    if (!currentWorkspace) return;
+
+    const interval = setInterval(() => {
+      loadConversations();
+      if (selectedConversation) {
+        loadMessages();
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [currentWorkspace, selectedConversation]);
+
+  // Click outside to close category dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setCategoryDropdownOpen(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Check for Instagram OAuth success
   useEffect(() => {
@@ -71,12 +134,14 @@ const Inbox: React.FC = () => {
 
     try {
       setLoading(true);
-      const [accountsData, conversationsData] = await Promise.all([
+      const [accountsData, conversationsData, categoriesData] = await Promise.all([
         instagramAPI.getByWorkspace(currentWorkspace._id),
         conversationAPI.getByWorkspace(currentWorkspace._id),
+        categoriesAPI.getByWorkspace(currentWorkspace._id),
       ]);
 
       setInstagramAccounts(accountsData || []);
+      setCategories(categoriesData || []);
 
       // If we have a connected Instagram account and no conversations, trigger sync
       const connectedAccount = accountsData?.find(acc => acc.status === 'connected');
@@ -109,6 +174,16 @@ const Inbox: React.FC = () => {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadConversations = async () => {
+    if (!currentWorkspace) return;
+    try {
+      const conversationsData = await conversationAPI.getByWorkspace(currentWorkspace._id);
+      setConversations(conversationsData || []);
+    } catch (error) {
+      console.error('Error loading conversations:', error);
     }
   };
 
@@ -252,18 +327,40 @@ const Inbox: React.FC = () => {
       {/* Conversation List */}
       <div className="w-80 border-r border-gray-200 flex flex-col bg-white">
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Conversations</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Connected: @{instagramAccounts?.[0]?.username || '...'} (Demo)
-          </p>
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Conversations</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                @{instagramAccounts?.[0]?.username || '...'}
+              </p>
+            </div>
+            <button
+              onClick={handleSyncAll}
+              disabled={syncingAll}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition"
+              title="Sync All Conversations"
+            >
+              {syncingAll ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Sync All
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {conversations.map((conv) => (
             <div
-              key={conv._id}
+              key={conv._id || conv.instagramConversationId}
               onClick={() => setSelectedConversation(conv)}
-              className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition ${selectedConversation?._id === conv._id ? 'bg-purple-50' : ''
+              className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition ${selectedConversation?._id === conv._id || selectedConversation?.instagramConversationId === conv.instagramConversationId ? 'bg-purple-50' : ''
                 }`}
             >
               <div className="flex items-start justify-between mb-1">
@@ -274,6 +371,23 @@ const Inbox: React.FC = () => {
               {conv.lastMessage && (
                 <p className="text-sm text-gray-500 mt-1 truncate">{conv.lastMessage}</p>
               )}
+              <div className="flex gap-2 mt-2">
+                {conv.isSynced ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <CheckCircle className="w-3 h-3" />
+                    Synced
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                    Not Synced
+                  </span>
+                )}
+                {conv.categoryName && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                    {conv.categoryName}
+                  </span>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -307,28 +421,74 @@ const Inbox: React.FC = () => {
                 <div
                   key={msg._id}
                   className={`flex ${msg.from === 'customer' ? 'justify-start' : 'justify-end'}`}
+                  onMouseEnter={() => msg.from === 'customer' && setHoveredMessageId(msg._id)}
+                  onMouseLeave={() => setHoveredMessageId(null)}
                 >
-                  <div
-                    className={`max-w-md px-4 py-2 rounded-lg ${msg.from === 'customer'
-                      ? 'bg-white text-gray-900 border border-gray-200'
-                      : msg.from === 'ai'
-                        ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                        : 'bg-blue-600 text-white'
-                      }`}
-                  >
-                    {msg.from === 'ai' && (
-                      <div className="flex items-center gap-1 mb-1">
-                        <Sparkles className="w-3 h-3" />
-                        <span className="text-xs font-medium">AI</span>
-                      </div>
-                    )}
-                    <p className="text-sm">{msg.text}</p>
-                    <p
-                      className={`text-xs mt-1 ${msg.from === 'user' ? 'text-blue-100' : 'text-gray-500'
+                  <div className="relative">
+                    <div
+                      className={`max-w-md px-4 py-2 rounded-lg ${msg.from === 'customer'
+                        ? 'bg-white text-gray-900 border border-gray-200'
+                        : msg.from === 'ai'
+                          ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                          : 'bg-blue-600 text-white'
                         }`}
                     >
-                      {formatTime(msg.createdAt)}
-                    </p>
+                      {msg.from === 'ai' && (
+                        <div className="flex items-center gap-1 mb-1">
+                          <Sparkles className="w-3 h-3" />
+                          <span className="text-xs font-medium">AI</span>
+                        </div>
+                      )}
+                      <p className="text-sm">{msg.text}</p>
+                      <p
+                        className={`text-xs mt-1 ${msg.from === 'user' ? 'text-blue-100' : 'text-gray-500'
+                          }`}
+                      >
+                        {formatTime(msg.createdAt)}
+                      </p>
+                    </div>
+
+                    {/* Category Tooltip for Customer Messages */}
+                    {msg.from === 'customer' && hoveredMessageId === msg._id && (
+                      <div className="absolute left-0 top-full mt-1 z-10">
+                        <div className="bg-gray-800 text-white text-xs rounded-lg px-3 py-2 shadow-lg min-w-[200px]">
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <span className="flex items-center gap-1">
+                              <Tag className="w-3 h-3" />
+                              Category:
+                            </span>
+                            <span className="font-medium">
+                              {msg.categoryId?.nameEn || 'Uncategorized'}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => setCategoryDropdownOpen(msg._id)}
+                            className="w-full text-left px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition"
+                          >
+                            Change Category
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Category Dropdown */}
+                    {categoryDropdownOpen === msg._id && (
+                      <div
+                        ref={categoryDropdownRef}
+                        className="absolute left-0 top-full mt-1 z-20 bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[200px] max-h-60 overflow-y-auto"
+                      >
+                        {categories.map((cat) => (
+                          <button
+                            key={cat._id}
+                            onClick={() => handleCategoryChange(msg._id, cat._id)}
+                            className={`w-full text-left px-4 py-2 hover:bg-gray-100 text-sm transition ${msg.categoryId?._id === cat._id ? 'bg-purple-50 text-purple-700 font-medium' : 'text-gray-700'
+                              }`}
+                          >
+                            {cat.nameEn}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
