@@ -12,6 +12,7 @@ export default function Escalations() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('Mounting Escalations page');
     if (currentWorkspace) {
       loadData();
     }
@@ -53,33 +54,33 @@ export default function Escalations() {
   };
 
   if (!currentWorkspace) {
-    return <div className="p-4 text-gray-600">Select a workspace to view escalations.</div>;
+    return <div className="p-4 text-muted-foreground">Select a workspace to view escalations.</div>;
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+        <RefreshCw className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-3 md:p-6 space-y-4 md:space-y-6">
+    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
       <div>
-        <h1 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5 md:w-6 md:h-6 text-amber-600" />
+        <h1 className="text-3xl font-bold text-foreground flex items-center gap-2 mb-2">
+          <AlertTriangle className="w-6 h-6 text-amber-500" />
           Human-in-the-Loop Alerts
         </h1>
-        <p className="text-sm md:text-base text-gray-600 mt-1">
+        <p className="text-muted-foreground">
           Conversations that require a human. See why escalation happened, what the AI said, and resolve when handled.
         </p>
         {settings && (
-          <div className="mt-3 text-xs md:text-sm text-gray-600 flex gap-4 flex-wrap">
-            <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-700">
+          <div className="mt-4 flex gap-3 flex-wrap">
+            <span className="px-3 py-1 text-xs font-medium rounded-full bg-secondary text-secondary-foreground border border-border">
               Mode: {settings.humanEscalationBehavior === 'ai_allowed' ? 'AI allowed during escalation' : 'AI silent during escalation'}
             </span>
-            <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-700">
+            <span className="px-3 py-1 text-xs font-medium rounded-full bg-secondary text-secondary-foreground border border-border">
               AI pause: {settings.humanHoldMinutes ?? 60} min
             </span>
           </div>
@@ -87,69 +88,84 @@ export default function Escalations() {
       </div>
 
       {error && (
-        <div className="p-3 md:p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm md:text-base">
+        <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive text-sm font-medium">
           {error}
         </div>
       )}
 
       {items.length === 0 && (
-        <div className="p-4 md:p-6 bg-white border rounded-lg text-gray-600">
-          No active escalations. When AI flags a conversation for human review, it will appear here.
+        <div className="p-12 border-2 border-dashed border-border rounded-xl text-center text-muted-foreground">
+          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-medium text-foreground mb-1">No active escalations</h3>
+          <p>When AI flags a conversation for human review, it will appear here.</p>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {items.map((item) => (
-          <div key={item.escalation._id} className="bg-white border rounded-lg p-4 space-y-3">
+          <div key={item.escalation._id} className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                  <User className="w-4 h-4 text-gray-500" />
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <User className="w-4 h-4 text-muted-foreground" />
                   {item.conversation.participantName} ({item.conversation.participantHandle})
                 </div>
-                <div className="text-xs text-gray-500">Escalated: {formatTime(item.escalation.createdAt)}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Escalated: {formatTime(item.escalation.createdAt)}</div>
               </div>
               <button
                 onClick={() => handleResolve(item.escalation._id)}
                 disabled={savingId === item.escalation._id}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs md:text-sm rounded-full bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20 disabled:opacity-50 transition-colors"
               >
-                {savingId === item.escalation._id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                Mark Resolved
+                {savingId === item.escalation._id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                Resolve
               </button>
             </div>
 
-            <div className="text-sm text-gray-800">
-              <span className="font-medium text-gray-900">Topic:</span>{' '}
-              {item.escalation.topicSummary || 'Escalation requested by AI'}
-            </div>
-            <div className="text-sm text-gray-800">
-              <span className="font-medium text-gray-900">Reason:</span>{' '}
-              {item.escalation.reason || 'Human review required'}
+            <div className="space-y-2 text-sm">
+              <div className="flex gap-2">
+                <span className="font-medium text-foreground min-w-[60px]">Topic:</span>
+                <span className="text-muted-foreground">{item.escalation.topicSummary || 'Escalation requested by AI'}</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="font-medium text-foreground min-w-[60px]">Reason:</span>
+                <span className="text-muted-foreground">{item.escalation.reason || 'Human review required'}</span>
+              </div>
             </div>
 
             {item.lastEscalation && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <div className="text-xs uppercase text-amber-700 font-semibold mb-1">Last AI escalation message</div>
-                <p className="text-sm text-gray-900">{item.lastEscalation.text}</p>
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                <div className="text-xs uppercase text-amber-600 dark:text-amber-500 font-bold mb-1.5 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3 h-3" />
+                  Last AI escalation message
+                </div>
+                <p className="text-sm text-foreground/90">{item.lastEscalation.text}</p>
                 {item.lastEscalation.aiEscalationReason && (
-                  <p className="text-xs text-gray-600 mt-1">Reason: {item.lastEscalation.aiEscalationReason}</p>
+                  <p className="text-xs text-muted-foreground mt-2 border-t border-amber-500/10 pt-2">
+                    <span className="font-medium text-amber-600/80 dark:text-amber-500/80">System Reason:</span> {item.lastEscalation.aiEscalationReason}
+                  </p>
                 )}
               </div>
             )}
 
             <div>
-              <div className="text-xs uppercase text-gray-500 mb-1">Recent messages</div>
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              <div className="text-xs font-semibold uppercase text-muted-foreground mb-2">Recent messages</div>
+              <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
                 {item.recentMessages.map((msg) => (
                   <div
                     key={msg._id}
-                    className={`text-sm p-2 rounded ${
-                      msg.from === 'ai' ? 'bg-blue-50 text-blue-900' : msg.from === 'customer' ? 'bg-gray-50 text-gray-800' : 'bg-green-50 text-green-900'
-                    }`}
+                    className={`text-sm p-3 rounded-lg border ${msg.from === 'ai'
+                        ? 'bg-primary/5 border-primary/10 text-foreground'
+                        : msg.from === 'customer'
+                          ? 'bg-muted/50 border-border text-foreground'
+                          : 'bg-green-500/5 border-green-500/10 text-foreground'
+                      }`}
                   >
-                    <div className="text-xs text-gray-500 mb-1">
-                      {msg.from.toUpperCase()} • {new Date(msg.createdAt).toLocaleString()}
+                    <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                      <span className="font-medium">{msg.from.toUpperCase()}</span>
+                      <span>{new Date(msg.createdAt).toLocaleString()}</span>
                     </div>
                     <div>{msg.text}</div>
                   </div>

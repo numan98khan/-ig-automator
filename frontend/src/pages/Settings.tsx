@@ -7,7 +7,6 @@ import {
   AutomationStats,
 } from '../services/api';
 import {
-  Settings as SettingsIcon,
   Shield,
   Users,
   Sliders,
@@ -15,16 +14,20 @@ import {
   EyeOff,
   Mail,
   CheckCircle,
-  RefreshCw,
   Save,
   Globe,
   MessageSquare,
   MessageCircle,
   Clock,
-  ToggleLeft,
-  ToggleRight,
   AlertCircle,
+  Loader2,
+  Zap,
+  Info
 } from 'lucide-react';
+import { Button } from '../components/ui/Button';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
+import { Input } from '../components/ui/Input';
 
 type TabType = 'account' | 'team' | 'automations';
 
@@ -256,36 +259,43 @@ export default function Settings() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto p-3 md:p-6">
-      <div className="mb-6 md:mb-8">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <SettingsIcon className="w-5 h-5 md:w-6 md:h-6" />
-          Settings
-        </h1>
-        <p className="text-sm md:text-base text-gray-600 mt-1">
-          Manage your account, team, and automation settings.
-        </p>
+    <div className="max-w-6xl mx-auto p-4 md:p-8">
+      {/* Header */}
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
+          <p className="text-slate-400">Manage your workspace, team, and AI automation preferences.</p>
+        </div>
+        {activeTab === 'automations' && (
+          <Button
+            onClick={handleSaveAutomations}
+            disabled={saving}
+            isLoading={saving}
+            leftIcon={!saving && <Save className="w-4 h-4" />}
+          >
+            Save Changes
+          </Button>
+        )}
       </div>
 
       {/* Tabs */}
-      <div className="mb-6 border-b border-gray-200 overflow-x-auto">
-        <div className="flex gap-2 min-w-max">
+      <div className="mb-8 border-b border-white/5 overflow-x-auto">
+        <div className="flex gap-1 min-w-max">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition font-medium text-sm md:text-base whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'border-purple-600 text-purple-600'
-                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-                }`}
+                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-all font-medium text-sm md:text-base whitespace-nowrap ${activeTab === tab.id
+                  ? 'border-primary text-white bg-white/5 rounded-t-lg'
+                  : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5 rounded-t-lg'
+                  }`}
               >
                 <Icon className="w-4 h-4" />
                 {tab.label}
                 {tab.badge && (
-                  <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
                 )}
               </button>
             );
@@ -295,66 +305,60 @@ export default function Settings() {
 
       {/* Status Messages */}
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 animate-fade-in">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span className="flex-1">{error}</span>
+          <span className="flex-1 font-medium text-sm">{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
+        <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-3 text-green-400 animate-fade-in">
           <CheckCircle className="w-5 h-5" />
-          {success}
+          <span className="flex-1 font-medium text-sm">{success}</span>
         </div>
       )}
 
       {/* Tab Content */}
       {activeTab === 'account' && (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-fade-in">
           {/* Account Status */}
-          <div className="bg-white rounded-lg border p-6">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Shield className="w-5 h-5 text-purple-600" />
-              Account Status
-            </h2>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="text-sm font-medium text-gray-700">Account Type</span>
-                <span className={`text-sm px-3 py-1 rounded-full ${
-                  user?.isProvisional
-                    ? 'bg-amber-100 text-amber-700'
-                    : 'bg-green-100 text-green-700'
-                }`}>
-                  {user?.isProvisional ? 'Provisional (Instagram Only)' : 'Secured'}
-                </span>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-primary" /> Account Status
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
+                <span className="text-sm font-medium text-slate-300">Type</span>
+                <Badge variant={user?.isProvisional ? 'warning' : 'success'}>
+                  {user?.isProvisional ? 'Provisional' : 'Secured'}
+                </Badge>
               </div>
 
               {user?.email && (
                 <>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium text-gray-700">Email</span>
-                    <span className="text-sm text-gray-600">{user.email}</span>
+                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
+                    <span className="text-sm font-medium text-slate-300">Email</span>
+                    <span className="text-sm text-slate-400">{user.email}</span>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium text-gray-700">Email Verification</span>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm px-3 py-1 rounded-full ${
-                        user.emailVerified
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-amber-100 text-amber-700'
-                      }`}>
-                        {user.emailVerified ? 'Verified' : 'Not Verified'}
-                      </span>
+                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
+                    <span className="text-sm font-medium text-slate-300">Verified</span>
+                    <div className="flex items-center gap-3">
+                      <Badge variant={user.emailVerified ? 'success' : 'warning'}>
+                        {user.emailVerified ? 'Verified' : 'Unverified'}
+                      </Badge>
                       {!user.emailVerified && (
-                        <button
+                        <Button
+                          size="sm"
+                          variant="secondary"
                           onClick={handleResendVerification}
                           disabled={saving}
-                          className="text-xs px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50"
+                          isLoading={saving}
                         >
-                          {saving ? 'Sending...' : 'Resend Email'}
-                        </button>
+                          Verify Now
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -362,496 +366,344 @@ export default function Settings() {
               )}
 
               {user?.instagramUsername && (
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium text-gray-700">Instagram</span>
-                  <span className="text-sm text-gray-600">@{user.instagramUsername}</span>
+                <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
+                  <span className="text-sm font-medium text-slate-300">Instagram</span>
+                  <span className="text-sm text-slate-400">@{user.instagramUsername}</span>
                 </div>
               )}
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          {/* Secure Account Form (for provisional users) */}
+          {/* Secure Account Form */}
           {user?.isProvisional && !user?.email && (
-            <div className="bg-white rounded-lg border p-6">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Mail className="w-5 h-5 text-purple-600" />
-                Secure Your Account
-              </h2>
-
-              <p className="text-sm text-gray-600 mb-6">
-                Add an email and password to secure your account, manage multiple Instagram accounts, and invite team members.
-              </p>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={accountForm.email}
-                    onChange={(e) => setAccountForm(prev => ({ ...prev, email: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="your@email.com"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={accountForm.showPassword ? 'text' : 'password'}
-                      value={accountForm.password}
-                      onChange={(e) => setAccountForm(prev => ({ ...prev, password: e.target.value }))}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent pr-10"
-                      placeholder="Min. 8 characters"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setAccountForm(prev => ({ ...prev, showPassword: !prev.showPassword }))}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    >
-                      {accountForm.showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Confirm Password
-                  </label>
-                  <input
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-white">
+                  <Mail className="w-5 h-5 text-accent" /> Secure Your Account
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-slate-400">
+                  Add an email and password to secure your account and access all features.
+                </p>
+                <Input
+                  label="Email Address"
+                  type="email"
+                  value={accountForm.email}
+                  onChange={(e) => setAccountForm(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="your@email.com"
+                />
+                <div className="relative">
+                  <Input
+                    label="Password"
                     type={accountForm.showPassword ? 'text' : 'password'}
-                    value={accountForm.confirmPassword}
-                    onChange={(e) => setAccountForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Confirm password"
+                    value={accountForm.password}
+                    onChange={(e) => setAccountForm(prev => ({ ...prev, password: e.target.value }))}
+                    placeholder="Min. 8 characters"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setAccountForm(prev => ({ ...prev, showPassword: !prev.showPassword }))}
+                    className="absolute right-3 top-[34px] text-slate-500 hover:text-white transition"
+                  >
+                    {accountForm.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
-
-                <button
+                <Input
+                  label="Confirm Password"
+                  type={accountForm.showPassword ? 'text' : 'password'}
+                  value={accountForm.confirmPassword}
+                  onChange={(e) => setAccountForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                  placeholder="Confirm password"
+                />
+                <Button
+                  className="w-full"
                   onClick={handleSecureAccount}
-                  disabled={saving}
-                  className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  isLoading={saving}
                 >
-                  {saving ? 'Securing Account...' : 'Secure Account'}
-                </button>
-              </div>
-            </div>
+                  Secure Account
+                </Button>
+              </CardContent>
+            </Card>
           )}
         </div>
       )}
 
       {activeTab === 'team' && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-lg border p-6">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Users className="w-5 h-5 text-purple-600" />
-              Team Management
-            </h2>
-
-            <div className="text-center py-12">
-              <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 mb-2">Team management coming soon!</p>
-              <p className="text-sm text-gray-500">
-                Invite team members to collaborate on your workspace.
-              </p>
-            </div>
-          </div>
+        <div className="space-y-6 animate-fade-in">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" /> Team Management
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="py-12 text-center">
+              <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Users className="w-8 h-8 text-slate-500" />
+              </div>
+              <p className="text-slate-300 font-medium mb-1">Coming Soon</p>
+              <p className="text-slate-500 text-sm">Invite team members to help manage your inbox.</p>
+            </CardContent>
+          </Card>
         </div>
       )}
 
       {activeTab === 'automations' && (
-        <div className="space-y-6">
-          {/* Stats Overview */}
-          {stats && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="bg-white rounded-lg border p-4">
-                <div className="text-sm text-gray-500">Comment DMs Sent</div>
-                <div className="text-2xl font-bold text-blue-600">{stats.commentDm.sent}</div>
-                {stats.commentDm.failed > 0 && (
-                  <div className="text-sm text-red-500">{stats.commentDm.failed} failed</div>
-                )}
-              </div>
-              <div className="bg-white rounded-lg border p-4">
-                <div className="text-sm text-gray-500">Auto-Replies Sent</div>
-                <div className="text-2xl font-bold text-green-600">{stats.autoReply.sent}</div>
-              </div>
-              <div className="bg-white rounded-lg border p-4">
-                <div className="text-sm text-gray-500">Follow-ups</div>
-                <div className="text-2xl font-bold text-purple-600">{stats.followup.sent} sent</div>
-                <div className="text-sm text-gray-500">{stats.followup.pending} pending</div>
-              </div>
+        <div className="space-y-6 animate-fade-in">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
-          )}
-
-          {/* Language Settings */}
-          <div className="bg-white rounded-lg border p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Globe className="w-5 h-5 text-blue-500" />
-              <h2 className="text-lg font-semibold">Language Settings</h2>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Default Response Language
-                </label>
-                <select
-                  value={formData.defaultLanguage}
-                  onChange={(e) => setFormData(prev => ({ ...prev, defaultLanguage: e.target.value }))}
-                  className="w-64 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  {LANGUAGES.map(lang => (
-                    <option key={lang.code} value={lang.code}>
-                      {lang.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-sm text-gray-500 mt-1">
-                  AI will respond in this language by default.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Preferred Reply Language
-                </label>
-                <select
-                  value={formData.defaultReplyLanguage}
-                  onChange={(e) => setFormData(prev => ({ ...prev, defaultReplyLanguage: e.target.value }))}
-                  className="w-64 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  {LANGUAGES.map(lang => (
-                    <option key={lang.code} value={lang.code}>
-                      {lang.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-sm text-gray-500 mt-1">
-                  Force AI replies into this language even if the customer writes differently.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* AI Reply Policy */}
-          <div className="bg-white rounded-lg border p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertCircle className="w-5 h-5 text-purple-500" />
-              <h2 className="text-lg font-semibold">AI Reply Policy</h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Decision Mode
-                </label>
-                <select
-                  value={formData.decisionMode}
-                  onChange={(e) => setFormData(prev => ({ ...prev, decisionMode: e.target.value as any }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="full_auto">Full auto</option>
-                  <option value="assist">Assist</option>
-                  <option value="info_only">Info only</option>
-                </select>
-                <p className="text-sm text-gray-500 mt-1">
-                  How bold the AI should be: full_auto answers more, info_only escalates more.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Max Reply Sentences
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={5}
-                  value={formData.maxReplySentences}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    maxReplySentences: Math.max(1, Math.min(5, parseInt(e.target.value) || 3)),
-                  }))}
-                  className="w-32 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-sm text-gray-500 mt-1">
-                  AI replies will be trimmed to this many sentences.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => handleToggle('allowHashtags')}
-                  className={`flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-full ${
-                    formData.allowHashtags ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  {formData.allowHashtags ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                  Hashtags {formData.allowHashtags ? 'Allowed' : 'Blocked'}
-                </button>
-                <button
-                  onClick={() => handleToggle('allowEmojis')}
-                  className={`flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-full ${
-                    formData.allowEmojis ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  {formData.allowEmojis ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                  Emojis {formData.allowEmojis ? 'Allowed' : 'Blocked'}
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Escalation Guidelines
-                </label>
-                <textarea
-                  value={formData.escalationGuidelines}
-                  onChange={(e) => setFormData(prev => ({ ...prev, escalationGuidelines: e.target.value }))}
-                  rows={3}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Describe when a human should step in..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Escalation Examples (one per line)
-                </label>
-                <textarea
-                  value={formData.escalationExamples}
-                  onChange={(e) => setFormData(prev => ({ ...prev, escalationExamples: e.target.value }))}
-                  rows={3}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Custom pricing request&#10;Urgent safety issue&#10;Sensitive personal data"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Human Escalation Behavior
-                </label>
-                <select
-                  value={formData.humanEscalationBehavior}
-                  onChange={(e) => setFormData(prev => ({ ...prev, humanEscalationBehavior: e.target.value as any }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="ai_silent">Human takes over (AI silent)</option>
-                  <option value="ai_allowed">AI can keep assisting</option>
-                </select>
-                <p className="text-sm text-gray-500 mt-1">
-                  When escalation is required, choose if AI pauses or continues supporting.
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  AI Pause Duration (minutes)
-                </label>
-                <input
-                  type="number"
-                  min={5}
-                  max={720}
-                  value={formData.humanHoldMinutes}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    humanHoldMinutes: Math.max(5, Math.min(720, parseInt(e.target.value) || 60)),
-                  }))}
-                  className="w-48 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-sm text-gray-500 mt-1">
-                  How long AI stays inactive after escalation when set to be silent.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Comment → DM Automation */}
-          <div className="bg-white rounded-lg border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-orange-500" />
-                <h2 className="text-lg font-semibold">Comment → DM Automation</h2>
-              </div>
-              <button
-                onClick={() => handleToggle('commentDmEnabled')}
-                className={`flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-full ${
-                  formData.commentDmEnabled
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-500'
-                }`}
-              >
-                {formData.commentDmEnabled ? (
-                  <>
-                    <ToggleRight className="w-5 h-5" />
-                    Enabled
-                  </>
-                ) : (
-                  <>
-                    <ToggleLeft className="w-5 h-5" />
-                    Disabled
-                  </>
-                )}
-              </button>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-4">
-              Automatically send a DM to users who comment on your posts.
-            </p>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                DM Template
-              </label>
-              <textarea
-                value={formData.commentDmTemplate}
-                onChange={(e) => setFormData(prev => ({ ...prev, commentDmTemplate: e.target.value }))}
-                rows={3}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Thanks for your comment! We'd love to help you with more information..."
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                This message will be sent as a DM when someone comments on your posts.
-              </p>
-            </div>
-          </div>
-
-          {/* Inbound DM Auto-Reply */}
-          <div className="bg-white rounded-lg border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <MessageCircle className="w-5 h-5 text-blue-500" />
-                <h2 className="text-lg font-semibold">Inbound DM Auto-Reply</h2>
-              </div>
-              <button
-                onClick={() => handleToggle('dmAutoReplyEnabled')}
-                className={`flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-full ${
-                  formData.dmAutoReplyEnabled
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-500'
-                }`}
-              >
-                {formData.dmAutoReplyEnabled ? (
-                  <>
-                    <ToggleRight className="w-5 h-5" />
-                    Enabled
-                  </>
-                ) : (
-                  <>
-                    <ToggleLeft className="w-5 h-5" />
-                    Disabled
-                  </>
-                )}
-              </button>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-4">
-              Automatically generate and send AI responses to incoming DMs. Messages are categorized
-              and responses use your knowledge base and category-specific instructions.
-            </p>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-700">
-                <strong>How it works:</strong> When enabled, incoming messages are automatically categorized
-                and responded to using AI. The AI uses your general knowledge base and category-specific
-                instructions to generate appropriate responses.
-              </p>
-            </div>
-          </div>
-
-          {/* 24h Follow-up */}
-          <div className="bg-white rounded-lg border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-purple-500" />
-                <h2 className="text-lg font-semibold">24h Follow-up Automation</h2>
-              </div>
-              <button
-                onClick={() => handleToggle('followupEnabled')}
-                className={`flex items-center justify-center gap-2 px-3 py-1.5 text-sm rounded-full ${
-                  formData.followupEnabled
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-500'
-                }`}
-              >
-                {formData.followupEnabled ? (
-                  <>
-                    <ToggleRight className="w-5 h-5" />
-                    Enabled
-                  </>
-                ) : (
-                  <>
-                    <ToggleLeft className="w-5 h-5" />
-                    Disabled
-                  </>
-                )}
-              </button>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-4">
-              Automatically send a follow-up message before the 24-hour messaging window expires.
-            </p>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Send Follow-up Before Window Expires (hours)
-                </label>
-                <input
-                  type="number"
-                  value={formData.followupHoursBeforeExpiry}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    followupHoursBeforeExpiry: Math.max(1, Math.min(23, parseInt(e.target.value) || 2))
-                  }))}
-                  min={1}
-                  max={23}
-                  className="w-32 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-sm text-gray-500 mt-1">
-                  Follow-up will be sent {formData.followupHoursBeforeExpiry} hour(s) before the 24h window closes.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Follow-up Template
-                </label>
-                <textarea
-                  value={formData.followupTemplate}
-                  onChange={(e) => setFormData(prev => ({ ...prev, followupTemplate: e.target.value }))}
-                  rows={3}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Just checking in to see if you had any other questions..."
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Save Button */}
-          <div className="flex justify-end">
-            <button
-              onClick={handleSaveAutomations}
-              disabled={saving || loading}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Save Settings
-                </>
+          ) : (
+            <>
+              {/* Stats */}
+              {stats && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card variant="solid">
+                    <CardContent className="p-6">
+                      <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Comments Processed</div>
+                      <div className="text-2xl font-bold text-white mt-1">{stats.commentDm.sent}</div>
+                      {stats.commentDm.failed > 0 && <div className="text-xs text-red-400 mt-1">{stats.commentDm.failed} failed</div>}
+                    </CardContent>
+                  </Card>
+                  <Card variant="solid">
+                    <CardContent className="p-6">
+                      <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Auto-Replies</div>
+                      <div className="text-2xl font-bold text-white mt-1">{stats.autoReply.sent}</div>
+                    </CardContent>
+                  </Card>
+                  <Card variant="solid">
+                    <CardContent className="p-6">
+                      <div className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Follow-ups</div>
+                      <div className="text-2xl font-bold text-white mt-1">{stats.followup.sent}</div>
+                      <div className="text-xs text-slate-500 mt-1">{stats.followup.pending} pending</div>
+                    </CardContent>
+                  </Card>
+                </div>
               )}
-            </button>
-          </div>
+
+              {/* AI Reply Policy */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-accent" /> AI Control Center
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Decision Mode</label>
+                      <select
+                        value={formData.decisionMode}
+                        onChange={(e) => setFormData(prev => ({ ...prev, decisionMode: e.target.value as any }))}
+                        className="input-field w-full"
+                      >
+                        <option value="full_auto">Full Auto (AI Responds)</option>
+                        <option value="assist">Assist (Drafts Only)</option>
+                        <option value="info_only">Info Only</option>
+                      </select>
+                      <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1">
+                        <Info className="w-3 h-3" /> Controls how autonomously the AI acts.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Reply Length</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={5}
+                        value={formData.maxReplySentences}
+                        onChange={(e) => setFormData(prev => ({ ...prev, maxReplySentences: parseInt(e.target.value) }))}
+                        className="input-field w-full"
+                      />
+                      <p className="text-xs text-slate-500 mt-1.5">Max sentences per reply.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-4">
+                    <Button
+                      variant={formData.allowHashtags ? "primary" : "secondary"}
+                      onClick={() => handleToggle('allowHashtags')}
+                      size="sm"
+                      className={!formData.allowHashtags ? "opacity-50" : ""}
+                    >
+                      Hashtags {formData.allowHashtags ? 'Allowed' : 'Blocked'}
+                    </Button>
+                    <Button
+                      variant={formData.allowEmojis ? "primary" : "secondary"}
+                      onClick={() => handleToggle('allowEmojis')}
+                      size="sm"
+                      className={!formData.allowEmojis ? "opacity-50" : ""}
+                    >
+                      Emojis {formData.allowEmojis ? 'Allowed' : 'Blocked'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Language */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-blue-400" /> Language
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Base Language</label>
+                    <select
+                      value={formData.defaultLanguage}
+                      onChange={(e) => setFormData(prev => ({ ...prev, defaultLanguage: e.target.value }))}
+                      className="input-field w-full"
+                    >
+                      {LANGUAGES.map(lang => (
+                        <option key={lang.code} value={lang.code}>{lang.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Force Reply Language</label>
+                    <select
+                      value={formData.defaultReplyLanguage}
+                      onChange={(e) => setFormData(prev => ({ ...prev, defaultReplyLanguage: e.target.value }))}
+                      className="input-field w-full"
+                    >
+                      {LANGUAGES.map(lang => (
+                        <option key={lang.code} value={lang.code}>{lang.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Automation Toggles */}
+              <div className="grid grid-cols-1 gap-6">
+                {/* Inbound DM */}
+                <Card className={formData.dmAutoReplyEnabled ? 'border-primary/50 bg-primary/5' : ''}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <MessageCircle className="w-5 h-5 text-blue-400" /> Auto-Reply to DMs
+                      </CardTitle>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-medium ${formData.dmAutoReplyEnabled ? 'text-primary' : 'text-slate-500'}`}>
+                          {formData.dmAutoReplyEnabled ? 'Active' : 'Disabled'}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant={formData.dmAutoReplyEnabled ? "primary" : "outline"}
+                          onClick={() => handleToggle('dmAutoReplyEnabled')}
+                        >
+                          {formData.dmAutoReplyEnabled ? 'Turn Off' : 'Turn On'}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-slate-400">
+                      Automatically replying to incoming DMs using your Knowledge Base and Category instructions.
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Comment to DM */}
+                <Card className={formData.commentDmEnabled ? 'border-primary/50 bg-primary/5' : ''}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <MessageSquare className="w-5 h-5 text-orange-400" /> Comment → DM
+                      </CardTitle>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-medium ${formData.commentDmEnabled ? 'text-primary' : 'text-slate-500'}`}>
+                          {formData.commentDmEnabled ? 'Active' : 'Disabled'}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant={formData.commentDmEnabled ? "primary" : "outline"}
+                          onClick={() => handleToggle('commentDmEnabled')}
+                        >
+                          {formData.commentDmEnabled ? 'Turn Off' : 'Turn On'}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-slate-400">
+                      Send a DM when someone comments on your posts.
+                    </p>
+                    {formData.commentDmEnabled && (
+                      <div className="space-y-2 animate-fade-in">
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">DM Template</label>
+                        <textarea
+                          value={formData.commentDmTemplate}
+                          onChange={(e) => setFormData(prev => ({ ...prev, commentDmTemplate: e.target.value }))}
+                          className="input-field w-full min-h-[80px]"
+                          placeholder="Hi! Thanks for your comment..."
+                        />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Follow Up */}
+                <Card className={formData.followupEnabled ? 'border-primary/50 bg-primary/5' : ''}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-purple-400" /> 24h Follow-up
+                      </CardTitle>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-medium ${formData.followupEnabled ? 'text-primary' : 'text-slate-500'}`}>
+                          {formData.followupEnabled ? 'Active' : 'Disabled'}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant={formData.followupEnabled ? "primary" : "outline"}
+                          onClick={() => handleToggle('followupEnabled')}
+                        >
+                          {formData.followupEnabled ? 'Turn Off' : 'Turn On'}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-slate-400">
+                      Send a check-in message before the Instagram 24h window closes.
+                    </p>
+                    {formData.followupEnabled && (
+                      <div className="space-y-4 animate-fade-in">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Hours Before Expiry</label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={23}
+                              value={formData.followupHoursBeforeExpiry}
+                              onChange={(e) => setFormData(prev => ({ ...prev, followupHoursBeforeExpiry: parseInt(e.target.value) }))}
+                              className="input-field w-full"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Message Template</label>
+                          <textarea
+                            value={formData.followupTemplate}
+                            onChange={(e) => setFormData(prev => ({ ...prev, followupTemplate: e.target.value }))}
+                            className="input-field w-full min-h-[80px]"
+                            placeholder="Just checking in before this chat closes..."
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
+// Force rebuild
