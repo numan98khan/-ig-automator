@@ -376,9 +376,9 @@ const Inbox: React.FC = () => {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0">
       {/* Conversation List - Hidden on mobile when conversation is selected */}
-      <div className={`w-full md:w-80 md:border-r border-gray-200 flex flex-col bg-white ${
+      <div className={`w-full md:w-80 md:border-r border-gray-200 flex flex-col bg-white min-h-0 ${
         selectedConversation ? 'hidden md:flex' : 'flex'
       }`}>
         <div className="p-3 md:p-4 border-b border-gray-200">
@@ -450,7 +450,7 @@ const Inbox: React.FC = () => {
       </div>
 
       {/* Chat Area - Hidden on mobile when no conversation is selected */}
-      <div className={`flex-1 flex flex-col bg-gray-50 ${
+      <div className={`flex-1 flex flex-col bg-gray-50 min-h-0 ${
         selectedConversation ? 'flex' : 'hidden md:flex'
       }`}>
         {selectedConversation ? (

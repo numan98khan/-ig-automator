@@ -25,9 +25,9 @@ const Layout: React.FC = () => {
   ];
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex-shrink-0">
+      <header className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex-shrink-0 z-10">
         <div className="flex items-center justify-between">
           {/* Logo and Title */}
           <div className="flex items-center space-x-2">
@@ -181,7 +181,7 @@ const Layout: React.FC = () => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto min-h-0">
         <Outlet />
       </main>
     </div>

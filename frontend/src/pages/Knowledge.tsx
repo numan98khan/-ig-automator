@@ -89,9 +89,9 @@ const Knowledge: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="h-full min-h-0 flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-3 md:p-6">
+      <div className="bg-white border-b border-gray-200 p-3 md:p-6 flex-shrink-0">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex-1">
             <h1 className="text-xl md:text-2xl font-bold text-gray-900">Knowledge Base</h1>
