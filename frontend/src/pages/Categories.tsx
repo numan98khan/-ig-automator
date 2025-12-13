@@ -193,41 +193,41 @@ export default function Categories() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Tags className="w-6 h-6" />
+    <div className="max-w-6xl mx-auto p-3 md:p-6">
+      <div className="mb-4 md:mb-8">
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Tags className="w-5 h-5 md:w-6 md:h-6" />
           Message Categories
         </h1>
-        <p className="text-gray-600 mt-1">
+        <p className="text-sm md:text-base text-gray-600 mt-1">
           Manage how different types of messages are categorized and answered.
         </p>
       </div>
 
       {/* Status Messages */}
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-          <AlertCircle className="w-5 h-5" />
-          {error}
-          <button onClick={() => setError(null)} className="ml-auto">
+        <div className="mb-4 md:mb-6 p-3 md:p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm md:text-base">
+          <AlertCircle className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError(null)} className="flex-shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
       {success && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
-          <CheckCircle className="w-5 h-5" />
+        <div className="mb-4 md:mb-6 p-3 md:p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700 text-sm md:text-base">
+          <CheckCircle className="w-4 h-4 md:w-5 md:h-5" />
           {success}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Category List */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-lg border">
-            <div className="p-4 border-b flex items-center justify-between">
-              <h2 className="font-semibold">Categories</h2>
+            <div className="p-3 md:p-4 border-b flex items-center justify-between">
+              <h2 className="text-sm md:text-base font-semibold">Categories</h2>
               <button
                 onClick={() => setShowNewCategoryForm(true)}
                 className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
@@ -239,13 +239,13 @@ export default function Categories() {
 
             {/* New Category Form */}
             {showNewCategoryForm && (
-              <div className="p-4 border-b bg-gray-50">
+              <div className="p-3 md:p-4 border-b bg-gray-50">
                 <input
                   type="text"
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                   placeholder="Category name"
-                  className="w-full px-3 py-2 border rounded-lg mb-2"
+                  className="w-full px-3 py-2 text-sm md:text-base border rounded-lg mb-2"
                   autoFocus
                 />
                 <input
@@ -253,13 +253,13 @@ export default function Categories() {
                   value={newCategoryDescription}
                   onChange={(e) => setNewCategoryDescription(e.target.value)}
                   placeholder="Description (optional)"
-                  className="w-full px-3 py-2 border rounded-lg mb-3"
+                  className="w-full px-3 py-2 text-sm md:text-base border rounded-lg mb-3"
                 />
                 <div className="flex gap-2">
                   <button
                     onClick={createCategory}
                     disabled={creating || !newCategoryName.trim()}
-                    className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    className="flex-1 px-3 py-2 text-sm md:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                   >
                     {creating ? 'Creating...' : 'Create'}
                   </button>
@@ -269,7 +269,7 @@ export default function Categories() {
                       setNewCategoryName('');
                       setNewCategoryDescription('');
                     }}
-                    className="px-3 py-1.5 border rounded-lg hover:bg-gray-100"
+                    className="px-3 py-2 text-sm md:text-base border rounded-lg hover:bg-gray-100"
                   >
                     Cancel
                   </button>
@@ -278,27 +278,27 @@ export default function Categories() {
             )}
 
             {/* Category List */}
-            <div className="divide-y max-h-[600px] overflow-y-auto">
+            <div className="divide-y max-h-[400px] md:max-h-[600px] overflow-y-auto">
               {categories.map(category => (
                 <div
                   key={category._id}
                   onClick={() => selectCategory(category)}
-                  className={`p-4 cursor-pointer hover:bg-gray-50 ${
+                  className={`p-3 md:p-4 cursor-pointer hover:bg-gray-50 ${
                     selectedCategory?._id === category._id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="font-medium flex items-center gap-2">
-                        {category.nameEn}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm md:text-base font-medium flex items-center gap-2">
+                        <span className="truncate">{category.nameEn}</span>
                         {category.isSystem && (
-                          <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">
+                          <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded flex-shrink-0">
                             System
                           </span>
                         )}
                       </div>
                       {category.description && (
-                        <div className="text-sm text-gray-500 mt-0.5">
+                        <div className="text-xs md:text-sm text-gray-500 mt-0.5 truncate">
                           {category.description}
                         </div>
                       )}
@@ -352,26 +352,26 @@ export default function Categories() {
         <div className="lg:col-span-2">
           {selectedCategory ? (
             <div className="bg-white rounded-lg border">
-              <div className="p-4 border-b">
-                <h2 className="font-semibold flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-blue-500" />
-                  Knowledge for "{selectedCategory.nameEn}"
+              <div className="p-3 md:p-4 border-b">
+                <h2 className="text-sm md:text-base font-semibold flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 md:w-5 md:h-5 text-blue-500" />
+                  <span className="truncate">Knowledge for "{selectedCategory.nameEn}"</span>
                 </h2>
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="text-xs md:text-sm text-gray-500 mt-1">
                   Define how the AI should respond to messages in this category.
                 </p>
               </div>
 
-              <div className="p-4">
+              <div className="p-3 md:p-4">
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-2">
                     Response Instructions
                   </label>
                   <textarea
                     value={knowledgeContent}
                     onChange={(e) => setKnowledgeContent(e.target.value)}
-                    rows={12}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                    rows={8}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-xs md:text-sm"
                     placeholder={`Enter instructions for how the AI should respond to "${selectedCategory.nameEn}" messages.
 
 Example:
@@ -380,14 +380,14 @@ Example:
 - If the question is complex, offer to connect them with a team member
 - Keep responses concise and professional`}
                   />
-                  <p className="text-sm text-gray-500 mt-2">
+                  <p className="text-xs md:text-sm text-gray-500 mt-2">
                     These instructions will be used by the AI when generating responses for messages
                     categorized as "{selectedCategory.nameEn}".
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-xs md:text-sm">
                     <span className={`px-2 py-1 rounded ${
                       selectedCategory.autoReplyEnabled
                         ? 'bg-green-100 text-green-700'
@@ -400,7 +400,7 @@ Example:
                   <button
                     onClick={saveKnowledge}
                     disabled={savingKnowledge}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 px-3 md:px-4 py-2 text-sm md:text-base bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 w-full sm:w-auto"
                   >
                     {savingKnowledge ? (
                       <>

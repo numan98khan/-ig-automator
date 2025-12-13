@@ -11,7 +11,7 @@ import {
   InstagramAccount,
   MessageCategory,
 } from '../services/api';
-import { Send, Sparkles, Instagram, Loader2, RefreshCw, CheckCircle, Tag, Check, CheckCheck } from 'lucide-react';
+import { Send, Sparkles, Instagram, Loader2, RefreshCw, CheckCircle, Tag, Check, CheckCheck, ArrowLeft } from 'lucide-react';
 
 const Inbox: React.FC = () => {
   const { currentWorkspace } = useAuth();
@@ -377,31 +377,33 @@ const Inbox: React.FC = () => {
 
   return (
     <div className="flex h-full">
-      {/* Conversation List */}
-      <div className="w-80 border-r border-gray-200 flex flex-col bg-white">
-        <div className="p-4 border-b border-gray-200">
+      {/* Conversation List - Hidden on mobile when conversation is selected */}
+      <div className={`w-full md:w-80 md:border-r border-gray-200 flex flex-col bg-white ${
+        selectedConversation ? 'hidden md:flex' : 'flex'
+      }`}>
+        <div className="p-3 md:p-4 border-b border-gray-200">
           <div className="flex justify-between items-start mb-2">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Conversations</h2>
-              <p className="text-sm text-gray-500 mt-1">
+              <h2 className="text-base md:text-lg font-semibold text-gray-900">Conversations</h2>
+              <p className="text-xs md:text-sm text-gray-500 mt-1">
                 @{instagramAccounts?.[0]?.username || '...'}
               </p>
             </div>
             <button
               onClick={handleSyncAll}
               disabled={syncingAll}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition"
+              className="flex items-center gap-1 px-2 md:px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition"
               title="Sync All Conversations"
             >
               {syncingAll ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Syncing...
+                  <span className="hidden sm:inline">Syncing...</span>
                 </>
               ) : (
                 <>
                   <RefreshCw className="w-3.5 h-3.5" />
-                  Sync All
+                  <span className="hidden sm:inline">Sync All</span>
                 </>
               )}
             </button>
@@ -413,18 +415,19 @@ const Inbox: React.FC = () => {
             <div
               key={conv._id || conv.instagramConversationId}
               onClick={() => setSelectedConversation(conv)}
-              className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition ${selectedConversation?._id === conv._id || selectedConversation?.instagramConversationId === conv.instagramConversationId ? 'bg-purple-50' : ''
-                }`}
+              className={`p-3 md:p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition ${
+                selectedConversation?._id === conv._id || selectedConversation?.instagramConversationId === conv.instagramConversationId ? 'bg-purple-50' : ''
+              }`}
             >
               <div className="flex items-start justify-between mb-1">
-                <h3 className="font-semibold text-gray-900">{conv.participantName}</h3>
+                <h3 className="font-semibold text-gray-900 text-sm md:text-base">{conv.participantName}</h3>
                 <span className="text-xs text-gray-500">{formatTime(conv.lastMessageAt)}</span>
               </div>
-              <p className="text-sm text-gray-600">{conv.participantHandle}</p>
+              <p className="text-xs md:text-sm text-gray-600">{conv.participantHandle}</p>
               {conv.lastMessage && (
-                <p className="text-sm text-gray-500 mt-1 truncate">{conv.lastMessage}</p>
+                <p className="text-xs md:text-sm text-gray-500 mt-1 truncate">{conv.lastMessage}</p>
               )}
-              <div className="flex gap-2 mt-2">
+              <div className="flex gap-2 mt-2 flex-wrap">
                 {conv.isSynced ? (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                     <CheckCircle className="w-3 h-3" />
@@ -446,40 +449,52 @@ const Inbox: React.FC = () => {
         </div>
       </div>
 
-      {/* Chat Area */}
-      <div className="flex-1 flex flex-col bg-gray-50">
+      {/* Chat Area - Hidden on mobile when no conversation is selected */}
+      <div className={`flex-1 flex flex-col bg-gray-50 ${
+        selectedConversation ? 'flex' : 'hidden md:flex'
+      }`}>
         {selectedConversation ? (
           <>
             {/* Chat Header */}
-            <div className="bg-white border-b border-gray-200 p-4">
+            <div className="bg-white border-b border-gray-200 p-3 md:p-4">
               <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="font-semibold text-gray-900">{selectedConversation.participantName}</h2>
-                  <p className="text-sm text-gray-500">{selectedConversation.participantHandle}</p>
+                <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+                  {/* Back button for mobile */}
+                  <button
+                    onClick={() => setSelectedConversation(null)}
+                    className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-full transition flex-shrink-0"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-semibold text-gray-900 text-sm md:text-base truncate">{selectedConversation.participantName}</h2>
+                    <p className="text-xs md:text-sm text-gray-500 truncate">{selectedConversation.participantHandle}</p>
+                  </div>
                 </div>
                 <button
                   onClick={handleSyncConversation}
                   disabled={syncing}
-                  className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition disabled:opacity-50"
+                  className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition disabled:opacity-50 flex-shrink-0"
                   title="Sync Messages"
                 >
-                  <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin text-purple-600' : ''}`} />
+                  <RefreshCw className={`w-4 h-4 md:w-5 md:h-5 ${syncing ? 'animate-spin text-purple-600' : ''}`} />
                 </button>
               </div>
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4">
               {messages.map((msg) => (
                 <div
                   key={msg._id}
                   className={`flex ${msg.from === 'customer' ? 'justify-start' : 'justify-end'}`}
                   onMouseEnter={() => msg.from === 'customer' && setHoveredMessageId(msg._id)}
                   onMouseLeave={() => setHoveredMessageId(null)}
+                  onTouchStart={() => msg.from === 'customer' && setHoveredMessageId(msg._id)}
                 >
                   <div className="relative">
                     <div
-                      className={`max-w-md px-4 py-2 rounded-lg ${msg.from === 'customer'
+                      className={`max-w-[85%] md:max-w-md px-3 md:px-4 py-2 rounded-lg ${msg.from === 'customer'
                         ? 'bg-white text-gray-900 border border-gray-200'
                         : msg.from === 'ai'
                           ? 'bg-purple-100 text-purple-900 border border-purple-200'
@@ -564,22 +579,22 @@ const Inbox: React.FC = () => {
             </div>
 
             {/* Input Area */}
-            <div className="bg-white border-t border-gray-200 p-4">
+            <div className="bg-white border-t border-gray-200 p-3 md:p-4">
               <div className="mb-2">
                 <button
                   onClick={handleGenerateAIReply}
                   disabled={generatingAI}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 disabled:bg-purple-50 disabled:text-purple-400 font-medium transition"
+                  className="w-full md:w-auto flex items-center justify-center gap-2 px-3 md:px-4 py-2 md:py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 disabled:bg-purple-50 disabled:text-purple-400 font-medium transition text-sm md:text-base"
                 >
                   {generatingAI ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Generating...
+                      <span>Generating...</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      Generate AI Reply
+                      <span>Generate AI Reply</span>
                     </>
                   )}
                 </button>
@@ -591,12 +606,12 @@ const Inbox: React.FC = () => {
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Type a message..."
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="flex-1 px-3 md:px-4 py-2.5 md:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base"
                 />
                 <button
                   type="submit"
                   disabled={sendingMessage || !newMessage.trim()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300 transition"
+                  className="px-3 md:px-4 py-2.5 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-300 transition flex-shrink-0"
                 >
                   {sendingMessage ? (
                     <Loader2 className="w-5 h-5 animate-spin" />

@@ -91,18 +91,18 @@ const Knowledge: React.FC = () => {
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Knowledge Base</h1>
-            <p className="text-sm text-gray-500 mt-1">
+      <div className="bg-white border-b border-gray-200 p-3 md:p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex-1">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Knowledge Base</h1>
+            <p className="text-xs md:text-sm text-gray-500 mt-1">
               Add information that the AI can use to answer customer questions
             </p>
           </div>
           {!showForm && (
             <button
               onClick={() => setShowForm(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-3 md:px-4 py-2 text-sm md:text-base bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition"
             >
               <Plus className="w-4 h-4" />
               Add Knowledge
@@ -112,44 +112,44 @@ const Knowledge: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6">
         <div className="max-w-4xl mx-auto">
           {showForm && (
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            <div className="bg-white rounded-lg shadow-md p-4 md:p-6 mb-4 md:mb-6">
+              <h2 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">
                 {editingItem ? 'Edit Knowledge Item' : 'Add Knowledge Item'}
               </h2>
 
               <form onSubmit={handleSubmit}>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                <div className="mb-3 md:mb-4">
+                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-2">Title</label>
                   <input
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="e.g., Working Hours, Shipping Policy"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 md:px-4 py-2 text-sm md:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     required
                   />
                 </div>
 
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
+                <div className="mb-3 md:mb-4">
+                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-2">Content</label>
                   <textarea
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
                     placeholder="Detailed information about this topic..."
-                    rows={6}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    rows={5}
+                    className="w-full px-3 md:px-4 py-2 text-sm md:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     required
                   />
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-purple-300 font-medium transition"
+                    className="flex items-center justify-center gap-2 px-3 md:px-4 py-2 text-sm md:text-base bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-purple-300 font-medium transition"
                   >
                     <Save className="w-4 h-4" />
                     {loading ? 'Saving...' : 'Save'}
@@ -157,7 +157,7 @@ const Knowledge: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleCancel}
-                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition"
+                    className="flex items-center justify-center gap-2 px-3 md:px-4 py-2 text-sm md:text-base border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition"
                   >
                     <X className="w-4 h-4" />
                     Cancel
@@ -168,16 +168,16 @@ const Knowledge: React.FC = () => {
           )}
 
           {items.length === 0 ? (
-            <div className="text-center py-12">
-              <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Knowledge Items Yet</h3>
-              <p className="text-gray-600 mb-6">
+            <div className="text-center py-8 md:py-12 px-4">
+              <BookOpen className="w-12 h-12 md:w-16 md:h-16 text-gray-400 mx-auto mb-3 md:mb-4" />
+              <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-2">No Knowledge Items Yet</h3>
+              <p className="text-sm md:text-base text-gray-600 mb-4 md:mb-6">
                 Add your first knowledge item to help the AI answer customer questions
               </p>
               {!showForm && (
                 <button
                   onClick={() => setShowForm(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition"
+                  className="inline-flex items-center gap-2 px-3 md:px-4 py-2 text-sm md:text-base bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition"
                 >
                   <Plus className="w-4 h-4" />
                   Add Knowledge
@@ -185,30 +185,30 @@ const Knowledge: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 md:space-y-4">
               {items.map((item) => (
-                <div key={item._id} className="bg-white rounded-lg shadow-md p-6">
-                  <div className="flex items-start justify-between mb-3">
-                    <h3 className="text-lg font-semibold text-gray-900">{item.title}</h3>
-                    <div className="flex gap-2">
+                <div key={item._id} className="bg-white rounded-lg shadow-md p-4 md:p-6">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <h3 className="text-base md:text-lg font-semibold text-gray-900 flex-1 min-w-0 break-words">{item.title}</h3>
+                    <div className="flex gap-1 md:gap-2 flex-shrink-0">
                       <button
                         onClick={() => handleEdit(item)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                        className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
                         title="Edit"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(item._id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                        className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
                         title="Delete"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                  <p className="text-gray-700 whitespace-pre-wrap">{item.content}</p>
-                  <p className="text-xs text-gray-500 mt-3">
+                  <p className="text-sm md:text-base text-gray-700 whitespace-pre-wrap break-words">{item.content}</p>
+                  <p className="text-xs text-gray-500 mt-2 md:mt-3">
                     Added {new Date(item.createdAt).toLocaleDateString()}
                   </p>
                 </div>
