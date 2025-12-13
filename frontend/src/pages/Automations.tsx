@@ -125,11 +125,24 @@ export default function Automations() {
 
     try {
       const updated = await settingsAPI.update(currentWorkspace._id, {
-        ...formData,
+        defaultLanguage: formData.defaultLanguage,
+        defaultReplyLanguage: formData.defaultReplyLanguage,
+        allowHashtags: formData.allowHashtags,
+        allowEmojis: formData.allowEmojis,
+        maxReplySentences: formData.maxReplySentences,
+        decisionMode: formData.decisionMode,
+        escalationGuidelines: formData.escalationGuidelines,
         escalationExamples: formData.escalationExamples
           ? formData.escalationExamples.split('\n').map(line => line.trim()).filter(Boolean)
           : [],
+        humanEscalationBehavior: formData.humanEscalationBehavior,
         humanHoldMinutes: Math.max(5, Math.min(720, formData.humanHoldMinutes || 60)),
+        commentDmEnabled: formData.commentDmEnabled,
+        commentDmTemplate: formData.commentDmTemplate,
+        dmAutoReplyEnabled: formData.dmAutoReplyEnabled,
+        followupEnabled: formData.followupEnabled,
+        followupHoursBeforeExpiry: formData.followupHoursBeforeExpiry,
+        followupTemplate: formData.followupTemplate,
       });
       setSettings(updated);
       setSuccess('Settings saved successfully!');

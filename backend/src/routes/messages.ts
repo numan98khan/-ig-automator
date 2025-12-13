@@ -198,11 +198,10 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
     const settings = await WorkspaceSettings.findOne({ workspaceId: conversation.workspaceId });
     const activeTicket = await getActiveTicket(conversation._id);
 
-    if (activeTicket) {
-      aiResponse.shouldEscalate = true;
+    if (activeTicket && aiResponse.shouldEscalate) {
       aiResponse.escalationReason = aiResponse.escalationReason || activeTicket.reason || 'Escalation pending';
       aiResponse.replyText = buildFollowupResponse(activeTicket.followUpCount || 0, aiResponse.replyText);
-    } else if (!aiResponse.shouldEscalate && activeTicket) {
+    } else if (activeTicket && !aiResponse.shouldEscalate) {
       aiResponse.replyText = `${aiResponse.replyText} Your earlier request is with a human teammate and they will confirm that separately.`;
     } else if (aiResponse.shouldEscalate) {
       aiResponse.replyText = buildInitialEscalationReply(aiResponse.replyText);

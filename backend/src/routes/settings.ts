@@ -51,7 +51,16 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     const { workspaceId } = req.params;
     const {
       defaultLanguage,
+      defaultReplyLanguage,
       uiLanguage,
+      allowHashtags,
+      allowEmojis,
+      maxReplySentences,
+      decisionMode,
+      escalationGuidelines,
+      escalationExamples,
+      humanEscalationBehavior,
+      humanHoldMinutes,
       commentDmEnabled,
       commentDmTemplate,
       dmAutoReplyEnabled,
@@ -74,7 +83,16 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     const updateData: Record<string, any> = {};
 
     if (defaultLanguage !== undefined) updateData.defaultLanguage = defaultLanguage;
+    if (defaultReplyLanguage !== undefined) updateData.defaultReplyLanguage = defaultReplyLanguage;
     if (uiLanguage !== undefined) updateData.uiLanguage = uiLanguage;
+    if (allowHashtags !== undefined) updateData.allowHashtags = allowHashtags;
+    if (allowEmojis !== undefined) updateData.allowEmojis = allowEmojis;
+    if (maxReplySentences !== undefined) updateData.maxReplySentences = maxReplySentences;
+    if (decisionMode !== undefined) updateData.decisionMode = decisionMode;
+    if (escalationGuidelines !== undefined) updateData.escalationGuidelines = escalationGuidelines;
+    if (escalationExamples !== undefined) updateData.escalationExamples = escalationExamples;
+    if (humanEscalationBehavior !== undefined) updateData.humanEscalationBehavior = humanEscalationBehavior;
+    if (humanHoldMinutes !== undefined) updateData.humanHoldMinutes = humanHoldMinutes;
     if (commentDmEnabled !== undefined) updateData.commentDmEnabled = commentDmEnabled;
     if (commentDmTemplate !== undefined) updateData.commentDmTemplate = commentDmTemplate;
     if (dmAutoReplyEnabled !== undefined) updateData.dmAutoReplyEnabled = dmAutoReplyEnabled;
