@@ -18,6 +18,7 @@ import messageRoutes from './routes/messages';
 import knowledgeRoutes from './routes/knowledge';
 import settingsRoutes from './routes/settings';
 import categoriesRoutes from './routes/categories';
+import escalationRoutes from './routes/escalations';
 import { scheduler } from './services/scheduler';
 
 // Load environment variables
@@ -48,6 +49,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/categories', categoriesRoutes);
+app.use('/api/escalations', escalationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

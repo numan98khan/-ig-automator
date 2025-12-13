@@ -21,46 +21,66 @@ export async function categorizeMessage(
   workspaceId: mongoose.Types.ObjectId | string
 ): Promise<CategorizationResult> {
   try {
-    // Get available categories for the workspace
     const categories = await MessageCategory.find({ workspaceId });
-    const categoryNames = categories.length > 0
-      ? categories.map(c => c.nameEn)
-      : DEFAULT_CATEGORIES.map(c => c.nameEn);
+    const categoryMeta = (categories.length > 0 ? categories : DEFAULT_CATEGORIES).map(cat => ({
+      name: cat.nameEn,
+      description: cat.descriptionEn || cat.description || '',
+      examples: (cat.exampleMessages || []).slice(0, 3),
+    }));
 
-    const prompt = `You are a message classifier for a business inbox. Analyze the following customer message and provide:
-1. The detected language (ISO 639-1 code, e.g., "en", "ar", "es", "fr", "de")
-2. The most appropriate category from the list
-3. If the message is NOT in English, provide an English translation
-4. A confidence score (0.0 to 1.0)
+    const categoryNames = categoryMeta.map(c => c.name);
 
-Available categories: ${categoryNames.join(', ')}
+    const schema = {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        detectedLanguage: { type: 'string', description: 'ISO 639-1 code' },
+        categoryName: { type: 'string', description: 'Must be one of the provided categories' },
+        translatedText: { type: ['string', 'null'], description: 'English translation if message not in English' },
+        confidence: { type: 'number', minimum: 0, maximum: 1 },
+      },
+      required: ['detectedLanguage', 'categoryName', 'translatedText', 'confidence'],
+    };
 
-Customer message:
-"${messageText}"
-
-Respond in JSON format only:
-{
-  "detectedLanguage": "ISO language code",
-  "categoryName": "Category name from the list",
-  "translatedText": "English translation if not English, otherwise null",
-  "confidence": 0.0 to 1.0
-}`;
+    const categoriesText = categoryMeta.map(cat => {
+      const examplesText = cat.examples.length > 0 ? ` Examples: ${cat.examples.join(' | ')}` : '';
+      return `- ${cat.name}: ${cat.description || 'No description.'}${examplesText}`;
+    }).join('\n');
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 200,
+      model: 'gpt-4o-mini',
+      temperature: 0.1,
+      messages: [
+        {
+          role: 'system',
+          content: 'Classify Instagram DMs for a business. Choose the best category and detect language. Return structured JSON only.',
+        },
+        {
+          role: 'user',
+          content: `Categories:\n${categoriesText}\n\nCustomer message:\n"""${messageText}"""\nReturn detectedLanguage, categoryName (must be from the list), translatedText (English translation or null if already English), and confidence (0-1).`,
+        },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'categorization_result',
+          schema,
+          strict: true,
+        },
+      },
     });
 
     const responseText = completion.choices[0].message.content?.trim() || '{}';
 
-    // Parse JSON response
-    let result: CategorizationResult;
+    let result: CategorizationResult = {
+      categoryName: 'General',
+      detectedLanguage: 'en',
+      translatedText: undefined,
+      confidence: 0.0,
+    };
+
     try {
-      // Handle potential markdown code blocks
-      const jsonText = responseText.replace(/```json\n?|\n?```/g, '').trim();
-      const parsed = JSON.parse(jsonText);
+      const parsed = JSON.parse(responseText);
       result = {
         categoryName: parsed.categoryName || 'General',
         detectedLanguage: parsed.detectedLanguage || 'en',
@@ -69,18 +89,26 @@ Respond in JSON format only:
       };
     } catch (parseError) {
       console.error('Failed to parse categorization response:', responseText);
-      result = {
-        categoryName: 'General',
-        detectedLanguage: 'en',
-        confidence: 0.0,
-      };
     }
 
-    // Validate category name exists
     if (!categoryNames.includes(result.categoryName)) {
       result.categoryName = 'General';
     }
 
+    // Confidence clamp for short or weakly-described categories
+    let confidence = result.confidence ?? 0.5;
+    const trimmedLength = messageText.trim().length;
+    if (trimmedLength < 20) {
+      confidence = Math.min(confidence, 0.45);
+    }
+
+    const categoryInfo = categoryMeta.find(c => c.name === result.categoryName);
+    const genericDescription = !categoryInfo?.description || categoryInfo.description.length < 30;
+    if (genericDescription) {
+      confidence = Math.min(confidence, 0.6);
+    }
+
+    result.confidence = Math.max(0, Math.min(1, Number(confidence.toFixed(2))));
     return result;
   } catch (error) {
     console.error('Error categorizing message:', error);
@@ -102,7 +130,7 @@ export async function detectLanguage(messageText: string): Promise<string> {
 "${messageText}"`;
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
       max_tokens: 10,

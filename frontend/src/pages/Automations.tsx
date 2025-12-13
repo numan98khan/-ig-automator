@@ -47,6 +47,15 @@ export default function Automations() {
   // Form state
   const [formData, setFormData] = useState({
     defaultLanguage: 'en',
+    defaultReplyLanguage: '',
+    allowHashtags: false,
+    allowEmojis: true,
+    maxReplySentences: 3,
+    decisionMode: 'assist' as 'full_auto' | 'assist' | 'info_only',
+    escalationGuidelines: '',
+    escalationExamples: '',
+    humanEscalationBehavior: 'ai_silent' as 'ai_silent' | 'ai_allowed',
+    humanHoldMinutes: 60,
     commentDmEnabled: false,
     commentDmTemplate: '',
     dmAutoReplyEnabled: false,
@@ -73,6 +82,15 @@ export default function Automations() {
       setSettings(data);
       setFormData({
         defaultLanguage: data.defaultLanguage || 'en',
+        defaultReplyLanguage: data.defaultReplyLanguage || data.defaultLanguage || 'en',
+        allowHashtags: data.allowHashtags ?? false,
+        allowEmojis: data.allowEmojis ?? true,
+        maxReplySentences: data.maxReplySentences ?? 3,
+        decisionMode: data.decisionMode || 'assist',
+        escalationGuidelines: data.escalationGuidelines || '',
+        escalationExamples: (data.escalationExamples || []).join('\n'),
+        humanEscalationBehavior: data.humanEscalationBehavior || 'ai_silent',
+        humanHoldMinutes: data.humanHoldMinutes || 60,
         commentDmEnabled: data.commentDmEnabled || false,
         commentDmTemplate: data.commentDmTemplate || '',
         dmAutoReplyEnabled: data.dmAutoReplyEnabled || false,
@@ -106,7 +124,13 @@ export default function Automations() {
     setSuccess(null);
 
     try {
-      const updated = await settingsAPI.update(currentWorkspace._id, formData);
+      const updated = await settingsAPI.update(currentWorkspace._id, {
+        ...formData,
+        escalationExamples: formData.escalationExamples
+          ? formData.escalationExamples.split('\n').map(line => line.trim()).filter(Boolean)
+          : [],
+        humanHoldMinutes: Math.max(5, Math.min(720, formData.humanHoldMinutes || 60)),
+      });
       setSettings(updated);
       setSuccess('Settings saved successfully!');
       setTimeout(() => setSuccess(null), 3000);
@@ -207,6 +231,157 @@ export default function Automations() {
               </select>
               <p className="text-xs md:text-sm text-gray-500 mt-1">
                 AI will respond in this language by default.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
+                Preferred Reply Language
+              </label>
+              <select
+                value={formData.defaultReplyLanguage}
+                onChange={(e) => setFormData(prev => ({ ...prev, defaultReplyLanguage: e.target.value }))}
+                className="w-full md:w-64 px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {LANGUAGES.map(lang => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs md:text-sm text-gray-500 mt-1">
+                Force AI replies into this language even if the customer writes differently.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* AI Reply Policy */}
+        <div className="bg-white rounded-lg border p-4 md:p-6">
+          <div className="flex items-center gap-2 mb-3 md:mb-4">
+            <AlertCircle className="w-4 h-4 md:w-5 md:h-5 text-purple-500" />
+            <h2 className="text-base md:text-lg font-semibold">AI Reply Policy</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
+                Decision Mode
+              </label>
+              <select
+                value={formData.decisionMode}
+                onChange={(e) => setFormData(prev => ({ ...prev, decisionMode: e.target.value as any }))}
+                className="w-full px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="full_auto">Full auto</option>
+                <option value="assist">Assist</option>
+                <option value="info_only">Info only</option>
+              </select>
+              <p className="text-xs md:text-sm text-gray-500 mt-1">
+                How bold the AI should be: full_auto answers more, info_only escalates more.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
+                Max Reply Sentences
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={5}
+                value={formData.maxReplySentences}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  maxReplySentences: Math.max(1, Math.min(5, parseInt(e.target.value) || 3)),
+                }))}
+                className="w-full md:w-32 px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs md:text-sm text-gray-500 mt-1">
+                AI replies will be trimmed to this many sentences.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => handleToggle('allowHashtags')}
+                className={`flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm rounded-full ${
+                  formData.allowHashtags ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                {formData.allowHashtags ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                Hashtags {formData.allowHashtags ? 'Allowed' : 'Blocked'}
+              </button>
+              <button
+                onClick={() => handleToggle('allowEmojis')}
+                className={`flex items-center justify-center gap-2 px-3 py-1.5 text-xs md:text-sm rounded-full ${
+                  formData.allowEmojis ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                {formData.allowEmojis ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                Emojis {formData.allowEmojis ? 'Allowed' : 'Blocked'}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div>
+              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
+                Escalation Guidelines
+              </label>
+              <textarea
+                value={formData.escalationGuidelines}
+                onChange={(e) => setFormData(prev => ({ ...prev, escalationGuidelines: e.target.value }))}
+                rows={3}
+                className="w-full px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Describe when a human should step in..."
+              />
+            </div>
+            <div>
+              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
+                Escalation Examples (one per line)
+              </label>
+              <textarea
+                value={formData.escalationExamples}
+                onChange={(e) => setFormData(prev => ({ ...prev, escalationExamples: e.target.value }))}
+                rows={3}
+                className="w-full px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Custom pricing request\nUrgent safety issue\nSensitive personal data"
+              />
+            </div>
+            <div>
+              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
+                Human Escalation Behavior
+              </label>
+              <select
+                value={formData.humanEscalationBehavior}
+                onChange={(e) => setFormData(prev => ({ ...prev, humanEscalationBehavior: e.target.value as any }))}
+                className="w-full px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="ai_silent">Human takes over (AI silent)</option>
+                <option value="ai_allowed">AI can keep assisting</option>
+              </select>
+              <p className="text-xs md:text-sm text-gray-500 mt-1">
+                When escalation is required, choose if AI pauses or continues supporting.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">
+                AI Pause Duration (minutes)
+              </label>
+              <input
+                type="number"
+                min={5}
+                max={720}
+                value={formData.humanHoldMinutes}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  humanHoldMinutes: Math.max(5, Math.min(720, parseInt(e.target.value) || 60)),
+                }))}
+                className="w-full md:w-48 px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs md:text-sm text-gray-500 mt-1">
+                How long AI stays inactive after escalation when set to be silent.
               </p>
             </div>
           </div>

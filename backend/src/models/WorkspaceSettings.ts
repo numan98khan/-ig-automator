@@ -4,8 +4,17 @@ export interface IWorkspaceSettings extends Document {
   workspaceId: mongoose.Types.ObjectId;
 
   // Language settings
-  defaultLanguage: string;        // AI response language (e.g., "en", "ar", "es")
+  defaultLanguage: string;        // Legacy default
+  defaultReplyLanguage?: string;  // Preferred reply language
   uiLanguage: string;             // Platform UI language (for future use)
+  allowHashtags?: boolean;
+  allowEmojis?: boolean;
+  maxReplySentences?: number;
+  decisionMode?: 'full_auto' | 'assist' | 'info_only';
+  escalationGuidelines?: string;
+  escalationExamples?: string[];
+  humanEscalationBehavior?: 'ai_silent' | 'ai_allowed';
+  humanHoldMinutes?: number;
 
   // Feature 1: Comment → DM Automation
   commentDmEnabled: boolean;
@@ -37,10 +46,52 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
     default: 'en',
     trim: true,
   },
+  defaultReplyLanguage: {
+    type: String,
+    trim: true,
+  },
   uiLanguage: {
     type: String,
     default: 'en',
     trim: true,
+  },
+  allowHashtags: {
+    type: Boolean,
+    default: false,
+  },
+  allowEmojis: {
+    type: Boolean,
+    default: true,
+  },
+  maxReplySentences: {
+    type: Number,
+    default: 3,
+    min: 1,
+    max: 5,
+  },
+  decisionMode: {
+    type: String,
+    enum: ['full_auto', 'assist', 'info_only'],
+    default: 'assist',
+  },
+  escalationGuidelines: {
+    type: String,
+    trim: true,
+  },
+  escalationExamples: {
+    type: [String],
+    default: [],
+  },
+  humanEscalationBehavior: {
+    type: String,
+    enum: ['ai_silent', 'ai_allowed'],
+    default: 'ai_silent',
+  },
+  humanHoldMinutes: {
+    type: Number,
+    default: 60,
+    min: 5,
+    max: 720,
   },
 
   // Feature 1: Comment → DM Automation

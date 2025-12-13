@@ -109,6 +109,87 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   }
 });
 
+// Resolve / clear human escalation for a conversation
+router.post('/:id/resolve-escalation', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const conversation = await Conversation.findById(req.params.id);
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    const workspace = await Workspace.findOne({
+      _id: conversation.workspaceId,
+      userId: req.userId,
+    });
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Unauthorized' });
+    }
+
+    conversation.humanRequired = false;
+    conversation.humanRequiredReason = undefined;
+    conversation.humanTriggeredAt = undefined;
+    conversation.humanTriggeredByMessageId = undefined;
+    conversation.humanHoldUntil = undefined;
+    await conversation.save();
+
+    res.json({ success: true, conversation });
+  } catch (error) {
+    console.error('Resolve escalation error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get human-required conversations for a workspace
+router.get('/escalations/workspace/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+
+    // Verify workspace belongs to user
+    const workspace = await Workspace.findOne({
+      _id: workspaceId,
+      userId: req.userId,
+    });
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    const conversations = await Conversation.find({
+      workspaceId,
+      humanRequired: true,
+    })
+      .sort({ humanTriggeredAt: -1 })
+      .limit(50);
+
+    const payload = await Promise.all(conversations.map(async (conv) => {
+      const recentMessages = await Message.find({ conversationId: conv._id })
+        .sort({ createdAt: -1 })
+        .limit(10);
+
+      const lastEscalation = await Message.findOne({
+        conversationId: conv._id,
+        aiShouldEscalate: true,
+      }).sort({ createdAt: -1 });
+
+      return {
+        conversation: conv,
+        recentMessages: recentMessages.reverse(),
+        lastEscalation,
+        humanRequiredReason: conv.humanRequiredReason,
+        humanHoldUntil: conv.humanHoldUntil,
+        humanTriggeredAt: conv.humanTriggeredAt,
+      };
+    }));
+
+    res.json(payload);
+  } catch (error) {
+    console.error('Get escalations error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Get conversation by ID
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {

@@ -8,6 +8,7 @@ import Knowledge from './pages/Knowledge';
 import Automations from './pages/Automations';
 import Categories from './pages/Categories';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import Escalations from './pages/Escalations';
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="automations" element={<Automations />} />
             <Route path="categories" element={<Categories />} />
+            <Route path="escalations" element={<Escalations />} />
           </Route>
           <Route path="*" element={<Navigate to="/landing" />} />
         </Routes>

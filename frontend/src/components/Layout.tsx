@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags, Menu, X as CloseIcon } from 'lucide-react';
+import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags, Menu, X as CloseIcon, AlertCircle } from 'lucide-react';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -21,6 +21,7 @@ const Layout: React.FC = () => {
     { to: '/knowledge', label: 'Knowledge', icon: BookOpen, isActive: isActive('/knowledge') },
     { to: '/categories', label: 'Categories', icon: Tags, isActive: isActive('/categories') },
     { to: '/automations', label: 'Automations', icon: Settings, isActive: isActive('/automations') },
+    { to: '/escalations', label: 'Human Alerts', icon: AlertCircle, isActive: isActive('/escalations') },
   ];
 
   return (

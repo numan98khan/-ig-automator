@@ -16,6 +16,7 @@ import {
   incrementCategoryCount,
 } from './aiCategorization';
 import { generateAIReply } from './aiReplyService';
+import { getActiveTicket, createTicket, addTicketUpdate } from './escalationService';
 
 /**
  * Get or create workspace settings
@@ -57,6 +58,18 @@ export async function processCommentDMAutomation(
 
     // Get workspace settings
     const settings = await getWorkspaceSettings(workspaceId);
+
+    // If human intervention is active and AI should stay silent, skip auto-reply
+    const now = new Date();
+    const holdActive = conversation.humanHoldUntil && conversation.humanHoldUntil > now;
+    if (conversation.humanRequired && settings.humanEscalationBehavior === 'ai_silent' && holdActive) {
+      return {
+        success: false,
+        message: 'Escalated to human; AI is paused',
+        categoryId,
+        detectedLanguage: categorization.detectedLanguage,
+      };
+    }
 
     // Check if comment DM automation is enabled
     if (!settings.commentDmEnabled) {
@@ -218,6 +231,13 @@ export async function processAutoReply(
     // Increment category count
     await incrementCategoryCount(categoryId);
 
+    const activeTicket = await getActiveTicket(conversation._id);
+    const sameTopicTicket =
+      activeTicket &&
+      activeTicket.categoryId &&
+      categoryId &&
+      activeTicket.categoryId.toString() === categoryId.toString();
+
     // Check if auto-reply is enabled for this category
     const category = await MessageCategory.findById(categoryId);
     if (category && !category.autoReplyEnabled) {
@@ -235,7 +255,6 @@ export async function processAutoReply(
       workspaceId,
       latestCustomerMessage: messageText,
       categoryId,
-      defaultLanguage: settings.defaultLanguage,
       categorization,
       historyLimit: 10,
     });
@@ -249,10 +268,44 @@ export async function processAutoReply(
       };
     }
 
+    // If existing ticket for same topic, force follow-up behavior
+    if (sameTopicTicket) {
+      aiReply.shouldEscalate = true;
+      aiReply.escalationReason = aiReply.escalationReason || activeTicket.reason || 'Escalation pending';
+      aiReply.replyText = buildFollowupResponse(activeTicket.followUpCount || 0, aiReply.replyText);
+      await addTicketUpdate(activeTicket._id, { from: 'customer', text: messageText });
+    } else if (activeTicket && !sameTopicTicket) {
+      // New topic while escalation pending: keep helping but remind briefly
+      aiReply.replyText = appendPendingNote(aiReply.replyText);
+    } else if (aiReply.shouldEscalate) {
+      aiReply.replyText = buildInitialEscalationReply(aiReply.replyText);
+    }
+
+    // If AI wants escalation and no ticket exists, create one
+    let escalationId: mongoose.Types.ObjectId | undefined;
+    if (aiReply.shouldEscalate && !sameTopicTicket) {
+      const ticket = await createTicket({
+        conversationId: conversation._id,
+        categoryId,
+        topicSummary: (aiReply.escalationReason || messageText).slice(0, 140),
+        reason: aiReply.escalationReason || 'Escalated by AI',
+        createdBy: 'ai',
+        customerMessage: messageText,
+      });
+      escalationId = ticket._id as mongoose.Types.ObjectId;
+      conversation.humanRequired = true;
+      conversation.humanRequiredReason = ticket.reason;
+      conversation.humanTriggeredAt = ticket.createdAt;
+      conversation.humanTriggeredByMessageId = undefined;
+      conversation.humanHoldUntil = settings.humanEscalationBehavior === 'ai_silent'
+        ? new Date(Date.now() + (settings.humanHoldMinutes || 60) * 60 * 1000)
+        : undefined;
+    }
+
     // Send the reply via Instagram API
     const result = await sendInstagramMessage(
       conversation.participantInstagramId!,
-      aiReply,
+      aiReply.replyText,
       igAccount.accessToken
     );
 
@@ -266,19 +319,39 @@ export async function processAutoReply(
     }
 
     // Save the reply as a message
-    await Message.create({
+    const savedMessage = await Message.create({
       conversationId: conversation._id,
-      text: aiReply,
+      text: aiReply.replyText,
       from: 'ai',
       platform: 'instagram',
       instagramMessageId: result.message_id,
       automationSource: 'auto_reply',
+      aiTags: aiReply.tags,
+      aiShouldEscalate: aiReply.shouldEscalate,
+      aiEscalationReason: aiReply.escalationReason,
     });
+
+    if (sameTopicTicket && activeTicket) {
+      await addTicketUpdate(activeTicket._id, { from: 'ai', text: aiReply.replyText, messageId: savedMessage._id });
+    } else if (escalationId) {
+      await addTicketUpdate(escalationId, { from: 'ai', text: aiReply.replyText, messageId: savedMessage._id });
+    }
 
     // Update conversation
     conversation.lastMessageAt = new Date();
-    conversation.lastMessage = aiReply;
+    conversation.lastMessage = aiReply.replyText;
     conversation.lastBusinessMessageAt = new Date();
+    if (aiReply.shouldEscalate) {
+      const holdMinutes = settings.humanHoldMinutes || 60;
+      conversation.humanRequired = true;
+      conversation.humanRequiredReason = aiReply.escalationReason || 'Escalation requested by AI';
+      conversation.humanTriggeredAt = new Date();
+      conversation.humanTriggeredByMessageId = savedMessage._id;
+      conversation.humanHoldUntil =
+        settings.humanEscalationBehavior === 'ai_silent'
+          ? new Date(Date.now() + holdMinutes * 60 * 1000)
+          : undefined;
+    }
     await conversation.save();
 
     return {
@@ -499,4 +572,25 @@ export async function cancelFollowupOnCustomerReply(
     },
     { status: 'customer_replied' }
   );
+}
+
+function buildFollowupResponse(followUpCount: number, base: string): string {
+  const templates = [
+    'I know you’re waiting on this. I’ve already flagged it to the team, and they’ll get back to you with the exact details. I can’t confirm on their behalf, but I can help gather anything they need.',
+    'Sorry for the wait. Your request is still with the team, and they’re the ones who can give a final answer. I can note your urgency and make sure they see it.',
+    'I’ve kept this with the team to review. I can’t make a commitment here, but I’m here to help with any other details you want them to consider.',
+  ];
+  const variant = templates[followUpCount % templates.length];
+  return base && base.trim().length > 0 ? base : variant;
+}
+
+function buildInitialEscalationReply(base: string): string {
+  if (base && base.trim().length > 0) return base;
+  return 'This needs a teammate to review directly, so I’ve flagged it for them. I won’t make promises here, but I can help with other questions while they respond.';
+}
+
+function appendPendingNote(reply: string): string {
+  const note = 'Your earlier request is still with our team and they will reply separately.';
+  if (reply.toLowerCase().includes('earlier request')) return reply;
+  return `${reply} ${note}`.trim();
 }

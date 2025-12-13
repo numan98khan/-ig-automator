@@ -3,9 +3,11 @@ import Message from '../models/Message';
 import Conversation from '../models/Conversation';
 import Workspace from '../models/Workspace';
 import InstagramAccount from '../models/InstagramAccount';
+import WorkspaceSettings from '../models/WorkspaceSettings';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { sendMessage as sendInstagramMessage } from '../utils/instagram-api';
 import { generateAIReply } from '../services/aiReplyService';
+import { getActiveTicket, createTicket, addTicketUpdate } from '../services/escalationService';
 
 const router = express.Router();
 
@@ -193,8 +195,20 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
       workspaceId: conversation.workspaceId,
       historyLimit: 20,
     });
+    const settings = await WorkspaceSettings.findOne({ workspaceId: conversation.workspaceId });
+    const activeTicket = await getActiveTicket(conversation._id);
 
-    console.log('🤖 AI generated response:', aiResponse);
+    if (activeTicket) {
+      aiResponse.shouldEscalate = true;
+      aiResponse.escalationReason = aiResponse.escalationReason || activeTicket.reason || 'Escalation pending';
+      aiResponse.replyText = buildFollowupResponse(activeTicket.followUpCount || 0, aiResponse.replyText);
+    } else if (!aiResponse.shouldEscalate && activeTicket) {
+      aiResponse.replyText = `${aiResponse.replyText} Your earlier request is with a human teammate and they will confirm that separately.`;
+    } else if (aiResponse.shouldEscalate) {
+      aiResponse.replyText = buildInitialEscalationReply(aiResponse.replyText);
+    }
+
+    console.log('🤖 AI generated response:', aiResponse.replyText, 'escalate:', aiResponse.shouldEscalate);
 
     // Send message via Instagram API first with HUMAN_AGENT tag to ensure notifications
     const enableHumanAgentTag = process.env.USE_HUMAN_AGENT_TAG === 'true';
@@ -204,7 +218,7 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
     try {
       result = await sendInstagramMessage(
         conversation.participantInstagramId,
-        aiResponse,
+        aiResponse.replyText,
         igAccount.accessToken,
         enableHumanAgentTag
           ? {
@@ -220,7 +234,7 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
 
       if (enableHumanAgentTag && tagBlocked) {
         console.warn('⚠️ HUMAN_AGENT tag rejected; retrying without tag...');
-        result = await sendInstagramMessage(conversation.participantInstagramId, aiResponse, igAccount.accessToken);
+        result = await sendInstagramMessage(conversation.participantInstagramId, aiResponse.replyText, igAccount.accessToken);
       } else {
         throw sendError;
       }
@@ -238,15 +252,52 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
     try {
       message = await Message.create({
         conversationId,
-        text: aiResponse,
+        text: aiResponse.replyText,
         from: 'ai',
         platform: 'instagram',
         instagramMessageId: result.message_id || undefined,
+        aiTags: aiResponse.tags,
+        aiShouldEscalate: aiResponse.shouldEscalate,
+        aiEscalationReason: aiResponse.escalationReason,
       });
 
+      // Escalation ticket handling
+      let ticketId = activeTicket?._id;
+      if (aiResponse.shouldEscalate && !ticketId) {
+        const ticket = await createTicket({
+          conversationId,
+          topicSummary: (aiResponse.escalationReason || aiResponse.replyText).slice(0, 140),
+          reason: aiResponse.escalationReason || 'Escalated by AI',
+          createdBy: 'ai',
+        });
+        ticketId = ticket._id;
+        conversation.humanRequired = true;
+        conversation.humanRequiredReason = ticket.reason;
+        conversation.humanTriggeredAt = ticket.createdAt;
+        conversation.humanTriggeredByMessageId = message._id;
+        conversation.humanHoldUntil = settings?.humanEscalationBehavior === 'ai_silent'
+          ? new Date(Date.now() + (settings?.humanHoldMinutes || 60) * 60 * 1000)
+          : undefined;
+      }
+
+      if (ticketId) {
+        await addTicketUpdate(ticketId, { from: 'ai', text: aiResponse.replyText, messageId: message._id });
+      }
+
       // Update conversation's lastMessageAt
-      conversation.lastMessage = aiResponse;
+      conversation.lastMessage = aiResponse.replyText;
       conversation.lastMessageAt = new Date();
+      if (aiResponse.shouldEscalate) {
+        const holdMinutes = settings?.humanHoldMinutes || 60;
+        const behavior = settings?.humanEscalationBehavior || 'ai_silent';
+        conversation.humanRequired = true;
+        conversation.humanRequiredReason = aiResponse.escalationReason || 'Escalation requested by AI';
+        conversation.humanTriggeredAt = new Date();
+        conversation.humanTriggeredByMessageId = message._id;
+        conversation.humanHoldUntil = behavior === 'ai_silent'
+          ? new Date(Date.now() + holdMinutes * 60 * 1000)
+          : undefined;
+      }
       await conversation.save();
 
       console.log('✅ AI message saved to database');
@@ -257,12 +308,24 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
         success: true,
         warning: 'Message sent successfully but database save failed',
         instagramMessageId: result.message_id,
-        text: aiResponse,
+        text: aiResponse.replyText,
+        aiMeta: {
+          tags: aiResponse.tags,
+          shouldEscalate: aiResponse.shouldEscalate,
+          escalationReason: aiResponse.escalationReason,
+        },
         error: dbError.message,
       });
     }
 
-    res.status(201).json(message);
+    res.status(201).json({
+      ...message.toObject(),
+      aiMeta: {
+        tags: aiResponse.tags,
+        shouldEscalate: aiResponse.shouldEscalate,
+        escalationReason: aiResponse.escalationReason,
+      },
+    });
   } catch (error: any) {
     console.error('Generate AI reply error:', error);
 
@@ -320,3 +383,18 @@ router.post('/mark-seen', authenticate, async (req: AuthRequest, res: Response) 
 });
 
 export default router;
+
+function buildFollowupResponse(followUpCount: number, base: string): string {
+  const templates = [
+    'I’ve flagged this to the team and they’ll handle it directly. I can’t confirm on their behalf, but I can gather any details they need.',
+    'Your request is with the team. I cannot make promises here, but I can note your urgency and pass along details.',
+    'Thanks for your patience. This needs a human to finalize. I’m here to help with any other questions meanwhile.',
+  ];
+  const variant = templates[followUpCount % templates.length];
+  return base && base.trim().length > 0 ? base : variant;
+}
+
+function buildInitialEscalationReply(base: string): string {
+  if (base && base.trim().length > 0) return base;
+  return 'This needs a teammate to review personally, so I’ve flagged it for them. I won’t make commitments here, but I can help with other questions meanwhile.';
+}

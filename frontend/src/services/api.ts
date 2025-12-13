@@ -53,6 +53,11 @@ export interface Conversation {
   isSynced?: boolean;
   categoryName?: string;
   categoryId?: any;
+  humanRequired?: boolean;
+  humanRequiredReason?: string;
+  humanTriggeredAt?: string;
+  humanTriggeredByMessageId?: string;
+  humanHoldUntil?: string;
 }
 
 export interface Message {
@@ -63,6 +68,9 @@ export interface Message {
   createdAt: string;
   categoryId?: any;
   seenAt?: string;
+  aiTags?: string[];
+  aiShouldEscalate?: boolean;
+  aiEscalationReason?: string;
 }
 
 export interface KnowledgeItem {
@@ -78,7 +86,16 @@ export interface WorkspaceSettings {
   _id: string;
   workspaceId: string;
   defaultLanguage: string;
+  defaultReplyLanguage?: string;
   uiLanguage: string;
+  allowHashtags?: boolean;
+  allowEmojis?: boolean;
+  maxReplySentences?: number;
+  decisionMode?: 'full_auto' | 'assist' | 'info_only';
+  escalationGuidelines?: string;
+  escalationExamples?: string[];
+  humanEscalationBehavior?: 'ai_silent' | 'ai_allowed';
+  humanHoldMinutes?: number;
   commentDmEnabled: boolean;
   commentDmTemplate: string;
   dmAutoReplyEnabled: boolean;
@@ -94,6 +111,10 @@ export interface MessageCategory {
   workspaceId: string;
   nameEn: string;
   description?: string;
+  descriptionEn?: string;
+  exampleMessages?: string[];
+  aiPolicy?: 'full_auto' | 'assist_only' | 'escalate';
+  escalationNote?: string;
   isSystem: boolean;
   autoReplyEnabled: boolean;
   messageCount: number;
@@ -109,6 +130,27 @@ export interface CategoryKnowledge {
   language: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface EscalationCase {
+  escalation: {
+    _id: string;
+    conversationId: string;
+    categoryId?: string;
+    topicSummary: string;
+    reason?: string;
+    status: 'pending' | 'in_progress' | 'resolved' | 'cancelled';
+    followUpCount: number;
+    createdAt: string;
+    updatedAt: string;
+    lastCustomerMessage?: string;
+    lastCustomerAt?: string;
+    lastAiMessage?: string;
+    lastAiAt?: string;
+  };
+  conversation: Conversation;
+  recentMessages: Message[];
+  lastEscalation?: Message;
 }
 
 export interface AutomationStats {
@@ -307,6 +349,18 @@ export const settingsAPI = {
 
   getStats: async (workspaceId: string): Promise<AutomationStats> => {
     const { data } = await api.get(`/api/settings/workspace/${workspaceId}/stats`);
+    return data;
+  },
+};
+
+// Human-in-the-loop / escalations
+export const escalationAPI = {
+  listByWorkspace: async (workspaceId: string): Promise<EscalationCase[]> => {
+    const { data } = await api.get(`/api/escalations/workspace/${workspaceId}`);
+    return data;
+  },
+  resolve: async (escalationId: string): Promise<{ success: boolean }> => {
+    const { data } = await api.post(`/api/escalations/${escalationId}/resolve`);
     return data;
   },
 };

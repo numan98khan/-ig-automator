@@ -19,6 +19,9 @@ export interface IMessage extends Document {
   categoryId?: mongoose.Types.ObjectId;  // Reference to MessageCategory
   detectedLanguage?: string;             // ISO language code (e.g., 'en', 'ar', 'es')
   translatedText?: string;               // English translation for analysis
+  aiTags?: string[];                     // Semantic labels returned by AI
+  aiShouldEscalate?: boolean;            // Escalation flag from AI
+  aiEscalationReason?: string;           // Short reason for escalation
 
   // Automation source tracking
   automationSource?: 'comment_dm' | 'auto_reply' | 'followup';  // Source of automated message
@@ -82,6 +85,17 @@ const messageSchema = new Schema<IMessage>({
   translatedText: {
     type: String,
     sparse: true,
+  },
+  aiTags: {
+    type: [String],
+    default: [],
+  },
+  aiShouldEscalate: {
+    type: Boolean,
+  },
+  aiEscalationReason: {
+    type: String,
+    trim: true,
   },
 
   // Automation source tracking
