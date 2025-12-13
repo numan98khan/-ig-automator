@@ -2,17 +2,12 @@ import express, { Response } from 'express';
 import Message from '../models/Message';
 import Conversation from '../models/Conversation';
 import Workspace from '../models/Workspace';
-import KnowledgeItem from '../models/KnowledgeItem';
 import InstagramAccount from '../models/InstagramAccount';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { sendMessage as sendInstagramMessage } from '../utils/instagram-api';
-import OpenAI from 'openai';
+import { generateAIReply } from '../services/aiReplyService';
 
 const router = express.Router();
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 // Get all messages for a conversation
 router.get('/conversation/:conversationId', authenticate, async (req: AuthRequest, res: Response) => {
@@ -193,44 +188,11 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
       return res.status(404).json({ error: 'Instagram account not found or not connected' });
     }
 
-    // Get conversation history
-    const messages = await Message.find({ conversationId }).sort({ createdAt: 1 });
-
-    // Get knowledge base
-    const knowledgeItems = await KnowledgeItem.find({ workspaceId: conversation.workspaceId });
-
-    // Build knowledge base context
-    const knowledgeContext = knowledgeItems.length > 0
-      ? `\n\nKnowledge Base:\n${knowledgeItems.map((item: any) => `- ${item.title}: ${item.content}`).join('\n')}`
-      : '';
-
-    // Build conversation history
-    const conversationHistory = messages.map((msg: any) => {
-      const role = msg.from === 'customer' ? 'Customer' : msg.from === 'ai' ? 'AI' : 'You';
-      return `${role}: ${msg.text}`;
-    }).join('\n');
-
-    // Create prompt
-    const prompt = `You are an AI assistant for a business's Instagram inbox. Your job is to help respond to customer messages professionally and helpfully.
-
-${knowledgeContext}
-
-Conversation History:
-${conversationHistory}
-
-Based on the conversation history and the knowledge base, generate a helpful and professional response to the customer's last message. If the answer is in the knowledge base, use it. If not, provide a polite response that tries to be helpful or asks for clarification.
-
-Response:`;
-
-    // Call OpenAI
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 200,
+    const aiResponse = await generateAIReply({
+      conversation,
+      workspaceId: conversation.workspaceId,
+      historyLimit: 20,
     });
-
-    const aiResponse = completion.choices[0].message.content?.trim() || 'I apologize, but I am unable to generate a response at this time.';
 
     console.log('🤖 AI generated response:', aiResponse);
 

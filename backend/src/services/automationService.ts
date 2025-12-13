@@ -1,9 +1,6 @@
-import OpenAI from 'openai';
 import mongoose from 'mongoose';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import MessageCategory from '../models/MessageCategory';
-import CategoryKnowledge from '../models/CategoryKnowledge';
-import KnowledgeItem from '../models/KnowledgeItem';
 import Message from '../models/Message';
 import Conversation from '../models/Conversation';
 import InstagramAccount from '../models/InstagramAccount';
@@ -18,10 +15,7 @@ import {
   getOrCreateCategory,
   incrementCategoryCount,
 } from './aiCategorization';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { generateAIReply } from './aiReplyService';
 
 /**
  * Get or create workspace settings
@@ -236,14 +230,15 @@ export async function processAutoReply(
     }
 
     // Build AI context
-    const aiReply = await generateAutoReply(
+    const aiReply = await generateAIReply({
       conversation,
-      messageText,
-      categoryId,
       workspaceId,
-      settings.defaultLanguage,
-      categorization
-    );
+      latestCustomerMessage: messageText,
+      categoryId,
+      defaultLanguage: settings.defaultLanguage,
+      categorization,
+      historyLimit: 10,
+    });
 
     if (!aiReply) {
       return {
@@ -299,91 +294,6 @@ export async function processAutoReply(
       success: false,
       message: `Auto-reply failed: ${error.message}`,
     };
-  }
-}
-
-/**
- * Generate AI reply with category knowledge
- */
-async function generateAutoReply(
-  conversation: any,
-  messageText: string,
-  categoryId: mongoose.Types.ObjectId,
-  workspaceId: mongoose.Types.ObjectId | string,
-  defaultLanguage: string,
-  categorization: { categoryName: string; detectedLanguage: string; translatedText?: string }
-): Promise<string | null> {
-  try {
-    // Get conversation history (last 10 messages)
-    const messages = await Message.find({ conversationId: conversation._id })
-      .sort({ createdAt: -1 })
-      .limit(10);
-    messages.reverse();
-
-    // Get general knowledge base
-    const knowledgeItems = await KnowledgeItem.find({ workspaceId });
-
-    // Get category-specific knowledge
-    const categoryKnowledge = await CategoryKnowledge.findOne({
-      workspaceId,
-      categoryId,
-    });
-
-    // Get category name
-    const category = await MessageCategory.findById(categoryId);
-
-    // Build knowledge context
-    let knowledgeContext = '';
-
-    if (knowledgeItems.length > 0) {
-      knowledgeContext += '\n\nGeneral Knowledge Base:\n';
-      knowledgeContext += knowledgeItems.map((item: any) => `- ${item.title}: ${item.content}`).join('\n');
-    }
-
-    if (categoryKnowledge && categoryKnowledge.content) {
-      knowledgeContext += `\n\nInstructions for "${category?.nameEn || 'this category'}" messages:\n`;
-      knowledgeContext += categoryKnowledge.content;
-    }
-
-    // Build conversation history
-    const conversationHistory = messages.map((msg: any) => {
-      const role = msg.from === 'customer' ? 'Customer' : msg.from === 'ai' ? 'AI' : 'Business';
-      return `${role}: ${msg.text}`;
-    }).join('\n');
-
-    // Build prompt with language instruction
-    const languageInstruction = defaultLanguage !== 'en'
-      ? `\nIMPORTANT: Always respond in ${getLanguageName(defaultLanguage)}.`
-      : '';
-
-    const prompt = `You are an AI assistant for a business's Instagram inbox. Your job is to help respond to customer messages professionally and helpfully.
-${knowledgeContext}
-
-Message Category: ${categorization.categoryName}
-Customer's Language: ${getLanguageName(categorization.detectedLanguage)}
-${categorization.translatedText ? `Translated message (English): "${categorization.translatedText}"` : ''}
-${languageInstruction}
-
-Conversation History:
-${conversationHistory}
-
-Latest Customer Message: "${messageText}"
-
-Based on the conversation history, knowledge base, and category instructions, generate a helpful and professional response. Keep it concise and friendly.
-
-Response:`;
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 250,
-    });
-
-    return completion.choices[0].message.content?.trim() || null;
-  } catch (error) {
-    console.error('Error generating auto-reply:', error);
-    return null;
   }
 }
 
@@ -589,33 +499,4 @@ export async function cancelFollowupOnCustomerReply(
     },
     { status: 'customer_replied' }
   );
-}
-
-/**
- * Helper: Get language name from ISO code
- */
-function getLanguageName(code: string): string {
-  const languages: Record<string, string> = {
-    en: 'English',
-    ar: 'Arabic',
-    es: 'Spanish',
-    fr: 'French',
-    de: 'German',
-    it: 'Italian',
-    pt: 'Portuguese',
-    ru: 'Russian',
-    zh: 'Chinese',
-    ja: 'Japanese',
-    ko: 'Korean',
-    hi: 'Hindi',
-    tr: 'Turkish',
-    nl: 'Dutch',
-    pl: 'Polish',
-    vi: 'Vietnamese',
-    th: 'Thai',
-    id: 'Indonesian',
-    ms: 'Malay',
-    tl: 'Filipino',
-  };
-  return languages[code] || code;
 }
