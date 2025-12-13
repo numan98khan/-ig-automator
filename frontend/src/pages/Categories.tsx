@@ -45,6 +45,17 @@ export default function Categories() {
     }
   }, [currentWorkspace]);
 
+  // Real-time polling for category updates (e.g., message counts)
+  useEffect(() => {
+    if (!currentWorkspace) return;
+
+    const interval = setInterval(() => {
+      loadCategoriesQuietly();
+    }, 10000); // Poll every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [currentWorkspace]);
+
   const loadCategories = async () => {
     if (!currentWorkspace) return;
 
@@ -58,6 +69,18 @@ export default function Categories() {
       setError(err.message || 'Failed to load categories');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCategoriesQuietly = async () => {
+    if (!currentWorkspace) return;
+
+    try {
+      const data = await categoriesAPI.getByWorkspace(currentWorkspace._id);
+      setCategories(data);
+    } catch (err: any) {
+      // Silently fail on background refresh
+      console.error('Failed to refresh categories:', err);
     }
   };
 

@@ -70,9 +70,31 @@ router.patch('/:messageId/category', authenticate, async (req: AuthRequest, res:
       return res.status(404).json({ error: 'Unauthorized' });
     }
 
+    // Track old category for count updates
+    const oldCategoryId = message.categoryId;
+
     // Update message category
     message.categoryId = categoryId;
     await message.save();
+
+    // Update category counts
+    const MessageCategory = (await import('../models/MessageCategory')).default;
+
+    // Decrement old category count if it exists
+    if (oldCategoryId) {
+      await MessageCategory.findByIdAndUpdate(
+        oldCategoryId,
+        { $inc: { messageCount: -1 } }
+      );
+    }
+
+    // Increment new category count
+    if (categoryId) {
+      await MessageCategory.findByIdAndUpdate(
+        categoryId,
+        { $inc: { messageCount: 1 } }
+      );
+    }
 
     // Also update conversation category if this is the last customer message
     const lastCustomerMessage = await Message.findOne({
