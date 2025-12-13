@@ -114,31 +114,71 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
   };
 
   const systemMessage = `
-You are an AI assistant for a business inbox.
-Global rules:
-- Obey workspace and category policies.
-- Never promise discounts, prices, contracts, or special deals unless policies explicitly allow it.
-- Replies must be concise (1-3 sentences, ~60-80 words max).
-- Avoid repeated questions or duplicated phrasing.
-- Only use hashtags if allowed; only use emojis if allowed.
-- Choose shouldEscalate=true when policy or situation indicates human involvement.
-- Respond in ${getLanguageName(replyLanguage)}.`;
+You are an AI assistant for a business inbox. You help businesses respond to customer messages on Instagram.
+
+Global rules that ALWAYS apply:
+- Strictly obey workspace and category policies provided in the context.
+- NEVER promise discounts, prices, contracts, special deals, or commitments unless the business's knowledge base explicitly authorizes you to do so.
+- Keep replies short and natural: 1–3 sentences, maximum 60–80 words.
+- Be helpful and professional, but not overly salesy or full of marketing fluff.
+- Avoid asking the same question twice in the same conversation.
+- Do not repeat the opening phrase from your previous reply if there is one.
+- Only use hashtags if the business allows them AND the customer used hashtags first.
+- Use emojis only if the business allows them.
+- When policy or situation is complex/risky/high-stakes, set shouldEscalate=true so a human can handle it.
+- Always respond in the language specified in the context (which may differ from the language of the instructions).
+- For escalations: acknowledge the request clearly, explain a human will handle it, avoid making commitments, and keep the door open for other questions.
+
+Your response must be valid JSON matching this schema:
+{
+  "replyText": "the message to send",
+  "shouldEscalate": true or false,
+  "escalationReason": "brief explanation if escalating, or null",
+  "tags": ["optional", "semantic", "labels"]
+}`;
 
   const userMessage = `
-Workspace policy: ${workspacePolicyText}
-Hashtags allowed: ${allowHashtags}. Emojis allowed: ${allowEmojis}. Max sentences: ${maxReplySentences}.
-Category: ${categoryName || 'General'}.
-${categoryPolicyText}
-Customer language: ${categorization?.detectedLanguage || 'unknown'}; Reply language: ${replyLanguage}.
-${categorization?.translatedText ? `Translated message (English): "${categorization.translatedText}"` : ''}
-${knowledgeContext ? `\n${knowledgeContext}\n` : ''}
-Conversation history:
+BUSINESS CONTEXT:
+Workspace decision mode: ${decisionMode}
+- full_auto: AI can answer most things confidently within knowledge base
+- assist: AI should help but be cautious on complex/risky topics
+- info_only: AI should be very conservative and escalate more often
+
+Workspace rules:
+- Hashtags allowed: ${allowHashtags}
+- Emojis allowed: ${allowEmojis}
+- Max sentences: ${maxReplySentences}
+- Default reply language: ${getLanguageName(replyLanguage)}
+${workspaceSettings?.escalationGuidelines ? `- Escalation guidelines: ${workspaceSettings.escalationGuidelines}` : ''}
+${workspaceSettings?.escalationExamples?.length ? `- Escalation examples: ${workspaceSettings.escalationExamples.join(' | ')}` : ''}
+
+KNOWLEDGE BASE:
+${knowledgeContext || 'No specific knowledge provided. Use general business courtesy.'}
+
+CURRENT MESSAGE CATEGORY: ${categoryName || 'General'}
+Category policy: ${aiPolicy}
+${aiPolicy === 'full_auto' ? '→ Safe to answer completely if you have the information.' : ''}
+${aiPolicy === 'assist_only' ? '→ Help informationally, but do NOT commit to prices, discounts, contracts, or binding decisions.' : ''}
+${aiPolicy === 'escalate' ? '→ ALWAYS escalate to human. Acknowledge request politely, state a human will follow up, do not make commitments.' : ''}
+${category?.escalationNote ? `Note: ${category.escalationNote}` : ''}
+
+CONVERSATION CONTEXT:
+Customer language detected: ${categorization?.detectedLanguage || 'unknown'}
+${categorization?.translatedText ? `(Translated to English: "${categorization.translatedText}")` : ''}
+You must reply in: ${getLanguageName(replyLanguage)}
+
+Recent conversation history:
 ${conversationHistory || 'No prior messages.'}
 
-Latest customer message:
+LATEST CUSTOMER MESSAGE:
 "${recentCustomerText}"
 
-Return JSON with: replyText, shouldEscalate (boolean), escalationReason (string if escalated), tags (string array).`;
+TASK:
+Generate a response following all rules above. Return JSON with:
+- replyText: your message to the customer
+- shouldEscalate: true if human review needed, false otherwise
+- escalationReason: brief reason if escalating (e.g., "Pricing negotiation requires approval", "Complex custom request"), or null
+- tags: semantic labels like ["pricing", "bulk_request", "urgent", "complaint"] to help categorize this interaction`;
 
   let parsed: AIReplyResult | null = null;
 
@@ -236,20 +276,29 @@ function postProcessReply(params: {
     text = text.replace(/[\u{1F300}-\u{1FAFF}]/gu, '');
   }
 
-  // Sentence limit
-  const sentences = text.match(/[^.!?]+[.!?]?/g) || [text];
-  const trimmedSentences = sentences.slice(0, Math.max(1, maxSentences));
+  // Sentence limit - be more sophisticated about sentence boundaries
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  let trimmedSentences = sentences.slice(0, Math.max(1, maxSentences));
 
-  // Avoid obvious repetition with previous AI message
-  if (lastAiMessage && trimmedSentences.length > 1) {
-    const currentStart = trimmedSentences[0].trim().toLowerCase();
-    const previousStart = lastAiMessage.split(/\s+/).slice(0, 6).join(' ').toLowerCase();
-    if (previousStart && currentStart.startsWith(previousStart)) {
-      trimmedSentences.shift();
+  // Avoid repetition with previous AI message
+  if (lastAiMessage && trimmedSentences.length > 0) {
+    const currentFirst = trimmedSentences[0].trim().toLowerCase();
+    const previousFirst = lastAiMessage.split(/[.!?]/)[0].trim().toLowerCase();
+
+    // Check if opening phrases are too similar (>70% overlap in first 8 words)
+    const currentWords = currentFirst.split(/\s+/).slice(0, 8);
+    const previousWords = previousFirst.split(/\s+/).slice(0, 8);
+    const overlap = currentWords.filter(w => previousWords.includes(w)).length;
+    const similarity = overlap / Math.max(currentWords.length, previousWords.length);
+
+    // If very similar opening (>70%), try to rephrase or skip first sentence
+    if (similarity > 0.7 && trimmedSentences.length > 1) {
+      trimmedSentences.shift(); // Remove repetitive opening
     }
   }
 
-  return trimmedSentences.join(' ').trim();
+  // Clean up spacing and return
+  return trimmedSentences.join(' ').trim().replace(/\s{2,}/g, ' ');
 }
 
 function ensureEscalationTone(text: string): string {

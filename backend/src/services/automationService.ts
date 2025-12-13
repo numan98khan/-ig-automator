@@ -561,23 +561,71 @@ export async function cancelFollowupOnCustomerReply(
   );
 }
 
+/**
+ * Generate varied responses for follow-up messages on the same escalated topic
+ * Uses different phrasing each time to avoid sounding robotic
+ */
 function buildFollowupResponse(followUpCount: number, base: string): string {
+  // If the AI generated a specific response, use it
+  if (base && base.trim().length > 20) {
+    return base;
+  }
+
+  // Otherwise, use varied templates that acknowledge the wait without making commitments
   const templates = [
-    'I know you’re waiting on this. I’ve already flagged it to the team, and they’ll get back to you with the exact details. I can’t confirm on their behalf, but I can help gather anything they need.',
-    'Sorry for the wait. Your request is still with the team, and they’re the ones who can give a final answer. I can note your urgency and make sure they see it.',
-    'I’ve kept this with the team to review. I can’t make a commitment here, but I’m here to help with any other details you want them to consider.',
+    'I understand you\'re waiting on this. The request is with the team and they\'ll respond with the specific details. In the meantime, I can help clarify anything or answer other questions.',
+    'Your request is still being reviewed by the team. They\'re the ones who can give you a definitive answer on this. Is there any additional information I can note for them?',
+    'The team has this flagged and will get back to you. I can\'t make commitments on their behalf, but I\'m here if you have other questions or want to add more details for them to consider.',
+    'Still with the team for review. They\'ll reach out directly about this specific matter. Let me know if there\'s anything else I can help with in the meantime.',
   ];
+
+  // Rotate through templates based on follow-up count
   const variant = templates[followUpCount % templates.length];
-  return base && base.trim().length > 0 ? base : variant;
+  return variant;
 }
 
+/**
+ * Generate initial escalation message - varies based on context
+ */
 function buildInitialEscalationReply(base: string): string {
-  if (base && base.trim().length > 0) return base;
-  return 'This needs a teammate to review directly, so I’ve flagged it for them. I won’t make promises here, but I can help with other questions while they respond.';
+  // If AI generated a good escalation response, use it
+  if (base && base.trim().length > 20) {
+    return base;
+  }
+
+  // Generic fallback if AI didn't provide one
+  const templates = [
+    'This is something a team member needs to review personally, so I\'ve flagged it for them. They\'ll get back to you with the exact details. I\'m here to help with any general questions in the meantime.',
+    'I\'ve forwarded this to the team for review. They\'ll be able to give you a proper answer on this. Feel free to ask me anything else while you wait.',
+    'A team member will handle this one directly and follow up with you. I can\'t make decisions on this, but I can help with other questions if you have any.',
+  ];
+
+  // Random selection for variety
+  const index = Math.floor(Math.random() * templates.length);
+  return templates[index];
 }
 
+/**
+ * Append a brief note about pending escalation when customer asks about a different topic
+ */
 function appendPendingNote(reply: string): string {
-  const note = 'Your earlier request is still with our team and they will reply separately.';
-  if (reply.toLowerCase().includes('earlier request')) return reply;
+  const notes = [
+    'Your earlier request is still with the team and they\'ll respond separately.',
+    'By the way, the team is still reviewing your other question and will get back to you.',
+    'Just so you know, your previous request is with a team member who will follow up.',
+  ];
+
+  // Check if reply already mentions the pending item
+  const mentionsPending = reply.toLowerCase().includes('earlier') ||
+                         reply.toLowerCase().includes('previous') ||
+                         reply.toLowerCase().includes('other question') ||
+                         reply.toLowerCase().includes('team');
+
+  if (mentionsPending) {
+    return reply; // Don't add redundant note
+  }
+
+  // Add a brief note
+  const note = notes[0]; // Use first variant for consistency
   return `${reply} ${note}`.trim();
 }
