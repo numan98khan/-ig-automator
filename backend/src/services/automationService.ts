@@ -58,18 +58,6 @@ export async function processCommentDMAutomation(
     // Get workspace settings
     const settings = await getWorkspaceSettings(workspaceId);
 
-    // If human intervention is active and AI should stay silent, skip auto-reply
-    const now = new Date();
-    const holdActive = conversation.humanHoldUntil && conversation.humanHoldUntil > now;
-    if (conversation.humanRequired && settings.humanEscalationBehavior === 'ai_silent' && holdActive) {
-      return {
-        success: false,
-        message: 'Escalated to human; AI is paused',
-        categoryId,
-        detectedLanguage: categorization.detectedLanguage,
-      };
-    }
-
     // Check if comment DM automation is enabled
     if (!settings.commentDmEnabled) {
       // Log as skipped

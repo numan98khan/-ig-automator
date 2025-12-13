@@ -24,7 +24,7 @@ export async function categorizeMessage(
     const categories = await MessageCategory.find({ workspaceId });
     const categoryMeta = (categories.length > 0 ? categories : DEFAULT_CATEGORIES).map(cat => ({
       name: cat.nameEn,
-      description: cat.descriptionEn || cat.description || '',
+      description: cat.descriptionEn || '',
       examples: (cat.exampleMessages || []).slice(0, 3),
     }));
 
