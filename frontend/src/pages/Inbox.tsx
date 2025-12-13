@@ -30,15 +30,27 @@ const Inbox: React.FC = () => {
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
+  const [previousMessageCount, setPreviousMessageCount] = useState(0);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
   const handleSyncConversation = async () => {
-    if (!selectedConversation) return;
+    if (!selectedConversation || !selectedConversation.instagramConversationId) return;
 
     setSyncing(true);
     try {
       await instagramSyncAPI.syncMessages(currentWorkspace?._id || '', selectedConversation.instagramConversationId);
-      await loadMessages();
-      await loadConversations(); // Reload to update sync status
+
+      // Reload conversations to get the synced version with _id
+      await loadConversations();
+
+      // Find the newly synced conversation and select it
+      const updatedConversations = await conversationAPI.getByWorkspace(currentWorkspace?._id || '');
+      const syncedConv = updatedConversations.find(c => c.instagramConversationId === selectedConversation.instagramConversationId);
+
+      if (syncedConv) {
+        setSelectedConversation(syncedConv);
+        await loadMessages();
+      }
     } catch (error) {
       console.error('Error syncing individual conversation:', error);
       alert('Failed to sync messages. Please try again.');
@@ -80,8 +92,12 @@ const Inbox: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Only auto-scroll when new messages arrive or user sends a message
   useEffect(() => {
-    scrollToBottom();
+    if (shouldAutoScroll && messages.length > previousMessageCount) {
+      scrollToBottom();
+    }
+    setPreviousMessageCount(messages.length);
   }, [messages]);
 
   useEffect(() => {
@@ -189,12 +205,18 @@ const Inbox: React.FC = () => {
 
   useEffect(() => {
     if (selectedConversation) {
-      loadMessages();
+      // If conversation is not synced, sync it first
+      if (!selectedConversation.isSynced && selectedConversation.instagramConversationId) {
+        handleSyncConversation();
+      } else {
+        loadMessages();
+      }
+      setShouldAutoScroll(true); // Enable auto-scroll for new conversation
     }
   }, [selectedConversation]);
 
   const loadMessages = async () => {
-    if (!selectedConversation) return;
+    if (!selectedConversation || !selectedConversation._id) return;
 
     try {
       const data = await messageAPI.getByConversation(selectedConversation._id);
@@ -208,12 +230,21 @@ const Inbox: React.FC = () => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedConversation) return;
 
+    // Check if conversation is synced
+    if (!selectedConversation._id) {
+      alert('Please wait while the conversation syncs...');
+      return;
+    }
+
     setSendingMessage(true);
     try {
       // Use Instagram API to send message
       const message = await instagramSyncAPI.sendMessage(selectedConversation._id, newMessage);
+
+      // Immediately add the message to the UI
       setMessages([...messages, message]);
       setNewMessage('');
+      setShouldAutoScroll(true);
 
       // Scroll to bottom after sending
       setTimeout(scrollToBottom, 100);
@@ -226,12 +257,14 @@ const Inbox: React.FC = () => {
   };
 
   const handleGenerateAIReply = async () => {
-    if (!selectedConversation) return;
+    if (!selectedConversation || !selectedConversation._id) return;
 
     setGeneratingAI(true);
     try {
       const message = await messageAPI.generateAIReply(selectedConversation._id);
       setMessages([...messages, message]);
+      setShouldAutoScroll(true);
+      setTimeout(scrollToBottom, 100);
     } catch (error) {
       console.error('Error generating AI reply:', error);
       alert('Failed to generate AI reply. Please try again.');
