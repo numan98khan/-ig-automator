@@ -102,7 +102,5 @@ const messageSchema = new Schema<IMessage>({
 
 // Create compound index for efficient lookups
 messageSchema.index({ conversationId: 1, createdAt: -1 });
-messageSchema.index({ instagramMessageId: 1 }, { sparse: true });
-messageSchema.index({ categoryId: 1 }, { sparse: true });
 
 export default mongoose.model<IMessage>('Message', messageSchema);

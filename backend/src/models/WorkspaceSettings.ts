@@ -79,6 +79,6 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
 });
 
 // Index for efficient lookups
-workspaceSettingsSchema.index({ workspaceId: 1 });
+// workspaceSettingsSchema.index({ workspaceId: 1 });
 
 export default mongoose.model<IWorkspaceSettings>('WorkspaceSettings', workspaceSettingsSchema);
