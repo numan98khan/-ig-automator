@@ -143,6 +143,7 @@ Return JSON with: replyText, shouldEscalate (boolean), escalationReason (string 
   let parsed: AIReplyResult | null = null;
 
   try {
+    console.log('🤖 Calling OpenAI API for AI reply generation...');
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       temperature: 0.35,
@@ -162,6 +163,7 @@ Return JSON with: replyText, shouldEscalate (boolean), escalationReason (string 
     });
 
     const content = completion.choices[0].message.content || '{}';
+    console.log('✅ OpenAI response received:', content);
     const raw = JSON.parse(content);
     parsed = {
       replyText: String(raw.replyText || '').trim(),
@@ -169,15 +171,20 @@ Return JSON with: replyText, shouldEscalate (boolean), escalationReason (string 
       escalationReason: raw.escalationReason ? String(raw.escalationReason).trim() : undefined,
       tags: Array.isArray(raw.tags) ? raw.tags.map((t: any) => String(t).trim()).filter(Boolean) : [],
     };
-  } catch (error) {
-    console.error('Failed to parse structured AI reply:', error);
+    console.log('✅ Parsed AI reply:', parsed);
+  } catch (error: any) {
+    console.error('❌ Failed to generate AI reply:', {
+      error: error.message,
+      stack: error.stack,
+      openaiKey: process.env.OPENAI_API_KEY ? 'Set (length: ' + process.env.OPENAI_API_KEY.length + ')' : 'NOT SET',
+    });
   }
 
   let reply: AIReplyResult = parsed || {
     replyText: 'Thanks for reaching out! A teammate will follow up shortly.',
-    shouldEscalate: false,
-    escalationReason: undefined,
-    tags: [],
+    shouldEscalate: true, // Changed from false - fallback should escalate
+    escalationReason: 'AI reply generation failed - requires human review',
+    tags: ['escalation', 'ai_error'],
   };
 
   // Enforce policy-based escalation
