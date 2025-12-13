@@ -159,7 +159,6 @@ export async function initializeDefaultCategories(
     // Check if categories already exist
     const existingCount = await MessageCategory.countDocuments({ workspaceId });
     if (existingCount > 0) {
-      console.log(`Categories already exist for workspace ${workspaceId}`);
       return;
     }
 
@@ -170,7 +169,6 @@ export async function initializeDefaultCategories(
     }));
 
     await MessageCategory.insertMany(categoriesToCreate);
-    console.log(`Created ${categoriesToCreate.length} default categories for workspace ${workspaceId}`);
   } catch (error) {
     console.error('Error initializing default categories:', error);
     throw error;
@@ -197,7 +195,6 @@ export async function getOrCreateCategory(
       nameEn: categoryName,
       isSystem: false,
     });
-    console.log(`Created new category "${categoryName}" for workspace ${workspaceId}`);
   }
 
   return category._id as mongoose.Types.ObjectId;

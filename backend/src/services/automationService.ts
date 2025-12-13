@@ -28,7 +28,6 @@ export async function getWorkspaceSettings(
 
   if (!settings) {
     settings = await WorkspaceSettings.create({ workspaceId });
-    console.log(`Created default settings for workspace ${workspaceId}`);
   }
 
   return settings;

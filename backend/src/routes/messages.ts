@@ -207,11 +207,8 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
       aiResponse.replyText = buildInitialEscalationReply(aiResponse.replyText);
     }
 
-    console.log('🤖 AI generated response:', aiResponse.replyText, 'escalate:', aiResponse.shouldEscalate);
-
     // Send message via Instagram API first with HUMAN_AGENT tag to ensure notifications
     const enableHumanAgentTag = process.env.USE_HUMAN_AGENT_TAG === 'true';
-    console.log('📤 Sending AI-generated message to Instagram', enableHumanAgentTag ? 'with HUMAN_AGENT tag...' : 'without message tag...');
 
     let result;
     try {
@@ -243,8 +240,6 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
     if (!result || (!result.message_id && !result.recipient_id)) {
       throw new Error('Instagram API did not return a valid response. Message may not have been sent.');
     }
-
-    console.log('✅ Instagram API confirmed AI message sent');
 
     // Only save to database AFTER successful send to Instagram
     let message;
@@ -298,8 +293,6 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
           : undefined;
       }
       await conversation.save();
-
-      console.log('✅ AI message saved to database');
     } catch (dbError: any) {
       // Message was sent to Instagram but failed to save to DB
       console.error('⚠️ AI message sent to Instagram but failed to save to database:', dbError);

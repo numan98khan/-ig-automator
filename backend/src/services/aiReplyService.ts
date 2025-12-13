@@ -143,7 +143,6 @@ Return JSON with: replyText, shouldEscalate (boolean), escalationReason (string 
   let parsed: AIReplyResult | null = null;
 
   try {
-    console.log('🤖 Calling OpenAI API for AI reply generation...');
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       temperature: 0.35,
@@ -163,7 +162,6 @@ Return JSON with: replyText, shouldEscalate (boolean), escalationReason (string 
     });
 
     const content = completion.choices[0].message.content || '{}';
-    console.log('✅ OpenAI response received:', content);
     const raw = JSON.parse(content);
     parsed = {
       replyText: String(raw.replyText || '').trim(),
@@ -171,13 +169,8 @@ Return JSON with: replyText, shouldEscalate (boolean), escalationReason (string 
       escalationReason: raw.escalationReason ? String(raw.escalationReason).trim() : undefined,
       tags: Array.isArray(raw.tags) ? raw.tags.map((t: any) => String(t).trim()).filter(Boolean) : [],
     };
-    console.log('✅ Parsed AI reply:', parsed);
   } catch (error: any) {
-    console.error('❌ Failed to generate AI reply:', {
-      error: error.message,
-      stack: error.stack,
-      openaiKey: process.env.OPENAI_API_KEY ? 'Set (length: ' + process.env.OPENAI_API_KEY.length + ')' : 'NOT SET',
-    });
+    console.error('AI reply generation failed:', error.message);
   }
 
   let reply: AIReplyResult = parsed || {
