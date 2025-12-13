@@ -23,6 +23,9 @@ export interface IMessage extends Document {
   // Automation source tracking
   automationSource?: 'comment_dm' | 'auto_reply' | 'followup';  // Source of automated message
 
+  // Read receipts
+  seenAt?: Date;                         // When the message was seen by the recipient
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -85,6 +88,12 @@ const messageSchema = new Schema<IMessage>({
   automationSource: {
     type: String,
     enum: ['comment_dm', 'auto_reply', 'followup'],
+    sparse: true,
+  },
+
+  // Read receipts
+  seenAt: {
+    type: Date,
     sparse: true,
   },
 

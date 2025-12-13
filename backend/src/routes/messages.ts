@@ -292,4 +292,47 @@ Response:`;
   }
 });
 
+// Mark messages as seen
+router.post('/mark-seen', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { conversationId } = req.body;
+
+    if (!conversationId) {
+      return res.status(400).json({ error: 'conversationId is required' });
+    }
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    // Verify workspace belongs to user
+    const workspace = await Workspace.findOne({
+      _id: conversation.workspaceId,
+      userId: req.userId,
+    });
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Unauthorized' });
+    }
+
+    // Mark all customer messages in this conversation as seen
+    const result = await Message.updateMany(
+      {
+        conversationId,
+        from: 'customer',
+        seenAt: null,
+      },
+      {
+        $set: { seenAt: new Date() },
+      }
+    );
+
+    res.json({ success: true, markedCount: result.modifiedCount });
+  } catch (error) {
+    console.error('Mark messages as seen error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 export default router;

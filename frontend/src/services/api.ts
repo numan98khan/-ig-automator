@@ -62,6 +62,7 @@ export interface Message {
   from: 'customer' | 'user' | 'ai';
   createdAt: string;
   categoryId?: any;
+  seenAt?: string;
 }
 
 export interface KnowledgeItem {
@@ -212,6 +213,11 @@ export const messageAPI = {
 
   updateCategory: async (messageId: string, categoryId: string): Promise<Message> => {
     const { data } = await api.patch(`/api/messages/${messageId}/category`, { categoryId });
+    return data;
+  },
+
+  markSeen: async (conversationId: string): Promise<{ success: boolean; markedCount: number }> => {
+    const { data } = await api.post('/api/messages/mark-seen', { conversationId });
     return data;
   },
 };

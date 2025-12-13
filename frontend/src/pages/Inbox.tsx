@@ -11,7 +11,7 @@ import {
   InstagramAccount,
   MessageCategory,
 } from '../services/api';
-import { Send, Sparkles, Instagram, Loader2, RefreshCw, CheckCircle, Tag } from 'lucide-react';
+import { Send, Sparkles, Instagram, Loader2, RefreshCw, CheckCircle, Tag, Check, CheckCheck } from 'lucide-react';
 
 const Inbox: React.FC = () => {
   const { currentWorkspace } = useAuth();
@@ -221,6 +221,9 @@ const Inbox: React.FC = () => {
     try {
       const data = await messageAPI.getByConversation(selectedConversation._id);
       setMessages(data);
+
+      // Mark customer messages as seen when viewing conversation
+      await messageAPI.markSeen(selectedConversation._id);
     } catch (error) {
       console.error('Error loading messages:', error);
     }
@@ -473,12 +476,24 @@ const Inbox: React.FC = () => {
                         </div>
                       )}
                       <p className="text-sm">{msg.text}</p>
-                      <p
-                        className={`text-xs mt-1 ${msg.from === 'user' ? 'text-blue-100' : 'text-gray-500'
-                          }`}
-                      >
-                        {formatTime(msg.createdAt)}
-                      </p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <p
+                          className={`text-xs ${msg.from === 'user' ? 'text-blue-100' : msg.from === 'ai' ? 'text-purple-600' : 'text-gray-500'
+                            }`}
+                        >
+                          {formatTime(msg.createdAt)}
+                        </p>
+                        {/* Seen indicator for messages sent by user/AI */}
+                        {msg.from !== 'customer' && (
+                          <span className={msg.from === 'user' ? 'text-blue-100' : 'text-purple-600'}>
+                            {msg.seenAt ? (
+                              <CheckCheck className="w-3 h-3" title={`Seen ${formatTime(msg.seenAt)}`} />
+                            ) : (
+                              <Check className="w-3 h-3" title="Delivered" />
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Category Tooltip for Customer Messages */}

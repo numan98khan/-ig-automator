@@ -208,6 +208,18 @@ async function handleMessagingEvent(messaging: any) {
 
     console.log(`💾 Saved message to conversation ${conversation._id}`);
 
+    // Mark our previous messages as seen (customer is replying, so they've seen our messages)
+    await Message.updateMany(
+      {
+        conversationId: conversation._id,
+        from: { $in: ['user', 'ai'] },
+        seenAt: null,
+      },
+      {
+        $set: { seenAt: new Date() },
+      }
+    );
+
     // Log successful processing
     webhookLogger.logWebhookProcessed('messaging', messaging, {
       conversationId: conversation._id,
