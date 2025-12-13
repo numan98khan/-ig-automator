@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import InstagramAccount from '../models/InstagramAccount';
 import Workspace from '../models/Workspace';
 import User from '../models/User';
+import WorkspaceMember from '../models/WorkspaceMember';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
@@ -179,31 +180,76 @@ router.get('/callback', async (req: Request, res: Response) => {
       let user = await User.findOne({ instagramUserId: accountData.user_id || user_id });
 
       if (!user) {
-        // Create new user
+        // Create new user (Instagram-only, provisional)
         console.log('🔄 User not found, creating new user...');
         user = await User.create({
           instagramUserId: accountData.user_id || user_id,
           instagramUsername: accountData.username,
+          isProvisional: true, // User created via Instagram only
+          emailVerified: false,
         });
         console.log('✅ Created new user via Instagram OAuth:', user._id);
       } else {
         console.log('✅ Found existing user:', user._id);
       }
 
-      // Check if user has a workspace
-      console.log('🔍 Looking for workspace for user:', user._id);
-      let workspace = await Workspace.findOne({ userId: user._id });
+      // Check if Instagram account already exists to determine workspace
+      console.log('🔍 Looking for existing Instagram account to find workspace...');
+      let existingIgAccount = await InstagramAccount.findOne({
+        $or: [
+          { instagramAccountId: accountData.user_id || user_id },
+          { username: accountData.username },
+        ],
+      });
 
-      if (!workspace) {
-        // Create new workspace
-        console.log('🔄 Workspace not found, creating new workspace...');
+      let workspace;
+      let isNewWorkspace = false;
+
+      if (existingIgAccount) {
+        // Instagram account already exists, use its workspace
+        console.log('✅ Found existing Instagram account, using workspace:', existingIgAccount.workspaceId);
+        workspace = await Workspace.findById(existingIgAccount.workspaceId);
+
+        if (!workspace) {
+          throw new Error('Instagram account exists but workspace not found');
+        }
+      } else {
+        // No existing Instagram account, create new workspace
+        console.log('🔄 No existing Instagram account, creating new workspace...');
         workspace = await Workspace.create({
           userId: user._id,
-          name: `${accountData.username}'s Workspace`,
+          name: `@${accountData.username}`,
         });
+        isNewWorkspace = true;
         console.log('✅ Created new workspace:', workspace._id);
+      }
+
+      // Ensure WorkspaceMember exists for this user
+      console.log('🔍 Checking workspace membership...');
+      let membership = await WorkspaceMember.findOne({
+        workspaceId: workspace._id,
+        userId: user._id,
+      });
+
+      if (!membership) {
+        // Create workspace membership with owner role
+        console.log('🔄 Creating workspace membership...');
+        membership = await WorkspaceMember.create({
+          workspaceId: workspace._id,
+          userId: user._id,
+          role: isNewWorkspace ? 'owner' : 'admin', // Owner if new workspace, admin if joining existing
+        });
+        console.log('✅ Created workspace membership:', membership._id, 'with role:', membership.role);
       } else {
-        console.log('✅ Found existing workspace:', workspace._id);
+        console.log('✅ Found existing workspace membership:', membership._id, 'with role:', membership.role);
+      }
+
+      // Set default workspace if not already set
+      if (!user.defaultWorkspaceId) {
+        console.log('🔄 Setting default workspace for user...');
+        user.defaultWorkspaceId = workspace._id;
+        await user.save();
+        console.log('✅ Set default workspace:', workspace._id);
       }
 
       // Check if Instagram account already connected
