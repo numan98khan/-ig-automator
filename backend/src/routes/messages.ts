@@ -234,12 +234,16 @@ Response:`;
 
     console.log('🤖 AI generated response:', aiResponse);
 
-    // Send message via Instagram API first (same pattern as manual send)
-    console.log('📤 Sending AI-generated message to Instagram...');
+    // Send message via Instagram API first with HUMAN_AGENT tag to ensure notifications
+    console.log('📤 Sending AI-generated message to Instagram with HUMAN_AGENT tag...');
     const result = await sendInstagramMessage(
       conversation.participantInstagramId,
       aiResponse,
-      igAccount.accessToken
+      igAccount.accessToken,
+      {
+        useMessageTag: true,
+        tag: 'HUMAN_AGENT', // Ensures notification is sent and extends messaging window to 7 days
+      }
     );
 
     // Verify Instagram API returned success
