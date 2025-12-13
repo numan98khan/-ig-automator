@@ -220,7 +220,24 @@ const Inbox: React.FC = () => {
 
     try {
       const data = await messageAPI.getByConversation(selectedConversation._id);
-      setMessages(data);
+
+      // Update messages, preserving scroll position if it's a background refresh
+      setMessages(prevMessages => {
+        // If it's the initial load or message count changed, just set new data
+        if (prevMessages.length !== data.length) {
+          return data;
+        }
+
+        // Otherwise, update seenAt timestamps for existing messages
+        return data.map((newMsg, index) => {
+          const prevMsg = prevMessages[index];
+          if (prevMsg && prevMsg._id === newMsg._id) {
+            // Preserve the message but update seenAt if it changed
+            return newMsg;
+          }
+          return newMsg;
+        });
+      });
 
       // Mark customer messages as seen when viewing conversation
       await messageAPI.markSeen(selectedConversation._id);
