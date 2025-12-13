@@ -110,7 +110,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
         items: { type: 'string' },
       },
     },
-    required: ['replyText', 'shouldEscalate'],
+    required: ['replyText', 'shouldEscalate', 'escalationReason', 'tags'],
   };
 
   const systemMessage = `

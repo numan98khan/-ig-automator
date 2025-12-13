@@ -356,7 +356,7 @@ export async function processAutoReply(
     return {
       success: true,
       message: 'Auto-reply sent successfully',
-      reply: aiReply,
+      reply: aiReply.replyText,
       categoryId,
       detectedLanguage: categorization.detectedLanguage,
     };

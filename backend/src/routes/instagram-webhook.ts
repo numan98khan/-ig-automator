@@ -283,7 +283,7 @@ async function processMessageAutomations(
     );
 
     if (autoReplyResult.success) {
-      console.log(`✅ Auto-reply sent: ${autoReplyResult.reply?.substring(0, 50)}...`);
+      console.log(`✅ Auto-reply sent`);
     } else {
       console.log(`⏭️ Auto-reply skipped: ${autoReplyResult.message}`);
     }
