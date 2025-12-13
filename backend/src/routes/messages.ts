@@ -235,16 +235,34 @@ Response:`;
     console.log('🤖 AI generated response:', aiResponse);
 
     // Send message via Instagram API first with HUMAN_AGENT tag to ensure notifications
-    console.log('📤 Sending AI-generated message to Instagram with HUMAN_AGENT tag...');
-    const result = await sendInstagramMessage(
-      conversation.participantInstagramId,
-      aiResponse,
-      igAccount.accessToken,
-      {
-        useMessageTag: true,
-        tag: 'HUMAN_AGENT', // Ensures notification is sent and extends messaging window to 7 days
+    const enableHumanAgentTag = process.env.USE_HUMAN_AGENT_TAG === 'true';
+    console.log('📤 Sending AI-generated message to Instagram', enableHumanAgentTag ? 'with HUMAN_AGENT tag...' : 'without message tag...');
+
+    let result;
+    try {
+      result = await sendInstagramMessage(
+        conversation.participantInstagramId,
+        aiResponse,
+        igAccount.accessToken,
+        enableHumanAgentTag
+          ? {
+              useMessageTag: true,
+              tag: 'HUMAN_AGENT', // Requires app review; may be blocked
+            }
+          : undefined
+      );
+    } catch (sendError: any) {
+      const errMsg = sendError?.message || '';
+      const igErrorMsg = sendError?.response?.data?.error?.message || '';
+      const tagBlocked = errMsg.includes('Human Agent') || igErrorMsg.includes('Human Agent');
+
+      if (enableHumanAgentTag && tagBlocked) {
+        console.warn('⚠️ HUMAN_AGENT tag rejected; retrying without tag...');
+        result = await sendInstagramMessage(conversation.participantInstagramId, aiResponse, igAccount.accessToken);
+      } else {
+        throw sendError;
       }
-    );
+    }
 
     // Verify Instagram API returned success
     if (!result || (!result.message_id && !result.recipient_id)) {
