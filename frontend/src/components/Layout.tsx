@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags, Menu, X as CloseIcon, AlertCircle } from 'lucide-react';
+import ProvisionalUserBanner from './ProvisionalUserBanner';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -66,9 +67,9 @@ const Layout: React.FC = () => {
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition"
               >
                 <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                  {user?.email?.[0]?.toUpperCase() || 'U'}
+                  {user?.email?.[0]?.toUpperCase() || user?.instagramUsername?.[0]?.toUpperCase() || 'U'}
                 </div>
-                <span className="text-sm font-medium text-gray-700">{user?.email}</span>
+                <span className="text-sm font-medium text-gray-700">{user?.email || user?.instagramUsername || 'User'}</span>
                 <ChevronDown className="w-4 h-4 text-gray-500" />
               </button>
 
@@ -99,7 +100,7 @@ const Layout: React.FC = () => {
               className="p-1 rounded-full hover:bg-gray-100 transition"
             >
               <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                {user?.email?.[0]?.toUpperCase() || 'U'}
+                {user?.email?.[0]?.toUpperCase() || user?.instagramUsername?.[0]?.toUpperCase() || 'U'}
               </div>
             </button>
             <button
@@ -164,7 +165,7 @@ const Layout: React.FC = () => {
           />
           <div className="absolute top-16 right-4 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20 md:hidden">
             <div className="px-4 py-2 border-b border-gray-200">
-              <p className="text-sm font-medium text-gray-900 truncate">{user?.email}</p>
+              <p className="text-sm font-medium text-gray-900 truncate">{user?.email || user?.instagramUsername || 'User'}</p>
               {currentWorkspace && (
                 <p className="text-xs text-gray-500">{currentWorkspace.name}</p>
               )}
@@ -179,6 +180,9 @@ const Layout: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* Provisional User Banner */}
+      <ProvisionalUserBanner />
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto min-h-0">

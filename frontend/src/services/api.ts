@@ -22,7 +22,13 @@ api.interceptors.request.use((config) => {
 // Types
 export interface User {
   id: string;
-  email: string;
+  email?: string;
+  instagramUserId?: string;
+  instagramUsername?: string;
+  isProvisional: boolean;
+  emailVerified: boolean;
+  defaultWorkspaceId?: string;
+  createdAt: string;
 }
 
 export interface Workspace {
