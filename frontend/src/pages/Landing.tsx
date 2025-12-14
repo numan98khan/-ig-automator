@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Instagram, Loader2, Sparkles, MessageSquare, Zap, AlertCircle, ArrowRight, Mail, Lock } from 'lucide-react';
+import { Instagram, Loader2, Sparkles, MessageSquare, Zap, AlertCircle, ArrowRight, Mail, Lock, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { Button } from '../components/ui/Button';
 
 const Landing: React.FC = () => {
@@ -12,6 +13,7 @@ const Landing: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { user, currentWorkspace, login, refreshUser } = useAuth();
+  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
 
   const location = useLocation();
@@ -110,9 +112,18 @@ const Landing: React.FC = () => {
             <div className="p-2 bg-gradient-primary rounded-xl shadow-glow">
               <Instagram className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold text-white tracking-tight">AI Inbox</span>
+            <span className="text-xl font-bold text-foreground tracking-tight">AI Inbox</span>
           </div>
-          <Button variant="ghost" className="text-sm">Contact Support</Button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="p-2 rounded-full bg-background/50 border border-border text-foreground/80 hover:text-foreground hover:bg-muted transition-colors backdrop-blur-md"
+              title="Toggle Theme"
+            >
+              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <Button variant="ghost" className="text-sm">Contact Support</Button>
+          </div>
         </div>
       </header>
 
@@ -120,14 +131,13 @@ const Landing: React.FC = () => {
       <div className="flex-1 flex flex-col justify-center px-4 py-12 md:py-20 relative z-10">
         <div className="max-w-5xl w-full mx-auto text-center">
 
-          {/* Hero Badge */}
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-primary-foreground/80 text-xs font-medium mb-8 animate-fade-in backdrop-blur-md">
-            <Sparkles className="w-3 h-3 text-accent" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/50 border border-border text-muted-foreground text-xs font-medium mb-8 animate-fade-in backdrop-blur-md">
+            <Sparkles className="w-3 h-3 text-amber-500" />
             <span>Now with GPT-4 Turbo Integration</span>
           </div>
 
           {/* Hero Title */}
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold text-white mb-6 tracking-tight leading-tight animate-slide-up">
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold text-foreground mb-6 tracking-tight leading-tight animate-slide-up">
             Master your DMs
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-secondary-hover">
@@ -135,7 +145,7 @@ const Landing: React.FC = () => {
             </span>
           </h1>
 
-          <p className="text-lg md:text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '0.1s' }}>
+          <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '0.1s' }}>
             Automate your Instagram customer support with AI-powered responses. Train your assistant, manage conversations, and scale effortlessly.
           </p>
 
@@ -158,19 +168,19 @@ const Landing: React.FC = () => {
             {showEmailLogin ? (
               <div className="w-full max-w-md mx-auto animate-fade-in">
                 <form onSubmit={handleEmailLogin} className="space-y-4">
-                  <div className="glass-panel p-6 rounded-2xl border border-white/10">
-                    <h2 className="text-xl font-bold text-white mb-4 text-center">Log In to Your Account</h2>
+                  <div className="glass-panel p-6 rounded-2xl border border-border bg-card/50 backdrop-blur-xl">
+                    <h2 className="text-xl font-bold text-foreground mb-4 text-center">Log In to Your Account</h2>
 
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
+                        <label className="block text-sm font-medium text-muted-foreground mb-2">Email</label>
                         <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                           <input
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            className="w-full pl-11 pr-4 py-3 bg-background/50 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                             placeholder="your@email.com"
                             required
                           />
@@ -178,14 +188,14 @@ const Landing: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
+                        <label className="block text-sm font-medium text-muted-foreground mb-2">Password</label>
                         <div className="relative">
-                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                           <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            className="w-full pl-11 pr-4 py-3 bg-background/50 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                             placeholder="Enter your password"
                             required
                           />
@@ -214,7 +224,7 @@ const Landing: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setShowEmailLogin(false)}
-                          className="text-sm text-slate-400 hover:text-white transition"
+                          className="text-sm text-muted-foreground hover:text-foreground transition"
                         >
                           ← Back to Instagram Login
                         </button>
@@ -255,7 +265,7 @@ const Landing: React.FC = () => {
                 <div className="mt-4">
                   <button
                     onClick={() => setShowEmailLogin(true)}
-                    className="text-sm text-slate-400 hover:text-white transition-colors font-medium"
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium"
                   >
                     Already have an account? <span className="text-primary">Log in with email</span>
                   </button>
@@ -266,32 +276,32 @@ const Landing: React.FC = () => {
 
           {/* Features Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-20 md:mt-32 px-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
-            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-white/5 transition-colors group">
-              <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
+            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-muted/50 transition-colors group border border-border/50">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
                 <MessageSquare className="w-6 h-6" />
               </div>
-              <h3 className="font-semibold text-lg text-white mb-2">Smart Replies</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">
+              <h3 className="font-semibold text-lg text-foreground mb-2">Smart Replies</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
                 Context-aware responses that sound just like you, generated in milliseconds.
               </p>
             </div>
 
-            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-white/5 transition-colors group">
-              <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center mb-4 text-accent group-hover:scale-110 transition-transform">
+            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-muted/50 transition-colors group border border-border/50">
+              <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center mb-4 text-accent group-hover:scale-110 transition-transform">
                 <Sparkles className="w-6 h-6" />
               </div>
-              <h3 className="font-semibold text-lg text-white mb-2">Knowledge Base</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">
+              <h3 className="font-semibold text-lg text-foreground mb-2">Knowledge Base</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
                 Feed the AI your documents and guidelines to ensure accurate information.
               </p>
             </div>
 
-            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-white/5 transition-colors group">
-              <div className="w-12 h-12 rounded-xl bg-secondary/20 flex items-center justify-center mb-4 text-slate-300 group-hover:scale-110 transition-transform">
+            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-muted/50 transition-colors group border border-border/50">
+              <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center mb-4 text-foreground group-hover:scale-110 transition-transform">
                 <Zap className="w-6 h-6" />
               </div>
-              <h3 className="font-semibold text-lg text-white mb-2">24/7 Automation</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">
+              <h3 className="font-semibold text-lg text-foreground mb-2">24/7 Automation</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
                 Never miss a DM. Handle thousands of conversations simultaneously, day or night.
               </p>
             </div>
