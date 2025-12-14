@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Escalation from '../models/Escalation';
 import Conversation from '../models/Conversation';
 import Workspace from '../models/Workspace';
+import WorkspaceMember from '../models/WorkspaceMember';
 import Message from '../models/Message';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { resolveTicket } from '../services/escalationService';
@@ -14,9 +15,20 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   try {
     const { workspaceId } = req.params;
 
-    const workspace = await Workspace.findOne({ _id: workspaceId, userId: req.userId });
+    // Check if user has access to this workspace (either as owner or member)
+    const workspace = await Workspace.findById(workspaceId);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    const isOwner = workspace.userId.toString() === req.userId;
+    const isMember = await WorkspaceMember.findOne({
+      workspaceId,
+      userId: req.userId,
+    });
+
+    if (!isOwner && !isMember) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     const conversations = await Conversation.find({ workspaceId }).select('_id participantName participantHandle workspaceId').lean();
