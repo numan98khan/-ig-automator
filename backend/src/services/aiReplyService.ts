@@ -237,25 +237,26 @@ Generate a response following all rules above. Return JSON with:
       }
     }
 
-    const completion = await openai.chat.completions.create({
+    const response = await openai.responses.create({
       model: 'gpt-4o-mini',
       temperature: 0.35,
-      max_tokens: 220,
-      messages: [
+      max_output_tokens: 220,
+      input: [
         { role: 'system', content: systemMessage.trim() },
         { role: 'user', content: userContent },
       ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
+      text: {
+        format: {
+          type: 'json_schema',
           name: 'ai_reply',
           schema,
           strict: true,
         },
       },
+      store: true, // Enable stateful context for better multi-turn conversations
     });
 
-    const content = completion.choices[0].message.content || '{}';
+    const content = response.output_text || '{}';
     const raw = JSON.parse(content);
     parsed = {
       replyText: String(raw.replyText || '').trim(),

@@ -47,10 +47,10 @@ export async function categorizeMessage(
       return `- ${cat.name}: ${cat.description || 'No description.'}${examplesText}`;
     }).join('\n');
 
-    const completion = await openai.chat.completions.create({
+    const response = await openai.responses.create({
       model: 'gpt-4o-mini',
       temperature: 0.1,
-      messages: [
+      input: [
         {
           role: 'system',
           content: 'Classify Instagram DMs for a business. Choose the best category and detect language. Return structured JSON only.',
@@ -60,17 +60,18 @@ export async function categorizeMessage(
           content: `Categories:\n${categoriesText}\n\nCustomer message:\n"""${messageText}"""\nReturn detectedLanguage, categoryName (must be from the list), translatedText (English translation or null if already English), and confidence (0-1).`,
         },
       ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
+      text: {
+        format: {
+          type: 'json_schema',
           name: 'categorization_result',
           schema,
           strict: true,
         },
       },
+      store: false, // Don't store categorization requests
     });
 
-    const responseText = completion.choices[0].message.content?.trim() || '{}';
+    const responseText = response.output_text?.trim() || '{}';
 
     let result: CategorizationResult = {
       categoryName: 'General',
@@ -129,14 +130,15 @@ export async function detectLanguage(messageText: string): Promise<string> {
 
 "${messageText}"`;
 
-    const completion = await openai.chat.completions.create({
+    const response = await openai.responses.create({
       model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
+      input: prompt,
       temperature: 0.1,
-      max_tokens: 10,
+      max_output_tokens: 10,
+      store: false, // Don't store language detection requests
     });
 
-    const languageCode = completion.choices[0].message.content?.trim().toLowerCase() || 'en';
+    const languageCode = response.output_text?.trim().toLowerCase() || 'en';
 
     // Validate it's a reasonable ISO code (2 letters)
     if (/^[a-z]{2}$/.test(languageCode)) {
