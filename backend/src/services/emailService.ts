@@ -79,7 +79,11 @@ Instagram AI Inbox - Powered by AI
   `.trim();
 
   try {
-    await resend.emails.send({
+    console.log(`📧 Sending verification email...`);
+    console.log(`   From: ${EMAIL_FROM}`);
+    console.log(`   To: ${user.email}`);
+
+    const result = await resend.emails.send({
       from: EMAIL_FROM,
       to: user.email,
       subject: 'Verify your email - Instagram AI Inbox',
@@ -88,8 +92,10 @@ Instagram AI Inbox - Powered by AI
     });
 
     console.log(`✅ Verification email sent to ${user.email}`);
+    console.log(`📬 Resend response:`, JSON.stringify(result, null, 2));
   } catch (error: any) {
     console.error('❌ Failed to send verification email:', error);
+    console.error('❌ Error details:', JSON.stringify(error, null, 2));
     throw new Error(`Failed to send verification email: ${error.message}`);
   }
 }
@@ -161,7 +167,11 @@ Instagram AI Inbox - Powered by AI
   `.trim();
 
   try {
-    await resend.emails.send({
+    console.log(`📧 Sending password reset email...`);
+    console.log(`   From: ${EMAIL_FROM}`);
+    console.log(`   To: ${user.email}`);
+
+    const result = await resend.emails.send({
       from: EMAIL_FROM,
       to: user.email,
       subject: 'Reset your password - Instagram AI Inbox',
@@ -170,8 +180,10 @@ Instagram AI Inbox - Powered by AI
     });
 
     console.log(`✅ Password reset email sent to ${user.email}`);
+    console.log(`📬 Resend response:`, JSON.stringify(result, null, 2));
   } catch (error: any) {
     console.error('❌ Failed to send password reset email:', error);
+    console.error('❌ Error details:', JSON.stringify(error, null, 2));
     throw new Error(`Failed to send password reset email: ${error.message}`);
   }
 }
@@ -248,7 +260,12 @@ Instagram AI Inbox - Powered by AI
   `.trim();
 
   try {
-    await resend.emails.send({
+    console.log(`📧 Sending workspace invite email...`);
+    console.log(`   From: ${EMAIL_FROM}`);
+    console.log(`   To: ${invitedEmail}`);
+    console.log(`   Subject: You've been invited to ${workspaceName} - Instagram AI Inbox`);
+
+    const result = await resend.emails.send({
       from: EMAIL_FROM,
       to: invitedEmail,
       subject: `You've been invited to ${workspaceName} - Instagram AI Inbox`,
@@ -257,8 +274,10 @@ Instagram AI Inbox - Powered by AI
     });
 
     console.log(`✅ Workspace invite email sent to ${invitedEmail}`);
+    console.log(`📬 Resend response:`, JSON.stringify(result, null, 2));
   } catch (error: any) {
     console.error('❌ Failed to send workspace invite email:', error);
+    console.error('❌ Error details:', JSON.stringify(error, null, 2));
     throw new Error(`Failed to send workspace invite email: ${error.message}`);
   }
 }
