@@ -23,6 +23,8 @@ api.interceptors.request.use((config) => {
 export interface User {
   id: string;
   email?: string;
+  firstName?: string;
+  lastName?: string;
   instagramUserId?: string;
   instagramUsername?: string;
   isProvisional: boolean;

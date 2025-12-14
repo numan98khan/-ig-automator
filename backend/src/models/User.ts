@@ -4,6 +4,8 @@ import bcrypt from 'bcryptjs';
 export interface IUser extends Document {
   email?: string;
   password?: string;
+  firstName?: string;
+  lastName?: string;
   instagramUserId?: string; // Instagram user ID for OAuth-only authentication
   instagramUsername?: string; // Instagram username
   isProvisional: boolean; // True if user created via Instagram only (no email/password yet)
@@ -23,6 +25,14 @@ const userSchema = new Schema<IUser>({
   },
   password: {
     type: String,
+  },
+  firstName: {
+    type: String,
+    trim: true,
+  },
+  lastName: {
+    type: String,
+    trim: true,
   },
   instagramUserId: {
     type: String,
