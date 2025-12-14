@@ -3,7 +3,8 @@ import { IUser } from '../models/User';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const EMAIL_FROM = process.env.EMAIL_FROM || 'no-reply@yourdomain.com';
-const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:5173';
+// Remove trailing slash to prevent double slashes in URLs
+const APP_BASE_URL = (process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
 
 if (!RESEND_API_KEY) {
   console.warn('⚠️ RESEND_API_KEY not set. Email sending will fail.');
