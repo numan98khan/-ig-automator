@@ -177,10 +177,16 @@ export default function Settings() {
         workspaceAPI.getMembers(currentWorkspace._id),
         workspaceInviteAPI.listInvites(currentWorkspace._id),
       ]);
-      setMembers(membersData);
-      setInvites(invitesData);
+
+      // Ensure we always have arrays
+      setMembers(Array.isArray(membersData) ? membersData : []);
+      setInvites(Array.isArray(invitesData) ? invitesData : []);
     } catch (err: any) {
+      console.error('Load team data error:', err);
       setError(err.response?.data?.error || 'Failed to load team data');
+      // Reset to empty arrays on error
+      setMembers([]);
+      setInvites([]);
     } finally {
       setTeamLoading(false);
     }

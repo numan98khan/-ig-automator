@@ -1,5 +1,6 @@
 import express, { Response } from 'express';
 import Workspace from '../models/Workspace';
+import WorkspaceMember from '../models/WorkspaceMember';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { getWorkspaceMembers, updateMemberRole, removeMember, hasPermission } from '../services/workspaceService';
 
@@ -17,6 +18,13 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     const workspace = await Workspace.create({
       name,
       userId: req.userId,
+    });
+
+    // Create WorkspaceMember entry for the owner
+    await WorkspaceMember.create({
+      workspaceId: workspace._id,
+      userId: req.userId,
+      role: 'owner',
     });
 
     res.status(201).json(workspace);
@@ -115,6 +123,52 @@ router.delete('/:id/members/:userId', authenticate, async (req: AuthRequest, res
   } catch (error: any) {
     console.error('Remove member error:', error);
     res.status(400).json({ error: error.message || 'Failed to remove member' });
+  }
+});
+
+// Migration endpoint: Fix missing workspace members
+router.post('/migrate-members', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    console.log('🔄 Starting workspace member migration...');
+
+    // Find all workspaces owned by current user
+    const workspaces = await Workspace.find({ userId: req.userId });
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const workspace of workspaces) {
+      // Check if WorkspaceMember already exists
+      const existing = await WorkspaceMember.findOne({
+        workspaceId: workspace._id,
+        userId: workspace.userId,
+      });
+
+      if (!existing) {
+        // Create WorkspaceMember entry for the owner
+        await WorkspaceMember.create({
+          workspaceId: workspace._id,
+          userId: workspace.userId,
+          role: 'owner',
+        });
+        console.log(`✅ Created member entry for workspace ${workspace._id}`);
+        created++;
+      } else {
+        console.log(`⏭️  Skipped workspace ${workspace._id} (already has member entry)`);
+        skipped++;
+      }
+    }
+
+    console.log(`✅ Migration complete: ${created} created, ${skipped} skipped`);
+    res.json({
+      message: 'Migration completed successfully',
+      created,
+      skipped,
+      total: workspaces.length,
+    });
+  } catch (error) {
+    console.error('Migration error:', error);
+    res.status(500).json({ error: 'Migration failed' });
   }
 });
 
