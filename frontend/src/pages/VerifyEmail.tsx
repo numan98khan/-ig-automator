@@ -14,26 +14,36 @@ const VerifyEmail: React.FC = () => {
   useEffect(() => {
     const verifyEmail = async () => {
       const token = searchParams.get('token');
+      console.log('📧 VerifyEmail page: Starting verification', { hasToken: !!token });
 
       if (!token) {
+        console.log('❌ No token found in URL');
         setStatus('error');
         setMessage('Verification token is missing. Please check your email link.');
         return;
       }
 
       try {
+        console.log('🔄 Calling verifyEmail API...');
         const response = await authAPI.verifyEmail(token);
+        console.log('✅ Verification API success:', response);
+
         setStatus('success');
         setMessage(response.message || 'Email verified successfully!');
 
         // Refresh user data to update emailVerified status
+        console.log('🔄 Refreshing user data...');
         await refreshUser();
+        console.log('✅ User data refreshed');
 
         // Redirect to inbox after 3 seconds
         setTimeout(() => {
+          console.log('🔄 Redirecting to inbox...');
           navigate('/');
         }, 3000);
       } catch (error: any) {
+        console.error('❌ Verification failed:', error);
+        console.error('Error details:', error.response?.data);
         setStatus('error');
         setMessage(error.response?.data?.error || 'Failed to verify email. The link may have expired.');
       }

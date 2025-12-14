@@ -25,7 +25,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const refreshUser = async () => {
     try {
+      console.log('🔄 AuthContext: Fetching user data...');
       const data = await authAPI.getMe();
+      console.log('✅ AuthContext: User data received:', {
+        email: data.user.email,
+        emailVerified: data.user.emailVerified,
+        isProvisional: data.user.isProvisional
+      });
+
       setUser(data.user);
       setWorkspaces(data.workspaces);
 
@@ -52,8 +59,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCurrentWorkspaceState(targetWorkspace);
         localStorage.setItem('currentWorkspaceId', targetWorkspace._id);
       }
+
+      console.log('✅ AuthContext: User state updated');
     } catch (error) {
-      console.error('Error fetching user:', error);
+      console.error('❌ AuthContext: Error fetching user:', error);
       logout();
     }
   };

@@ -185,8 +185,10 @@ router.post('/secure-account', authenticate, async (req: AuthRequest, res: Respo
 router.get('/verify-email', async (req: Request, res: Response) => {
   try {
     const { token } = req.query;
+    console.log('📧 Email verification request received');
 
     if (!token || typeof token !== 'string') {
+      console.log('❌ No token provided');
       return res.status(400).json({ error: 'Verification token is required' });
     }
 
@@ -194,21 +196,33 @@ router.get('/verify-email', async (req: Request, res: Response) => {
     let payload;
     try {
       payload = verifyToken(token);
+      console.log('✅ Token decoded:', { userId: payload.userId, type: payload.type });
     } catch (error) {
+      console.log('❌ Token verification failed:', error);
       return res.status(400).json({ error: 'Invalid or expired verification token' });
     }
 
     if (payload.type !== 'verify_email') {
+      console.log('❌ Invalid token type:', payload.type);
       return res.status(400).json({ error: 'Invalid token type' });
     }
 
     // Find user and verify
     const user = await User.findById(payload.userId);
     if (!user) {
+      console.log('❌ User not found:', payload.userId);
       return res.status(404).json({ error: 'User not found' });
     }
 
+    console.log('📝 User found:', {
+      id: user._id,
+      email: user.email,
+      emailVerified: user.emailVerified,
+      isProvisional: user.isProvisional
+    });
+
     if (user.emailVerified) {
+      console.log('ℹ️ Email already verified');
       return res.status(200).json({ message: 'Email already verified' });
     }
 
@@ -216,6 +230,13 @@ router.get('/verify-email', async (req: Request, res: Response) => {
     user.emailVerified = true;
     user.isProvisional = false;
     await user.save();
+
+    console.log('✅ Email verified successfully:', {
+      id: user._id,
+      email: user.email,
+      emailVerified: user.emailVerified,
+      isProvisional: user.isProvisional
+    });
 
     res.json({
       message: 'Email verified successfully!',
@@ -227,7 +248,7 @@ router.get('/verify-email', async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('Verify email error:', error);
+    console.error('❌ Verify email error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
