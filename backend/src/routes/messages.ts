@@ -5,6 +5,7 @@ import Workspace from '../models/Workspace';
 import InstagramAccount from '../models/InstagramAccount';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { sendMessage as sendInstagramMessage } from '../utils/instagram-api';
 import { generateAIReply } from '../services/aiReplyService';
 import { getActiveTicket, createTicket, addTicketUpdate } from '../services/escalationService';
@@ -21,14 +22,14 @@ router.get('/conversation/:conversationId', authenticate, async (req: AuthReques
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: conversation.workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace
+    const { hasAccess } = await checkWorkspaceAccess(
+      conversation.workspaceId.toString(),
+      req.userId!
+    );
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Unauthorized' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     const messages = await Message.find({ conversationId })
@@ -57,14 +58,14 @@ router.patch('/:messageId/category', authenticate, async (req: AuthRequest, res:
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: conversation.workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace
+    const { hasAccess } = await checkWorkspaceAccess(
+      conversation.workspaceId.toString(),
+      req.userId!
+    );
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Unauthorized' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     // Track old category for count updates
@@ -126,14 +127,14 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: conversation.workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace
+    const { hasAccess } = await checkWorkspaceAccess(
+      conversation.workspaceId.toString(),
+      req.userId!
+    );
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Unauthorized' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     // Create message
@@ -174,14 +175,14 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
       return res.status(400).json({ error: 'AI reply only supported for Instagram conversations' });
     }
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: conversation.workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace
+    const { hasAccess } = await checkWorkspaceAccess(
+      conversation.workspaceId.toString(),
+      req.userId!
+    );
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Unauthorized' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     // Get Instagram account
@@ -345,14 +346,14 @@ router.post('/mark-seen', authenticate, async (req: AuthRequest, res: Response) 
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: conversation.workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace
+    const { hasAccess } = await checkWorkspaceAccess(
+      conversation.workspaceId.toString(),
+      req.userId!
+    );
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Unauthorized' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     // Mark all customer messages in this conversation as seen
