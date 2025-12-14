@@ -216,6 +216,13 @@ export const authAPI = {
   },
 };
 
+// Workspace Members API
+export interface WorkspaceMember {
+  user: User;
+  role: 'owner' | 'admin' | 'agent' | 'viewer';
+  joinedAt: string;
+}
+
 // Workspace API
 export const workspaceAPI = {
   create: async (name: string): Promise<Workspace> => {
@@ -230,6 +237,21 @@ export const workspaceAPI = {
 
   getById: async (id: string): Promise<Workspace> => {
     const { data } = await api.get(`/api/workspaces/${id}`);
+    return data;
+  },
+
+  getMembers: async (workspaceId: string): Promise<WorkspaceMember[]> => {
+    const { data } = await api.get(`/api/workspaces/${workspaceId}/members`);
+    return data;
+  },
+
+  updateMemberRole: async (workspaceId: string, userId: string, role: string): Promise<{ message: string }> => {
+    const { data } = await api.put(`/api/workspaces/${workspaceId}/members/${userId}/role`, { role });
+    return data;
+  },
+
+  removeMember: async (workspaceId: string, userId: string): Promise<{ message: string }> => {
+    const { data } = await api.delete(`/api/workspaces/${workspaceId}/members/${userId}`);
     return data;
   },
 };
@@ -429,30 +451,6 @@ export const categoriesAPI = {
 
   updateKnowledge: async (categoryId: string, content: string): Promise<CategoryKnowledge> => {
     const { data } = await api.put(`/api/categories/${categoryId}/knowledge`, { content });
-    return data;
-  },
-};
-
-// Workspace Members API
-export interface WorkspaceMember {
-  user: User;
-  role: 'owner' | 'admin' | 'agent' | 'viewer';
-  joinedAt: string;
-}
-
-export const workspaceAPI = {
-  getMembers: async (workspaceId: string): Promise<WorkspaceMember[]> => {
-    const { data } = await api.get(`/api/workspaces/${workspaceId}/members`);
-    return data;
-  },
-
-  updateMemberRole: async (workspaceId: string, userId: string, role: string): Promise<{ message: string }> => {
-    const { data } = await api.put(`/api/workspaces/${workspaceId}/members/${userId}/role`, { role });
-    return data;
-  },
-
-  removeMember: async (workspaceId: string, userId: string): Promise<{ message: string }> => {
-    const { data } = await api.delete(`/api/workspaces/${workspaceId}/members/${userId}`);
     return data;
   },
 };
