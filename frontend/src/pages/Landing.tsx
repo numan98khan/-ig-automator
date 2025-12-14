@@ -11,7 +11,7 @@ const Landing: React.FC = () => {
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { user, currentWorkspace, login } = useAuth();
+  const { user, currentWorkspace, login, refreshUser } = useAuth();
   const navigate = useNavigate();
 
   const location = useLocation();
@@ -80,9 +80,14 @@ const Landing: React.FC = () => {
       setError(null);
 
       await login(email, password);
+      console.log('✅ Login successful, fetching user data...');
 
-      // Success - user will be redirected by useEffect above
-      console.log('✅ Login successful');
+      // Refresh user data to get workspaces
+      await refreshUser();
+      console.log('✅ User data refreshed, navigating to inbox...');
+
+      // Navigate to inbox
+      navigate('/inbox', { replace: true });
     } catch (error: any) {
       console.error('Login error:', error);
       setError(error.response?.data?.error || 'Invalid email or password');
