@@ -39,7 +39,7 @@ const VerifyEmail: React.FC = () => {
         // Redirect to inbox after 3 seconds
         setTimeout(() => {
           console.log('🔄 Redirecting to inbox...');
-          navigate('/');
+          navigate('/inbox', { replace: true });
         }, 3000);
       } catch (error: any) {
         console.error('❌ Verification failed:', error);
@@ -94,13 +94,13 @@ const VerifyEmail: React.FC = () => {
           {status === 'error' && (
             <div className="space-y-3">
               <button
-                onClick={() => navigate('/login')}
+                onClick={() => navigate('/landing')}
                 className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
               >
                 Go to Login
               </button>
               <button
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/inbox')}
                 className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium"
               >
                 Go to Inbox
