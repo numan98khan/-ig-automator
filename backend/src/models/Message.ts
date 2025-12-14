@@ -19,6 +19,7 @@ export interface IMessage extends Document {
     width?: number;                      // Width for images/videos
     height?: number;                     // Height for images/videos
     fileName?: string;
+    transcription?: string;              // Transcribed text for voice/audio messages
   }[];
   linkPreview?: {
     url: string;
@@ -88,6 +89,7 @@ const messageSchema = new Schema<IMessage>({
     width: Number,
     height: Number,
     fileName: String,
+    transcription: String,
   }],
   linkPreview: {
     url: String,

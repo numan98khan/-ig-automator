@@ -85,15 +85,25 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
       : ''
   }`;
 
-  // Build conversation history with media context
+  // Build conversation history with media context and transcriptions
   const conversationHistory = messages.map((msg: any) => {
     const role = msg.from === 'customer' ? 'Customer' : msg.from === 'ai' ? 'AI' : 'Business';
     let text = `${role}: ${msg.text}`;
 
     // Add media context to conversation history
     if (msg.attachments && msg.attachments.length > 0) {
-      const mediaTypes = msg.attachments.map((a: any) => a.type).join(', ');
-      text += ` [Sent ${mediaTypes}]`;
+      const attachmentDetails: string[] = [];
+
+      for (const attachment of msg.attachments) {
+        // For voice/audio with transcription, show the transcription
+        if ((attachment.type === 'voice' || attachment.type === 'audio') && attachment.transcription) {
+          attachmentDetails.push(`${attachment.type} (transcribed)`);
+        } else {
+          attachmentDetails.push(attachment.type);
+        }
+      }
+
+      text += ` [Sent ${attachmentDetails.join(', ')}]`;
     }
 
     return text;
@@ -133,6 +143,8 @@ You can see and analyze images and videos that customers send. When responding t
 - Answer questions about the images/videos
 - Provide helpful information based on the visual content
 - If the image/video is unclear or you can't help, acknowledge it and suggest the customer provide more details
+
+Voice notes and audio messages are automatically transcribed. The transcribed text is included in the message content. Treat transcribed voice notes naturally in your response - you don't need to mention that it was a voice note unless relevant.
 
 Global rules that ALWAYS apply:
 - Strictly obey workspace and category policies provided in the context.
@@ -202,8 +214,9 @@ Generate a response following all rules above. Return JSON with:
 
   try {
     // Build user message content (text + images if present)
+    // Note: Responses API uses 'input_text' and 'input_image' instead of 'text' and 'image_url'
     const userContent: any[] = [
-      { type: 'text', text: userMessage.trim() },
+      { type: 'input_text', text: userMessage.trim() },
     ];
 
     // Add image attachments to the message for vision analysis
@@ -212,25 +225,25 @@ Generate a response following all rules above. Return JSON with:
         // Only add image and video types (GPT-4 Vision supports these)
         if (attachment.type === 'image') {
           userContent.push({
-            type: 'image_url',
-            image_url: {
+            type: 'input_image',
+            source: {
+              type: 'url',
               url: attachment.url,
-              detail: 'auto', // 'low', 'high', or 'auto'
             },
           });
         }
         // Note: For videos, we could add the thumbnail or first frame
         else if (attachment.type === 'video' && (attachment.thumbnailUrl || attachment.previewUrl)) {
           userContent.push({
-            type: 'image_url',
-            image_url: {
+            type: 'input_image',
+            source: {
+              type: 'url',
               url: attachment.thumbnailUrl || attachment.previewUrl,
-              detail: 'auto',
             },
           });
           // Add context that this is a video thumbnail
           userContent.push({
-            type: 'text',
+            type: 'input_text',
             text: `[Note: The above image is a thumbnail from a video. The customer sent a video message.]`,
           });
         }
