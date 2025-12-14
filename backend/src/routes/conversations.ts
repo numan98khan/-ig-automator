@@ -5,6 +5,7 @@ import Workspace from '../models/Workspace';
 import InstagramAccount from '../models/InstagramAccount';
 import MessageCategory from '../models/MessageCategory';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { fetchConversations, fetchUserDetails } from '../utils/instagram-api';
 
 const router = express.Router();
@@ -14,14 +15,11 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   try {
     const { workspaceId } = req.params;
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace (owner or member)
+    const { hasAccess, workspace } = await checkWorkspaceAccess(workspaceId, req.userId!);
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Workspace not found' });
+    if (!hasAccess || !workspace) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     const conversations = await Conversation.find({ workspaceId })
@@ -118,13 +116,14 @@ router.post('/:id/resolve-escalation', authenticate, async (req: AuthRequest, re
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    const workspace = await Workspace.findOne({
-      _id: conversation.workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace
+    const { hasAccess } = await checkWorkspaceAccess(
+      conversation.workspaceId.toString(),
+      req.userId!
+    );
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Unauthorized' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     conversation.humanRequired = false;
@@ -146,14 +145,11 @@ router.get('/escalations/workspace/:workspaceId', authenticate, async (req: Auth
   try {
     const { workspaceId } = req.params;
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace
+    const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Workspace not found' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     const conversations = await Conversation.find({
@@ -199,14 +195,14 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: conversation.workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace
+    const { hasAccess } = await checkWorkspaceAccess(
+      conversation.workspaceId.toString(),
+      req.userId!
+    );
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Unauthorized' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     res.json(conversation);

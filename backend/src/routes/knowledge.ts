@@ -2,22 +2,20 @@ import express, { Response } from 'express';
 import KnowledgeItem from '../models/KnowledgeItem';
 import Workspace from '../models/Workspace';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 
 const router = express.Router();
 
-// Get all knowledge items for a workspace
+// Get all knowledge items for a workspace (all members can view)
 router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId } = req.params;
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace
+    const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Workspace not found' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     const items = await KnowledgeItem.find({ workspaceId }).sort({ createdAt: -1 });
@@ -28,7 +26,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   }
 });
 
-// Create knowledge item
+// Create knowledge item (owner and admin only)
 router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { title, content, workspaceId } = req.body;
@@ -37,14 +35,15 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'title, content, and workspaceId are required' });
     }
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
+    // Check if user is owner or admin
+    const { hasAccess, isOwner, role } = await checkWorkspaceAccess(workspaceId, req.userId!);
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Workspace not found' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+
+    if (!isOwner && role !== 'admin') {
+      return res.status(403).json({ error: 'Only workspace owners and admins can create knowledge items' });
     }
 
     const item = await KnowledgeItem.create({

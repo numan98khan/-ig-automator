@@ -1,5 +1,6 @@
 import express, { Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import MessageCategory from '../models/MessageCategory';
 import CategoryKnowledge from '../models/CategoryKnowledge';
 import Workspace from '../models/Workspace';
@@ -16,14 +17,11 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   try {
     const { workspaceId } = req.params;
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace
+    const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Workspace not found' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     // Get categories
@@ -84,14 +82,11 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'workspaceId and nameEn are required' });
     }
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
+    // Check if user has access to this workspace
+    const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Workspace not found' });
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     // Check if category already exists
