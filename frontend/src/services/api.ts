@@ -68,6 +68,27 @@ export interface Conversation {
   humanHoldUntil?: string;
 }
 
+export interface MessageAttachment {
+  type: 'image' | 'video' | 'audio' | 'voice' | 'file';
+  url: string;
+  previewUrl?: string;
+  thumbnailUrl?: string;
+  mimeType?: string;
+  fileSize?: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  fileName?: string;
+}
+
+export interface LinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  imageUrl?: string;
+  siteName?: string;
+}
+
 export interface Message {
   _id: string;
   conversationId: string;
@@ -79,6 +100,10 @@ export interface Message {
   aiTags?: string[];
   aiShouldEscalate?: boolean;
   aiEscalationReason?: string;
+  attachments?: MessageAttachment[];
+  linkPreview?: LinkPreview;
+  platform?: 'instagram' | 'mock';
+  instagramMessageId?: string;
 }
 
 export interface KnowledgeItem {

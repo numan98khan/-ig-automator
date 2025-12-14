@@ -14,6 +14,7 @@ import {
 import { Send, Sparkles, Instagram, Loader2, RefreshCw, CheckCircle, Tag, Check, CheckCheck, ArrowLeft, MoreVertical, Search, MessageSquare } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { ImageAttachment, VideoAttachment, VoiceAttachment, LinkPreviewComponent, FileAttachment } from '../components/MessageMedia';
 
 const Inbox: React.FC = () => {
   const { currentWorkspace } = useAuth();
@@ -451,7 +452,29 @@ const Inbox: React.FC = () => {
                         </div>
                       )}
 
-                      <p className="whitespace-pre-wrap">{msg.text}</p>
+                      {/* Attachments */}
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div className="space-y-2 mb-2">
+                          {msg.attachments.map((attachment, index) => (
+                            <div key={index}>
+                              {attachment.type === 'image' && <ImageAttachment attachment={attachment} />}
+                              {attachment.type === 'video' && <VideoAttachment attachment={attachment} />}
+                              {(attachment.type === 'audio' || attachment.type === 'voice') && <VoiceAttachment attachment={attachment} />}
+                              {attachment.type === 'file' && <FileAttachment attachment={attachment} />}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Link Preview */}
+                      {msg.linkPreview && (
+                        <div className="mb-2">
+                          <LinkPreviewComponent linkPreview={msg.linkPreview} />
+                        </div>
+                      )}
+
+                      {/* Text Message */}
+                      {msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>}
 
                       <div className={`flex items-center justify-end gap-1.5 mt-1.5 text-[10px] ${msg.from === 'customer' ? 'text-muted-foreground' : 'text-primary-foreground/70'
                         }`}>

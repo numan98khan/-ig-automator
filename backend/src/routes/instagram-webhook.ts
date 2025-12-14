@@ -182,15 +182,56 @@ async function handleMessagingEvent(messaging: any) {
       await cancelFollowupOnCustomerReply(conversation._id);
     }
 
-    // Handle attachments
+    // Handle attachments with rich metadata
     const attachments = [];
     if (messaging.message.attachments) {
       for (const attachment of messaging.message.attachments) {
         if (attachment.payload?.url) {
-          attachments.push({
-            type: attachment.type || 'file',
+          const attachmentData: any = {
+            type: attachment.type || 'file', // image, video, audio, file
             url: attachment.payload.url,
-          });
+          };
+
+          // Add preview/thumbnail URL if available
+          if (attachment.payload.preview_url) {
+            attachmentData.previewUrl = attachment.payload.preview_url;
+          }
+          if (attachment.payload.thumbnail_url) {
+            attachmentData.thumbnailUrl = attachment.payload.thumbnail_url;
+          }
+
+          // Add media metadata
+          if (attachment.payload.mime_type) {
+            attachmentData.mimeType = attachment.payload.mime_type;
+          }
+          if (attachment.payload.file_size) {
+            attachmentData.fileSize = attachment.payload.file_size;
+          }
+
+          // Add dimensions for images/videos
+          if (attachment.payload.width) {
+            attachmentData.width = attachment.payload.width;
+          }
+          if (attachment.payload.height) {
+            attachmentData.height = attachment.payload.height;
+          }
+
+          // Add duration for videos/audio
+          if (attachment.payload.duration) {
+            attachmentData.duration = attachment.payload.duration;
+          }
+
+          // Add filename if available
+          if (attachment.payload.name) {
+            attachmentData.fileName = attachment.payload.name;
+          }
+
+          // Special handling for voice messages
+          if (attachment.type === 'audio' && attachment.payload.is_voice_message) {
+            attachmentData.type = 'voice';
+          }
+
+          attachments.push(attachmentData);
         }
       }
     }

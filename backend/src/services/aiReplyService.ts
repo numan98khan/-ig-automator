@@ -85,16 +85,28 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
       : ''
   }`;
 
-  // Build conversation history
+  // Build conversation history with media context
   const conversationHistory = messages.map((msg: any) => {
     const role = msg.from === 'customer' ? 'Customer' : msg.from === 'ai' ? 'AI' : 'Business';
-    return `${role}: ${msg.text}`;
+    let text = `${role}: ${msg.text}`;
+
+    // Add media context to conversation history
+    if (msg.attachments && msg.attachments.length > 0) {
+      const mediaTypes = msg.attachments.map((a: any) => a.type).join(', ');
+      text += ` [Sent ${mediaTypes}]`;
+    }
+
+    return text;
   }).join('\n');
 
+  const recentCustomerMessage = [...messages].reverse().find((msg: any) => msg.from === 'customer');
   const recentCustomerText =
     latestCustomerMessage ||
-    [...messages].reverse().find((msg: any) => msg.from === 'customer')?.text ||
+    recentCustomerMessage?.text ||
     '';
+
+  // Extract attachments from the latest customer message
+  const recentCustomerAttachments = recentCustomerMessage?.attachments || [];
 
   const lastAiMessage = [...messages].reverse().find((msg: any) => msg.from === 'ai')?.text;
 
@@ -115,6 +127,12 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
 
   const systemMessage = `
 You are an AI assistant for a business inbox. You help businesses respond to customer messages on Instagram.
+
+You can see and analyze images and videos that customers send. When responding to media:
+- Describe what you see when relevant to the conversation
+- Answer questions about the images/videos
+- Provide helpful information based on the visual content
+- If the image/video is unclear or you can't help, acknowledge it and suggest the customer provide more details
 
 Global rules that ALWAYS apply:
 - Strictly obey workspace and category policies provided in the context.
@@ -183,13 +201,49 @@ Generate a response following all rules above. Return JSON with:
   let parsed: AIReplyResult | null = null;
 
   try {
+    // Build user message content (text + images if present)
+    const userContent: any[] = [
+      { type: 'text', text: userMessage.trim() },
+    ];
+
+    // Add image attachments to the message for vision analysis
+    if (recentCustomerAttachments.length > 0) {
+      for (const attachment of recentCustomerAttachments) {
+        // Only add image and video types (GPT-4 Vision supports these)
+        if (attachment.type === 'image') {
+          userContent.push({
+            type: 'image_url',
+            image_url: {
+              url: attachment.url,
+              detail: 'auto', // 'low', 'high', or 'auto'
+            },
+          });
+        }
+        // Note: For videos, we could add the thumbnail or first frame
+        else if (attachment.type === 'video' && (attachment.thumbnailUrl || attachment.previewUrl)) {
+          userContent.push({
+            type: 'image_url',
+            image_url: {
+              url: attachment.thumbnailUrl || attachment.previewUrl,
+              detail: 'auto',
+            },
+          });
+          // Add context that this is a video thumbnail
+          userContent.push({
+            type: 'text',
+            text: `[Note: The above image is a thumbnail from a video. The customer sent a video message.]`,
+          });
+        }
+      }
+    }
+
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       temperature: 0.35,
       max_tokens: 220,
       messages: [
         { role: 'system', content: systemMessage.trim() },
-        { role: 'user', content: userMessage.trim() },
+        { role: 'user', content: userContent },
       ],
       response_format: {
         type: 'json_schema',
