@@ -7,6 +7,7 @@ import { connectDB } from './config/database';
 // Import routes
 import authRoutes from './routes/auth';
 import workspaceRoutes from './routes/workspaces';
+import workspaceInviteRoutes from './routes/workspace-invites';
 import instagramRoutes from './routes/instagram';
 import instagramOAuthRoutes from './routes/instagram-oauth';
 import instagramSyncRoutes from './routes/instagram-sync';
@@ -38,6 +39,7 @@ connectDB();
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/workspaces', workspaceRoutes);
+app.use('/api/workspace-invites', workspaceInviteRoutes);
 app.use('/api/instagram', instagramOAuthRoutes); // OAuth routes (auth, callback)
 app.use('/api/instagram', instagramSyncRoutes);   // Sync routes (sync-messages, send-message)
 app.use('/api/instagram', instagramDebugRoutes);  // Debug routes

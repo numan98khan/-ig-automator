@@ -10,6 +10,7 @@ import Categories from './pages/Categories';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import Escalations from './pages/Escalations';
 import VerifyEmail from './pages/VerifyEmail';
+import AcceptInvite from './pages/AcceptInvite';
 import RequestPasswordReset from './pages/RequestPasswordReset';
 import ResetPassword from './pages/ResetPassword';
 
@@ -21,6 +22,7 @@ function App() {
           <Route path="/landing" element={<Landing />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/request-password-reset" element={<RequestPasswordReset />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route

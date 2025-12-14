@@ -3,8 +3,12 @@ import { useAuth } from '../context/AuthContext';
 import {
   settingsAPI,
   authAPI,
+  workspaceAPI,
+  workspaceInviteAPI,
   WorkspaceSettings,
   AutomationStats,
+  WorkspaceMember,
+  WorkspaceInvite,
 } from '../services/api';
 import {
   Shield,
@@ -22,7 +26,10 @@ import {
   AlertCircle,
   Loader2,
   Zap,
-  Info
+  Info,
+  UserPlus,
+  Trash2,
+  X
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
@@ -85,6 +92,15 @@ export default function Settings() {
     followupTemplate: '',
   });
 
+  // Team Management State
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [invites, setInvites] = useState<WorkspaceInvite[]>([]);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [inviteForm, setInviteForm] = useState({
+    email: '',
+    role: 'agent' as 'admin' | 'agent' | 'viewer',
+  });
+
   useEffect(() => {
     // Auto-select account tab if user is provisional
     if (user?.isProvisional || !user?.emailVerified) {
@@ -96,6 +112,12 @@ export default function Settings() {
     if (currentWorkspace && activeTab === 'automations') {
       loadSettings();
       loadStats();
+    }
+  }, [currentWorkspace, activeTab]);
+
+  useEffect(() => {
+    if (currentWorkspace && activeTab === 'team') {
+      loadTeamData();
     }
   }, [currentWorkspace, activeTab]);
 
@@ -141,6 +163,90 @@ export default function Settings() {
       setStats(data);
     } catch (err) {
       console.error('Failed to load stats:', err);
+    }
+  };
+
+  const loadTeamData = async () => {
+    if (!currentWorkspace) return;
+
+    setTeamLoading(true);
+    setError(null);
+
+    try {
+      const [membersData, invitesData] = await Promise.all([
+        workspaceAPI.getMembers(currentWorkspace._id),
+        workspaceInviteAPI.listInvites(currentWorkspace._id),
+      ]);
+      setMembers(membersData);
+      setInvites(invitesData);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to load team data');
+    } finally {
+      setTeamLoading(false);
+    }
+  };
+
+  const handleSendInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentWorkspace) return;
+
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await workspaceInviteAPI.sendInvite(currentWorkspace._id, inviteForm.email, inviteForm.role);
+      setSuccess(`Invitation sent to ${inviteForm.email}`);
+      setInviteForm({ email: '', role: 'agent' });
+      setTimeout(() => setSuccess(null), 3000);
+      await loadTeamData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to send invitation');
+    }
+  };
+
+  const handleCancelInvite = async (inviteId: string) => {
+    if (!confirm('Are you sure you want to cancel this invitation?')) return;
+
+    setError(null);
+
+    try {
+      await workspaceInviteAPI.cancelInvite(inviteId);
+      setSuccess('Invitation cancelled');
+      setTimeout(() => setSuccess(null), 3000);
+      await loadTeamData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to cancel invitation');
+    }
+  };
+
+  const handleUpdateRole = async (userId: string, newRole: string) => {
+    if (!currentWorkspace) return;
+
+    setError(null);
+
+    try {
+      await workspaceAPI.updateMemberRole(currentWorkspace._id, userId, newRole);
+      setSuccess('Member role updated');
+      setTimeout(() => setSuccess(null), 3000);
+      await loadTeamData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update member role');
+    }
+  };
+
+  const handleRemoveMember = async (userId: string, userEmail: string) => {
+    if (!confirm(`Are you sure you want to remove ${userEmail} from this workspace?`)) return;
+    if (!currentWorkspace) return;
+
+    setError(null);
+
+    try {
+      await workspaceAPI.removeMember(currentWorkspace._id, userId);
+      setSuccess('Member removed');
+      setTimeout(() => setSuccess(null), 3000);
+      await loadTeamData();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to remove member');
     }
   };
 
@@ -431,20 +537,190 @@ export default function Settings() {
 
       {activeTab === 'team' && (
         <div className="space-y-6 animate-fade-in">
+          {/* Invite New Member */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" /> Team Management
+                <UserPlus className="w-5 h-5 text-primary" /> Invite Team Member
               </CardTitle>
             </CardHeader>
-            <CardContent className="py-12 text-center">
-              <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="w-8 h-8 text-slate-500" />
-              </div>
-              <p className="text-slate-300 font-medium mb-1">Coming Soon</p>
-              <p className="text-slate-500 text-sm">Invite team members to help manage your inbox.</p>
+            <CardContent>
+              <form onSubmit={handleSendInvite} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2">
+                    <Input
+                      label="Email Address"
+                      type="email"
+                      value={inviteForm.email}
+                      onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="teammate@example.com"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Role
+                    </label>
+                    <select
+                      value={inviteForm.role}
+                      onChange={(e) => setInviteForm(prev => ({ ...prev, role: e.target.value as any }))}
+                      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    >
+                      <option value="viewer">Viewer</option>
+                      <option value="agent">Agent</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                </div>
+                <Button type="submit" className="w-full md:w-auto">
+                  <Mail className="w-4 h-4 mr-2" />
+                  Send Invitation
+                </Button>
+              </form>
             </CardContent>
           </Card>
+
+          {teamLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <>
+              {/* Current Members */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-primary" /> Team Members ({members.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {members.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <p className="text-slate-400">No team members yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {members.map((member) => (
+                        <div
+                          key={member.user.id}
+                          className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
+                                <Users className="w-5 h-5 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-white">
+                                  {member.user.email}
+                                  {member.user.id === user?.id && (
+                                    <span className="ml-2 text-xs text-slate-400">(You)</span>
+                                  )}
+                                </p>
+                                <p className="text-sm text-slate-400">
+                                  Joined {new Date(member.joinedAt).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {member.role === 'owner' ? (
+                              <Badge variant="primary">Owner</Badge>
+                            ) : (
+                              <select
+                                value={member.role}
+                                onChange={(e) => handleUpdateRole(member.user.id, e.target.value)}
+                                disabled={member.user.id === user?.id}
+                                className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <option value="viewer">Viewer</option>
+                                <option value="agent">Agent</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                            )}
+                            {member.role !== 'owner' && member.user.id !== user?.id && (
+                              <button
+                                onClick={() => handleRemoveMember(member.user.id, member.user.email || 'this user')}
+                                className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition"
+                                title="Remove member"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Pending Invitations */}
+              {invites.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-primary" /> Pending Invitations ({invites.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {invites.map((invite) => (
+                        <div
+                          key={invite._id}
+                          className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10"
+                        >
+                          <div className="flex-1">
+                            <p className="font-medium text-white">{invite.email}</p>
+                            <p className="text-sm text-slate-400">
+                              Role: <span className="font-medium capitalize">{invite.role}</span> ·
+                              Expires {new Date(invite.expiresAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleCancelInvite(invite._id)}
+                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
+                            title="Cancel invitation"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Role Descriptions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Info className="w-5 h-5 text-primary" /> Role Permissions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 text-sm">
+                    <div className="p-3 bg-white/5 rounded-lg">
+                      <p className="font-medium text-white mb-1">Owner</p>
+                      <p className="text-slate-400">Full access to everything including billing and workspace deletion</p>
+                    </div>
+                    <div className="p-3 bg-white/5 rounded-lg">
+                      <p className="font-medium text-white mb-1">Admin</p>
+                      <p className="text-slate-400">Manage team members, settings, and all workspace features</p>
+                    </div>
+                    <div className="p-3 bg-white/5 rounded-lg">
+                      <p className="font-medium text-white mb-1">Agent</p>
+                      <p className="text-slate-400">Manage conversations, knowledge base, and categories</p>
+                    </div>
+                    <div className="p-3 bg-white/5 rounded-lg">
+                      <p className="font-medium text-white mb-1">Viewer</p>
+                      <p className="text-slate-400">Read-only access to conversations and reports</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       )}
 

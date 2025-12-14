@@ -183,9 +183,13 @@ export async function sendWorkspaceInviteEmail(
   invitedEmail: string,
   workspaceName: string,
   inviterName: string,
-  token: string
+  token: string,
+  role: string
 ): Promise<void> {
   const inviteUrl = `${APP_BASE_URL}/accept-invite?token=${token}`;
+
+  // Format role for display
+  const roleDisplay = role.charAt(0).toUpperCase() + role.slice(1);
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -201,10 +205,10 @@ export async function sendWorkspaceInviteEmail(
       <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
         <p style="font-size: 16px; margin-bottom: 20px;">Hi there,</p>
         <p style="font-size: 16px; margin-bottom: 20px;">
-          <strong>${inviterName}</strong> has invited you to join the workspace <strong>${workspaceName}</strong> on Instagram AI Inbox!
+          <strong>${inviterName}</strong> has invited you to join the workspace <strong>${workspaceName}</strong> on Instagram AI Inbox as a <strong>${roleDisplay}</strong>!
         </p>
         <p style="font-size: 16px; margin-bottom: 20px;">
-          Click the button below to accept the invitation and join the team:
+          Click the button below to accept the invitation and set up your account:
         </p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${inviteUrl}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block; font-size: 16px;">
@@ -216,7 +220,7 @@ export async function sendWorkspaceInviteEmail(
           <a href="${inviteUrl}" style="color: #667eea; word-break: break-all;">${inviteUrl}</a>
         </p>
         <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
-          This invitation will expire in 24 hours.
+          This invitation will expire in 7 days.
         </p>
       </div>
       <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
@@ -231,13 +235,13 @@ You're Invited!
 
 Hi there,
 
-${inviterName} has invited you to join the workspace ${workspaceName} on Instagram AI Inbox!
+${inviterName} has invited you to join the workspace ${workspaceName} on Instagram AI Inbox as a ${roleDisplay}!
 
-Click the link below to accept the invitation and join the team:
+Click the link below to accept the invitation and set up your account:
 
 ${inviteUrl}
 
-This invitation will expire in 24 hours.
+This invitation will expire in 7 days.
 
 ---
 Instagram AI Inbox - Powered by AI

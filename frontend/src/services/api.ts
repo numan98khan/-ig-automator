@@ -433,4 +433,74 @@ export const categoriesAPI = {
   },
 };
 
+// Workspace Members API
+export interface WorkspaceMember {
+  user: User;
+  role: 'owner' | 'admin' | 'agent' | 'viewer';
+  joinedAt: string;
+}
+
+export const workspaceAPI = {
+  getMembers: async (workspaceId: string): Promise<WorkspaceMember[]> => {
+    const { data } = await api.get(`/api/workspaces/${workspaceId}/members`);
+    return data;
+  },
+
+  updateMemberRole: async (workspaceId: string, userId: string, role: string): Promise<{ message: string }> => {
+    const { data } = await api.put(`/api/workspaces/${workspaceId}/members/${userId}/role`, { role });
+    return data;
+  },
+
+  removeMember: async (workspaceId: string, userId: string): Promise<{ message: string }> => {
+    const { data } = await api.delete(`/api/workspaces/${workspaceId}/members/${userId}`);
+    return data;
+  },
+};
+
+// Workspace Invites API
+export interface WorkspaceInvite {
+  _id: string;
+  workspaceId: string;
+  email: string;
+  role: 'owner' | 'admin' | 'agent' | 'viewer';
+  invitedBy: string;
+  token: string;
+  expiresAt: string;
+  accepted: boolean;
+  createdAt: string;
+}
+
+export interface InviteDetails {
+  email: string;
+  workspaceName: string;
+  role: string;
+}
+
+export const workspaceInviteAPI = {
+  sendInvite: async (workspaceId: string, email: string, role: string): Promise<{ message: string; invite: WorkspaceInvite }> => {
+    const { data } = await api.post('/api/workspace-invites/send', { workspaceId, email, role });
+    return data;
+  },
+
+  listInvites: async (workspaceId: string): Promise<WorkspaceInvite[]> => {
+    const { data } = await api.get(`/api/workspace-invites/${workspaceId}`);
+    return data;
+  },
+
+  cancelInvite: async (inviteId: string): Promise<{ message: string }> => {
+    const { data } = await api.delete(`/api/workspace-invites/${inviteId}`);
+    return data;
+  },
+
+  getInviteDetails: async (token: string): Promise<InviteDetails> => {
+    const { data } = await api.get(`/api/workspace-invites/details/${token}`);
+    return data;
+  },
+
+  acceptInvite: async (token: string, password: string, firstName?: string, lastName?: string): Promise<{ message: string; token: string; user: User }> => {
+    const { data } = await api.post('/api/workspace-invites/accept', { token, password, firstName, lastName });
+    return data;
+  },
+};
+
 export default api;

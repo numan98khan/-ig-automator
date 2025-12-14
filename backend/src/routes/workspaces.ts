@@ -1,6 +1,7 @@
 import express, { Response } from 'express';
 import Workspace from '../models/Workspace';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { getWorkspaceMembers, updateMemberRole, removeMember, hasPermission } from '../services/workspaceService';
 
 const router = express.Router();
 
@@ -52,6 +53,68 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Get workspace error:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get workspace members
+router.get('/:id/members', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Check if user has access to this workspace (must be at least a viewer)
+    const canView = await hasPermission(req.userId!, id, 'viewer');
+    if (!canView) {
+      return res.status(403).json({ error: 'You do not have permission to view members of this workspace' });
+    }
+
+    const members = await getWorkspaceMembers(id);
+    res.json(members);
+  } catch (error) {
+    console.error('Get workspace members error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update member role
+router.put('/:id/members/:userId/role', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id, userId } = req.params;
+    const { role } = req.body;
+
+    if (!role) {
+      return res.status(400).json({ error: 'Role is required' });
+    }
+
+    // Only owners and admins can change roles
+    const canManage = await hasPermission(req.userId!, id, 'admin');
+    if (!canManage) {
+      return res.status(403).json({ error: 'You do not have permission to change member roles' });
+    }
+
+    await updateMemberRole(id, userId, role);
+    res.json({ message: 'Member role updated successfully' });
+  } catch (error: any) {
+    console.error('Update member role error:', error);
+    res.status(400).json({ error: error.message || 'Failed to update member role' });
+  }
+});
+
+// Remove member
+router.delete('/:id/members/:userId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id, userId } = req.params;
+
+    // Only owners and admins can remove members
+    const canManage = await hasPermission(req.userId!, id, 'admin');
+    if (!canManage) {
+      return res.status(403).json({ error: 'You do not have permission to remove members' });
+    }
+
+    await removeMember(id, userId);
+    res.json({ message: 'Member removed successfully' });
+  } catch (error: any) {
+    console.error('Remove member error:', error);
+    res.status(400).json({ error: error.message || 'Failed to remove member' });
   }
 });
 
