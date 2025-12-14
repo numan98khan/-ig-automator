@@ -179,6 +179,12 @@ router.get('/callback', async (req: Request, res: Response) => {
       console.log('🔍 Looking for user with Instagram ID:', accountData.user_id || user_id);
       let user = await User.findOne({ instagramUserId: accountData.user_id || user_id });
 
+      // If user exists and has secured their account with email/password, redirect them to use email login
+      if (user && !user.isProvisional && user.email) {
+        console.log('⚠️  User has secured account, redirecting to email login');
+        return res.redirect(`${FRONTEND_URL}/landing?error=account_secured&message=You have already secured your account. Please log in with your email and password.`);
+      }
+
       if (!user) {
         // Create new user (Instagram-only, provisional)
         console.log('🔄 User not found, creating new user...');
