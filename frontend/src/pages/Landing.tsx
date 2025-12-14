@@ -140,7 +140,7 @@ const Landing: React.FC = () => {
           <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold text-foreground mb-6 tracking-tight leading-tight animate-slide-up">
             Master your DMs
             <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-secondary-hover">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 animate-gradient-x">
               using Intelligence.
             </span>
           </h1>
