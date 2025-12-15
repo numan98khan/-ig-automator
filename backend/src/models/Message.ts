@@ -9,19 +9,40 @@ export interface IMessage extends Document {
   instagramMessageId?: string;           // Instagram's message ID
   platform: 'instagram' | 'mock';        // Platform identifier
   attachments?: {
-    type: string;                        // 'image', 'video', 'audio', 'file'
+    type: 'image' | 'video' | 'audio' | 'voice' | 'file';
     url: string;
     previewUrl?: string;
+    thumbnailUrl?: string;
+    mimeType?: string;
+    fileSize?: number;
+    duration?: number;                   // Duration in seconds for audio/video
+    width?: number;                      // Width for images/videos
+    height?: number;                     // Height for images/videos
+    fileName?: string;
+    transcription?: string;              // Transcribed text for voice/audio messages
   }[];
+  linkPreview?: {
+    url: string;
+    title?: string;
+    description?: string;
+    imageUrl?: string;
+    siteName?: string;
+  };
   metadata?: Record<string, any>;       // Additional Instagram data
 
   // Categorization fields (Phase 2)
   categoryId?: mongoose.Types.ObjectId;  // Reference to MessageCategory
   detectedLanguage?: string;             // ISO language code (e.g., 'en', 'ar', 'es')
   translatedText?: string;               // English translation for analysis
+  aiTags?: string[];                     // Semantic labels returned by AI
+  aiShouldEscalate?: boolean;            // Escalation flag from AI
+  aiEscalationReason?: string;           // Short reason for escalation
 
   // Automation source tracking
   automationSource?: 'comment_dm' | 'auto_reply' | 'followup';  // Source of automated message
+
+  // Read receipts
+  seenAt?: Date;                         // When the message was seen by the recipient
 
   createdAt: Date;
   updatedAt: Date;
@@ -57,11 +78,26 @@ const messageSchema = new Schema<IMessage>({
   attachments: [{
     type: {
       type: String,
-      enum: ['image', 'video', 'audio', 'file'],
+      enum: ['image', 'video', 'audio', 'voice', 'file'],
     },
     url: String,
     previewUrl: String,
+    thumbnailUrl: String,
+    mimeType: String,
+    fileSize: Number,
+    duration: Number,
+    width: Number,
+    height: Number,
+    fileName: String,
+    transcription: String,
   }],
+  linkPreview: {
+    url: String,
+    title: String,
+    description: String,
+    imageUrl: String,
+    siteName: String,
+  },
   metadata: {
     type: Schema.Types.Mixed,
   },
@@ -80,11 +116,28 @@ const messageSchema = new Schema<IMessage>({
     type: String,
     sparse: true,
   },
+  aiTags: {
+    type: [String],
+    default: [],
+  },
+  aiShouldEscalate: {
+    type: Boolean,
+  },
+  aiEscalationReason: {
+    type: String,
+    trim: true,
+  },
 
   // Automation source tracking
   automationSource: {
     type: String,
     enum: ['comment_dm', 'auto_reply', 'followup'],
+    sparse: true,
+  },
+
+  // Read receipts
+  seenAt: {
+    type: Date,
     sparse: true,
   },
 

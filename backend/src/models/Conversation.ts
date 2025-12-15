@@ -23,6 +23,13 @@ export interface IConversation extends Document {
   detectedLanguage?: string;
   categoryConfidence?: number;
 
+  // Human-in-the-loop / escalation tracking
+  humanRequired?: boolean;
+  humanRequiredReason?: string;
+  humanTriggeredAt?: Date;
+  humanTriggeredByMessageId?: mongoose.Types.ObjectId;
+  humanHoldUntil?: Date;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -92,6 +99,26 @@ const conversationSchema = new Schema<IConversation>({
   },
   categoryConfidence: {
     type: Number,
+  },
+
+  // Human-in-the-loop / escalation tracking
+  humanRequired: {
+    type: Boolean,
+    default: false,
+  },
+  humanRequiredReason: {
+    type: String,
+    trim: true,
+  },
+  humanTriggeredAt: {
+    type: Date,
+  },
+  humanTriggeredByMessageId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Message',
+  },
+  humanHoldUntil: {
+    type: Date,
   },
 
   createdAt: {

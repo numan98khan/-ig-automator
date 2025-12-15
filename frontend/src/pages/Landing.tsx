@@ -1,57 +1,65 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Instagram, Loader2, Sparkles, MessageSquare, Zap, AlertCircle } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Instagram, Loader2, Sparkles, MessageSquare, Zap, AlertCircle, ArrowRight, Mail, Lock, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { Button } from '../components/ui/Button';
 
 const Landing: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { user, currentWorkspace } = useAuth();
+  const [showEmailLogin, setShowEmailLogin] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const { user, currentWorkspace, login, refreshUser } = useAuth();
+  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+
+  const location = useLocation();
 
   useEffect(() => {
     // Check for errors in URL params
     const params = new URLSearchParams(window.location.search);
     const errorParam = params.get('error');
-    const tokenParam = params.get('token');
-    const instagramConnected = params.get('instagram_connected');
-
-    // DEBUG: Log all URL parameters
-    console.log('🔍 Landing page URL params:', {
-      error: errorParam,
-      token: tokenParam ? 'PRESENT' : 'MISSING',
-      instagram_connected: instagramConnected,
-      full_url: window.location.href,
-      all_params: Object.fromEntries(params.entries())
-    });
+    const messageParam = params.get('message');
 
     if (errorParam) {
-      setError(`Authentication failed: ${errorParam}`);
+      // Use custom message if provided, otherwise use default error message
+      if (messageParam) {
+        setError(decodeURIComponent(messageParam));
+        setShowEmailLogin(true); // Show email login form if account is secured
+      } else if (errorParam === 'account_secured') {
+        setError('You have already secured your account. Please log in with your email and password.');
+        setShowEmailLogin(true);
+      } else {
+        setError(`Authentication failed: ${errorParam}`);
+      }
       console.error('❌ OAuth error:', errorParam);
       // Keep error in URL for 5 seconds before cleaning
       setTimeout(() => {
         window.history.replaceState({}, '', window.location.pathname);
-      }, 5000);
+        setError(null);
+      }, 8000);
       return;
     }
 
-    // If user is already logged in with workspace, redirect to inbox
+    // If user is already logged in with workspace, redirect to inbox or original destination
     if (user && currentWorkspace) {
-      console.log('✅ User authenticated, redirecting to inbox');
-      navigate('/inbox');
+      console.log('✅ User authenticated, redirecting...');
+      const from = location.state?.from?.pathname || '/inbox';
+      // If the destination is same as landing (shouldn't happen), go to inbox
+      const target = from === '/landing' ? '/inbox' : from;
+      navigate(target, { replace: true });
     }
-  }, [user, currentWorkspace, navigate]);
+  }, [user, currentWorkspace, navigate, location]);
 
   const handleInstagramLogin = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Redirect directly to backend OAuth without workspace ID
-      // Backend will create user + workspace on first login
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      console.log('Initiating Instagram OAuth, API URL:', apiUrl);
-
       const response = await fetch(`${apiUrl}/api/instagram/auth-login`);
 
       if (!response.ok) {
@@ -59,7 +67,6 @@ const Landing: React.FC = () => {
       }
 
       const data = await response.json();
-      console.log('Redirecting to Instagram OAuth:', data.authUrl);
       window.location.href = data.authUrl;
     } catch (error) {
       console.error('Error initiating Instagram login:', error);
@@ -68,125 +75,255 @@ const Landing: React.FC = () => {
     }
   };
 
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setLoginLoading(true);
+      setError(null);
+
+      await login(email, password);
+      console.log('✅ Login successful, fetching user data...');
+
+      // Refresh user data to get workspaces
+      await refreshUser();
+      console.log('✅ User data refreshed, navigating to inbox...');
+
+      // Navigate to inbox
+      navigate('/inbox', { replace: true });
+    } catch (error: any) {
+      console.error('Login error:', error);
+      setError(error.response?.data?.error || 'Invalid email or password');
+      setLoginLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500">
+    <div className="min-h-screen bg-background relative overflow-hidden flex flex-col selection:bg-primary/30">
+
+      {/* Background Ambience */}
+      {/* Background Ambience - Horizon Effect */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Main Horizon Glow - Broad & Soft */}
+        <div className="absolute top-[20%] left-1/2 -translate-x-1/2 w-[140%] h-[80%] rounded-[100%] bg-gradient-to-b from-violet-600/20 via-indigo-600/10 to-transparent blur-[100px] opacity-50 dark:opacity-40" />
+
+        {/* Sharper Inner Horizon - Defines the 'Arch' */}
+        <div className="absolute top-[30%] left-1/2 -translate-x-1/2 w-[110%] h-[60%] rounded-[100%] bg-gradient-to-b from-indigo-500/30 via-purple-500/10 to-transparent blur-[80px] opacity-60 dark:opacity-50" />
+
+        {/* Core Glow - Intense & Focused */}
+        <div className="absolute top-[35%] left-1/2 -translate-x-1/2 w-[80%] h-[40%] rounded-[100%] bg-gradient-to-b from-violet-400/20 via-indigo-400/10 to-transparent blur-[60px] opacity-70 dark:opacity-60" />
+
+        {/* Subtle Grain Overlay */}
+        <div className="absolute inset-0 opacity-[0.04] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noiseFilter\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.65\' numOctaves=\'3\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noiseFilter)\'/%3E%3C/svg%3E")' }} />
+      </div>
+
+
       {/* Header */}
-      <header className="absolute top-0 left-0 right-0 p-6">
-        <div className="max-w-7xl mx-auto flex items-center gap-3">
-          <Instagram className="w-10 h-10 text-white" />
-          <span className="text-2xl font-bold text-white">AI Instagram Inbox</span>
+      <header className="p-6 relative z-10">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-primary rounded-xl shadow-glow">
+              <Instagram className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-xl font-bold text-foreground tracking-tight">AI Inbox</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="p-2 rounded-full bg-background/50 border border-border text-foreground/80 hover:text-foreground hover:bg-muted transition-colors backdrop-blur-md"
+              title="Toggle Theme"
+            >
+              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <Button variant="ghost" className="text-sm">Contact Support</Button>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <div className="min-h-screen flex items-center justify-center px-4 py-20">
-        <div className="max-w-5xl w-full">
-          <div className="text-center mb-12">
-            {/* Hero */}
-            <div className="mb-8">
-              <div className="inline-block bg-white/20 backdrop-blur-sm rounded-full p-6 mb-6">
-                <Instagram className="w-24 h-24 text-white" />
-              </div>
-              <h1 className="text-6xl font-bold text-white mb-4">
-                Manage Instagram DMs
-                <br />
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-yellow-200 to-pink-200">
-                  with AI
-                </span>
-              </h1>
-              <p className="text-2xl text-purple-100 mb-8 max-w-2xl mx-auto">
-                Automate your Instagram customer support with AI-powered responses
-              </p>
-            </div>
+      <div className="flex-1 flex flex-col justify-center px-4 py-12 md:py-20 relative z-10">
+        <div className="max-w-5xl w-full mx-auto text-center">
 
-            {/* Sign in Button */}
-            <div className="mb-12">
-              <button
-                onClick={handleInstagramLogin}
-                disabled={loading}
-                className="group relative inline-flex items-center gap-4 bg-white text-purple-600 px-12 py-6 rounded-2xl font-bold text-xl shadow-2xl hover:shadow-3xl hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-8 h-8 animate-spin" />
-                    <span>Connecting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Instagram className="w-8 h-8" />
-                    <span>Sign in with Instagram</span>
-                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 opacity-0 group-hover:opacity-10 transition-opacity" />
-                  </>
-                )}
-              </button>
-              <p className="text-white/80 text-sm mt-4">
-                Free • No credit card required • Connect in 30 seconds
-              </p>
-
-              {/* Error Message */}
-              {error && (
-                <div className="mt-4 max-w-md mx-auto">
-                  <div className="bg-red-500/20 backdrop-blur-md border border-red-400/50 rounded-xl p-4 flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-200 flex-shrink-0 mt-0.5" />
-                    <div className="text-left">
-                      <p className="text-red-100 font-semibold text-sm">Error</p>
-                      <p className="text-red-200 text-sm mt-1">{error}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Features Grid */}
-            <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 text-white border border-white/20">
-                <div className="bg-white/20 rounded-full w-14 h-14 flex items-center justify-center mb-4 mx-auto">
-                  <MessageSquare className="w-7 h-7" />
-                </div>
-                <h3 className="font-bold text-lg mb-2">AI-Powered Replies</h3>
-                <p className="text-purple-100 text-sm">
-                  Automatically respond to DMs with intelligent, context-aware messages
-                </p>
-              </div>
-
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 text-white border border-white/20">
-                <div className="bg-white/20 rounded-full w-14 h-14 flex items-center justify-center mb-4 mx-auto">
-                  <Sparkles className="w-7 h-7" />
-                </div>
-                <h3 className="font-bold text-lg mb-2">Custom Knowledge Base</h3>
-                <p className="text-purple-100 text-sm">
-                  Train AI with your FAQs and brand voice for personalized responses
-                </p>
-              </div>
-
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 text-white border border-white/20">
-                <div className="bg-white/20 rounded-full w-14 h-14 flex items-center justify-center mb-4 mx-auto">
-                  <Zap className="w-7 h-7" />
-                </div>
-                <h3 className="font-bold text-lg mb-2">Instant Setup</h3>
-                <p className="text-purple-100 text-sm">
-                  Connect your Instagram Business account and start in minutes
-                </p>
-              </div>
-            </div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/50 border border-border text-muted-foreground text-xs font-medium mb-8 animate-fade-in backdrop-blur-md">
+            <Sparkles className="w-3 h-3 text-amber-500" />
+            <span>Now with GPT-4 Turbo Integration</span>
           </div>
 
-          {/* Requirements */}
-          <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 max-w-2xl mx-auto border border-white/20">
-            <p className="text-white/90 text-sm text-center">
-              <strong>Requirements:</strong> Instagram Business or Creator account connected to a Facebook Page
-            </p>
+          {/* Hero Title */}
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold text-foreground mb-6 tracking-tight leading-tight animate-slide-up">
+            Master your DMs
+            <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 animate-gradient-x">
+              using Intelligence.
+            </span>
+          </h1>
+
+          <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '0.1s' }}>
+            Automate your Instagram customer support with AI-powered responses. Train your assistant, manage conversations, and scale effortlessly.
+          </p>
+
+          {/* CTA Section */}
+          <div className="flex flex-col items-center gap-4 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+            {/* Error Message */}
+            {error && (
+              <div className="mb-2 animate-fade-in">
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center gap-3 text-left max-w-md">
+                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-red-200 text-sm font-medium">Notice</p>
+                    <p className="text-red-300/80 text-xs mt-0.5">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Email Login Form */}
+            {showEmailLogin ? (
+              <div className="w-full max-w-md mx-auto animate-fade-in">
+                <form onSubmit={handleEmailLogin} className="space-y-4">
+                  <div className="glass-panel p-6 rounded-2xl border border-border bg-card/50 backdrop-blur-xl">
+                    <h2 className="text-xl font-bold text-foreground mb-4 text-center">Log In to Your Account</h2>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-muted-foreground mb-2">Email</label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                          <input
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full pl-11 pr-4 py-3 bg-background/50 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            placeholder="your@email.com"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-muted-foreground mb-2">Password</label>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                          <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full pl-11 pr-4 py-3 bg-background/50 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            placeholder="Enter your password"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={loginLoading}
+                        className="w-full px-6 py-3 bg-gradient-primary rounded-xl text-white font-semibold hover:shadow-glow hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {loginLoading ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>Logging in...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Log In</span>
+                            <ArrowRight className="w-5 h-5" />
+                          </>
+                        )}
+                      </button>
+
+                      <div className="text-center">
+                        <button
+                          type="button"
+                          onClick={() => setShowEmailLogin(false)}
+                          className="text-sm text-muted-foreground hover:text-foreground transition"
+                        >
+                          ← Back to Instagram Login
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={handleInstagramLogin}
+                  disabled={loading}
+                  className="group relative inline-flex items-center gap-3 px-8 py-4 bg-gradient-primary rounded-2xl text-white font-semibold text-lg hover:shadow-glow hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Connecting secure session...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Instagram className="w-5 h-5" />
+                      <span>Continue with Instagram</span>
+                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center gap-4 text-xs text-slate-500 mt-2">
+                  <span className="flex items-center gap-1"><Zap className="w-3 h-3" /> Instant Setup</span>
+                  <span className="w-1 h-1 bg-slate-700 rounded-full" />
+                  <span>No credit card required</span>
+                </div>
+
+                {/* Already have an account link */}
+                <div className="mt-4">
+                  <button
+                    onClick={() => setShowEmailLogin(true)}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium"
+                  >
+                    Already have an account? <span className="text-primary">Log in with email</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Features Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-20 md:mt-32 px-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
+            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-muted/50 transition-colors group border border-border/50">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
+                <MessageSquare className="w-6 h-6" />
+              </div>
+              <h3 className="font-semibold text-lg text-foreground mb-2">Smart Replies</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Context-aware responses that sound just like you, generated in milliseconds.
+              </p>
+            </div>
+
+            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-muted/50 transition-colors group border border-border/50">
+              <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center mb-4 text-accent group-hover:scale-110 transition-transform">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <h3 className="font-semibold text-lg text-foreground mb-2">Knowledge Base</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Feed the AI your documents and guidelines to ensure accurate information.
+              </p>
+            </div>
+
+            <div className="glass-panel p-6 rounded-2xl text-left hover:bg-muted/50 transition-colors group border border-border/50">
+              <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center mb-4 text-foreground group-hover:scale-110 transition-transform">
+                <Zap className="w-6 h-6" />
+              </div>
+              <h3 className="font-semibold text-lg text-foreground mb-2">24/7 Automation</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Never miss a DM. Handle thousands of conversations simultaneously, day or night.
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Footer */}
-      <footer className="absolute bottom-0 left-0 right-0 p-6">
-        <div className="max-w-7xl mx-auto text-center">
-          <p className="text-white/60 text-sm">
-            Secure OAuth authentication • No password required
-          </p>
-        </div>
+      <footer className="p-8 text-center text-slate-600 text-sm relative z-10">
+        <p>© 2024 AI Automator. Built for creators.</p>
       </footer>
     </div>
   );

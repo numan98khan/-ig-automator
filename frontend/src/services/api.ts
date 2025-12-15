@@ -22,7 +22,15 @@ api.interceptors.request.use((config) => {
 // Types
 export interface User {
   id: string;
-  email: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  instagramUserId?: string;
+  instagramUsername?: string;
+  isProvisional: boolean;
+  emailVerified: boolean;
+  defaultWorkspaceId?: string;
+  createdAt: string;
 }
 
 export interface Workspace {
@@ -50,6 +58,35 @@ export interface Conversation {
   lastMessageAt: string;
   lastMessage?: string;
   createdAt: string;
+  isSynced?: boolean;
+  categoryName?: string;
+  categoryId?: any;
+  humanRequired?: boolean;
+  humanRequiredReason?: string;
+  humanTriggeredAt?: string;
+  humanTriggeredByMessageId?: string;
+  humanHoldUntil?: string;
+}
+
+export interface MessageAttachment {
+  type: 'image' | 'video' | 'audio' | 'voice' | 'file';
+  url: string;
+  previewUrl?: string;
+  thumbnailUrl?: string;
+  mimeType?: string;
+  fileSize?: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  fileName?: string;
+}
+
+export interface LinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  imageUrl?: string;
+  siteName?: string;
 }
 
 export interface Message {
@@ -58,6 +95,15 @@ export interface Message {
   text: string;
   from: 'customer' | 'user' | 'ai';
   createdAt: string;
+  categoryId?: any;
+  seenAt?: string;
+  aiTags?: string[];
+  aiShouldEscalate?: boolean;
+  aiEscalationReason?: string;
+  attachments?: MessageAttachment[];
+  linkPreview?: LinkPreview;
+  platform?: 'instagram' | 'mock';
+  instagramMessageId?: string;
 }
 
 export interface KnowledgeItem {
@@ -73,7 +119,16 @@ export interface WorkspaceSettings {
   _id: string;
   workspaceId: string;
   defaultLanguage: string;
+  defaultReplyLanguage?: string;
   uiLanguage: string;
+  allowHashtags?: boolean;
+  allowEmojis?: boolean;
+  maxReplySentences?: number;
+  decisionMode?: 'full_auto' | 'assist' | 'info_only';
+  escalationGuidelines?: string;
+  escalationExamples?: string[];
+  humanEscalationBehavior?: 'ai_silent' | 'ai_allowed';
+  humanHoldMinutes?: number;
   commentDmEnabled: boolean;
   commentDmTemplate: string;
   dmAutoReplyEnabled: boolean;
@@ -89,6 +144,10 @@ export interface MessageCategory {
   workspaceId: string;
   nameEn: string;
   description?: string;
+  descriptionEn?: string;
+  exampleMessages?: string[];
+  aiPolicy?: 'full_auto' | 'assist_only' | 'escalate';
+  escalationNote?: string;
   isSystem: boolean;
   autoReplyEnabled: boolean;
   messageCount: number;
@@ -104,6 +163,27 @@ export interface CategoryKnowledge {
   language: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface EscalationCase {
+  escalation: {
+    _id: string;
+    conversationId: string;
+    categoryId?: string;
+    topicSummary: string;
+    reason?: string;
+    status: 'pending' | 'in_progress' | 'resolved' | 'cancelled';
+    followUpCount: number;
+    createdAt: string;
+    updatedAt: string;
+    lastCustomerMessage?: string;
+    lastCustomerAt?: string;
+    lastAiMessage?: string;
+    lastAiAt?: string;
+  };
+  conversation: Conversation;
+  recentMessages: Message[];
+  lastEscalation?: Message;
 }
 
 export interface AutomationStats {
@@ -136,7 +216,39 @@ export const authAPI = {
     const { data } = await api.get('/api/auth/me');
     return data;
   },
+
+  secureAccount: async (email: string, password: string) => {
+    const { data } = await api.post('/api/auth/secure-account', { email, password });
+    return data;
+  },
+
+  verifyEmail: async (token: string) => {
+    const { data } = await api.get(`/api/auth/verify-email?token=${token}`);
+    return data;
+  },
+
+  resendVerification: async () => {
+    const { data } = await api.post('/api/auth/resend-verification');
+    return data;
+  },
+
+  requestPasswordReset: async (email: string) => {
+    const { data } = await api.post('/api/auth/reset-password-request', { email });
+    return data;
+  },
+
+  resetPassword: async (token: string, newPassword: string) => {
+    const { data } = await api.post('/api/auth/reset-password', { token, newPassword });
+    return data;
+  },
 };
+
+// Workspace Members API
+export interface WorkspaceMember {
+  user: User;
+  role: 'owner' | 'admin' | 'agent' | 'viewer';
+  joinedAt: string;
+}
 
 // Workspace API
 export const workspaceAPI = {
@@ -152,6 +264,21 @@ export const workspaceAPI = {
 
   getById: async (id: string): Promise<Workspace> => {
     const { data } = await api.get(`/api/workspaces/${id}`);
+    return data;
+  },
+
+  getMembers: async (workspaceId: string): Promise<WorkspaceMember[]> => {
+    const { data } = await api.get(`/api/workspaces/${workspaceId}/members`);
+    return data;
+  },
+
+  updateMemberRole: async (workspaceId: string, userId: string, role: string): Promise<{ message: string }> => {
+    const { data } = await api.put(`/api/workspaces/${workspaceId}/members/${userId}/role`, { role });
+    return data;
+  },
+
+  removeMember: async (workspaceId: string, userId: string): Promise<{ message: string }> => {
+    const { data } = await api.delete(`/api/workspaces/${workspaceId}/members/${userId}`);
     return data;
   },
 };
@@ -203,6 +330,16 @@ export const messageAPI = {
 
   generateAIReply: async (conversationId: string): Promise<Message> => {
     const { data } = await api.post('/api/messages/generate-ai-reply', { conversationId });
+    return data;
+  },
+
+  updateCategory: async (messageId: string, categoryId: string): Promise<Message> => {
+    const { data } = await api.patch(`/api/messages/${messageId}/category`, { categoryId });
+    return data;
+  },
+
+  markSeen: async (conversationId: string): Promise<{ success: boolean; markedCount: number }> => {
+    const { data } = await api.post('/api/messages/mark-seen', { conversationId });
     return data;
   },
 };
@@ -296,6 +433,18 @@ export const settingsAPI = {
   },
 };
 
+// Human-in-the-loop / escalations
+export const escalationAPI = {
+  listByWorkspace: async (workspaceId: string): Promise<EscalationCase[]> => {
+    const { data } = await api.get(`/api/escalations/workspace/${workspaceId}`);
+    return data;
+  },
+  resolve: async (escalationId: string): Promise<{ success: boolean }> => {
+    const { data } = await api.post(`/api/escalations/${escalationId}/resolve`);
+    return data;
+  },
+};
+
 // Categories API (Phase 2)
 export const categoriesAPI = {
   getByWorkspace: async (workspaceId: string): Promise<MessageCategory[]> => {
@@ -329,6 +478,52 @@ export const categoriesAPI = {
 
   updateKnowledge: async (categoryId: string, content: string): Promise<CategoryKnowledge> => {
     const { data } = await api.put(`/api/categories/${categoryId}/knowledge`, { content });
+    return data;
+  },
+};
+
+// Workspace Invites API
+export interface WorkspaceInvite {
+  _id: string;
+  workspaceId: string;
+  email: string;
+  role: 'owner' | 'admin' | 'agent' | 'viewer';
+  invitedBy: string;
+  token: string;
+  expiresAt: string;
+  accepted: boolean;
+  createdAt: string;
+}
+
+export interface InviteDetails {
+  email: string;
+  workspaceName: string;
+  role: string;
+}
+
+export const workspaceInviteAPI = {
+  sendInvite: async (workspaceId: string, email: string, role: string): Promise<{ message: string; invite: WorkspaceInvite }> => {
+    const { data } = await api.post('/api/workspace-invites/send', { workspaceId, email, role });
+    return data;
+  },
+
+  listInvites: async (workspaceId: string): Promise<WorkspaceInvite[]> => {
+    const { data } = await api.get(`/api/workspace-invites/${workspaceId}`);
+    return data;
+  },
+
+  cancelInvite: async (inviteId: string): Promise<{ message: string }> => {
+    const { data } = await api.delete(`/api/workspace-invites/${inviteId}`);
+    return data;
+  },
+
+  getInviteDetails: async (token: string): Promise<InviteDetails> => {
+    const { data } = await api.get(`/api/workspace-invites/details/${token}`);
+    return data;
+  },
+
+  acceptInvite: async (token: string, password: string, firstName?: string, lastName?: string): Promise<{ message: string; token: string; user: User }> => {
+    const { data } = await api.post('/api/workspace-invites/accept', { token, password, firstName, lastName });
     return data;
   },
 };

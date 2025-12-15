@@ -25,26 +25,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const refreshUser = async () => {
     try {
+      console.log('🔄 AuthContext: Fetching user data...');
       const data = await authAPI.getMe();
+      console.log('✅ AuthContext: User data received:', {
+        email: data.user.email,
+        emailVerified: data.user.emailVerified,
+        isProvisional: data.user.isProvisional
+      });
+
       setUser(data.user);
       setWorkspaces(data.workspaces);
 
-      // Set current workspace
+      // Set current workspace - priority order:
+      // 1. Saved workspace ID from localStorage
+      // 2. User's default workspace ID
+      // 3. First workspace in list
       const savedWorkspaceId = localStorage.getItem('currentWorkspaceId');
+      let targetWorkspace: Workspace | undefined;
+
       if (savedWorkspaceId) {
-        const workspace = data.workspaces.find((w: Workspace) => w._id === savedWorkspaceId);
-        if (workspace) {
-          setCurrentWorkspaceState(workspace);
-        } else if (data.workspaces.length > 0) {
-          setCurrentWorkspaceState(data.workspaces[0]);
-          localStorage.setItem('currentWorkspaceId', data.workspaces[0]._id);
-        }
-      } else if (data.workspaces.length > 0) {
-        setCurrentWorkspaceState(data.workspaces[0]);
-        localStorage.setItem('currentWorkspaceId', data.workspaces[0]._id);
+        targetWorkspace = data.workspaces.find((w: Workspace) => w._id === savedWorkspaceId);
       }
+
+      if (!targetWorkspace && data.user.defaultWorkspaceId) {
+        targetWorkspace = data.workspaces.find((w: Workspace) => w._id === data.user.defaultWorkspaceId);
+      }
+
+      if (!targetWorkspace && data.workspaces.length > 0) {
+        targetWorkspace = data.workspaces[0];
+      }
+
+      if (targetWorkspace) {
+        setCurrentWorkspaceState(targetWorkspace);
+        localStorage.setItem('currentWorkspaceId', targetWorkspace._id);
+      }
+
+      console.log('✅ AuthContext: User state updated');
     } catch (error) {
-      console.error('Error fetching user:', error);
+      console.error('❌ AuthContext: Error fetching user:', error);
       logout();
     }
   };

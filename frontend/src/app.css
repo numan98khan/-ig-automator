@@ -1,0 +1,123 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* White Mode - Resend Clean */
+    --background: 255 255 255;
+    --foreground: 9 9 11;
+    /* Zinc 950 */
+
+    --primary: 0 0 0;
+    --primary-foreground: 255 255 255;
+
+    --secondary: 244 244 245;
+    /* Zinc 100 */
+    --secondary-foreground: 24 24 27;
+    /* Zinc 950 */
+
+    --muted: 244 244 245;
+    /* Zinc 100 */
+    --muted-foreground: 113 113 122;
+    /* Zinc 500 */
+
+    --accent: 244 244 245;
+    /* Zinc 100 */
+    --accent-foreground: 24 24 27;
+    /* Zinc 950 */
+
+    --border: 228 228 231;
+    /* Zinc 200 */
+    --input: 228 228 231;
+    /* Zinc 200 */
+    --ring: 24 24 27;
+    /* Zinc 950 */
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Dark Mode - Resend Deep */
+    --background: 0 0 0;
+    /* Pure Black */
+    --foreground: 250 250 250;
+    /* Zinc 50 */
+
+    --primary: 255 255 255;
+    --primary-foreground: 0 0 0;
+
+    --secondary: 39 39 42;
+    /* Zinc 800 */
+    --secondary-foreground: 250 250 250;
+
+    --muted: 39 39 42;
+    /* Zinc 800 */
+    --muted-foreground: 161 161 170;
+    /* Zinc 400 */
+
+    --accent: 39 39 42;
+    /* Zinc 800 */
+    --accent-foreground: 250 250 250;
+
+    --border: 51 51 51;
+    /* Dark Gray for clearer borders in dark mode */
+    --input: 39 39 42;
+    /* Zinc 800 */
+    --ring: 212 212 216;
+    /* Zinc 300 */
+  }
+
+  * {
+    border-color: rgb(var(--border));
+  }
+
+  body {
+    background-color: rgb(var(--background));
+    color: rgb(var(--foreground));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full transition-colors;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/50;
+}
+
+/* Glassmorphism Utilities */
+@layer components {
+  .glass-panel {
+    @apply bg-background/50 backdrop-blur-md border border-border/50;
+  }
+
+  .glass-button {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm;
+  }
+
+  .input-field {
+    @apply w-full bg-transparent border border-input rounded-md px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all;
+  }
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}

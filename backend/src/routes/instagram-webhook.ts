@@ -15,6 +15,7 @@ import {
   getOrCreateCategory,
   incrementCategoryCount,
 } from '../services/aiCategorization';
+import { transcribeAudioFromUrl } from '../services/transcriptionService';
 
 const router = express.Router();
 
@@ -182,15 +183,56 @@ async function handleMessagingEvent(messaging: any) {
       await cancelFollowupOnCustomerReply(conversation._id);
     }
 
-    // Handle attachments
+    // Handle attachments with rich metadata
     const attachments = [];
     if (messaging.message.attachments) {
       for (const attachment of messaging.message.attachments) {
         if (attachment.payload?.url) {
-          attachments.push({
-            type: attachment.type || 'file',
+          const attachmentData: any = {
+            type: attachment.type || 'file', // image, video, audio, file
             url: attachment.payload.url,
-          });
+          };
+
+          // Add preview/thumbnail URL if available
+          if (attachment.payload.preview_url) {
+            attachmentData.previewUrl = attachment.payload.preview_url;
+          }
+          if (attachment.payload.thumbnail_url) {
+            attachmentData.thumbnailUrl = attachment.payload.thumbnail_url;
+          }
+
+          // Add media metadata
+          if (attachment.payload.mime_type) {
+            attachmentData.mimeType = attachment.payload.mime_type;
+          }
+          if (attachment.payload.file_size) {
+            attachmentData.fileSize = attachment.payload.file_size;
+          }
+
+          // Add dimensions for images/videos
+          if (attachment.payload.width) {
+            attachmentData.width = attachment.payload.width;
+          }
+          if (attachment.payload.height) {
+            attachmentData.height = attachment.payload.height;
+          }
+
+          // Add duration for videos/audio
+          if (attachment.payload.duration) {
+            attachmentData.duration = attachment.payload.duration;
+          }
+
+          // Add filename if available
+          if (attachment.payload.name) {
+            attachmentData.fileName = attachment.payload.name;
+          }
+
+          // Special handling for voice messages
+          if (attachment.type === 'audio' && attachment.payload.is_voice_message) {
+            attachmentData.type = 'voice';
+          }
+
+          attachments.push(attachmentData);
         }
       }
     }
@@ -208,6 +250,44 @@ async function handleMessagingEvent(messaging: any) {
 
     console.log(`💾 Saved message to conversation ${conversation._id}`);
 
+    // === VOICE NOTE TRANSCRIPTION ===
+    // Transcribe voice notes BEFORE automation (critical for AI to read transcription)
+    const hasVoiceNote = attachments.some((att: any) => att.type === 'voice' || att.type === 'audio');
+    let finalMessageText = messageText;
+
+    if (hasVoiceNote) {
+      try {
+        console.log('🎤 Voice note detected - transcribing before automation...');
+        await transcribeVoiceNotes(savedMessage);
+
+        // Reload the message to get the updated text with transcription
+        const updatedMessage = await Message.findById(savedMessage._id);
+        if (updatedMessage) {
+          finalMessageText = updatedMessage.text;
+          console.log(`✅ Using transcribed text for automation: "${finalMessageText.substring(0, 100)}..."`);
+        }
+      } catch (error) {
+        console.error('❌ Error transcribing voice note:', error);
+        webhookLogger.logWebhookError(error, {
+          eventType: 'transcription',
+          messageId: savedMessage._id
+        });
+        // Continue with original text if transcription fails
+      }
+    }
+
+    // Mark our previous messages as seen (customer is replying, so they've seen our messages)
+    await Message.updateMany(
+      {
+        conversationId: conversation._id,
+        from: { $in: ['user', 'ai'] },
+        seenAt: null,
+      },
+      {
+        $set: { seenAt: new Date() },
+      }
+    );
+
     // Log successful processing
     webhookLogger.logWebhookProcessed('messaging', messaging, {
       conversationId: conversation._id,
@@ -217,10 +297,11 @@ async function handleMessagingEvent(messaging: any) {
 
     // === PHASE 2: AUTOMATION PROCESSING ===
     // Process automations asynchronously to not block webhook response
+    // Use finalMessageText which includes transcription if it was a voice note
     processMessageAutomations(
       conversation,
       savedMessage,
-      messageText,
+      finalMessageText,
       igAccount.workspaceId.toString(),
       isNewConversation
     ).catch(error => {
@@ -231,6 +312,62 @@ async function handleMessagingEvent(messaging: any) {
   } catch (error) {
     console.error('❌ Error handling messaging event:', error);
     webhookLogger.logWebhookError(error, { eventType: 'messaging', messaging });
+  }
+}
+
+/**
+ * Transcribe voice notes in a message and update the message with transcriptions
+ */
+async function transcribeVoiceNotes(message: any): Promise<void> {
+  try {
+    if (!message.attachments || message.attachments.length === 0) {
+      return;
+    }
+
+    let hasTranscriptions = false;
+    let transcribedText = message.text || '';
+
+    for (const attachment of message.attachments) {
+      // Only transcribe voice and audio attachments
+      if (attachment.type === 'voice' || attachment.type === 'audio') {
+        console.log(`🎤 Transcribing ${attachment.type} message...`);
+
+        try {
+          const transcription = await transcribeAudioFromUrl(attachment.url, {
+            model: 'gpt-4o-mini-transcribe',
+            prompt: 'This audio may contain multiple languages including English, Arabic, Urdu, Hindi, Spanish, French, and others. Please transcribe exactly as spoken, preserving all languages.',
+          });
+
+          // Update the attachment with the transcription
+          attachment.transcription = transcription;
+          hasTranscriptions = true;
+
+          console.log(`✅ Transcribed ${attachment.type}: "${transcription.substring(0, 100)}..."`);
+
+          // If message text is just a placeholder, replace it with transcription
+          if (!message.text || message.text === '[Voice Note]' || message.text === '[Audio]') {
+            transcribedText = transcription;
+          } else {
+            // Append transcription to existing text
+            transcribedText += `\n\n[Voice transcription: ${transcription}]`;
+          }
+        } catch (error: any) {
+          console.error(`❌ Failed to transcribe ${attachment.type}:`, error.message);
+          // Don't fail the whole process if one transcription fails
+          attachment.transcription = '[Transcription failed]';
+        }
+      }
+    }
+
+    // Save updated message if we have transcriptions
+    if (hasTranscriptions) {
+      message.text = transcribedText;
+      await message.save();
+      console.log(`💾 Updated message with transcriptions`);
+    }
+  } catch (error) {
+    console.error('Error in transcribeVoiceNotes:', error);
+    throw error;
   }
 }
 
@@ -271,7 +408,7 @@ async function processMessageAutomations(
     );
 
     if (autoReplyResult.success) {
-      console.log(`✅ Auto-reply sent: ${autoReplyResult.reply?.substring(0, 50)}...`);
+      console.log(`✅ Auto-reply sent`);
     } else {
       console.log(`⏭️ Auto-reply skipped: ${autoReplyResult.message}`);
     }

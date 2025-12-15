@@ -4,8 +4,13 @@ import bcrypt from 'bcryptjs';
 export interface IUser extends Document {
   email?: string;
   password?: string;
+  firstName?: string;
+  lastName?: string;
   instagramUserId?: string; // Instagram user ID for OAuth-only authentication
   instagramUsername?: string; // Instagram username
+  isProvisional: boolean; // True if user created via Instagram only (no email/password yet)
+  emailVerified: boolean; // True when email has been confirmed
+  defaultWorkspaceId?: mongoose.Types.ObjectId; // Default workspace to open after login
   createdAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
@@ -21,6 +26,14 @@ const userSchema = new Schema<IUser>({
   password: {
     type: String,
   },
+  firstName: {
+    type: String,
+    trim: true,
+  },
+  lastName: {
+    type: String,
+    trim: true,
+  },
   instagramUserId: {
     type: String,
     unique: true,
@@ -28,6 +41,18 @@ const userSchema = new Schema<IUser>({
   },
   instagramUsername: {
     type: String,
+  },
+  isProvisional: {
+    type: Boolean,
+    default: true, // Default to true; becomes false after email/password setup
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false,
+  },
+  defaultWorkspaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workspace',
   },
   createdAt: {
     type: Date,

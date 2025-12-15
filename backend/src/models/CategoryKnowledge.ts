@@ -22,7 +22,7 @@ const categoryKnowledgeSchema = new Schema<ICategoryKnowledge>({
   },
   content: {
     type: String,
-    required: true,
+    required: false,
     default: '',
   },
   language: {

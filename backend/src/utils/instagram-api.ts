@@ -195,17 +195,37 @@ export async function fetchUserDetails(userId: string, accessToken: string) {
 
 /**
  * Send a message to a conversation
+ * @param recipientId - Instagram user ID to send message to
+ * @param messageText - Text content of the message
+ * @param accessToken - Instagram access token
+ * @param options - Optional settings for messaging behavior
+ * @param options.useMessageTag - Whether to use MESSAGE_TAG messaging type
+ * @param options.tag - Message tag (e.g., 'HUMAN_AGENT' for AI/human agent responses)
  */
 export async function sendMessage(
   recipientId: string,
   messageText: string,
-  accessToken: string
+  accessToken: string,
+  options?: {
+    useMessageTag?: boolean;
+    tag?: string;
+  }
 ): Promise<any> {
   const endpoint = `${BASE_URL}/me/messages`;
-  const payload = {
+  const payload: any = {
     recipient: { id: recipientId },
     message: { text: messageText },
   };
+
+  // Add messaging_type and tag for notification control
+  // HUMAN_AGENT tag ensures notifications are sent and extends messaging window to 7 days
+  if (options?.useMessageTag && options?.tag) {
+    payload.messaging_type = 'MESSAGE_TAG';
+    payload.tag = options.tag;
+  } else {
+    // Default to RESPONSE type for regular messages (within 24-hour window)
+    payload.messaging_type = 'RESPONSE';
+  }
 
   webhookLogger.logApiCall(endpoint, 'POST', payload);
 

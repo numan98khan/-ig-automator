@@ -7,6 +7,7 @@ import { connectDB } from './config/database';
 // Import routes
 import authRoutes from './routes/auth';
 import workspaceRoutes from './routes/workspaces';
+import workspaceInviteRoutes from './routes/workspace-invites';
 import instagramRoutes from './routes/instagram';
 import instagramOAuthRoutes from './routes/instagram-oauth';
 import instagramSyncRoutes from './routes/instagram-sync';
@@ -18,6 +19,7 @@ import messageRoutes from './routes/messages';
 import knowledgeRoutes from './routes/knowledge';
 import settingsRoutes from './routes/settings';
 import categoriesRoutes from './routes/categories';
+import escalationRoutes from './routes/escalations';
 import { scheduler } from './services/scheduler';
 
 // Load environment variables
@@ -37,6 +39,7 @@ connectDB();
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/workspaces', workspaceRoutes);
+app.use('/api/workspace-invites', workspaceInviteRoutes);
 app.use('/api/instagram', instagramOAuthRoutes); // OAuth routes (auth, callback)
 app.use('/api/instagram', instagramSyncRoutes);   // Sync routes (sync-messages, send-message)
 app.use('/api/instagram', instagramDebugRoutes);  // Debug routes
@@ -48,6 +51,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/categories', categoriesRoutes);
+app.use('/api/escalations', escalationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

@@ -45,10 +45,10 @@ if ! pgrep -x "ngrok" > /dev/null; then
 
   if [ -n "$NGROK_DOMAIN" ]; then
     echo "   Starting new instance on port 5001 with domain: $NGROK_DOMAIN..."
-    ngrok http --domain=$NGROK_DOMAIN 5001 > ngrok.log 2>&1 &
+    ngrok http --domain=$NGROK_DOMAIN --region=in 5001 > ngrok.log 2>&1 &
   else
     echo "   Starting new instance on port 5001 (random domain)..."
-    ngrok http 5001 > ngrok.log 2>&1 &
+    ngrok http --region=in 5001 > ngrok.log 2>&1 &
   fi
   NGROK_PID=$!
 else
@@ -87,7 +87,6 @@ echo -e "${GREEN}✅ Webhook URL: ${WEBHOOK_URL}${NC}"
 echo -e "${BLUE}📝 Updating backend/.env with Ngrok URLs...${NC}"
 
 # Update/Add WEBHOOK_URL
-export WEBHOOK_URL="$NGROK_URL/webhook"
 if grep -q "WEBHOOK_URL=" backend/.env; then
     SAFE_URL=$(echo $WEBHOOK_URL | sed 's/\//\\\//g')
     sed -i '' "s/^WEBHOOK_URL=.*/WEBHOOK_URL=$SAFE_URL/" backend/.env
@@ -96,7 +95,6 @@ else
 fi
 
 # Update/Add BACKEND_URL
-export BACKEND_URL="$NGROK_URL"
 if grep -q "BACKEND_URL=" backend/.env; then
     SAFE_URL=$(echo $BACKEND_URL | sed 's/\//\\\//g')
     sed -i '' "s/^BACKEND_URL=.*/BACKEND_URL=$SAFE_URL/" backend/.env

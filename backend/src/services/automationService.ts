@@ -1,9 +1,6 @@
-import OpenAI from 'openai';
 import mongoose from 'mongoose';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import MessageCategory from '../models/MessageCategory';
-import CategoryKnowledge from '../models/CategoryKnowledge';
-import KnowledgeItem from '../models/KnowledgeItem';
 import Message from '../models/Message';
 import Conversation from '../models/Conversation';
 import InstagramAccount from '../models/InstagramAccount';
@@ -18,10 +15,8 @@ import {
   getOrCreateCategory,
   incrementCategoryCount,
 } from './aiCategorization';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { generateAIReply } from './aiReplyService';
+import { getActiveTicket, createTicket, addTicketUpdate } from './escalationService';
 
 /**
  * Get or create workspace settings
@@ -33,7 +28,6 @@ export async function getWorkspaceSettings(
 
   if (!settings) {
     settings = await WorkspaceSettings.create({ workspaceId });
-    console.log(`Created default settings for workspace ${workspaceId}`);
   }
 
   return settings;
@@ -224,6 +218,13 @@ export async function processAutoReply(
     // Increment category count
     await incrementCategoryCount(categoryId);
 
+    const activeTicket = await getActiveTicket(conversation._id);
+    const sameTopicTicket =
+      activeTicket &&
+      activeTicket.categoryId &&
+      categoryId &&
+      activeTicket.categoryId.toString() === categoryId.toString();
+
     // Check if auto-reply is enabled for this category
     const category = await MessageCategory.findById(categoryId);
     if (category && !category.autoReplyEnabled) {
@@ -236,14 +237,14 @@ export async function processAutoReply(
     }
 
     // Build AI context
-    const aiReply = await generateAutoReply(
+    const aiReply = await generateAIReply({
       conversation,
-      messageText,
-      categoryId,
       workspaceId,
-      settings.defaultLanguage,
-      categorization
-    );
+      latestCustomerMessage: messageText,
+      categoryId,
+      categorization,
+      historyLimit: 10,
+    });
 
     if (!aiReply) {
       return {
@@ -254,10 +255,44 @@ export async function processAutoReply(
       };
     }
 
+    // If existing ticket for same topic, force follow-up behavior
+    if (sameTopicTicket) {
+      aiReply.shouldEscalate = true;
+      aiReply.escalationReason = aiReply.escalationReason || activeTicket.reason || 'Escalation pending';
+      aiReply.replyText = buildFollowupResponse(activeTicket.followUpCount || 0, aiReply.replyText);
+      await addTicketUpdate(activeTicket._id, { from: 'customer', text: messageText });
+    } else if (activeTicket && !sameTopicTicket) {
+      // New topic while escalation pending: keep helping but remind briefly
+      aiReply.replyText = appendPendingNote(aiReply.replyText);
+    } else if (aiReply.shouldEscalate) {
+      aiReply.replyText = buildInitialEscalationReply(aiReply.replyText);
+    }
+
+    // If AI wants escalation and no ticket exists, create one
+    let escalationId: mongoose.Types.ObjectId | undefined;
+    if (aiReply.shouldEscalate && !sameTopicTicket) {
+      const ticket = await createTicket({
+        conversationId: conversation._id,
+        categoryId,
+        topicSummary: (aiReply.escalationReason || messageText).slice(0, 140),
+        reason: aiReply.escalationReason || 'Escalated by AI',
+        createdBy: 'ai',
+        customerMessage: messageText,
+      });
+      escalationId = ticket._id as mongoose.Types.ObjectId;
+      conversation.humanRequired = true;
+      conversation.humanRequiredReason = ticket.reason;
+      conversation.humanTriggeredAt = ticket.createdAt;
+      conversation.humanTriggeredByMessageId = undefined;
+      conversation.humanHoldUntil = settings.humanEscalationBehavior === 'ai_silent'
+        ? new Date(Date.now() + (settings.humanHoldMinutes || 60) * 60 * 1000)
+        : undefined;
+    }
+
     // Send the reply via Instagram API
     const result = await sendInstagramMessage(
       conversation.participantInstagramId!,
-      aiReply,
+      aiReply.replyText,
       igAccount.accessToken
     );
 
@@ -271,25 +306,45 @@ export async function processAutoReply(
     }
 
     // Save the reply as a message
-    await Message.create({
+    const savedMessage = await Message.create({
       conversationId: conversation._id,
-      text: aiReply,
+      text: aiReply.replyText,
       from: 'ai',
       platform: 'instagram',
       instagramMessageId: result.message_id,
       automationSource: 'auto_reply',
+      aiTags: aiReply.tags,
+      aiShouldEscalate: aiReply.shouldEscalate,
+      aiEscalationReason: aiReply.escalationReason,
     });
+
+    if (sameTopicTicket && activeTicket) {
+      await addTicketUpdate(activeTicket._id, { from: 'ai', text: aiReply.replyText, messageId: savedMessage._id });
+    } else if (escalationId) {
+      await addTicketUpdate(escalationId, { from: 'ai', text: aiReply.replyText, messageId: savedMessage._id });
+    }
 
     // Update conversation
     conversation.lastMessageAt = new Date();
-    conversation.lastMessage = aiReply;
+    conversation.lastMessage = aiReply.replyText;
     conversation.lastBusinessMessageAt = new Date();
+    if (aiReply.shouldEscalate) {
+      const holdMinutes = settings.humanHoldMinutes || 60;
+      conversation.humanRequired = true;
+      conversation.humanRequiredReason = aiReply.escalationReason || 'Escalation requested by AI';
+      conversation.humanTriggeredAt = new Date();
+      conversation.humanTriggeredByMessageId = savedMessage._id;
+      conversation.humanHoldUntil =
+        settings.humanEscalationBehavior === 'ai_silent'
+          ? new Date(Date.now() + holdMinutes * 60 * 1000)
+          : undefined;
+    }
     await conversation.save();
 
     return {
       success: true,
       message: 'Auto-reply sent successfully',
-      reply: aiReply,
+      reply: aiReply.replyText,
       categoryId,
       detectedLanguage: categorization.detectedLanguage,
     };
@@ -299,91 +354,6 @@ export async function processAutoReply(
       success: false,
       message: `Auto-reply failed: ${error.message}`,
     };
-  }
-}
-
-/**
- * Generate AI reply with category knowledge
- */
-async function generateAutoReply(
-  conversation: any,
-  messageText: string,
-  categoryId: mongoose.Types.ObjectId,
-  workspaceId: mongoose.Types.ObjectId | string,
-  defaultLanguage: string,
-  categorization: { categoryName: string; detectedLanguage: string; translatedText?: string }
-): Promise<string | null> {
-  try {
-    // Get conversation history (last 10 messages)
-    const messages = await Message.find({ conversationId: conversation._id })
-      .sort({ createdAt: -1 })
-      .limit(10);
-    messages.reverse();
-
-    // Get general knowledge base
-    const knowledgeItems = await KnowledgeItem.find({ workspaceId });
-
-    // Get category-specific knowledge
-    const categoryKnowledge = await CategoryKnowledge.findOne({
-      workspaceId,
-      categoryId,
-    });
-
-    // Get category name
-    const category = await MessageCategory.findById(categoryId);
-
-    // Build knowledge context
-    let knowledgeContext = '';
-
-    if (knowledgeItems.length > 0) {
-      knowledgeContext += '\n\nGeneral Knowledge Base:\n';
-      knowledgeContext += knowledgeItems.map((item: any) => `- ${item.title}: ${item.content}`).join('\n');
-    }
-
-    if (categoryKnowledge && categoryKnowledge.content) {
-      knowledgeContext += `\n\nInstructions for "${category?.nameEn || 'this category'}" messages:\n`;
-      knowledgeContext += categoryKnowledge.content;
-    }
-
-    // Build conversation history
-    const conversationHistory = messages.map((msg: any) => {
-      const role = msg.from === 'customer' ? 'Customer' : msg.from === 'ai' ? 'AI' : 'Business';
-      return `${role}: ${msg.text}`;
-    }).join('\n');
-
-    // Build prompt with language instruction
-    const languageInstruction = defaultLanguage !== 'en'
-      ? `\nIMPORTANT: Always respond in ${getLanguageName(defaultLanguage)}.`
-      : '';
-
-    const prompt = `You are an AI assistant for a business's Instagram inbox. Your job is to help respond to customer messages professionally and helpfully.
-${knowledgeContext}
-
-Message Category: ${categorization.categoryName}
-Customer's Language: ${getLanguageName(categorization.detectedLanguage)}
-${categorization.translatedText ? `Translated message (English): "${categorization.translatedText}"` : ''}
-${languageInstruction}
-
-Conversation History:
-${conversationHistory}
-
-Latest Customer Message: "${messageText}"
-
-Based on the conversation history, knowledge base, and category instructions, generate a helpful and professional response. Keep it concise and friendly.
-
-Response:`;
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 250,
-    });
-
-    return completion.choices[0].message.content?.trim() || null;
-  } catch (error) {
-    console.error('Error generating auto-reply:', error);
-    return null;
   }
 }
 
@@ -592,30 +562,70 @@ export async function cancelFollowupOnCustomerReply(
 }
 
 /**
- * Helper: Get language name from ISO code
+ * Generate varied responses for follow-up messages on the same escalated topic
+ * Uses different phrasing each time to avoid sounding robotic
  */
-function getLanguageName(code: string): string {
-  const languages: Record<string, string> = {
-    en: 'English',
-    ar: 'Arabic',
-    es: 'Spanish',
-    fr: 'French',
-    de: 'German',
-    it: 'Italian',
-    pt: 'Portuguese',
-    ru: 'Russian',
-    zh: 'Chinese',
-    ja: 'Japanese',
-    ko: 'Korean',
-    hi: 'Hindi',
-    tr: 'Turkish',
-    nl: 'Dutch',
-    pl: 'Polish',
-    vi: 'Vietnamese',
-    th: 'Thai',
-    id: 'Indonesian',
-    ms: 'Malay',
-    tl: 'Filipino',
-  };
-  return languages[code] || code;
+function buildFollowupResponse(followUpCount: number, base: string): string {
+  // If the AI generated a specific response, use it
+  if (base && base.trim().length > 20) {
+    return base;
+  }
+
+  // Otherwise, use varied templates that acknowledge the wait without making commitments
+  const templates = [
+    'I understand you\'re waiting on this. The request is with the team and they\'ll respond with the specific details. In the meantime, I can help clarify anything or answer other questions.',
+    'Your request is still being reviewed by the team. They\'re the ones who can give you a definitive answer on this. Is there any additional information I can note for them?',
+    'The team has this flagged and will get back to you. I can\'t make commitments on their behalf, but I\'m here if you have other questions or want to add more details for them to consider.',
+    'Still with the team for review. They\'ll reach out directly about this specific matter. Let me know if there\'s anything else I can help with in the meantime.',
+  ];
+
+  // Rotate through templates based on follow-up count
+  const variant = templates[followUpCount % templates.length];
+  return variant;
+}
+
+/**
+ * Generate initial escalation message - varies based on context
+ */
+function buildInitialEscalationReply(base: string): string {
+  // If AI generated a good escalation response, use it
+  if (base && base.trim().length > 20) {
+    return base;
+  }
+
+  // Generic fallback if AI didn't provide one
+  const templates = [
+    'This is something a team member needs to review personally, so I\'ve flagged it for them. They\'ll get back to you with the exact details. I\'m here to help with any general questions in the meantime.',
+    'I\'ve forwarded this to the team for review. They\'ll be able to give you a proper answer on this. Feel free to ask me anything else while you wait.',
+    'A team member will handle this one directly and follow up with you. I can\'t make decisions on this, but I can help with other questions if you have any.',
+  ];
+
+  // Random selection for variety
+  const index = Math.floor(Math.random() * templates.length);
+  return templates[index];
+}
+
+/**
+ * Append a brief note about pending escalation when customer asks about a different topic
+ */
+function appendPendingNote(reply: string): string {
+  const notes = [
+    'Your earlier request is still with the team and they\'ll respond separately.',
+    'By the way, the team is still reviewing your other question and will get back to you.',
+    'Just so you know, your previous request is with a team member who will follow up.',
+  ];
+
+  // Check if reply already mentions the pending item
+  const mentionsPending = reply.toLowerCase().includes('earlier') ||
+                         reply.toLowerCase().includes('previous') ||
+                         reply.toLowerCase().includes('other question') ||
+                         reply.toLowerCase().includes('team');
+
+  if (mentionsPending) {
+    return reply; // Don't add redundant note
+  }
+
+  // Add a brief note
+  const note = notes[0]; // Use first variant for consistency
+  return `${reply} ${note}`.trim();
 }

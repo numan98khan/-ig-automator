@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { instagramAPI } from '../services/api';
 import { Loader2 } from 'lucide-react';
@@ -40,6 +40,8 @@ const PrivateRoute: React.FC<Props> = ({
     checkInstagram();
   }, [requireInstagram, currentWorkspace]);
 
+  const location = useLocation();
+
   if (loading || checkingInstagram) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -49,17 +51,17 @@ const PrivateRoute: React.FC<Props> = ({
   }
 
   if (!user) {
-    return <Navigate to="/landing" />;
+    return <Navigate to="/landing" state={{ from: location }} replace />;
   }
 
   if (requireWorkspace && !currentWorkspace) {
     // User should have workspace created automatically via Instagram OAuth
-    return <Navigate to="/landing" />;
+    return <Navigate to="/landing" state={{ from: location }} replace />;
   }
 
   if (requireInstagram && !hasInstagram) {
     // User should have Instagram connected via OAuth login
-    return <Navigate to="/landing" />;
+    return <Navigate to="/landing" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
