@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import MessageCategory from '../models/MessageCategory';
-import Message from '../models/Message';
+import Message, { IMessage } from '../models/Message';
 import Conversation from '../models/Conversation';
 import InstagramAccount from '../models/InstagramAccount';
 import CommentDMLog from '../models/CommentDMLog';
@@ -17,6 +17,12 @@ import {
 } from './aiCategorization';
 import { generateAIReply } from './aiReplyService';
 import { getActiveTicket, createTicket, addTicketUpdate } from './escalationService';
+
+const HUMAN_TYPING_PAUSE_MS = 3500; // Small pause to mimic human response timing
+
+function wait(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 /**
  * Get or create workspace settings
@@ -175,6 +181,7 @@ export async function processCommentDMAutomation(
  */
 export async function processAutoReply(
   conversationId: mongoose.Types.ObjectId | string,
+  latestMessage: IMessage,
   messageText: string,
   workspaceId: mongoose.Types.ObjectId | string
 ): Promise<{
@@ -209,7 +216,44 @@ export async function processAutoReply(
       return { success: false, message: 'Instagram account not found' };
     }
 
-    // Categorize the message
+    // Wait briefly to see if the customer is still typing/adding more context
+    if (HUMAN_TYPING_PAUSE_MS > 0) {
+      await wait(HUMAN_TYPING_PAUSE_MS);
+    }
+
+    // If a newer customer message arrived during the pause, skip so the freshest message can drive the reply
+    const newestCustomerMessage = await Message.findOne({
+      conversationId,
+      from: 'customer',
+    }).sort({ createdAt: -1 });
+
+    if (!newestCustomerMessage) {
+      return { success: false, message: 'No customer messages found for auto-reply' };
+    }
+
+    if (newestCustomerMessage._id.toString() !== latestMessage._id.toString()) {
+      return { success: false, message: 'A newer customer message arrived; deferring auto-reply' };
+    }
+
+    // Combine all customer messages since the last business/AI response to keep context together
+    const lastBusinessMessage = await Message.findOne({
+      conversationId,
+      from: { $in: ['ai', 'user'] },
+    }).sort({ createdAt: -1 });
+
+    const messageWindowStart = lastBusinessMessage?.createdAt || conversation.createdAt || new Date(0);
+    const recentCustomerMessages = await Message.find({
+      conversationId,
+      from: 'customer',
+      createdAt: { $gt: messageWindowStart },
+    })
+      .sort({ createdAt: 1 });
+
+    if (recentCustomerMessages.length > 0) {
+      messageText = recentCustomerMessages.map(msg => msg.text).join('\n');
+    }
+
+    // Categorize the (possibly combined) message
     const categorization = await categorizeMessage(messageText, workspaceId);
 
     // Get or create category
