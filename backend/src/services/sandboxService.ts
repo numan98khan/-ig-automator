@@ -11,6 +11,8 @@ import { IMessage } from '../models/Message';
 interface RunResult {
   runId: string;
   steps: SandboxRunStep[];
+  createdAt: Date;
+  settingsSnapshot?: Record<string, any>;
 }
 
 function buildSandboxConversation(workspaceId: string) {
@@ -30,9 +32,17 @@ function recordSettingsSnapshot(settings: any) {
     decisionMode: settings?.decisionMode,
     defaultLanguage: settings?.defaultLanguage,
     defaultReplyLanguage: settings?.defaultReplyLanguage,
+    uiLanguage: settings?.uiLanguage,
+    allowHashtags: settings?.allowHashtags,
+    allowEmojis: settings?.allowEmojis,
+    maxReplySentences: settings?.maxReplySentences,
     primaryGoal: settings?.primaryGoal,
     secondaryGoal: settings?.secondaryGoal,
     goalConfigs: settings?.goalConfigs,
+    humanEscalationBehavior: settings?.humanEscalationBehavior,
+    humanHoldMinutes: settings?.humanHoldMinutes,
+    escalationGuidelines: settings?.escalationGuidelines,
+    escalationExamples: settings?.escalationExamples,
   };
 }
 
@@ -112,5 +122,10 @@ export async function runSandboxScenario(
     steps,
   });
 
-  return { runId: run._id.toString(), steps: run.steps };
+  return {
+    runId: run._id.toString(),
+    steps: run.steps,
+    createdAt: run.createdAt,
+    settingsSnapshot: run.settingsSnapshot,
+  };
 }

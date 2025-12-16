@@ -4,13 +4,14 @@ import {
   SandboxMessage,
   SandboxRunStep,
   SandboxScenario,
+  SandboxRun,
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
-import { Plus, Play, Save, Trash2, TestTube, MessageSquare } from 'lucide-react';
+import { Plus, Play, Save, Trash2, TestTube, MessageSquare, Clock } from 'lucide-react';
 
 export default function Sandbox() {
   const { currentWorkspace } = useAuth();
@@ -20,6 +21,9 @@ export default function Sandbox() {
   const [description, setDescription] = useState('');
   const [messages, setMessages] = useState<SandboxMessage[]>([{ role: 'customer', text: '' }]);
   const [runSteps, setRunSteps] = useState<SandboxRunStep[]>([]);
+  const [runConfig, setRunConfig] = useState<Record<string, any> | undefined>();
+  const [runHistory, setRunHistory] = useState<SandboxRun[]>([]);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +57,9 @@ export default function Sandbox() {
     setDescription('');
     setMessages([{ role: 'customer', text: '' }]);
     setRunSteps([]);
+    setRunHistory([]);
+    setActiveRunId(null);
+    setRunConfig(undefined);
   };
 
   const handleSelectScenario = (scenario: SandboxScenario) => {
@@ -63,6 +70,10 @@ export default function Sandbox() {
       scenario.messages.length > 0 ? scenario.messages : [{ role: 'customer', text: '' }]
     );
     setRunSteps([]);
+    setRunHistory([]);
+    setActiveRunId(null);
+    setRunConfig(undefined);
+    loadRunsForScenario(scenario._id);
   };
 
   const handleAddMessage = () => {
@@ -75,6 +86,22 @@ export default function Sandbox() {
 
   const handleMessageChange = (index: number, text: string) => {
     setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, text } : msg)));
+  };
+
+  const loadRunsForScenario = async (scenarioId: string) => {
+    try {
+      const history = await sandboxAPI.listRuns(scenarioId);
+      setRunHistory(history);
+      if (history.length > 0) {
+        const latest = history[0];
+        setActiveRunId(latest._id);
+        setRunSteps(latest.steps || []);
+        setRunConfig(latest.settingsSnapshot);
+      }
+    } catch (err: any) {
+      console.error('Failed to load runs', err);
+      setError(err.message || 'Failed to load simulation history');
+    }
   };
 
   const saveScenario = async () => {
@@ -134,10 +161,25 @@ export default function Sandbox() {
 
     setRunning(true);
     setError(null);
+    setSuccess(null);
+    setRunConfig(undefined);
+    setRunSteps(messages.map((msg) => ({ customerText: msg.text, aiReplyText: '' })));
 
     try {
       const result = await sandboxAPI.runScenario(selectedScenarioId);
-      setRunSteps(result.steps || []);
+      const newRun: SandboxRun = {
+        _id: result.runId,
+        runId: result.runId,
+        steps: result.steps || [],
+        createdAt: result.createdAt,
+        settingsSnapshot: result.settingsSnapshot,
+      };
+
+      setRunSteps(newRun.steps);
+      setRunConfig(newRun.settingsSnapshot);
+      setActiveRunId(newRun._id);
+      setRunHistory((prev) => [newRun, ...prev]);
+      setSuccess('Simulation complete');
     } catch (err: any) {
       console.error('Failed to run simulation', err);
       setError(err.message || 'Failed to run simulation');
@@ -262,6 +304,52 @@ export default function Sandbox() {
                     onChange={(e) => handleMessageChange(index, e.target.value)}
                     placeholder="Customer says..."
                   />
+                  <div className="p-3 rounded-md bg-muted text-sm space-y-1">
+                    <div className="font-medium flex items-center justify-between">
+                      <span>AI Reply</span>
+                      {running && <span className="text-xs text-muted-foreground">Simulating…</span>}
+                    </div>
+                    {runSteps[index]?.aiReplyText ? (
+                      <>
+                        <div className="p-2 rounded-md bg-primary/5 border border-primary/20">
+                          {runSteps[index].aiReplyText}
+                        </div>
+                        {runSteps[index].meta && (
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div className="flex gap-2 flex-wrap">
+                              {runSteps[index].meta.categoryName && (
+                                <Badge variant="secondary">{runSteps[index].meta.categoryName}</Badge>
+                              )}
+                              {runSteps[index].meta.detectedLanguage && (
+                                <Badge variant="secondary">Lang: {runSteps[index].meta.detectedLanguage}</Badge>
+                              )}
+                              {runSteps[index].meta.goalMatched && runSteps[index].meta.goalMatched !== 'none' && (
+                                <Badge variant="secondary">Goal: {runSteps[index].meta.goalMatched}</Badge>
+                              )}
+                              {runSteps[index].meta.shouldEscalate && <Badge variant="secondary">Escalate</Badge>}
+                            </div>
+                            <ul className="list-disc list-inside space-y-1">
+                              {runSteps[index].meta.escalationReason && (
+                                <li>Escalation reason: {runSteps[index].meta.escalationReason}</li>
+                              )}
+                              {runSteps[index].meta.tags && runSteps[index].meta.tags.length > 0 && (
+                                <li>Tags: {runSteps[index].meta.tags.join(', ')}</li>
+                              )}
+                              {runSteps[index].meta.knowledgeItemsUsed &&
+                                runSteps[index].meta.knowledgeItemsUsed.length > 0 && (
+                                  <li>
+                                    Knowledge used:{' '}
+                                    {runSteps[index].meta.knowledgeItemsUsed.map((item) => item.title).join(', ')}
+                                  </li>
+                                )}
+                            </ul>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No simulation result yet.</p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -279,53 +367,87 @@ export default function Sandbox() {
                 {running ? 'Running...' : 'Run Simulation'}
               </Button>
             </div>
-
-            {runSteps.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="font-medium">Simulation Results</h3>
-                <div className="space-y-3">
-                  {runSteps.map((step, index) => (
-                    <div key={index} className="p-3 border border-border rounded-lg space-y-2">
-                      <div className="text-xs text-muted-foreground">Step {index + 1}</div>
-                      <div className="p-3 rounded-md bg-muted text-sm">
-                        <strong>Customer:</strong> {step.customerText}
-                      </div>
-                      <div className="p-3 rounded-md bg-primary/5 border border-primary/20 text-sm">
-                        <strong>AI Reply:</strong> {step.aiReplyText}
-                      </div>
-                      {step.meta && (
-                        <div className="p-3 rounded-md bg-muted/50 text-sm space-y-2">
-                          <div className="flex gap-2 flex-wrap">
-                            {step.meta.categoryName && <Badge variant="secondary">{step.meta.categoryName}</Badge>}
-                            {step.meta.detectedLanguage && (
-                              <Badge variant="secondary">Lang: {step.meta.detectedLanguage}</Badge>
-                            )}
-                            {step.meta.goalMatched && step.meta.goalMatched !== 'none' && (
-                              <Badge variant="secondary">Goal: {step.meta.goalMatched}</Badge>
-                            )}
-                            {step.meta.shouldEscalate && <Badge variant="secondary">Escalate</Badge>}
-                          </div>
-                          <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                            {step.meta.escalationReason && <li>Escalation reason: {step.meta.escalationReason}</li>}
-                            {step.meta.tags && step.meta.tags.length > 0 && (
-                              <li>Tags: {step.meta.tags.join(', ')}</li>
-                            )}
-                            {step.meta.knowledgeItemsUsed && step.meta.knowledgeItemsUsed.length > 0 && (
-                              <li>
-                                Knowledge used: {step.meta.knowledgeItemsUsed.map((item) => item.title).join(', ')}
-                              </li>
-                            )}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>
+
+      {runHistory.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-1">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-4 h-4" /> Simulation History
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {runHistory.map((run) => (
+                <div
+                  key={run._id}
+                  className={`p-3 rounded-lg border transition cursor-pointer ${
+                    activeRunId === run._id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'
+                  }`}
+                  onClick={() => {
+                    setActiveRunId(run._id);
+                    setRunSteps(run.steps || []);
+                    setRunConfig(run.settingsSnapshot);
+                  }}
+                >
+                  <p className="text-sm font-medium">Run {run._id.slice(-6)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(run.createdAt).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Run Configuration</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              {runConfig ? (
+                <>
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Decision mode</p>
+                    <p className="font-medium">{runConfig.decisionMode || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Default language</p>
+                    <p className="font-medium">{runConfig.defaultLanguage || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Reply language</p>
+                    <p className="font-medium">{runConfig.defaultReplyLanguage || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Primary goal</p>
+                    <p className="font-medium">{runConfig.primaryGoal || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Secondary goal</p>
+                    <p className="font-medium">{runConfig.secondaryGoal || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Human escalation</p>
+                    <p className="font-medium">{runConfig.humanEscalationBehavior || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Max reply sentences</p>
+                    <p className="font-medium">{runConfig.maxReplySentences ?? '—'}</p>
+                  </div>
+                  <div className="space-y-1 md:col-span-2">
+                    <p className="text-muted-foreground">Escalation guidelines</p>
+                    <p className="font-medium whitespace-pre-wrap">{runConfig.escalationGuidelines || '—'}</p>
+                  </div>
+                </>
+              ) : (
+                <p className="text-muted-foreground">Run a simulation to see the configuration used.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import express, { Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import SandboxScenario from '../models/SandboxScenario';
+import SandboxRun from '../models/SandboxRun';
 import { runSandboxScenario } from '../services/sandboxService';
 
 const router = express.Router();
@@ -99,6 +100,31 @@ router.delete('/scenarios/:id', authenticate, async (req: AuthRequest, res: Resp
     res.json({ success: true });
   } catch (error) {
     console.error('Delete sandbox scenario error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/scenarios/:id/runs', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const scenario = await SandboxScenario.findById(id);
+    if (!scenario) {
+      return res.status(404).json({ error: 'Scenario not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(scenario.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+
+    const runs = await SandboxRun.find({ scenarioId: scenario._id, workspaceId: scenario.workspaceId })
+      .sort({ createdAt: -1 })
+      .limit(10);
+
+    res.json(runs);
+  } catch (error) {
+    console.error('List sandbox runs error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

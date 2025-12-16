@@ -239,6 +239,12 @@ export interface SandboxRunStep {
 export interface SandboxRunResponse {
   runId: string;
   steps: SandboxRunStep[];
+  createdAt: string;
+  settingsSnapshot?: Record<string, any>;
+}
+
+export interface SandboxRun extends SandboxRunResponse {
+  _id: string;
 }
 
 export interface EscalationCase {
@@ -588,6 +594,11 @@ export const sandboxAPI = {
 
   runScenario: async (scenarioId: string): Promise<SandboxRunResponse> => {
     const { data } = await api.post(`/api/sandbox/scenarios/${scenarioId}/run`);
+    return data;
+  },
+
+  listRuns: async (scenarioId: string): Promise<SandboxRun[]> => {
+    const { data } = await api.get(`/api/sandbox/scenarios/${scenarioId}/runs`);
     return data;
   },
 };
