@@ -609,12 +609,12 @@ export const sandboxAPI = {
 
   quickRun: async (
     workspaceId: string,
-    message: string,
+    messages: string[] | string,
     overrideSettings?: Partial<WorkspaceSettings>
   ): Promise<SandboxRunResponse> => {
     const { data } = await api.post('/api/sandbox/quick-run', {
       workspaceId,
-      messages: [message],
+      messages: Array.isArray(messages) ? messages : [messages],
       overrideSettings,
     });
     return data;
