@@ -403,6 +403,7 @@ async function processMessageAutomations(
     // 3. Process auto-reply if enabled
     const autoReplyResult = await processAutoReply(
       conversation._id,
+      savedMessage,
       messageText,
       workspaceId
     );
