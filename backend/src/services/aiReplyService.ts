@@ -195,7 +195,25 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
             enum: ['none', 'capture_lead', 'book_appointment', 'start_order', 'handle_support', 'drive_to_channel'],
           },
           status: { type: 'string', enum: ['idle', 'collecting', 'completed'] },
-          collectedFields: { type: 'object', additionalProperties: true },
+          collectedFields: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              name: { type: 'string' },
+              phone: { type: 'string' },
+              email: { type: 'string' },
+              customNote: { type: 'string' },
+              date: { type: 'string' },
+              time: { type: 'string' },
+              serviceType: { type: 'string' },
+              productName: { type: 'string' },
+              quantity: { type: ['number', 'string'] },
+              variant: { type: 'string' },
+              orderId: { type: 'string' },
+              photoUrl: { type: 'string' },
+              targetChannel: { type: 'string' },
+            },
+          },
           summary: { type: 'string' },
           nextStep: { type: 'string' },
           shouldCreateRecord: { type: 'boolean' },
@@ -357,6 +375,17 @@ Generate a response following all rules above. Return JSON with:
       shouldEscalate: Boolean(raw.shouldEscalate),
       escalationReason: raw.escalationReason ? String(raw.escalationReason).trim() : undefined,
       tags: Array.isArray(raw.tags) ? raw.tags.map((t: any) => String(t).trim()).filter(Boolean) : [],
+      goalProgress: raw.goalProgress
+        ? {
+            goalType: raw.goalProgress.goalType,
+            status: raw.goalProgress.status,
+            collectedFields: raw.goalProgress.collectedFields,
+            summary: raw.goalProgress.summary,
+            nextStep: raw.goalProgress.nextStep,
+            shouldCreateRecord: raw.goalProgress.shouldCreateRecord,
+            targetLink: raw.goalProgress.targetLink,
+          }
+        : undefined,
     };
   } catch (error: any) {
     console.error('AI reply generation failed:', error.message);
