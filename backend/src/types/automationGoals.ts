@@ -53,4 +53,6 @@ export interface GoalProgressState {
   collectedFields?: Record<string, any>;
   summary?: string;
   nextStep?: string;
+  shouldCreateRecord?: boolean;
+  targetLink?: string;
 }
