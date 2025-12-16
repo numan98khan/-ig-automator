@@ -592,8 +592,13 @@ export const sandboxAPI = {
     await api.delete(`/api/sandbox/scenarios/${scenarioId}`);
   },
 
-  runScenario: async (scenarioId: string): Promise<SandboxRunResponse> => {
-    const { data } = await api.post(`/api/sandbox/scenarios/${scenarioId}/run`);
+  runScenario: async (
+    scenarioId: string,
+    overrideSettings?: Partial<WorkspaceSettings>
+  ): Promise<SandboxRunResponse> => {
+    const { data } = await api.post(`/api/sandbox/scenarios/${scenarioId}/run`, {
+      overrideSettings,
+    });
     return data;
   },
 

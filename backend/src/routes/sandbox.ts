@@ -132,6 +132,7 @@ router.get('/scenarios/:id/runs', authenticate, async (req: AuthRequest, res: Re
 router.post('/scenarios/:id/run', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const { overrideSettings } = req.body || {};
 
     const scenario = await SandboxScenario.findById(id);
     if (!scenario) {
@@ -143,7 +144,11 @@ router.post('/scenarios/:id/run', authenticate, async (req: AuthRequest, res: Re
       return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
-    const run = await runSandboxScenario(scenario.workspaceId.toString(), scenario._id.toString());
+    const run = await runSandboxScenario(
+      scenario.workspaceId.toString(),
+      scenario._id.toString(),
+      overrideSettings
+    );
     res.json(run);
   } catch (error) {
     console.error('Run sandbox scenario error:', error);

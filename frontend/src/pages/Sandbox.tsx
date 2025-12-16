@@ -5,13 +5,55 @@ import {
   SandboxRunStep,
   SandboxScenario,
   SandboxRun,
+  WorkspaceSettings,
+  GoalType,
+  settingsAPI,
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
-import { Plus, Play, Save, Trash2, TestTube, MessageSquare, Clock } from 'lucide-react';
+import {
+  Plus,
+  Play,
+  Save,
+  Trash2,
+  TestTube,
+  MessageSquare,
+  Clock,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
+
+function snapshotSettings(settings?: WorkspaceSettings | null): Partial<WorkspaceSettings> {
+  if (!settings) return {};
+  return {
+    decisionMode: settings.decisionMode,
+    defaultLanguage: settings.defaultLanguage,
+    defaultReplyLanguage: settings.defaultReplyLanguage,
+    maxReplySentences: settings.maxReplySentences,
+    primaryGoal: settings.primaryGoal,
+    secondaryGoal: settings.secondaryGoal,
+    goalConfigs: settings.goalConfigs,
+    humanEscalationBehavior: settings.humanEscalationBehavior,
+    escalationGuidelines: settings.escalationGuidelines,
+    humanHoldMinutes: settings.humanHoldMinutes,
+  };
+}
+
+function runSummary(run: SandboxRun) {
+  const steps = run.steps || [];
+  const escalations = steps.filter((s) => s.meta?.shouldEscalate).length;
+  const goals = Array.from(new Set(steps.map((s) => s.meta?.goalMatched).filter(Boolean))) as GoalType[];
+  const goalLabel = goals.find((g) => g && g !== 'none');
+  const parts = [
+    `${steps.length} steps`,
+    goalLabel ? `Goal: ${goalLabel}` : null,
+    escalations ? `${escalations} escalations` : null,
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
 
 export default function Sandbox() {
   const { currentWorkspace } = useAuth();
@@ -21,9 +63,13 @@ export default function Sandbox() {
   const [description, setDescription] = useState('');
   const [messages, setMessages] = useState<SandboxMessage[]>([{ role: 'customer', text: '' }]);
   const [runSteps, setRunSteps] = useState<SandboxRunStep[]>([]);
-  const [runConfig, setRunConfig] = useState<Record<string, any> | undefined>();
+  const [runConfig, setRunConfig] = useState<Partial<WorkspaceSettings>>({});
+  const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings | null>(null);
   const [runHistory, setRunHistory] = useState<SandboxRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null);
+  const [inspectorTab, setInspectorTab] = useState<'details' | 'config'>('details');
+  const [showHistory, setShowHistory] = useState(false);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,11 +80,28 @@ export default function Sandbox() {
     [scenarios, selectedScenarioId]
   );
 
+  const effectiveConfig = useMemo(() => {
+    return { ...snapshotSettings(workspaceSettings), ...runConfig };
+  }, [workspaceSettings, runConfig]);
+
   useEffect(() => {
     if (currentWorkspace) {
+      loadWorkspaceSettings();
       loadScenarios();
     }
   }, [currentWorkspace]);
+
+  const loadWorkspaceSettings = async () => {
+    if (!currentWorkspace) return;
+    try {
+      const data = await settingsAPI.getByWorkspace(currentWorkspace._id);
+      setWorkspaceSettings(data);
+      setRunConfig(snapshotSettings(data));
+    } catch (err: any) {
+      console.error('Failed to load workspace settings', err);
+      setError(err.message || 'Failed to load workspace settings');
+    }
+  };
 
   const loadScenarios = async () => {
     if (!currentWorkspace) return;
@@ -59,7 +122,9 @@ export default function Sandbox() {
     setRunSteps([]);
     setRunHistory([]);
     setActiveRunId(null);
-    setRunConfig(undefined);
+    setSelectedStepIndex(null);
+    setInspectorTab('details');
+    setRunConfig(snapshotSettings(workspaceSettings));
   };
 
   const handleSelectScenario = (scenario: SandboxScenario) => {
@@ -72,7 +137,9 @@ export default function Sandbox() {
     setRunSteps([]);
     setRunHistory([]);
     setActiveRunId(null);
-    setRunConfig(undefined);
+    setSelectedStepIndex(null);
+    setInspectorTab('details');
+    setRunConfig(snapshotSettings(workspaceSettings));
     loadRunsForScenario(scenario._id);
   };
 
@@ -92,12 +159,6 @@ export default function Sandbox() {
     try {
       const history = await sandboxAPI.listRuns(scenarioId);
       setRunHistory(history);
-      if (history.length > 0) {
-        const latest = history[0];
-        setActiveRunId(latest._id);
-        setRunSteps(latest.steps || []);
-        setRunConfig(latest.settingsSnapshot);
-      }
     } catch (err: any) {
       console.error('Failed to load runs', err);
       setError(err.message || 'Failed to load simulation history');
@@ -162,11 +223,12 @@ export default function Sandbox() {
     setRunning(true);
     setError(null);
     setSuccess(null);
-    setRunConfig(undefined);
+    setSelectedStepIndex(null);
+    setInspectorTab('details');
     setRunSteps(messages.map((msg) => ({ customerText: msg.text, aiReplyText: '' })));
 
     try {
-      const result = await sandboxAPI.runScenario(selectedScenarioId);
+      const result = await sandboxAPI.runScenario(selectedScenarioId, runConfig);
       const newRun: SandboxRun = {
         _id: result.runId,
         runId: result.runId,
@@ -176,8 +238,9 @@ export default function Sandbox() {
       };
 
       setRunSteps(newRun.steps);
-      setRunConfig(newRun.settingsSnapshot);
+      setRunConfig(newRun.settingsSnapshot || runConfig);
       setActiveRunId(newRun._id);
+      setSelectedStepIndex(newRun.steps.length ? 0 : null);
       setRunHistory((prev) => [newRun, ...prev]);
       setSuccess('Simulation complete');
     } catch (err: any) {
@@ -188,106 +251,200 @@ export default function Sandbox() {
     }
   };
 
+  const handleSelectRun = (run: SandboxRun) => {
+    setActiveRunId(run._id);
+    setRunSteps(run.steps || []);
+    setRunConfig(run.settingsSnapshot || snapshotSettings(workspaceSettings));
+    setSelectedStepIndex(run.steps?.length ? 0 : null);
+    setInspectorTab('details');
+  };
+
+  const selectedStep =
+    selectedStepIndex !== null && runSteps[selectedStepIndex] ? runSteps[selectedStepIndex] : null;
+
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <TestTube className="w-6 h-6 text-primary" /> Sandbox
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Draft conversation scripts and see how the bot responds without touching Instagram.
-          </p>
+    <div className="p-4 md:p-6 h-[calc(100vh-88px)]">
+      {(error || success) && (
+        <div className="mb-3 space-y-1">
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {success && <p className="text-sm text-emerald-600">{success}</p>}
         </div>
-        <Button variant="secondary" onClick={resetForm} leftIcon={<Plus className="w-4 h-4" />}>
-          New Scenario
-        </Button>
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" /> Saved Scenarios
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 max-h-[70vh] overflow-y-auto">
-            {scenarios.length === 0 && (
-              <p className="text-sm text-muted-foreground">No scenarios yet. Create one to start testing.</p>
-            )}
-            {scenarios.map((scenario) => (
-              <div
-                key={scenario._id}
-                className={`p-3 rounded-lg border transition cursor-pointer ${
-                  selectedScenarioId === scenario._id
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:bg-muted'
-                }`}
-                onClick={() => handleSelectScenario(scenario)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="font-medium">{scenario.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Updated {new Date(scenario.updatedAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteScenario(scenario._id);
-                    }}
-                    className="text-muted-foreground hover:text-destructive"
-                    title="Delete scenario"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+      <div className="grid gap-4 h-full lg:grid-cols-[260px_1fr_320px]">
+        {/* Left rail */}
+        <Card className="h-full flex flex-col">
+          <div className="p-4 border-b flex items-center justify-between gap-2">
+            <div>
+              <div className="text-lg font-semibold flex items-center gap-2">
+                <TestTube className="w-5 h-5 text-primary" /> Sandbox
+              </div>
+              <p className="text-xs text-muted-foreground">Simulate without touching Instagram.</p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={resetForm}
+              leftIcon={<Plus className="w-4 h-4" />}
+            >
+              New
+            </Button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm font-medium text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" /> Saved Scenarios
                 </div>
-                {scenario.description && (
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{scenario.description}</p>
+                <span className="text-xs">{scenarios.length}</span>
+              </div>
+              <div className="space-y-2">
+                {scenarios.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No scenarios yet. Create one to start testing.
+                  </p>
                 )}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TestTube className="w-4 h-4" /> Scenario Editor
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            {success && <p className="text-sm text-emerald-600">{success}</p>}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-sm text-muted-foreground">Name</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Welcome flow" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm text-muted-foreground">Description</label>
-                <Input
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Short summary"
-                />
+                {scenarios.map((scenario) => (
+                  <div
+                    key={scenario._id}
+                    className={`p-3 rounded-lg border transition cursor-pointer ${
+                      selectedScenarioId === scenario._id
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:bg-muted'
+                    }`}
+                    onClick={() => handleSelectScenario(scenario)}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium">{scenario.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Updated {new Date(scenario.updatedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteScenario(scenario._id);
+                        }}
+                        className="text-muted-foreground hover:text-destructive"
+                        title="Delete scenario"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {scenario.description && (
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                        {scenario.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium">Customer Messages</h3>
-                <Button size="sm" variant="secondary" onClick={handleAddMessage} leftIcon={<Plus className="w-4 h-4" />}>
-                  Add message
+              <button
+                className="w-full flex items-center justify-between text-sm font-medium text-left"
+                onClick={() => setShowHistory((prev) => !prev)}
+              >
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Clock className="w-4 h-4" /> Simulation History
+                </span>
+                {showHistory ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              </button>
+
+              {showHistory && (
+                <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+                  {runHistory.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No runs yet for this scenario.</p>
+                  )}
+                  {runHistory.map((run) => (
+                    <div
+                      key={run._id}
+                      className={`p-3 rounded-lg border transition cursor-pointer ${
+                        activeRunId === run._id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:bg-muted'
+                      }`}
+                      onClick={() => handleSelectRun(run)}
+                    >
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">Run {run._id.slice(-6)}</span>
+                        <span>{new Date(run.createdAt).toLocaleString()}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{runSummary(run)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        {/* Center column */}
+        <Card className="h-full flex flex-col overflow-hidden">
+          <div className="p-4 border-b sticky top-0 bg-card z-10 flex flex-col gap-3">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div className="flex-1 space-y-2">
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Scenario name"
+                />
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <Badge variant="secondary">
+                    Mode: {effectiveConfig.decisionMode || 'assist'}
+                  </Badge>
+                  <Badge variant="secondary">
+                    Goal: {effectiveConfig.primaryGoal || 'none'}
+                  </Badge>
+                  {currentWorkspace && (
+                    <Badge variant="neutral">Workspace: {currentWorkspace.name}</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button onClick={saveScenario} disabled={loading} leftIcon={<Save className="w-4 h-4" />}>
+                  {selectedScenario ? 'Save Scenario' : 'Create Scenario'}
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={runScenario}
+                  disabled={running || !selectedScenarioId}
+                  leftIcon={<Play className="w-4 h-4" />}
+                >
+                  {running ? 'Running...' : activeRunId ? 'Re-run Simulation' : 'Run Simulation'}
                 </Button>
               </div>
+            </div>
+            <Input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional description"
+            />
+          </div>
 
-              {messages.map((msg, index) => (
-                <div key={index} className="p-3 border border-border rounded-lg space-y-2 bg-muted/30">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium">Conversation Script</h3>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleAddMessage}
+                leftIcon={<Plus className="w-4 h-4" />}
+              >
+                Add message
+              </Button>
+            </div>
+
+            {messages.map((msg, index) => {
+              const meta = runSteps[index]?.meta;
+              const hasReply = Boolean(runSteps[index]?.aiReplyText);
+              return (
+                <div key={index} className="p-3 border border-border rounded-lg space-y-3 bg-muted/30">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Step {index + 1} – Customer message</span>
+                    <span>Step {index + 1} – Customer</span>
                     {messages.length > 1 && (
                       <button
                         className="text-destructive hover:underline"
@@ -304,150 +461,233 @@ export default function Sandbox() {
                     onChange={(e) => handleMessageChange(index, e.target.value)}
                     placeholder="Customer says..."
                   />
-                  <div className="p-3 rounded-md bg-muted text-sm space-y-1">
-                    <div className="font-medium flex items-center justify-between">
-                      <span>AI Reply</span>
-                      {running && <span className="text-xs text-muted-foreground">Simulating…</span>}
+                  <div className="rounded-md bg-background border border-dashed border-border p-3 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">AI Reply</span>
+                      {running && <span>Simulating…</span>}
                     </div>
-                    {runSteps[index]?.aiReplyText ? (
-                      <>
-                        <div className="p-2 rounded-md bg-primary/5 border border-primary/20">
-                          {runSteps[index].aiReplyText}
-                        </div>
-                        {runSteps[index].meta && (
-                          <div className="text-xs text-muted-foreground space-y-1">
-                            <div className="flex gap-2 flex-wrap">
-                              {runSteps[index].meta.categoryName && (
-                                <Badge variant="secondary">{runSteps[index].meta.categoryName}</Badge>
-                              )}
-                              {runSteps[index].meta.detectedLanguage && (
-                                <Badge variant="secondary">Lang: {runSteps[index].meta.detectedLanguage}</Badge>
-                              )}
-                              {runSteps[index].meta.goalMatched && runSteps[index].meta.goalMatched !== 'none' && (
-                                <Badge variant="secondary">Goal: {runSteps[index].meta.goalMatched}</Badge>
-                              )}
-                              {runSteps[index].meta.shouldEscalate && <Badge variant="secondary">Escalate</Badge>}
-                            </div>
-                            <ul className="list-disc list-inside space-y-1">
-                              {runSteps[index].meta.escalationReason && (
-                                <li>Escalation reason: {runSteps[index].meta.escalationReason}</li>
-                              )}
-                              {runSteps[index].meta.tags && runSteps[index].meta.tags.length > 0 && (
-                                <li>Tags: {runSteps[index].meta.tags.join(', ')}</li>
-                              )}
-                              {runSteps[index].meta.knowledgeItemsUsed &&
-                                runSteps[index].meta.knowledgeItemsUsed.length > 0 && (
-                                  <li>
-                                    Knowledge used:{' '}
-                                    {runSteps[index].meta.knowledgeItemsUsed.map((item) => item.title).join(', ')}
-                                  </li>
-                                )}
-                            </ul>
+                    {hasReply ? (
+                      <div
+                        className={`p-3 rounded-md border cursor-pointer ${
+                          selectedStepIndex === index ? 'border-primary bg-primary/5' : 'border-border'
+                        }`}
+                        onClick={() => {
+                          setSelectedStepIndex(index);
+                          setInspectorTab('details');
+                        }}
+                      >
+                        <p className="text-sm whitespace-pre-wrap">{runSteps[index].aiReplyText}</p>
+                        {meta && (
+                          <div className="flex flex-wrap gap-2 mt-2 text-[11px] text-muted-foreground">
+                            {meta.detectedLanguage && (
+                              <Badge variant="secondary">Lang: {meta.detectedLanguage}</Badge>
+                            )}
+                            {meta.categoryName && <Badge variant="secondary">{meta.categoryName}</Badge>}
+                            {meta.goalMatched && meta.goalMatched !== 'none' && (
+                              <Badge variant="secondary">Goal: {meta.goalMatched}</Badge>
+                            )}
+                            <Badge variant="secondary">
+                              Escalate: {meta.shouldEscalate ? 'Yes' : 'No'}
+                            </Badge>
                           </div>
                         )}
-                      </>
+                        <p className="text-[11px] text-primary mt-1">Click for details</p>
+                      </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground">No simulation result yet.</p>
+                      <p className="text-xs text-muted-foreground">Run a simulation to see the reply.</p>
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
+          </div>
+        </Card>
 
-            <div className="flex items-center gap-3">
-              <Button onClick={saveScenario} disabled={loading} leftIcon={<Save className="w-4 h-4" />}>
-                {selectedScenario ? 'Save Scenario' : 'Create Scenario'}
-              </Button>
-              <Button
-                variant="primary"
-                onClick={runScenario}
-                disabled={running || !selectedScenarioId}
-                leftIcon={<Play className="w-4 h-4" />}
-              >
-                {running ? 'Running...' : 'Run Simulation'}
-              </Button>
-            </div>
-          </CardContent>
+        {/* Right inspector */}
+        <Card className="h-full flex flex-col overflow-hidden">
+          <div className="border-b flex items-center gap-2 p-3 text-sm font-medium">
+            <button
+              className={`px-3 py-2 rounded-md ${
+                inspectorTab === 'details' ? 'bg-muted text-foreground' : 'text-muted-foreground'
+              }`}
+              onClick={() => setInspectorTab('details')}
+            >
+              Run Details
+            </button>
+            <button
+              className={`px-3 py-2 rounded-md ${
+                inspectorTab === 'config' ? 'bg-muted text-foreground' : 'text-muted-foreground'
+              }`}
+              onClick={() => setInspectorTab('config')}
+            >
+              Config
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
+            {inspectorTab === 'details' && (
+              <div className="space-y-3">
+                {!selectedStep && <p className="text-muted-foreground">Select an AI reply to inspect details.</p>}
+                {selectedStep && (
+                  <>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Customer</p>
+                      <p className="font-medium whitespace-pre-wrap">{selectedStep.customerText}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">AI Reply</p>
+                      <p className="whitespace-pre-wrap">{selectedStep.aiReplyText}</p>
+                    </div>
+                    {selectedStep.meta && (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-2">
+                          {selectedStep.meta.detectedLanguage && (
+                            <Badge variant="secondary">Lang: {selectedStep.meta.detectedLanguage}</Badge>
+                          )}
+                          {selectedStep.meta.categoryName && (
+                            <Badge variant="secondary">{selectedStep.meta.categoryName}</Badge>
+                          )}
+                          {selectedStep.meta.goalMatched && selectedStep.meta.goalMatched !== 'none' && (
+                            <Badge variant="secondary">Goal: {selectedStep.meta.goalMatched}</Badge>
+                          )}
+                          <Badge variant="secondary">
+                            Escalate: {selectedStep.meta.shouldEscalate ? 'Yes' : 'No'}
+                          </Badge>
+                        </div>
+                        {selectedStep.meta.escalationReason && (
+                          <p className="text-muted-foreground text-xs">
+                            Escalation reason: {selectedStep.meta.escalationReason}
+                          </p>
+                        )}
+                        {selectedStep.meta.tags && selectedStep.meta.tags.length > 0 && (
+                          <div>
+                            <p className="text-xs text-muted-foreground">Tags</p>
+                            <div className="flex flex-wrap gap-1">
+                              {selectedStep.meta.tags.map((tag) => (
+                                <Badge key={tag} variant="secondary">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {selectedStep.meta.knowledgeItemsUsed &&
+                          selectedStep.meta.knowledgeItemsUsed.length > 0 && (
+                            <div>
+                              <p className="text-xs text-muted-foreground">Knowledge used</p>
+                              <ul className="list-disc list-inside text-xs text-foreground space-y-1">
+                                {selectedStep.meta.knowledgeItemsUsed.map((item) => (
+                                  <li key={item.id}>{item.title}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {inspectorTab === 'config' && (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Decision mode</p>
+                  <select
+                    className="w-full border rounded-md p-2 bg-background"
+                    value={runConfig.decisionMode || ''}
+                    onChange={(e) => setRunConfig((prev) => ({ ...prev, decisionMode: e.target.value as any }))}
+                  >
+                    <option value="">Use workspace default</option>
+                    <option value="full_auto">Full auto</option>
+                    <option value="assist">Assist</option>
+                    <option value="info_only">Info only</option>
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Reply language</p>
+                  <Input
+                    value={runConfig.defaultReplyLanguage || ''}
+                    onChange={(e) =>
+                      setRunConfig((prev) => ({ ...prev, defaultReplyLanguage: e.target.value }))
+                    }
+                    placeholder="e.g. en"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Primary goal</p>
+                    <select
+                      className="w-full border rounded-md p-2 bg-background"
+                      value={runConfig.primaryGoal || ''}
+                      onChange={(e) =>
+                        setRunConfig((prev) => ({ ...prev, primaryGoal: (e.target.value as GoalType) || undefined }))
+                      }
+                    >
+                      <option value="">Use workspace default</option>
+                      <option value="none">None</option>
+                      <option value="capture_lead">Capture lead</option>
+                      <option value="book_appointment">Book appointment</option>
+                      <option value="start_order">Start order</option>
+                      <option value="handle_support">Handle support</option>
+                      <option value="drive_to_channel">Drive to channel</option>
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Secondary goal</p>
+                    <select
+                      className="w-full border rounded-md p-2 bg-background"
+                      value={runConfig.secondaryGoal || ''}
+                      onChange={(e) =>
+                        setRunConfig((prev) => ({ ...prev, secondaryGoal: (e.target.value as GoalType) || undefined }))
+                      }
+                    >
+                      <option value="">Use workspace default</option>
+                      <option value="none">None</option>
+                      <option value="capture_lead">Capture lead</option>
+                      <option value="book_appointment">Book appointment</option>
+                      <option value="start_order">Start order</option>
+                      <option value="handle_support">Handle support</option>
+                      <option value="drive_to_channel">Drive to channel</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Max reply sentences</p>
+                  <Input
+                    type="number"
+                    value={runConfig.maxReplySentences ?? ''}
+                    onChange={(e) =>
+                      setRunConfig((prev) => ({
+                        ...prev,
+                        maxReplySentences: e.target.value === '' ? undefined : Number(e.target.value),
+                      }))
+                    }
+                    placeholder="Use workspace default"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Human escalation behavior</p>
+                  <select
+                    className="w-full border rounded-md p-2 bg-background"
+                    value={runConfig.humanEscalationBehavior || ''}
+                    onChange={(e) =>
+                      setRunConfig((prev) => ({
+                        ...prev,
+                        humanEscalationBehavior: (e.target.value as any) || undefined,
+                      }))
+                    }
+                  >
+                    <option value="">Use workspace default</option>
+                    <option value="ai_silent">AI silent</option>
+                    <option value="ai_allowed">AI allowed</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
         </Card>
       </div>
-
-      {runHistory.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="lg:col-span-1">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="w-4 h-4" /> Simulation History
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 max-h-[60vh] overflow-y-auto">
-              {runHistory.map((run) => (
-                <div
-                  key={run._id}
-                  className={`p-3 rounded-lg border transition cursor-pointer ${
-                    activeRunId === run._id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'
-                  }`}
-                  onClick={() => {
-                    setActiveRunId(run._id);
-                    setRunSteps(run.steps || []);
-                    setRunConfig(run.settingsSnapshot);
-                  }}
-                >
-                  <p className="text-sm font-medium">Run {run._id.slice(-6)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(run.createdAt).toLocaleString()}
-                  </p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Run Configuration</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              {runConfig ? (
-                <>
-                  <div className="space-y-1">
-                    <p className="text-muted-foreground">Decision mode</p>
-                    <p className="font-medium">{runConfig.decisionMode || '—'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-muted-foreground">Default language</p>
-                    <p className="font-medium">{runConfig.defaultLanguage || '—'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-muted-foreground">Reply language</p>
-                    <p className="font-medium">{runConfig.defaultReplyLanguage || '—'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-muted-foreground">Primary goal</p>
-                    <p className="font-medium">{runConfig.primaryGoal || '—'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-muted-foreground">Secondary goal</p>
-                    <p className="font-medium">{runConfig.secondaryGoal || '—'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-muted-foreground">Human escalation</p>
-                    <p className="font-medium">{runConfig.humanEscalationBehavior || '—'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-muted-foreground">Max reply sentences</p>
-                    <p className="font-medium">{runConfig.maxReplySentences ?? '—'}</p>
-                  </div>
-                  <div className="space-y-1 md:col-span-2">
-                    <p className="text-muted-foreground">Escalation guidelines</p>
-                    <p className="font-medium whitespace-pre-wrap">{runConfig.escalationGuidelines || '—'}</p>
-                  </div>
-                </>
-              ) : (
-                <p className="text-muted-foreground">Run a simulation to see the configuration used.</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }

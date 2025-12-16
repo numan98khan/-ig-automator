@@ -48,14 +48,15 @@ function recordSettingsSnapshot(settings: any) {
 
 export async function runSandboxScenario(
   workspaceId: string,
-  scenarioId: string
+  scenarioId: string,
+  overrideSettings?: Record<string, any>
 ): Promise<RunResult> {
   const scenario = await SandboxScenario.findOne({ _id: scenarioId, workspaceId });
   if (!scenario) {
     throw new Error('Scenario not found');
   }
 
-  const settings = await getWorkspaceSettings(workspaceId);
+  const settings = { ...(await getWorkspaceSettings(workspaceId)), ...(overrideSettings || {}) };
   const goalConfigs = getGoalConfigs(settings);
   const conversation = buildSandboxConversation(workspaceId);
   const history: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = [];
