@@ -316,6 +316,7 @@ Generate a response following all rules above. Return JSON with:
 
   let parsed: AIReplyResult | null = null;
   let responseContent: string | null = null;
+  let usedFallback = false;
 
   try {
     // Build user message content (text + images if present)
@@ -418,6 +419,15 @@ Generate a response following all rules above. Return JSON with:
     tags: ['escalation', 'ai_error'],
   };
 
+  if (!parsed) {
+    usedFallback = true;
+    console.warn('Falling back to escalation reply after AI generation failure', {
+      conversationId: conversation._id?.toString(),
+      workspaceId: workspaceId.toString(),
+      categoryId: categoryId?.toString(),
+    });
+  }
+
   // Enforce policy-based escalation
   if (aiPolicy === 'escalate') {
     reply.shouldEscalate = true;
@@ -450,6 +460,21 @@ Generate a response following all rules above. Return JSON with:
   if (!reply.replyText.trim()) {
     reply.replyText = 'Thanks for reaching out! A teammate will follow up shortly.';
   }
+
+  const loggedGoalType = reply.goalProgress?.goalType || activeGoalType || detectedGoal;
+
+  console.info('AI reply generated', {
+    conversationId: conversation._id?.toString(),
+    workspaceId: workspaceId.toString(),
+    categoryId: categoryId?.toString(),
+    detectedGoal,
+    activeGoalType,
+    repliedGoalType: loggedGoalType,
+    goalStatus: reply.goalProgress?.status,
+    usedFallback,
+    shouldEscalate: reply.shouldEscalate,
+    replyPreview: reply.replyText?.slice(0, 140),
+  });
 
   return reply;
 }

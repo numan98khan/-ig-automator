@@ -531,6 +531,16 @@ export async function processAutoReply(
     }
 
     // Send the reply via Instagram API
+    console.info('Sending AI Instagram reply', {
+      conversationId: conversation._id,
+      workspaceId,
+      categoryId,
+      goalType,
+      goalStatus: aiReply.goalProgress?.status,
+      shouldEscalate: aiReply.shouldEscalate,
+      replyPreview: aiReply.replyText?.slice(0, 140),
+    });
+
     const result = await sendInstagramMessage(
       conversation.participantInstagramId!,
       aiReply.replyText,
@@ -549,6 +559,14 @@ export async function processAutoReply(
         detectedLanguage: categorization.detectedLanguage,
       };
     }
+
+    console.info('Instagram reply sent', {
+      conversationId: conversation._id,
+      messageId: result.message_id,
+      recipientId: result.recipient_id,
+      goalType,
+      shouldEscalate: aiReply.shouldEscalate,
+    });
 
     // Save the reply as a message
     const savedMessage = await Message.create({
