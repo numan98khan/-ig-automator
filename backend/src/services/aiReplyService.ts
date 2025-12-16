@@ -395,7 +395,27 @@ Generate a response following all rules above. Return JSON with:
     });
 
     responseContent = response.output_text || '{}';
-    const raw = JSON.parse(responseContent);
+    const raw = safeParseJson(responseContent);
+    const collectedFieldsDefaults = {
+      name: null,
+      phone: null,
+      email: null,
+      customNote: null,
+      date: null,
+      time: null,
+      serviceType: null,
+      productName: null,
+      quantity: null,
+      variant: null,
+      orderId: null,
+      photoUrl: null,
+      targetChannel: null,
+    };
+
+    const mergedCollectedFields = raw.goalProgress?.collectedFields
+      ? { ...collectedFieldsDefaults, ...raw.goalProgress.collectedFields }
+      : collectedFieldsDefaults;
+
     parsed = {
       replyText: String(raw.replyText || '').trim(),
       shouldEscalate: Boolean(raw.shouldEscalate),
@@ -405,7 +425,7 @@ Generate a response following all rules above. Return JSON with:
         ? {
             goalType: raw.goalProgress.goalType,
             status: raw.goalProgress.status,
-            collectedFields: raw.goalProgress.collectedFields,
+            collectedFields: mergedCollectedFields,
             summary: raw.goalProgress.summary,
             nextStep: raw.goalProgress.nextStep,
             shouldCreateRecord: raw.goalProgress.shouldCreateRecord,
@@ -541,6 +561,25 @@ function postProcessReply(params: {
 
   // Clean up spacing and return
   return trimmedSentences.join(' ').trim().replace(/\s{2,}/g, ' ');
+}
+
+function safeParseJson(content: string): any {
+  try {
+    return JSON.parse(content);
+  } catch (primaryError) {
+    try {
+      const repaired = content
+        // remove trailing commas before closing braces/brackets
+        .replace(/,\s*([}\]])/g, '$1')
+        // collapse duplicate commas that can appear after line breaks
+        .replace(/,\s*,/g, ',')
+        .trim();
+
+      return JSON.parse(repaired);
+    } catch (secondaryError) {
+      throw primaryError;
+    }
+  }
 }
 
 function ensureEscalationTone(text: string): string {
