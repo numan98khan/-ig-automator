@@ -46,28 +46,20 @@ function recordSettingsSnapshot(settings: any) {
   };
 }
 
-export async function runSandboxScenario(
+async function simulateMessages(
   workspaceId: string,
-  scenarioId: string,
-  overrideSettings?: Record<string, any>
-): Promise<RunResult> {
-  const scenario = await SandboxScenario.findOne({ _id: scenarioId, workspaceId });
-  if (!scenario) {
-    throw new Error('Scenario not found');
-  }
-
-  const settings = { ...(await getWorkspaceSettings(workspaceId)), ...(overrideSettings || {}) };
+  messages: string[],
+  settings: Record<string, any>
+): Promise<SandboxRunStep[]> {
   const goalConfigs = getGoalConfigs(settings);
   const conversation = buildSandboxConversation(workspaceId);
   const history: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = [];
   const steps: SandboxRunStep[] = [];
 
-  for (const step of scenario.messages) {
-    if (step.role !== 'customer') continue;
-
-    const categorization = await categorizeMessage(step.text, workspaceId);
+  for (const messageText of messages) {
+    const categorization = await categorizeMessage(messageText, workspaceId);
     const category = await MessageCategory.findOne({ workspaceId, nameEn: categorization.categoryName });
-    const detectedGoal = detectGoalIntent(step.text || '');
+    const detectedGoal = detectGoalIntent(messageText || '');
     const goalMatched = goalMatchesWorkspace(
       detectedGoal,
       settings.primaryGoal as GoalType | undefined,
@@ -79,7 +71,7 @@ export async function runSandboxScenario(
     const aiReply = await generateAIReply({
       conversation,
       workspaceId,
-      latestCustomerMessage: step.text,
+      latestCustomerMessage: messageText,
       categoryId: category?._id,
       categorization,
       historyLimit: 20,
@@ -99,7 +91,7 @@ export async function runSandboxScenario(
     });
 
     steps.push({
-      customerText: step.text,
+      customerText: messageText,
       aiReplyText: aiReply.replyText,
       meta: {
         detectedLanguage: categorization.detectedLanguage,
@@ -112,9 +104,30 @@ export async function runSandboxScenario(
       },
     });
 
-    history.push({ from: 'customer', text: step.text, createdAt: new Date() });
+    history.push({ from: 'customer', text: messageText, createdAt: new Date() });
     history.push({ from: 'ai', text: aiReply.replyText, createdAt: new Date() });
   }
+
+  return steps;
+}
+
+export async function runSandboxScenario(
+  workspaceId: string,
+  scenarioId: string,
+  overrideSettings?: Record<string, any>
+): Promise<RunResult> {
+  const scenario = await SandboxScenario.findOne({ _id: scenarioId, workspaceId });
+  if (!scenario) {
+    throw new Error('Scenario not found');
+  }
+
+  const settings = { ...(await getWorkspaceSettings(workspaceId)), ...(overrideSettings || {}) };
+
+  const steps = await simulateMessages(
+    workspaceId,
+    scenario.messages.filter((step) => step.role === 'customer').map((step) => step.text),
+    settings,
+  );
 
   const run = await SandboxRun.create({
     workspaceId,
@@ -128,5 +141,22 @@ export async function runSandboxScenario(
     steps: run.steps,
     createdAt: run.createdAt,
     settingsSnapshot: run.settingsSnapshot,
+  };
+}
+
+export async function runQuickSandbox(
+  workspaceId: string,
+  messages: string[],
+  overrideSettings?: Record<string, any>
+): Promise<RunResult> {
+  const settings = { ...(await getWorkspaceSettings(workspaceId)), ...(overrideSettings || {}) };
+
+  const steps = await simulateMessages(workspaceId, messages, settings);
+
+  return {
+    runId: new mongoose.Types.ObjectId().toString(),
+    steps,
+    createdAt: new Date(),
+    settingsSnapshot: recordSettingsSnapshot(settings),
   };
 }

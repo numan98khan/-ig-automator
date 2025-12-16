@@ -3,7 +3,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import SandboxScenario from '../models/SandboxScenario';
 import SandboxRun from '../models/SandboxRun';
-import { runSandboxScenario } from '../services/sandboxService';
+import { runQuickSandbox, runSandboxScenario } from '../services/sandboxService';
 
 const router = express.Router();
 
@@ -152,6 +152,27 @@ router.post('/scenarios/:id/run', authenticate, async (req: AuthRequest, res: Re
     res.json(run);
   } catch (error) {
     console.error('Run sandbox scenario error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/quick-run', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { workspaceId, messages = [], overrideSettings } = req.body || {};
+
+    if (!workspaceId || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'workspaceId and at least one message are required' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+
+    const run = await runQuickSandbox(workspaceId, messages, overrideSettings);
+    res.json(run);
+  } catch (error) {
+    console.error('Run sandbox quick message error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

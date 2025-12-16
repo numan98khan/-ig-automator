@@ -14,7 +14,18 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
-import { Plus, Play, Save, Trash2, TestTube, MessageSquare, Clock, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  Plus,
+  Play,
+  Save,
+  Trash2,
+  TestTube,
+  MessageSquare,
+  Clock,
+  ChevronDown,
+  ChevronRight,
+  Sparkles,
+} from 'lucide-react';
 
 function snapshotSettings(settings?: WorkspaceSettings | null): Partial<WorkspaceSettings> {
   if (!settings) return {};
@@ -62,8 +73,11 @@ export default function Sandbox() {
   const [openDetailIndex, setOpenDetailIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
+  const [quickRunning, setQuickRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [quickInput, setQuickInput] = useState('');
+  const [quickStep, setQuickStep] = useState<SandboxRunStep | null>(null);
 
   const selectedScenario = useMemo(
     () => scenarios.find((s) => s._id === selectedScenarioId) || null,
@@ -115,6 +129,8 @@ export default function Sandbox() {
     setOpenDetailIndex(null);
     setViewingHistory(false);
     setRunConfig(snapshotSettings(workspaceSettings));
+    setQuickInput('');
+    setQuickStep(null);
   };
 
   const handleSelectScenario = (scenario: SandboxScenario) => {
@@ -130,6 +146,8 @@ export default function Sandbox() {
     setOpenDetailIndex(null);
     setViewingHistory(false);
     setRunConfig(snapshotSettings(workspaceSettings));
+    setQuickStep(null);
+    setQuickInput('');
     loadRunsForScenario(scenario._id);
   };
 
@@ -239,6 +257,24 @@ export default function Sandbox() {
       setError(err.message || 'Failed to run simulation');
     } finally {
       setRunning(false);
+    }
+  };
+
+  const runQuickTest = async () => {
+    if (!currentWorkspace || !quickInput.trim()) return;
+    setQuickRunning(true);
+    setError(null);
+    setQuickStep(null);
+    try {
+      const result = await sandboxAPI.quickRun(currentWorkspace._id, quickInput.trim(), runConfig);
+      setQuickStep(result.steps?.[0] || null);
+      setSuccess('Preview generated');
+    } catch (err: any) {
+      console.error('Failed to run quick preview', err);
+      setError(err.message || 'Failed to generate preview');
+    } finally {
+      setQuickRunning(false);
+      setTimeout(() => setSuccess(null), 2000);
     }
   };
 
@@ -618,6 +654,44 @@ export default function Sandbox() {
                 <option value="ai_silent">AI silent</option>
                 <option value="ai_allowed">AI allowed</option>
               </select>
+            </div>
+
+            <div className="pt-2 border-t mt-2">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary" /> Quick free-text test
+                </p>
+                <Button size="sm" variant="secondary" onClick={runQuickTest} disabled={quickRunning}>
+                  {quickRunning ? 'Running…' : 'Test'}
+                </Button>
+              </div>
+              <textarea
+                className="w-full rounded-md border border-border bg-background p-2 text-sm focus:ring-2 focus:ring-primary"
+                rows={4}
+                value={quickInput}
+                onChange={(e) => setQuickInput(e.target.value)}
+                placeholder="Type a customer message to preview the AI reply"
+              />
+              {quickStep && (
+                <div className="mt-2 p-3 border rounded-md bg-muted/30 space-y-2">
+                  <div className="text-xs text-muted-foreground">Preview reply</div>
+                  <p className="text-sm whitespace-pre-wrap">{quickStep.aiReplyText}</p>
+                  {quickStep.meta && (
+                    <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                      {quickStep.meta.detectedLanguage && (
+                        <Badge variant="secondary">Lang: {quickStep.meta.detectedLanguage}</Badge>
+                      )}
+                      {quickStep.meta.categoryName && <Badge variant="secondary">{quickStep.meta.categoryName}</Badge>}
+                      {quickStep.meta.goalMatched && quickStep.meta.goalMatched !== 'none' && (
+                        <Badge variant="secondary">Goal: {quickStep.meta.goalMatched}</Badge>
+                      )}
+                      <Badge variant="secondary">
+                        Escalate: {quickStep.meta.shouldEscalate ? 'Yes' : 'No'}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </Card>

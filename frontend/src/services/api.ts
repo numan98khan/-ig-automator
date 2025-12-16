@@ -606,6 +606,19 @@ export const sandboxAPI = {
     const { data } = await api.get(`/api/sandbox/scenarios/${scenarioId}/runs`);
     return data;
   },
+
+  quickRun: async (
+    workspaceId: string,
+    message: string,
+    overrideSettings?: Partial<WorkspaceSettings>
+  ): Promise<SandboxRunResponse> => {
+    const { data } = await api.post('/api/sandbox/quick-run', {
+      workspaceId,
+      messages: [message],
+      overrideSettings,
+    });
+    return data;
+  },
 };
 
 // Workspace Invites API
