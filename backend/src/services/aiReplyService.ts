@@ -6,6 +6,7 @@ import KnowledgeItem from '../models/KnowledgeItem';
 import CategoryKnowledge from '../models/CategoryKnowledge';
 import MessageCategory from '../models/MessageCategory';
 import WorkspaceSettings from '../models/WorkspaceSettings';
+import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -16,6 +17,12 @@ export interface AIReplyResult {
   shouldEscalate: boolean;
   escalationReason?: string;
   tags?: string[];
+  goalProgress?: GoalProgressState & {
+    goalType?: GoalType;
+    collectedFields?: Record<string, any>;
+    shouldCreateRecord?: boolean;
+    targetLink?: string;
+  };
 }
 
 export interface AIReplyOptions {
@@ -25,6 +32,17 @@ export interface AIReplyOptions {
   categoryId?: mongoose.Types.ObjectId | string;
   categorization?: { categoryName?: string; detectedLanguage?: string; translatedText?: string };
   historyLimit?: number;
+  goalContext?: {
+    workspaceGoals?: {
+      primaryGoal?: GoalType;
+      secondaryGoal?: GoalType;
+      configs?: GoalConfigurations;
+    };
+    detectedGoal?: GoalType;
+    activeGoalType?: GoalType;
+    goalState?: 'idle' | 'collecting' | 'completed';
+    collectedFields?: Record<string, any>;
+  };
 }
 
 /**
@@ -62,6 +80,43 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
   const allowEmojis = workspaceSettings?.allowEmojis ?? true;
   const maxReplySentences = workspaceSettings?.maxReplySentences || 3;
   const replyLanguage = workspaceSettings?.defaultReplyLanguage || workspaceSettings?.defaultLanguage || categorization?.detectedLanguage || 'en';
+
+  const goalContext = options.goalContext || {};
+  const workspaceGoals = goalContext.workspaceGoals;
+  const detectedGoal = goalContext.detectedGoal || 'none';
+  const activeGoalType = goalContext.activeGoalType;
+  const goalState = goalContext.goalState || 'idle';
+  const collectedGoalFields = goalContext.collectedFields || {};
+
+  const describeGoalConfigs = (configs?: GoalConfigurations) => {
+    if (!configs) return 'No specific goal configuration provided.';
+
+    const leadFields = [
+      configs.leadCapture.collectName ? 'name' : null,
+      configs.leadCapture.collectPhone ? 'phone' : null,
+      configs.leadCapture.collectEmail ? 'email' : null,
+      configs.leadCapture.collectCustomNote ? 'custom note' : null,
+    ].filter(Boolean).join(', ');
+
+    const bookingFields = [
+      configs.booking.collectDate ? 'date' : null,
+      configs.booking.collectTime ? 'time' : null,
+      configs.booking.collectServiceType ? 'serviceType' : null,
+    ].filter(Boolean).join(', ');
+
+    const orderFields = [
+      configs.order.collectProductName ? 'productName' : null,
+      configs.order.collectQuantity ? 'quantity' : null,
+      configs.order.collectVariant ? 'variant' : null,
+    ].filter(Boolean).join(', ');
+
+    const supportFields = [
+      configs.support.askForOrderId ? 'orderId' : null,
+      configs.support.askForPhoto ? 'photo' : null,
+    ].filter(Boolean).join(', ');
+
+    return `Lead capture fields: ${leadFields || 'none'} | Booking link: ${configs.booking.bookingLink || 'n/a'}; fields: ${bookingFields || 'none'} | Order catalog: ${configs.order.catalogUrl || 'n/a'}; fields: ${orderFields || 'none'} | Support asks: ${supportFields || 'none'} | Drive target: ${configs.drive.targetType || 'website'} ${configs.drive.targetLink || ''}`;
+  };
 
   // Build knowledge context
   let knowledgeContext = '';
@@ -131,8 +186,66 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
         type: 'array',
         items: { type: 'string' },
       },
+      goalProgress: {
+        type: ['object', 'null'],
+        additionalProperties: false,
+        properties: {
+          goalType: {
+            type: 'string',
+            enum: ['none', 'capture_lead', 'book_appointment', 'start_order', 'handle_support', 'drive_to_channel'],
+          },
+          status: { type: ['string', 'null'], enum: ['idle', 'collecting', 'completed', null] },
+          collectedFields: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              name: { type: ['string', 'null'] },
+              phone: { type: ['string', 'null'] },
+              email: { type: ['string', 'null'] },
+              customNote: { type: ['string', 'null'] },
+              date: { type: ['string', 'null'] },
+              time: { type: ['string', 'null'] },
+              serviceType: { type: ['string', 'null'] },
+              productName: { type: ['string', 'null'] },
+              quantity: { type: ['number', 'string', 'null'] },
+              variant: { type: ['string', 'null'] },
+              orderId: { type: ['string', 'null'] },
+              photoUrl: { type: ['string', 'null'] },
+              targetChannel: { type: ['string', 'null'] },
+            },
+            required: [
+              'name',
+              'phone',
+              'email',
+              'customNote',
+              'date',
+              'time',
+              'serviceType',
+              'productName',
+              'quantity',
+              'variant',
+              'orderId',
+              'photoUrl',
+              'targetChannel',
+            ],
+          },
+          summary: { type: ['string', 'null'] },
+          nextStep: { type: ['string', 'null'] },
+          shouldCreateRecord: { type: ['boolean', 'null'] },
+          targetLink: { type: ['string', 'null'] },
+        },
+        required: [
+          'goalType',
+          'status',
+          'collectedFields',
+          'summary',
+          'nextStep',
+          'shouldCreateRecord',
+          'targetLink',
+        ],
+      },
     },
-    required: ['replyText', 'shouldEscalate', 'escalationReason', 'tags'],
+    required: ['replyText', 'shouldEscalate', 'escalationReason', 'tags', 'goalProgress'],
   };
 
   const systemMessage = `
@@ -182,6 +295,15 @@ Workspace rules:
 ${workspaceSettings?.escalationGuidelines ? `- Escalation guidelines: ${workspaceSettings.escalationGuidelines}` : ''}
 ${workspaceSettings?.escalationExamples?.length ? `- Escalation examples: ${workspaceSettings.escalationExamples.join(' | ')}` : ''}
 
+DM goals:
+- Primary goal: ${workspaceGoals?.primaryGoal || 'none'}
+- Secondary goal: ${workspaceGoals?.secondaryGoal || 'none'}
+- Detected intent for latest message: ${detectedGoal}
+- Active conversation goal: ${activeGoalType || 'none'} (state: ${goalState})
+- Collected goal fields so far: ${Object.keys(collectedGoalFields).length ? JSON.stringify(collectedGoalFields) : 'none'}
+- Goal config summary: ${describeGoalConfigs(workspaceGoals?.configs)}
+If a detected intent matches a workspace goal, answer their question then guide them through a short 2-4 question flow to collect the configured fields. Keep it concise and avoid repeating previous asks.
+
 KNOWLEDGE BASE:
 ${knowledgeContext || 'No specific knowledge provided. Use general business courtesy.'}
 
@@ -208,9 +330,12 @@ Generate a response following all rules above. Return JSON with:
 - replyText: your message to the customer
 - shouldEscalate: true if human review needed, false otherwise
 - escalationReason: brief reason if escalating (e.g., "Pricing negotiation requires approval", "Complex custom request"), or null
-- tags: semantic labels like ["pricing", "bulk_request", "urgent", "complaint"] to help categorize this interaction`;
+- tags: semantic labels like ["pricing", "bulk_request", "urgent", "complaint"] to help categorize this interaction
+- goalProgress: when working on a goal, include goalType, status ('collecting' or 'completed'), collectedFields (merge any newly inferred answers), summary, nextStep, and set shouldCreateRecord=true when the flow is complete. Include targetLink if sharing a booking or catalog link.`;
 
   let parsed: AIReplyResult | null = null;
+  let responseContent: string | null = null;
+  let usedFallback = false;
 
   try {
     // Build user message content (text + images if present)
@@ -269,16 +394,61 @@ Generate a response following all rules above. Return JSON with:
       store: true, // Enable stateful context for better multi-turn conversations
     });
 
-    const content = response.output_text || '{}';
-    const raw = JSON.parse(content);
+    responseContent = response.output_text || '{}';
+    const raw = safeParseJson(responseContent);
+    const collectedFieldsDefaults = {
+      name: null,
+      phone: null,
+      email: null,
+      customNote: null,
+      date: null,
+      time: null,
+      serviceType: null,
+      productName: null,
+      quantity: null,
+      variant: null,
+      orderId: null,
+      photoUrl: null,
+      targetChannel: null,
+    };
+
+    const mergedCollectedFields = raw.goalProgress?.collectedFields
+      ? { ...collectedFieldsDefaults, ...raw.goalProgress.collectedFields }
+      : collectedFieldsDefaults;
+
     parsed = {
       replyText: String(raw.replyText || '').trim(),
       shouldEscalate: Boolean(raw.shouldEscalate),
       escalationReason: raw.escalationReason ? String(raw.escalationReason).trim() : undefined,
       tags: Array.isArray(raw.tags) ? raw.tags.map((t: any) => String(t).trim()).filter(Boolean) : [],
+      goalProgress: raw.goalProgress
+        ? {
+            goalType: raw.goalProgress.goalType,
+            status: raw.goalProgress.status,
+            collectedFields: mergedCollectedFields,
+            summary: raw.goalProgress.summary,
+            nextStep: raw.goalProgress.nextStep,
+            shouldCreateRecord: raw.goalProgress.shouldCreateRecord,
+            targetLink: raw.goalProgress.targetLink,
+          }
+        : undefined,
     };
   } catch (error: any) {
-    console.error('AI reply generation failed:', error.message);
+    const details: Record<string, any> = {
+      message: error?.message,
+      status: error?.status,
+      type: error?.error?.type,
+    };
+
+    if (error?.error?.message) {
+      details.apiMessage = error.error.message;
+    }
+
+    if (responseContent) {
+      details.partialResponse = responseContent.slice(0, 800);
+    }
+
+    console.error('AI reply generation failed:', details);
   }
 
   let reply: AIReplyResult = parsed || {
@@ -287,6 +457,15 @@ Generate a response following all rules above. Return JSON with:
     escalationReason: 'AI reply generation failed - requires human review',
     tags: ['escalation', 'ai_error'],
   };
+
+  if (!parsed) {
+    usedFallback = true;
+    console.warn('Falling back to escalation reply after AI generation failure', {
+      conversationId: conversation._id?.toString(),
+      workspaceId: workspaceId.toString(),
+      categoryId: categoryId?.toString(),
+    });
+  }
 
   // Enforce policy-based escalation
   if (aiPolicy === 'escalate') {
@@ -320,6 +499,21 @@ Generate a response following all rules above. Return JSON with:
   if (!reply.replyText.trim()) {
     reply.replyText = 'Thanks for reaching out! A teammate will follow up shortly.';
   }
+
+  const loggedGoalType = reply.goalProgress?.goalType || activeGoalType || detectedGoal;
+
+  console.info('AI reply generated', {
+    conversationId: conversation._id?.toString(),
+    workspaceId: workspaceId.toString(),
+    categoryId: categoryId?.toString(),
+    detectedGoal,
+    activeGoalType,
+    repliedGoalType: loggedGoalType,
+    goalStatus: reply.goalProgress?.status,
+    usedFallback,
+    shouldEscalate: reply.shouldEscalate,
+    replyPreview: reply.replyText?.slice(0, 140),
+  });
 
   return reply;
 }
@@ -367,6 +561,51 @@ function postProcessReply(params: {
 
   // Clean up spacing and return
   return trimmedSentences.join(' ').trim().replace(/\s{2,}/g, ' ');
+}
+
+function safeParseJson(content: string): any {
+  try {
+    return JSON.parse(content);
+  } catch (primaryError) {
+    try {
+      const repaired = repairJson(content);
+      return JSON.parse(repaired);
+    } catch (secondaryError) {
+      throw primaryError;
+    }
+  }
+}
+
+function repairJson(content: string): string {
+  let repaired = content
+    // remove trailing commas before closing braces/brackets
+    .replace(/,\s*([}\]])/g, '$1')
+    // collapse duplicate commas that can appear after line breaks
+    .replace(/,\s*,/g, ',')
+    // replace missing values before a closing brace with null
+    .replace(/:\s*(\r?\n)*\s*([}\]])/g, ': null$2')
+    .trim();
+
+  // If a property is left dangling at the end (e.g., "targetChannel": ), set it to null
+  const danglingField = /"([A-Za-z0-9_]+)"\s*:\s*$/m;
+  if (danglingField.test(repaired)) {
+    repaired = repaired.replace(danglingField, '"$1": null');
+  }
+
+  // Balance braces/brackets if the model response was truncated
+  const openBraces = (repaired.match(/{/g) || []).length;
+  const closeBraces = (repaired.match(/}/g) || []).length;
+  if (closeBraces < openBraces) {
+    repaired += '}'.repeat(openBraces - closeBraces);
+  }
+
+  const openBrackets = (repaired.match(/\[/g) || []).length;
+  const closeBrackets = (repaired.match(/\]/g) || []).length;
+  if (closeBrackets < openBrackets) {
+    repaired += ']'.repeat(openBrackets - closeBrackets);
+  }
+
+  return repaired;
 }
 
 function ensureEscalationTone(text: string): string {
