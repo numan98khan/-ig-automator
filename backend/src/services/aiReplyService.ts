@@ -568,18 +568,44 @@ function safeParseJson(content: string): any {
     return JSON.parse(content);
   } catch (primaryError) {
     try {
-      const repaired = content
-        // remove trailing commas before closing braces/brackets
-        .replace(/,\s*([}\]])/g, '$1')
-        // collapse duplicate commas that can appear after line breaks
-        .replace(/,\s*,/g, ',')
-        .trim();
-
+      const repaired = repairJson(content);
       return JSON.parse(repaired);
     } catch (secondaryError) {
       throw primaryError;
     }
   }
+}
+
+function repairJson(content: string): string {
+  let repaired = content
+    // remove trailing commas before closing braces/brackets
+    .replace(/,\s*([}\]])/g, '$1')
+    // collapse duplicate commas that can appear after line breaks
+    .replace(/,\s*,/g, ',')
+    // replace missing values before a closing brace with null
+    .replace(/:\s*(\r?\n)*\s*([}\]])/g, ': null$2')
+    .trim();
+
+  // If a property is left dangling at the end (e.g., "targetChannel": ), set it to null
+  const danglingField = /"([A-Za-z0-9_]+)"\s*:\s*$/m;
+  if (danglingField.test(repaired)) {
+    repaired = repaired.replace(danglingField, '"$1": null');
+  }
+
+  // Balance braces/brackets if the model response was truncated
+  const openBraces = (repaired.match(/{/g) || []).length;
+  const closeBraces = (repaired.match(/}/g) || []).length;
+  if (closeBraces < openBraces) {
+    repaired += '}'.repeat(openBraces - closeBraces);
+  }
+
+  const openBrackets = (repaired.match(/\[/g) || []).length;
+  const closeBrackets = (repaired.match(/\]/g) || []).length;
+  if (closeBrackets < openBrackets) {
+    repaired += ']'.repeat(openBrackets - closeBrackets);
+  }
+
+  return repaired;
 }
 
 function ensureEscalationTone(text: string): string {
