@@ -473,11 +473,11 @@ export async function processAutoReply(
       };
     }
 
-    // If existing ticket for same topic, force follow-up behavior
+    // If existing ticket for same topic, keep helping but add a light reminder without blocking the conversation
     if (sameTopicTicket) {
-      aiReply.shouldEscalate = true;
+      aiReply.shouldEscalate = false; // avoid spamming escalation replies when a ticket is already open
       aiReply.escalationReason = aiReply.escalationReason || activeTicket.reason || 'Escalation pending';
-      aiReply.replyText = buildFollowupResponse(activeTicket.followUpCount || 0, aiReply.replyText);
+      aiReply.replyText = appendPendingNote(aiReply.replyText);
       await addTicketUpdate(activeTicket._id, { from: 'customer', text: messageText });
     } else if (activeTicket && !sameTopicTicket) {
       // New topic while escalation pending: keep helping but remind briefly
