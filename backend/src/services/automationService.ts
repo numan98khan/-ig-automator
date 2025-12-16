@@ -459,6 +459,12 @@ export async function processAutoReply(
     });
 
     if (!aiReply) {
+      console.error('generateAIReply returned null', {
+        conversationId: conversation._id,
+        workspaceId,
+        categoryId,
+        detectedGoal,
+      });
       return {
         success: false,
         message: 'Failed to generate reply',
@@ -532,6 +538,10 @@ export async function processAutoReply(
     );
 
     if (!result || (!result.message_id && !result.recipient_id)) {
+      console.error('Failed to send Instagram reply', {
+        conversationId: conversation._id,
+        result,
+      });
       return {
         success: false,
         message: 'Failed to send reply to Instagram',

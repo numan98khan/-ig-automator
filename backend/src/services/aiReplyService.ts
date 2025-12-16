@@ -315,6 +315,7 @@ Generate a response following all rules above. Return JSON with:
 - goalProgress: when working on a goal, include goalType, status ('collecting' or 'completed'), collectedFields (merge any newly inferred answers), summary, nextStep, and set shouldCreateRecord=true when the flow is complete. Include targetLink if sharing a booking or catalog link.`;
 
   let parsed: AIReplyResult | null = null;
+  let responseContent: string | null = null;
 
   try {
     // Build user message content (text + images if present)
@@ -373,8 +374,8 @@ Generate a response following all rules above. Return JSON with:
       store: true, // Enable stateful context for better multi-turn conversations
     });
 
-    const content = response.output_text || '{}';
-    const raw = JSON.parse(content);
+    responseContent = response.output_text || '{}';
+    const raw = JSON.parse(responseContent);
     parsed = {
       replyText: String(raw.replyText || '').trim(),
       shouldEscalate: Boolean(raw.shouldEscalate),
@@ -393,7 +394,21 @@ Generate a response following all rules above. Return JSON with:
         : undefined,
     };
   } catch (error: any) {
-    console.error('AI reply generation failed:', error.message);
+    const details: Record<string, any> = {
+      message: error?.message,
+      status: error?.status,
+      type: error?.error?.type,
+    };
+
+    if (error?.error?.message) {
+      details.apiMessage = error.error.message;
+    }
+
+    if (responseContent) {
+      details.partialResponse = responseContent.slice(0, 800);
+    }
+
+    console.error('AI reply generation failed:', details);
   }
 
   let reply: AIReplyResult = parsed || {
