@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import mongoose from 'mongoose';
 import { IConversation } from '../models/Conversation';
-import Message from '../models/Message';
+import Message, { IMessage } from '../models/Message';
 import KnowledgeItem from '../models/KnowledgeItem';
 import CategoryKnowledge from '../models/CategoryKnowledge';
 import MessageCategory from '../models/MessageCategory';
@@ -17,6 +17,7 @@ export interface AIReplyResult {
   shouldEscalate: boolean;
   escalationReason?: string;
   tags?: string[];
+  knowledgeItemsUsed?: { id: string; title: string }[];
   goalProgress?: GoalProgressState & {
     goalType?: GoalType;
     collectedFields?: Record<string, any>;
@@ -32,6 +33,8 @@ export interface AIReplyOptions {
   categoryId?: mongoose.Types.ObjectId | string;
   categorization?: { categoryName?: string; detectedLanguage?: string; translatedText?: string };
   historyLimit?: number;
+  mode?: 'live' | 'sandbox';
+  messageHistory?: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[];
   goalContext?: {
     workspaceGoals?: {
       primaryGoal?: GoalType;
@@ -57,14 +60,24 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     categoryId,
     categorization,
     historyLimit = 10,
+    messageHistory,
   } = options;
 
-  const [messages, knowledgeItems, workspaceSettings] = await Promise.all([
-    Message.find({ conversationId: conversation._id }).sort({ createdAt: -1 }).limit(historyLimit),
+  const [knowledgeItems, workspaceSettings] = await Promise.all([
     KnowledgeItem.find({ workspaceId }),
     WorkspaceSettings.findOne({ workspaceId }),
   ]);
-  messages.reverse();
+
+  const messages: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = messageHistory
+    ? [...messageHistory].slice(-historyLimit)
+    : await Message.find({ conversationId: conversation._id })
+        .sort({ createdAt: -1 })
+        .limit(historyLimit)
+        .then(found => {
+          const ordered = [...found];
+          ordered.reverse();
+          return ordered;
+        });
 
   const [categoryKnowledge, category] = categoryId
     ? await Promise.all([
@@ -80,6 +93,17 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
   const allowEmojis = workspaceSettings?.allowEmojis ?? true;
   const maxReplySentences = workspaceSettings?.maxReplySentences || 3;
   const replyLanguage = workspaceSettings?.defaultReplyLanguage || workspaceSettings?.defaultLanguage || categorization?.detectedLanguage || 'en';
+  const knowledgeItemsUsed = knowledgeItems.slice(0, 5).map(item => ({
+    id: item._id.toString(),
+    title: item.title,
+  }));
+
+  if (categoryKnowledge?.content) {
+    knowledgeItemsUsed.unshift({
+      id: categoryKnowledge._id?.toString() || 'category',
+      title: `Category Guidance: ${category?.nameEn || 'Unspecified'}`,
+    });
+  }
 
   const goalContext = options.goalContext || {};
   const workspaceGoals = goalContext.workspaceGoals;
@@ -499,6 +523,8 @@ Generate a response following all rules above. Return JSON with:
   if (!reply.replyText.trim()) {
     reply.replyText = 'Thanks for reaching out! A teammate will follow up shortly.';
   }
+
+  reply.knowledgeItemsUsed = knowledgeItemsUsed;
 
   const loggedGoalType = reply.goalProgress?.goalType || activeGoalType || detectedGoal;
 

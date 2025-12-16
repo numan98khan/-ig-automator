@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags, Menu, X as CloseIcon, AlertCircle, Sun, Moon } from 'lucide-react';
+import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags, Menu, X as CloseIcon, AlertCircle, Sun, Moon, TestTube } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
 
@@ -23,6 +23,7 @@ const Layout: React.FC = () => {
   const navLinks = [
     { to: '/', label: 'Inbox', icon: MessageSquare, isActive: isActive('/') || isActive('/inbox') },
     { to: '/knowledge', label: 'Knowledge', icon: BookOpen, isActive: isActive('/knowledge') },
+    { to: '/sandbox', label: 'Sandbox', icon: TestTube, isActive: isActive('/sandbox') },
     { to: '/categories', label: 'Categories', icon: Tags, isActive: isActive('/categories') },
     { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
     { to: '/escalations', label: 'Human Alerts', icon: AlertCircle, isActive: isActive('/escalations') },

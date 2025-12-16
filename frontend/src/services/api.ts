@@ -205,6 +205,42 @@ export interface CategoryKnowledge {
   updatedAt: string;
 }
 
+export interface SandboxMessage {
+  role: 'customer';
+  text: string;
+}
+
+export interface SandboxScenario {
+  _id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  messages: SandboxMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SandboxRunStepMeta {
+  detectedLanguage?: string;
+  categoryName?: string;
+  goalMatched?: GoalType | 'none';
+  shouldEscalate?: boolean;
+  escalationReason?: string;
+  tags?: string[];
+  knowledgeItemsUsed?: { id: string; title: string }[];
+}
+
+export interface SandboxRunStep {
+  customerText: string;
+  aiReplyText: string;
+  meta?: SandboxRunStepMeta;
+}
+
+export interface SandboxRunResponse {
+  runId: string;
+  steps: SandboxRunStep[];
+}
+
 export interface EscalationCase {
   escalation: {
     _id: string;
@@ -518,6 +554,40 @@ export const categoriesAPI = {
 
   updateKnowledge: async (categoryId: string, content: string): Promise<CategoryKnowledge> => {
     const { data } = await api.put(`/api/categories/${categoryId}/knowledge`, { content });
+    return data;
+  },
+};
+
+export const sandboxAPI = {
+  listScenarios: async (workspaceId: string): Promise<SandboxScenario[]> => {
+    const { data } = await api.get('/api/sandbox/scenarios', { params: { workspaceId } });
+    return data;
+  },
+
+  createScenario: async (payload: {
+    workspaceId: string;
+    name: string;
+    description?: string;
+    messages: SandboxMessage[];
+  }): Promise<SandboxScenario> => {
+    const { data } = await api.post('/api/sandbox/scenarios', payload);
+    return data;
+  },
+
+  updateScenario: async (
+    scenarioId: string,
+    payload: Partial<Pick<SandboxScenario, 'name' | 'description' | 'messages'>>
+  ): Promise<SandboxScenario> => {
+    const { data } = await api.put(`/api/sandbox/scenarios/${scenarioId}`, payload);
+    return data;
+  },
+
+  deleteScenario: async (scenarioId: string): Promise<void> => {
+    await api.delete(`/api/sandbox/scenarios/${scenarioId}`);
+  },
+
+  runScenario: async (scenarioId: string): Promise<SandboxRunResponse> => {
+    const { data } = await api.post(`/api/sandbox/scenarios/${scenarioId}/run`);
     return data;
   },
 };

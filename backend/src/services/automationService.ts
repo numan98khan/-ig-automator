@@ -59,7 +59,7 @@ const DEFAULT_GOAL_CONFIGS: GoalConfigurations = {
   },
 };
 
-function getGoalConfigs(settings: any): GoalConfigurations {
+export function getGoalConfigs(settings: any): GoalConfigurations {
   return {
     leadCapture: { ...DEFAULT_GOAL_CONFIGS.leadCapture, ...(settings?.goalConfigs?.leadCapture || {}) },
     booking: { ...DEFAULT_GOAL_CONFIGS.booking, ...(settings?.goalConfigs?.booking || {}) },
@@ -69,7 +69,7 @@ function getGoalConfigs(settings: any): GoalConfigurations {
   };
 }
 
-function detectGoalIntent(text: string): GoalType {
+export function detectGoalIntent(text: string): GoalType {
   const lower = text.toLowerCase();
 
   if (/(book|appointment|schedule|reserve|reservation)/.test(lower)) return 'book_appointment';
@@ -80,7 +80,7 @@ function detectGoalIntent(text: string): GoalType {
   return 'none';
 }
 
-function goalMatchesWorkspace(goal: GoalType, primary?: GoalType, secondary?: GoalType): boolean {
+export function goalMatchesWorkspace(goal: GoalType, primary?: GoalType, secondary?: GoalType): boolean {
   if (!goal || goal === 'none') return false;
   return goal === primary || goal === secondary;
 }
