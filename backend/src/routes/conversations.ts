@@ -56,11 +56,19 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
         const myId = me.id;
         const myUsername = me.username;
 
-        const existingMap = new Map(conversations.map(c => [c.instagramConversationId, c]));
+        const existingConversationIds = new Set(
+          conversations
+            .map(c => c.instagramConversationId)
+            .filter((id): id is string => Boolean(id)),
+        );
+        const existingParticipantIds = new Set(
+          conversations
+            .map(c => c.participantInstagramId)
+            .filter((id): id is string => Boolean(id)),
+        );
 
         // Find unsynced conversations
         const unsyncedConversations = instagramConversations
-          .filter((igConv: any) => !existingMap.has(igConv.id))
           .map((igConv: any) => {
             const participants = igConv.participants?.data || [];
             let participant = participants.find((p: any) => {
@@ -74,6 +82,10 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
             }
 
             if (!participant) return null;
+
+            if (existingConversationIds.has(igConv.id) || existingParticipantIds.has(participant.id)) {
+              return null;
+            }
 
             return {
               instagramConversationId: igConv.id,
