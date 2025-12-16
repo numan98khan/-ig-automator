@@ -245,7 +245,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
         ],
       },
     },
-    required: ['replyText', 'shouldEscalate', 'escalationReason', 'tags'],
+    required: ['replyText', 'shouldEscalate', 'escalationReason', 'tags', 'goalProgress'],
   };
 
   const systemMessage = `
