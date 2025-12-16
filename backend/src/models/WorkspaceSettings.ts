@@ -1,4 +1,13 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import {
+  BookingGoalConfig,
+  DriveGoalConfig,
+  GoalConfigurations,
+  GoalType,
+  OrderGoalConfig,
+  SupportGoalConfig,
+  LeadCaptureConfig,
+} from '../types/automationGoals';
 
 export interface IWorkspaceSettings extends Document {
   workspaceId: mongoose.Types.ObjectId;
@@ -28,9 +37,45 @@ export interface IWorkspaceSettings extends Document {
   followupHoursBeforeExpiry: number;  // Hours before 24h window to send follow-up (default: 2)
   followupTemplate: string;           // Follow-up message template
 
+  // Conversation goals
+  primaryGoal?: GoalType;
+  secondaryGoal?: GoalType;
+  goalConfigs?: GoalConfigurations;
+
   createdAt: Date;
   updatedAt: Date;
 }
+
+const leadCaptureConfigSchema = new Schema<LeadCaptureConfig>({
+  collectName: { type: Boolean, default: true },
+  collectPhone: { type: Boolean, default: true },
+  collectEmail: { type: Boolean, default: false },
+  collectCustomNote: { type: Boolean, default: false },
+}, { _id: false });
+
+const bookingGoalConfigSchema = new Schema<BookingGoalConfig>({
+  bookingLink: { type: String, trim: true },
+  collectDate: { type: Boolean, default: true },
+  collectTime: { type: Boolean, default: true },
+  collectServiceType: { type: Boolean, default: false },
+}, { _id: false });
+
+const orderGoalConfigSchema = new Schema<OrderGoalConfig>({
+  catalogUrl: { type: String, trim: true },
+  collectProductName: { type: Boolean, default: true },
+  collectQuantity: { type: Boolean, default: true },
+  collectVariant: { type: Boolean, default: false },
+}, { _id: false });
+
+const supportGoalConfigSchema = new Schema<SupportGoalConfig>({
+  askForOrderId: { type: Boolean, default: true },
+  askForPhoto: { type: Boolean, default: false },
+}, { _id: false });
+
+const driveGoalConfigSchema = new Schema<DriveGoalConfig>({
+  targetType: { type: String, enum: ['website', 'WhatsApp', 'store', 'app'], default: 'website' },
+  targetLink: { type: String, trim: true },
+}, { _id: false });
 
 const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
   workspaceId: {
@@ -124,6 +169,28 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
   followupTemplate: {
     type: String,
     default: "Just checking in to see if you had any other questions before we close this chat. We're here to help!",
+  },
+
+  // Conversation goals
+  primaryGoal: {
+    type: String,
+    enum: ['none', 'capture_lead', 'book_appointment', 'start_order', 'handle_support', 'drive_to_channel'],
+    default: 'none',
+  },
+  secondaryGoal: {
+    type: String,
+    enum: ['none', 'capture_lead', 'book_appointment', 'start_order', 'handle_support', 'drive_to_channel'],
+    default: 'none',
+  },
+  goalConfigs: {
+    type: new Schema<GoalConfigurations>({
+      leadCapture: { type: leadCaptureConfigSchema, default: () => ({}) },
+      booking: { type: bookingGoalConfigSchema, default: () => ({}) },
+      order: { type: orderGoalConfigSchema, default: () => ({}) },
+      support: { type: supportGoalConfigSchema, default: () => ({}) },
+      drive: { type: driveGoalConfigSchema, default: () => ({}) },
+    }, { _id: false }),
+    default: undefined,
   },
 }, {
   timestamps: true,

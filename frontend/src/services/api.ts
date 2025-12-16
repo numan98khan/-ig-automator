@@ -114,6 +114,43 @@ export interface KnowledgeItem {
   createdAt: string;
 }
 
+export type GoalType =
+  | 'none'
+  | 'capture_lead'
+  | 'book_appointment'
+  | 'start_order'
+  | 'handle_support'
+  | 'drive_to_channel';
+
+export interface GoalConfigs {
+  leadCapture: {
+    collectName: boolean;
+    collectPhone: boolean;
+    collectEmail: boolean;
+    collectCustomNote: boolean;
+  };
+  booking: {
+    bookingLink?: string;
+    collectDate: boolean;
+    collectTime: boolean;
+    collectServiceType: boolean;
+  };
+  order: {
+    catalogUrl?: string;
+    collectProductName: boolean;
+    collectQuantity: boolean;
+    collectVariant: boolean;
+  };
+  support: {
+    askForOrderId: boolean;
+    askForPhoto: boolean;
+  };
+  drive: {
+    targetType: 'website' | 'WhatsApp' | 'store' | 'app';
+    targetLink?: string;
+  };
+}
+
 // Phase 2: Automation Types
 export interface WorkspaceSettings {
   _id: string;
@@ -135,6 +172,9 @@ export interface WorkspaceSettings {
   followupEnabled: boolean;
   followupHoursBeforeExpiry: number;
   followupTemplate: string;
+  primaryGoal?: GoalType;
+  secondaryGoal?: GoalType;
+  goalConfigs?: GoalConfigs;
   createdAt: string;
   updatedAt: string;
 }

@@ -17,11 +17,77 @@ import {
 } from './aiCategorization';
 import { generateAIReply } from './aiReplyService';
 import { getActiveTicket, createTicket, addTicketUpdate } from './escalationService';
+import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
+import LeadCapture from '../models/LeadCapture';
+import BookingRequest from '../models/BookingRequest';
+import OrderIntent from '../models/OrderIntent';
+import SupportTicketStub from '../models/SupportTicketStub';
+import ChannelDriveEvent from '../models/ChannelDriveEvent';
 
 const HUMAN_TYPING_PAUSE_MS = 3500; // Small pause to mimic human response timing
 
 function wait(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+const DEFAULT_GOAL_CONFIGS: GoalConfigurations = {
+  leadCapture: {
+    collectName: true,
+    collectPhone: true,
+    collectEmail: false,
+    collectCustomNote: false,
+  },
+  booking: {
+    bookingLink: '',
+    collectDate: true,
+    collectTime: true,
+    collectServiceType: false,
+  },
+  order: {
+    catalogUrl: '',
+    collectProductName: true,
+    collectQuantity: true,
+    collectVariant: false,
+  },
+  support: {
+    askForOrderId: true,
+    askForPhoto: false,
+  },
+  drive: {
+    targetType: 'website',
+    targetLink: '',
+  },
+};
+
+function getGoalConfigs(settings: any): GoalConfigurations {
+  return {
+    leadCapture: { ...DEFAULT_GOAL_CONFIGS.leadCapture, ...(settings?.goalConfigs?.leadCapture || {}) },
+    booking: { ...DEFAULT_GOAL_CONFIGS.booking, ...(settings?.goalConfigs?.booking || {}) },
+    order: { ...DEFAULT_GOAL_CONFIGS.order, ...(settings?.goalConfigs?.order || {}) },
+    support: { ...DEFAULT_GOAL_CONFIGS.support, ...(settings?.goalConfigs?.support || {}) },
+    drive: { ...DEFAULT_GOAL_CONFIGS.drive, ...(settings?.goalConfigs?.drive || {}) },
+  };
+}
+
+function detectGoalIntent(text: string): GoalType {
+  const lower = text.toLowerCase();
+
+  if (/(book|appointment|schedule|reserve|reservation)/.test(lower)) return 'book_appointment';
+  if (/(buy|price|order|purchase|checkout|cart|start order|place order)/.test(lower)) return 'start_order';
+  if (/(interested|contact me|reach out|quote|more info|call me|email me)/.test(lower)) return 'capture_lead';
+  if (/(late|broken|refund|problem|issue|support|help with order|cancel)/.test(lower)) return 'handle_support';
+  if (/(where are you|location|address|website|site|link|whatsapp|app|store)/.test(lower)) return 'drive_to_channel';
+  return 'none';
+}
+
+function goalMatchesWorkspace(goal: GoalType, primary?: GoalType, secondary?: GoalType): boolean {
+  if (!goal || goal === 'none') return false;
+  return goal === primary || goal === secondary;
+}
+
+function mergeGoalFields(existing: Record<string, any> = {}, incoming?: Record<string, any>): Record<string, any> {
+  if (!incoming) return existing;
+  return { ...existing, ...incoming };
 }
 
 /**
@@ -37,6 +103,88 @@ export async function getWorkspaceSettings(
   }
 
   return settings;
+}
+
+async function saveGoalOutcome(
+  goalType: GoalType,
+  conversation: any,
+  fields: Record<string, any>,
+  configs: GoalConfigurations,
+  summary?: string,
+  targetLink?: string,
+): Promise<void> {
+  if (goalType === 'capture_lead') {
+    const existing = await LeadCapture.findOne({ conversationId: conversation._id });
+    if (existing) return;
+
+    await LeadCapture.create({
+      workspaceId: conversation.workspaceId,
+      conversationId: conversation._id,
+      goalType,
+      participantName: conversation.participantName,
+      participantHandle: conversation.participantHandle,
+      name: fields.name || fields.fullName,
+      phone: fields.phone,
+      email: fields.email,
+      customNote: fields.customNote || fields.note,
+    });
+  }
+
+  if (goalType === 'book_appointment') {
+    const existing = await BookingRequest.findOne({ conversationId: conversation._id });
+    if (existing) return;
+
+    await BookingRequest.create({
+      workspaceId: conversation.workspaceId,
+      conversationId: conversation._id,
+      bookingLink: targetLink || configs.booking.bookingLink,
+      date: fields.date,
+      time: fields.time,
+      serviceType: fields.serviceType,
+      summary,
+    });
+  }
+
+  if (goalType === 'start_order') {
+    const existing = await OrderIntent.findOne({ conversationId: conversation._id });
+    if (existing) return;
+
+    await OrderIntent.create({
+      workspaceId: conversation.workspaceId,
+      conversationId: conversation._id,
+      catalogUrl: targetLink || configs.order.catalogUrl,
+      productName: fields.productName,
+      quantity: fields.quantity,
+      variant: fields.variant,
+      summary,
+    });
+  }
+
+  if (goalType === 'handle_support') {
+    const existing = await SupportTicketStub.findOne({ conversationId: conversation._id });
+    if (existing) return;
+
+    await SupportTicketStub.create({
+      workspaceId: conversation.workspaceId,
+      conversationId: conversation._id,
+      orderId: fields.orderId || fields.ticketId,
+      photoUrl: fields.photoUrl,
+      summary,
+    });
+  }
+
+  if (goalType === 'drive_to_channel') {
+    const existing = await ChannelDriveEvent.findOne({ conversationId: conversation._id });
+    if (existing) return;
+
+    await ChannelDriveEvent.create({
+      workspaceId: conversation.workspaceId,
+      conversationId: conversation._id,
+      targetType: configs.drive.targetType,
+      targetLink: targetLink || configs.drive.targetLink,
+      note: summary,
+    });
+  }
 }
 
 /**
@@ -204,6 +352,15 @@ export async function processAutoReply(
 
     // Get workspace settings
     const settings = await getWorkspaceSettings(workspaceId);
+    const goalConfigs = getGoalConfigs(settings);
+
+    const detectedGoal = detectGoalIntent(messageText || '');
+    const matchesWorkspaceGoal = goalMatchesWorkspace(detectedGoal, settings.primaryGoal, settings.secondaryGoal);
+
+    if (matchesWorkspaceGoal && (!conversation.activeGoalType || conversation.activeGoalType === detectedGoal)) {
+      conversation.activeGoalType = detectedGoal;
+      conversation.goalState = conversation.goalState || 'collecting';
+    }
 
     // Check if DM auto-reply is enabled
     if (!settings.dmAutoReplyEnabled) {
@@ -288,6 +445,17 @@ export async function processAutoReply(
       categoryId,
       categorization,
       historyLimit: 10,
+      goalContext: {
+        workspaceGoals: {
+          primaryGoal: settings.primaryGoal,
+          secondaryGoal: settings.secondaryGoal,
+          configs: goalConfigs,
+        },
+        detectedGoal: matchesWorkspaceGoal ? detectedGoal : 'none',
+        activeGoalType: conversation.activeGoalType,
+        goalState: conversation.goalState,
+        collectedFields: conversation.goalCollectedFields,
+      },
     });
 
     if (!aiReply) {
@@ -310,6 +478,29 @@ export async function processAutoReply(
       aiReply.replyText = appendPendingNote(aiReply.replyText);
     } else if (aiReply.shouldEscalate) {
       aiReply.replyText = buildInitialEscalationReply(aiReply.replyText);
+    }
+
+    const goalProgress = aiReply.goalProgress as GoalProgressState | undefined;
+    const goalType = (goalProgress?.goalType && goalProgress.goalType !== 'none'
+      ? goalProgress.goalType
+      : conversation.activeGoalType || (matchesWorkspaceGoal ? detectedGoal : undefined)) as GoalType | undefined;
+
+    if (goalType && goalType !== 'none') {
+      const mergedFields = mergeGoalFields(conversation.goalCollectedFields, goalProgress?.collectedFields);
+      conversation.goalCollectedFields = mergedFields;
+      conversation.goalState = goalProgress?.status || conversation.goalState || 'collecting';
+      conversation.goalSummary = goalProgress?.summary || conversation.goalSummary;
+      conversation.goalLastInteractionAt = new Date();
+      conversation.activeGoalType = goalType;
+
+      if (goalProgress?.status === 'completed' || goalProgress?.shouldCreateRecord) {
+        await saveGoalOutcome(goalType, conversation, mergedFields, goalConfigs, goalProgress?.summary, goalProgress?.targetLink);
+        conversation.goalState = 'completed';
+      }
+
+      if (conversation.markModified) {
+        conversation.markModified('goalCollectedFields');
+      }
     }
 
     // If AI wants escalation and no ticket exists, create one

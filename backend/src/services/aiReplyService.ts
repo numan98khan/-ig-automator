@@ -6,6 +6,7 @@ import KnowledgeItem from '../models/KnowledgeItem';
 import CategoryKnowledge from '../models/CategoryKnowledge';
 import MessageCategory from '../models/MessageCategory';
 import WorkspaceSettings from '../models/WorkspaceSettings';
+import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -16,6 +17,12 @@ export interface AIReplyResult {
   shouldEscalate: boolean;
   escalationReason?: string;
   tags?: string[];
+  goalProgress?: GoalProgressState & {
+    goalType?: GoalType;
+    collectedFields?: Record<string, any>;
+    shouldCreateRecord?: boolean;
+    targetLink?: string;
+  };
 }
 
 export interface AIReplyOptions {
@@ -25,6 +32,17 @@ export interface AIReplyOptions {
   categoryId?: mongoose.Types.ObjectId | string;
   categorization?: { categoryName?: string; detectedLanguage?: string; translatedText?: string };
   historyLimit?: number;
+  goalContext?: {
+    workspaceGoals?: {
+      primaryGoal?: GoalType;
+      secondaryGoal?: GoalType;
+      configs?: GoalConfigurations;
+    };
+    detectedGoal?: GoalType;
+    activeGoalType?: GoalType;
+    goalState?: 'idle' | 'collecting' | 'completed';
+    collectedFields?: Record<string, any>;
+  };
 }
 
 /**
@@ -62,6 +80,43 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
   const allowEmojis = workspaceSettings?.allowEmojis ?? true;
   const maxReplySentences = workspaceSettings?.maxReplySentences || 3;
   const replyLanguage = workspaceSettings?.defaultReplyLanguage || workspaceSettings?.defaultLanguage || categorization?.detectedLanguage || 'en';
+
+  const goalContext = options.goalContext || {};
+  const workspaceGoals = goalContext.workspaceGoals;
+  const detectedGoal = goalContext.detectedGoal || 'none';
+  const activeGoalType = goalContext.activeGoalType;
+  const goalState = goalContext.goalState || 'idle';
+  const collectedGoalFields = goalContext.collectedFields || {};
+
+  const describeGoalConfigs = (configs?: GoalConfigurations) => {
+    if (!configs) return 'No specific goal configuration provided.';
+
+    const leadFields = [
+      configs.leadCapture.collectName ? 'name' : null,
+      configs.leadCapture.collectPhone ? 'phone' : null,
+      configs.leadCapture.collectEmail ? 'email' : null,
+      configs.leadCapture.collectCustomNote ? 'custom note' : null,
+    ].filter(Boolean).join(', ');
+
+    const bookingFields = [
+      configs.booking.collectDate ? 'date' : null,
+      configs.booking.collectTime ? 'time' : null,
+      configs.booking.collectServiceType ? 'serviceType' : null,
+    ].filter(Boolean).join(', ');
+
+    const orderFields = [
+      configs.order.collectProductName ? 'productName' : null,
+      configs.order.collectQuantity ? 'quantity' : null,
+      configs.order.collectVariant ? 'variant' : null,
+    ].filter(Boolean).join(', ');
+
+    const supportFields = [
+      configs.support.askForOrderId ? 'orderId' : null,
+      configs.support.askForPhoto ? 'photo' : null,
+    ].filter(Boolean).join(', ');
+
+    return `Lead capture fields: ${leadFields || 'none'} | Booking link: ${configs.booking.bookingLink || 'n/a'}; fields: ${bookingFields || 'none'} | Order catalog: ${configs.order.catalogUrl || 'n/a'}; fields: ${orderFields || 'none'} | Support asks: ${supportFields || 'none'} | Drive target: ${configs.drive.targetType || 'website'} ${configs.drive.targetLink || ''}`;
+  };
 
   // Build knowledge context
   let knowledgeContext = '';
@@ -131,6 +186,22 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
         type: 'array',
         items: { type: 'string' },
       },
+      goalProgress: {
+        type: ['object', 'null'],
+        additionalProperties: false,
+        properties: {
+          goalType: {
+            type: 'string',
+            enum: ['none', 'capture_lead', 'book_appointment', 'start_order', 'handle_support', 'drive_to_channel'],
+          },
+          status: { type: 'string', enum: ['idle', 'collecting', 'completed'] },
+          collectedFields: { type: 'object', additionalProperties: true },
+          summary: { type: 'string' },
+          nextStep: { type: 'string' },
+          shouldCreateRecord: { type: 'boolean' },
+          targetLink: { type: 'string' },
+        },
+      },
     },
     required: ['replyText', 'shouldEscalate', 'escalationReason', 'tags'],
   };
@@ -182,6 +253,15 @@ Workspace rules:
 ${workspaceSettings?.escalationGuidelines ? `- Escalation guidelines: ${workspaceSettings.escalationGuidelines}` : ''}
 ${workspaceSettings?.escalationExamples?.length ? `- Escalation examples: ${workspaceSettings.escalationExamples.join(' | ')}` : ''}
 
+DM goals:
+- Primary goal: ${workspaceGoals?.primaryGoal || 'none'}
+- Secondary goal: ${workspaceGoals?.secondaryGoal || 'none'}
+- Detected intent for latest message: ${detectedGoal}
+- Active conversation goal: ${activeGoalType || 'none'} (state: ${goalState})
+- Collected goal fields so far: ${Object.keys(collectedGoalFields).length ? JSON.stringify(collectedGoalFields) : 'none'}
+- Goal config summary: ${describeGoalConfigs(workspaceGoals?.configs)}
+If a detected intent matches a workspace goal, answer their question then guide them through a short 2-4 question flow to collect the configured fields. Keep it concise and avoid repeating previous asks.
+
 KNOWLEDGE BASE:
 ${knowledgeContext || 'No specific knowledge provided. Use general business courtesy.'}
 
@@ -208,7 +288,8 @@ Generate a response following all rules above. Return JSON with:
 - replyText: your message to the customer
 - shouldEscalate: true if human review needed, false otherwise
 - escalationReason: brief reason if escalating (e.g., "Pricing negotiation requires approval", "Complex custom request"), or null
-- tags: semantic labels like ["pricing", "bulk_request", "urgent", "complaint"] to help categorize this interaction`;
+- tags: semantic labels like ["pricing", "bulk_request", "urgent", "complaint"] to help categorize this interaction
+- goalProgress: when working on a goal, include goalType, status ('collecting' or 'completed'), collectedFields (merge any newly inferred answers), summary, nextStep, and set shouldCreateRecord=true when the flow is complete. Include targetLink if sharing a booking or catalog link.`;
 
   let parsed: AIReplyResult | null = null;
 

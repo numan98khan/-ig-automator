@@ -4,6 +4,8 @@ import {
   settingsAPI,
   WorkspaceSettings,
   AutomationStats,
+  GoalType,
+  GoalConfigs,
 } from '../services/api';
 import {
   Settings,
@@ -35,6 +37,44 @@ const LANGUAGES = [
   { code: 'tr', name: 'Turkish' },
 ];
 
+const GOAL_OPTIONS: { value: GoalType; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'capture_lead', label: 'Capture lead' },
+  { value: 'book_appointment', label: 'Book appointment' },
+  { value: 'start_order', label: 'Start order' },
+  { value: 'handle_support', label: 'Handle support' },
+  { value: 'drive_to_channel', label: 'Drive to channel' },
+];
+
+const DEFAULT_GOAL_CONFIGS: GoalConfigs = {
+  leadCapture: {
+    collectName: true,
+    collectPhone: true,
+    collectEmail: false,
+    collectCustomNote: false,
+  },
+  booking: {
+    bookingLink: '',
+    collectDate: true,
+    collectTime: true,
+    collectServiceType: false,
+  },
+  order: {
+    catalogUrl: '',
+    collectProductName: true,
+    collectQuantity: true,
+    collectVariant: false,
+  },
+  support: {
+    askForOrderId: true,
+    askForPhoto: false,
+  },
+  drive: {
+    targetType: 'website',
+    targetLink: '',
+  },
+};
+
 export default function Automations() {
   const { currentWorkspace } = useAuth();
   const [, setSettings] = useState<WorkspaceSettings | null>(null);
@@ -62,6 +102,9 @@ export default function Automations() {
     followupEnabled: false,
     followupHoursBeforeExpiry: 2,
     followupTemplate: '',
+    primaryGoal: 'none' as GoalType,
+    secondaryGoal: 'none' as GoalType,
+    goalConfigs: DEFAULT_GOAL_CONFIGS,
   });
 
   useEffect(() => {
@@ -79,6 +122,13 @@ export default function Automations() {
 
     try {
       const data = await settingsAPI.getByWorkspace(currentWorkspace._id);
+      const mergedGoalConfigs: GoalConfigs = {
+        leadCapture: { ...DEFAULT_GOAL_CONFIGS.leadCapture, ...(data.goalConfigs?.leadCapture || {}) },
+        booking: { ...DEFAULT_GOAL_CONFIGS.booking, ...(data.goalConfigs?.booking || {}) },
+        order: { ...DEFAULT_GOAL_CONFIGS.order, ...(data.goalConfigs?.order || {}) },
+        support: { ...DEFAULT_GOAL_CONFIGS.support, ...(data.goalConfigs?.support || {}) },
+        drive: { ...DEFAULT_GOAL_CONFIGS.drive, ...(data.goalConfigs?.drive || {}) },
+      };
       setSettings(data);
       setFormData({
         defaultLanguage: data.defaultLanguage || 'en',
@@ -97,6 +147,9 @@ export default function Automations() {
         followupEnabled: data.followupEnabled || false,
         followupHoursBeforeExpiry: data.followupHoursBeforeExpiry || 2,
         followupTemplate: data.followupTemplate || '',
+        primaryGoal: data.primaryGoal || 'none',
+        secondaryGoal: data.secondaryGoal || 'none',
+        goalConfigs: mergedGoalConfigs,
       });
     } catch (err: any) {
       setError(err.message || 'Failed to load settings');
@@ -143,6 +196,9 @@ export default function Automations() {
         followupEnabled: formData.followupEnabled,
         followupHoursBeforeExpiry: formData.followupHoursBeforeExpiry,
         followupTemplate: formData.followupTemplate,
+        primaryGoal: formData.primaryGoal,
+        secondaryGoal: formData.secondaryGoal,
+        goalConfigs: formData.goalConfigs,
       });
       setSettings(updated);
       setSuccess('Settings saved successfully!');
@@ -159,6 +215,160 @@ export default function Automations() {
       ...prev,
       [field]: !prev[field],
     }));
+  };
+
+  const updateGoalConfig = <K extends keyof GoalConfigs>(key: K, value: Partial<GoalConfigs[K]>) => {
+    setFormData(prev => ({
+      ...prev,
+      goalConfigs: {
+        ...prev.goalConfigs,
+        [key]: {
+          ...prev.goalConfigs[key],
+          ...value,
+        },
+      },
+    }));
+  };
+
+  const renderGoalConfig = (goal: GoalType) => {
+    if (goal === 'capture_lead') {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+          {[
+            { key: 'collectName', label: 'Ask for name' },
+            { key: 'collectPhone', label: 'Ask for phone number' },
+            { key: 'collectEmail', label: 'Ask for email' },
+            { key: 'collectCustomNote', label: 'Ask for extra notes' },
+          ].map(option => (
+            <label key={option.key} className="flex items-center gap-2 text-sm md:text-base">
+              <input
+                type="checkbox"
+                checked={(formData.goalConfigs.leadCapture as any)[option.key]}
+                onChange={(e) => updateGoalConfig('leadCapture', { [option.key]: e.target.checked } as any)}
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+      );
+    }
+
+    if (goal === 'book_appointment') {
+      return (
+        <div className="space-y-3 mt-3">
+          <div>
+            <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Booking link (optional)</label>
+            <input
+              type="text"
+              value={formData.goalConfigs.booking.bookingLink || ''}
+              onChange={(e) => updateGoalConfig('booking', { bookingLink: e.target.value })}
+              className="w-full px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="https://..."
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {[
+              { key: 'collectDate', label: 'Ask for date' },
+              { key: 'collectTime', label: 'Ask for time' },
+              { key: 'collectServiceType', label: 'Ask for service type' },
+            ].map(option => (
+              <label key={option.key} className="flex items-center gap-2 text-sm md:text-base">
+                <input
+                  type="checkbox"
+                  checked={(formData.goalConfigs.booking as any)[option.key]}
+                  onChange={(e) => updateGoalConfig('booking', { [option.key]: e.target.checked } as any)}
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (goal === 'start_order') {
+      return (
+        <div className="space-y-3 mt-3">
+          <div>
+            <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Catalog / checkout URL</label>
+            <input
+              type="text"
+              value={formData.goalConfigs.order.catalogUrl || ''}
+              onChange={(e) => updateGoalConfig('order', { catalogUrl: e.target.value })}
+              className="w-full px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="https://..."
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {[
+              { key: 'collectProductName', label: 'Ask for product name' },
+              { key: 'collectQuantity', label: 'Ask for quantity' },
+              { key: 'collectVariant', label: 'Ask for size/color' },
+            ].map(option => (
+              <label key={option.key} className="flex items-center gap-2 text-sm md:text-base">
+                <input
+                  type="checkbox"
+                  checked={(formData.goalConfigs.order as any)[option.key]}
+                  onChange={(e) => updateGoalConfig('order', { [option.key]: e.target.checked } as any)}
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (goal === 'handle_support') {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+          {[
+            { key: 'askForOrderId', label: 'Ask for order ID' },
+            { key: 'askForPhoto', label: 'Ask for photo' },
+          ].map(option => (
+            <label key={option.key} className="flex items-center gap-2 text-sm md:text-base">
+              <input
+                type="checkbox"
+                checked={(formData.goalConfigs.support as any)[option.key]}
+                onChange={(e) => updateGoalConfig('support', { [option.key]: e.target.checked } as any)}
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+      );
+    }
+
+    if (goal === 'drive_to_channel') {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+          <div>
+            <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Target channel</label>
+            <select
+              value={formData.goalConfigs.drive.targetType}
+              onChange={(e) => updateGoalConfig('drive', { targetType: e.target.value as GoalConfigs['drive']['targetType'] })}
+              className="w-full px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              {['website', 'WhatsApp', 'store', 'app'].map(option => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Target link / address</label>
+            <input
+              type="text"
+              value={formData.goalConfigs.drive.targetLink || ''}
+              onChange={(e) => updateGoalConfig('drive', { targetLink: e.target.value })}
+              className="w-full px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="https://..."
+            />
+          </div>
+        </div>
+      );
+    }
+
+    return null;
   };
 
   if (loading) {
@@ -219,6 +429,56 @@ export default function Automations() {
       )}
 
       <div className="space-y-4 md:space-y-6">
+        {/* Conversation Goals */}
+        <div className="bg-white rounded-lg border p-4 md:p-6">
+          <div className="flex items-center gap-2 mb-3 md:mb-4">
+            <MessageSquare className="w-4 h-4 md:w-5 md:h-5 text-blue-500" />
+            <h2 className="text-base md:text-lg font-semibold">Conversation Goals</h2>
+          </div>
+          <p className="text-sm text-gray-600 mb-3">Pick the main objectives for DM conversations and the fields you want the AI to collect.</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+            <div>
+              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Primary DM Goal</label>
+              <select
+                value={formData.primaryGoal}
+                onChange={(e) => setFormData(prev => ({ ...prev, primaryGoal: e.target.value as GoalType }))}
+                className="w-full px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {GOAL_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1">Secondary DM Goal (optional)</label>
+              <select
+                value={formData.secondaryGoal}
+                onChange={(e) => setFormData(prev => ({ ...prev, secondaryGoal: e.target.value as GoalType }))}
+                className="w-full px-3 py-2 text-sm md:text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {GOAL_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {formData.primaryGoal !== 'none' && (
+            <div className="mt-4">
+              <div className="text-sm font-medium text-gray-800">Primary goal configuration</div>
+              {renderGoalConfig(formData.primaryGoal)}
+            </div>
+          )}
+
+          {formData.secondaryGoal !== 'none' && (
+            <div className="mt-4 border-t pt-4">
+              <div className="text-sm font-medium text-gray-800">Secondary goal configuration</div>
+              {renderGoalConfig(formData.secondaryGoal)}
+            </div>
+          )}
+        </div>
+
         {/* Language Settings */}
         <div className="bg-white rounded-lg border p-4 md:p-6">
           <div className="flex items-center gap-2 mb-3 md:mb-4">
