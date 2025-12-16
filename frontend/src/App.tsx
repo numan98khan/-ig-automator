@@ -13,6 +13,7 @@ import VerifyEmail from './pages/VerifyEmail';
 import AcceptInvite from './pages/AcceptInvite';
 import RequestPasswordReset from './pages/RequestPasswordReset';
 import ResetPassword from './pages/ResetPassword';
+import Sandbox from './pages/Sandbox';
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
             {/* <Route index element={<Navigate to="/categories" replace />} /> */}
             <Route path="inbox" element={<Inbox />} />
             <Route path="knowledge" element={<Knowledge />} />
+            <Route path="sandbox" element={<Sandbox />} />
             <Route path="settings" element={<Settings />} />
             <Route path="categories" element={<Categories />} />
             <Route path="escalations" element={<Escalations />} />
