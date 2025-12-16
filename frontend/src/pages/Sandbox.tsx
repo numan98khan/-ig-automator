@@ -14,17 +14,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
-import {
-  Plus,
-  Play,
-  Save,
-  Trash2,
-  TestTube,
-  MessageSquare,
-  Clock,
-  ChevronDown,
-  ChevronRight,
-} from 'lucide-react';
+import { Plus, Play, Save, Trash2, TestTube, MessageSquare, Clock, ChevronDown, ChevronRight } from 'lucide-react';
 
 function snapshotSettings(settings?: WorkspaceSettings | null): Partial<WorkspaceSettings> {
   if (!settings) return {};
@@ -67,9 +57,9 @@ export default function Sandbox() {
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings | null>(null);
   const [runHistory, setRunHistory] = useState<SandboxRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null);
-  const [inspectorTab, setInspectorTab] = useState<'details' | 'config'>('details');
   const [showHistory, setShowHistory] = useState(false);
+  const [viewingHistory, setViewingHistory] = useState(false);
+  const [openDetailIndex, setOpenDetailIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,8 +112,8 @@ export default function Sandbox() {
     setRunSteps([]);
     setRunHistory([]);
     setActiveRunId(null);
-    setSelectedStepIndex(null);
-    setInspectorTab('details');
+    setOpenDetailIndex(null);
+    setViewingHistory(false);
     setRunConfig(snapshotSettings(workspaceSettings));
   };
 
@@ -137,8 +127,8 @@ export default function Sandbox() {
     setRunSteps([]);
     setRunHistory([]);
     setActiveRunId(null);
-    setSelectedStepIndex(null);
-    setInspectorTab('details');
+    setOpenDetailIndex(null);
+    setViewingHistory(false);
     setRunConfig(snapshotSettings(workspaceSettings));
     loadRunsForScenario(scenario._id);
   };
@@ -223,8 +213,8 @@ export default function Sandbox() {
     setRunning(true);
     setError(null);
     setSuccess(null);
-    setSelectedStepIndex(null);
-    setInspectorTab('details');
+    setOpenDetailIndex(null);
+    setViewingHistory(false);
     setRunSteps(messages.map((msg) => ({ customerText: msg.text, aiReplyText: '' })));
 
     try {
@@ -240,7 +230,8 @@ export default function Sandbox() {
       setRunSteps(newRun.steps);
       setRunConfig(newRun.settingsSnapshot || runConfig);
       setActiveRunId(newRun._id);
-      setSelectedStepIndex(newRun.steps.length ? 0 : null);
+      setOpenDetailIndex(null);
+      setViewingHistory(true);
       setRunHistory((prev) => [newRun, ...prev]);
       setSuccess('Simulation complete');
     } catch (err: any) {
@@ -255,12 +246,9 @@ export default function Sandbox() {
     setActiveRunId(run._id);
     setRunSteps(run.steps || []);
     setRunConfig(run.settingsSnapshot || snapshotSettings(workspaceSettings));
-    setSelectedStepIndex(run.steps?.length ? 0 : null);
-    setInspectorTab('details');
+    setOpenDetailIndex(null);
+    setViewingHistory(true);
   };
-
-  const selectedStep =
-    selectedStepIndex !== null && runSteps[selectedStepIndex] ? runSteps[selectedStepIndex] : null;
 
   return (
     <div className="p-4 md:p-6 h-[calc(100vh-88px)]">
@@ -286,8 +274,9 @@ export default function Sandbox() {
               size="sm"
               onClick={resetForm}
               leftIcon={<Plus className="w-4 h-4" />}
+              title="New scenario"
             >
-              New
+              <span className="sr-only">New Scenario</span>
             </Button>
           </div>
 
@@ -399,22 +388,27 @@ export default function Sandbox() {
                   <Badge variant="secondary">
                     Goal: {effectiveConfig.primaryGoal || 'none'}
                   </Badge>
-                  {currentWorkspace && (
-                    <Badge variant="neutral">Workspace: {currentWorkspace.name}</Badge>
-                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button onClick={saveScenario} disabled={loading} leftIcon={<Save className="w-4 h-4" />}>
-                  {selectedScenario ? 'Save Scenario' : 'Create Scenario'}
+                <Button
+                  onClick={saveScenario}
+                  disabled={loading}
+                  leftIcon={<Save className="w-4 h-4" />}
+                  title={selectedScenario ? 'Save Scenario' : 'Create Scenario'}
+                >
+                  <span className="sr-only">{selectedScenario ? 'Save Scenario' : 'Create Scenario'}</span>
                 </Button>
                 <Button
                   variant="primary"
                   onClick={runScenario}
                   disabled={running || !selectedScenarioId}
                   leftIcon={<Play className="w-4 h-4" />}
+                  title={running ? 'Running simulation' : activeRunId ? 'Re-run Simulation' : 'Run Simulation'}
                 >
-                  {running ? 'Running...' : activeRunId ? 'Re-run Simulation' : 'Run Simulation'}
+                  <span className="sr-only">
+                    {running ? 'Running simulation' : activeRunId ? 'Re-run Simulation' : 'Run Simulation'}
+                  </span>
                 </Button>
               </div>
             </div>
@@ -441,11 +435,12 @@ export default function Sandbox() {
             {messages.map((msg, index) => {
               const meta = runSteps[index]?.meta;
               const hasReply = Boolean(runSteps[index]?.aiReplyText);
+              const detailsOpen = openDetailIndex === index;
               return (
                 <div key={index} className="p-3 border border-border rounded-lg space-y-3 bg-muted/30">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>Step {index + 1} – Customer</span>
-                    {messages.length > 1 && (
+                    {messages.length > 1 && !viewingHistory && (
                       <button
                         className="text-destructive hover:underline"
                         onClick={() => handleRemoveMessage(index)}
@@ -461,40 +456,67 @@ export default function Sandbox() {
                     onChange={(e) => handleMessageChange(index, e.target.value)}
                     placeholder="Customer says..."
                   />
-                  <div className="rounded-md bg-background border border-dashed border-border p-3 space-y-2">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">AI Reply</span>
-                      {running && <span>Simulating…</span>}
-                    </div>
-                    {hasReply ? (
-                      <div
-                        className={`p-3 rounded-md border cursor-pointer ${
-                          selectedStepIndex === index ? 'border-primary bg-primary/5' : 'border-border'
+                <div className="rounded-md bg-background border border-dashed border-border p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">AI Reply</span>
+                    {running && <span>Simulating…</span>}
+                  </div>
+                  {hasReply ? (
+                    <div
+                        className={`p-3 rounded-md border ${
+                          detailsOpen ? 'border-primary bg-primary/5' : 'border-border bg-muted/20'
                         }`}
-                        onClick={() => {
-                          setSelectedStepIndex(index);
-                          setInspectorTab('details');
-                        }}
-                      >
-                        <p className="text-sm whitespace-pre-wrap">{runSteps[index].aiReplyText}</p>
-                        {meta && (
-                          <div className="flex flex-wrap gap-2 mt-2 text-[11px] text-muted-foreground">
-                            {meta.detectedLanguage && (
-                              <Badge variant="secondary">Lang: {meta.detectedLanguage}</Badge>
+                        onClick={() => setOpenDetailIndex(detailsOpen ? null : index)}
+                    >
+                      <p className="text-sm whitespace-pre-wrap">{runSteps[index].aiReplyText}</p>
+                      {meta && (
+                        <div className="flex flex-wrap gap-2 mt-2 text-[11px] text-muted-foreground">
+                          {meta.detectedLanguage && (
+                            <Badge variant="secondary">Lang: {meta.detectedLanguage}</Badge>
+                          )}
+                          {meta.categoryName && <Badge variant="secondary">{meta.categoryName}</Badge>}
+                          {meta.goalMatched && meta.goalMatched !== 'none' && (
+                            <Badge variant="secondary">Goal: {meta.goalMatched}</Badge>
+                          )}
+                          <Badge variant="secondary">
+                            Escalate: {meta.shouldEscalate ? 'Yes' : 'No'}
+                          </Badge>
+                          <Badge variant="secondary">Details</Badge>
+                        </div>
+                      )}
+                        {detailsOpen && meta && (
+                          <div className="mt-3 space-y-2 text-xs text-foreground">
+                            {meta.tags && meta.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {meta.tags.map((tag) => (
+                                  <Badge key={tag} variant="secondary">
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
                             )}
-                            {meta.categoryName && <Badge variant="secondary">{meta.categoryName}</Badge>}
-                            {meta.goalMatched && meta.goalMatched !== 'none' && (
-                              <Badge variant="secondary">Goal: {meta.goalMatched}</Badge>
+                            {(meta.escalationReason || meta.goalMatched || meta.categoryName) && (
+                              <div className="space-y-1 text-muted-foreground">
+                                {meta.escalationReason && <p>Reason: {meta.escalationReason}</p>}
+                                {meta.goalMatched && meta.goalMatched !== 'none' && <p>Goal: {meta.goalMatched}</p>}
+                                {meta.categoryName && <p>Category: {meta.categoryName}</p>}
+                              </div>
                             )}
-                            <Badge variant="secondary">
-                              Escalate: {meta.shouldEscalate ? 'Yes' : 'No'}
-                            </Badge>
+                            {meta.knowledgeItemsUsed && meta.knowledgeItemsUsed.length > 0 && (
+                              <div className="space-y-1">
+                                <p className="text-muted-foreground">Knowledge used</p>
+                                <ul className="list-disc list-inside space-y-1">
+                                  {meta.knowledgeItemsUsed.map((item) => (
+                                    <li key={item.id}>{item.title}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                           </div>
                         )}
-                        <p className="text-[11px] text-primary mt-1">Click for details</p>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Run a simulation to see the reply.</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Run a simulation to see the reply.</p>
                     )}
                   </div>
                 </div>
@@ -503,190 +525,103 @@ export default function Sandbox() {
           </div>
         </Card>
 
-        {/* Right inspector */}
+        {/* Right configuration panel */}
         <Card className="h-full flex flex-col overflow-hidden">
-          <div className="border-b flex items-center gap-2 p-3 text-sm font-medium">
-            <button
-              className={`px-3 py-2 rounded-md ${
-                inspectorTab === 'details' ? 'bg-muted text-foreground' : 'text-muted-foreground'
-              }`}
-              onClick={() => setInspectorTab('details')}
-            >
-              Run Details
-            </button>
-            <button
-              className={`px-3 py-2 rounded-md ${
-                inspectorTab === 'config' ? 'bg-muted text-foreground' : 'text-muted-foreground'
-              }`}
-              onClick={() => setInspectorTab('config')}
-            >
-              Config
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
-            {inspectorTab === 'details' && (
-              <div className="space-y-3">
-                {!selectedStep && <p className="text-muted-foreground">Select an AI reply to inspect details.</p>}
-                {selectedStep && (
-                  <>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Customer</p>
-                      <p className="font-medium whitespace-pre-wrap">{selectedStep.customerText}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">AI Reply</p>
-                      <p className="whitespace-pre-wrap">{selectedStep.aiReplyText}</p>
-                    </div>
-                    {selectedStep.meta && (
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap gap-2">
-                          {selectedStep.meta.detectedLanguage && (
-                            <Badge variant="secondary">Lang: {selectedStep.meta.detectedLanguage}</Badge>
-                          )}
-                          {selectedStep.meta.categoryName && (
-                            <Badge variant="secondary">{selectedStep.meta.categoryName}</Badge>
-                          )}
-                          {selectedStep.meta.goalMatched && selectedStep.meta.goalMatched !== 'none' && (
-                            <Badge variant="secondary">Goal: {selectedStep.meta.goalMatched}</Badge>
-                          )}
-                          <Badge variant="secondary">
-                            Escalate: {selectedStep.meta.shouldEscalate ? 'Yes' : 'No'}
-                          </Badge>
-                        </div>
-                        {selectedStep.meta.escalationReason && (
-                          <p className="text-muted-foreground text-xs">
-                            Escalation reason: {selectedStep.meta.escalationReason}
-                          </p>
-                        )}
-                        {selectedStep.meta.tags && selectedStep.meta.tags.length > 0 && (
-                          <div>
-                            <p className="text-xs text-muted-foreground">Tags</p>
-                            <div className="flex flex-wrap gap-1">
-                              {selectedStep.meta.tags.map((tag) => (
-                                <Badge key={tag} variant="secondary">
-                                  {tag}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {selectedStep.meta.knowledgeItemsUsed &&
-                          selectedStep.meta.knowledgeItemsUsed.length > 0 && (
-                            <div>
-                              <p className="text-xs text-muted-foreground">Knowledge used</p>
-                              <ul className="list-disc list-inside text-xs text-foreground space-y-1">
-                                {selectedStep.meta.knowledgeItemsUsed.map((item) => (
-                                  <li key={item.id}>{item.title}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                      </div>
-                    )}
-                  </>
-                )}
+          <div className="border-b p-3 text-sm font-medium">Run Configuration</div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Decision mode</p>
+              <select
+                className="w-full border rounded-md p-2 bg-background"
+                value={runConfig.decisionMode || ''}
+                onChange={(e) => setRunConfig((prev) => ({ ...prev, decisionMode: e.target.value as any }))}
+              >
+                <option value="">Use workspace default</option>
+                <option value="full_auto">Full auto</option>
+                <option value="assist">Assist</option>
+                <option value="info_only">Info only</option>
+              </select>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Reply language</p>
+              <Input
+                value={runConfig.defaultReplyLanguage || ''}
+                onChange={(e) => setRunConfig((prev) => ({ ...prev, defaultReplyLanguage: e.target.value }))}
+                placeholder="e.g. en"
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Primary goal</p>
+                <select
+                  className="w-full border rounded-md p-2 bg-background"
+                  value={runConfig.primaryGoal || ''}
+                  onChange={(e) =>
+                    setRunConfig((prev) => ({ ...prev, primaryGoal: (e.target.value as GoalType) || undefined }))
+                  }
+                >
+                  <option value="">Use workspace default</option>
+                  <option value="none">None</option>
+                  <option value="capture_lead">Capture lead</option>
+                  <option value="book_appointment">Book appointment</option>
+                  <option value="start_order">Start order</option>
+                  <option value="handle_support">Handle support</option>
+                  <option value="drive_to_channel">Drive to channel</option>
+                </select>
               </div>
-            )}
-
-            {inspectorTab === 'config' && (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Decision mode</p>
-                  <select
-                    className="w-full border rounded-md p-2 bg-background"
-                    value={runConfig.decisionMode || ''}
-                    onChange={(e) => setRunConfig((prev) => ({ ...prev, decisionMode: e.target.value as any }))}
-                  >
-                    <option value="">Use workspace default</option>
-                    <option value="full_auto">Full auto</option>
-                    <option value="assist">Assist</option>
-                    <option value="info_only">Info only</option>
-                  </select>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Reply language</p>
-                  <Input
-                    value={runConfig.defaultReplyLanguage || ''}
-                    onChange={(e) =>
-                      setRunConfig((prev) => ({ ...prev, defaultReplyLanguage: e.target.value }))
-                    }
-                    placeholder="e.g. en"
-                  />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Primary goal</p>
-                    <select
-                      className="w-full border rounded-md p-2 bg-background"
-                      value={runConfig.primaryGoal || ''}
-                      onChange={(e) =>
-                        setRunConfig((prev) => ({ ...prev, primaryGoal: (e.target.value as GoalType) || undefined }))
-                      }
-                    >
-                      <option value="">Use workspace default</option>
-                      <option value="none">None</option>
-                      <option value="capture_lead">Capture lead</option>
-                      <option value="book_appointment">Book appointment</option>
-                      <option value="start_order">Start order</option>
-                      <option value="handle_support">Handle support</option>
-                      <option value="drive_to_channel">Drive to channel</option>
-                    </select>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Secondary goal</p>
-                    <select
-                      className="w-full border rounded-md p-2 bg-background"
-                      value={runConfig.secondaryGoal || ''}
-                      onChange={(e) =>
-                        setRunConfig((prev) => ({ ...prev, secondaryGoal: (e.target.value as GoalType) || undefined }))
-                      }
-                    >
-                      <option value="">Use workspace default</option>
-                      <option value="none">None</option>
-                      <option value="capture_lead">Capture lead</option>
-                      <option value="book_appointment">Book appointment</option>
-                      <option value="start_order">Start order</option>
-                      <option value="handle_support">Handle support</option>
-                      <option value="drive_to_channel">Drive to channel</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Max reply sentences</p>
-                  <Input
-                    type="number"
-                    value={runConfig.maxReplySentences ?? ''}
-                    onChange={(e) =>
-                      setRunConfig((prev) => ({
-                        ...prev,
-                        maxReplySentences: e.target.value === '' ? undefined : Number(e.target.value),
-                      }))
-                    }
-                    placeholder="Use workspace default"
-                  />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Human escalation behavior</p>
-                  <select
-                    className="w-full border rounded-md p-2 bg-background"
-                    value={runConfig.humanEscalationBehavior || ''}
-                    onChange={(e) =>
-                      setRunConfig((prev) => ({
-                        ...prev,
-                        humanEscalationBehavior: (e.target.value as any) || undefined,
-                      }))
-                    }
-                  >
-                    <option value="">Use workspace default</option>
-                    <option value="ai_silent">AI silent</option>
-                    <option value="ai_allowed">AI allowed</option>
-                  </select>
-                </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Secondary goal</p>
+                <select
+                  className="w-full border rounded-md p-2 bg-background"
+                  value={runConfig.secondaryGoal || ''}
+                  onChange={(e) =>
+                    setRunConfig((prev) => ({ ...prev, secondaryGoal: (e.target.value as GoalType) || undefined }))
+                  }
+                >
+                  <option value="">Use workspace default</option>
+                  <option value="none">None</option>
+                  <option value="capture_lead">Capture lead</option>
+                  <option value="book_appointment">Book appointment</option>
+                  <option value="start_order">Start order</option>
+                  <option value="handle_support">Handle support</option>
+                  <option value="drive_to_channel">Drive to channel</option>
+                </select>
               </div>
-            )}
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Max reply sentences</p>
+              <Input
+                type="number"
+                value={runConfig.maxReplySentences ?? ''}
+                onChange={(e) =>
+                  setRunConfig((prev) => ({
+                    ...prev,
+                    maxReplySentences: e.target.value === '' ? undefined : Number(e.target.value),
+                  }))
+                }
+                placeholder="Use workspace default"
+              />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Human escalation behavior</p>
+              <select
+                className="w-full border rounded-md p-2 bg-background"
+                value={runConfig.humanEscalationBehavior || ''}
+                onChange={(e) =>
+                  setRunConfig((prev) => ({
+                    ...prev,
+                    humanEscalationBehavior: (e.target.value as any) || undefined,
+                  }))
+                }
+              >
+                <option value="">Use workspace default</option>
+                <option value="ai_silent">AI silent</option>
+                <option value="ai_allowed">AI allowed</option>
+              </select>
+            </div>
           </div>
         </Card>
+
       </div>
     </div>
   );
