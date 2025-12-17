@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useAccountContext } from '../context/AccountContext';
 import {
   conversationAPI,
   messageAPI,
@@ -36,6 +37,7 @@ import { ImageAttachment, VideoAttachment, VoiceAttachment, LinkPreviewComponent
 
 const Inbox: React.FC = () => {
   const { currentWorkspace } = useAuth();
+  const { activeAccount, accounts: accountContextList } = useAccountContext();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -124,7 +126,7 @@ const Inbox: React.FC = () => {
     if (currentWorkspace) {
       loadData();
     }
-  }, [currentWorkspace]);
+  }, [currentWorkspace, activeAccount]);
 
   useEffect(() => {
     if (!currentWorkspace) return;
@@ -135,7 +137,7 @@ const Inbox: React.FC = () => {
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [currentWorkspace, selectedConversation]);
+  }, [currentWorkspace, selectedConversation, activeAccount]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -155,7 +157,7 @@ const Inbox: React.FC = () => {
         loadData();
       }
     }
-  }, [currentWorkspace]);
+  }, [currentWorkspace, activeAccount]);
 
   useEffect(() => {
     const updateContextPreference = () => {
@@ -177,26 +179,43 @@ const Inbox: React.FC = () => {
         categoriesAPI.getByWorkspace(currentWorkspace._id),
       ]);
 
-      setInstagramAccounts(accountsData || []);
+      setInstagramAccounts(accountsData || accountContextList || []);
       setCategories(categoriesData || []);
 
-      const connectedAccount = accountsData?.find(acc => acc.status === 'connected');
-      if (connectedAccount && (!conversationsData || conversationsData.length === 0)) {
+      if (!activeAccount) {
+        setConversations([]);
+        setSelectedConversation(null);
+        return;
+      }
+
+      const scopedConversations = (conversationsData || []).filter(
+        (conv) => conv.instagramAccountId === activeAccount._id,
+      );
+
+      const connectedAccount = accountsData?.find((acc) => acc._id === activeAccount._id && acc.status === 'connected');
+      if (connectedAccount && scopedConversations.length === 0) {
         try {
           await instagramSyncAPI.syncMessages(currentWorkspace._id);
           const updatedConversations = await conversationAPI.getByWorkspace(currentWorkspace._id);
-          setConversations(updatedConversations || []);
-          if (updatedConversations && updatedConversations.length > 0 && !selectedConversation) {
-            setSelectedConversation(updatedConversations[0]);
+          const filteredUpdated = (updatedConversations || []).filter(
+            (conv) => conv.instagramAccountId === activeAccount._id,
+          );
+          setConversations(filteredUpdated || []);
+          if (filteredUpdated && filteredUpdated.length > 0 && !selectedConversation) {
+            setSelectedConversation(filteredUpdated[0]);
+          } else if (filteredUpdated.length === 0) {
+            setSelectedConversation(null);
           }
         } catch (syncError) {
           console.error('❌ Error syncing Instagram messages:', syncError);
-          setConversations(conversationsData || []);
+          setConversations(scopedConversations || []);
         }
       } else {
-        setConversations(conversationsData || []);
-        if (conversationsData && conversationsData.length > 0 && !selectedConversation) {
-          setSelectedConversation(conversationsData[0]);
+        setConversations(scopedConversations || []);
+        if (scopedConversations && scopedConversations.length > 0 && !selectedConversation) {
+          setSelectedConversation(scopedConversations[0]);
+        } else if (scopedConversations.length === 0) {
+          setSelectedConversation(null);
         }
       }
     } catch (error) {
@@ -207,10 +226,16 @@ const Inbox: React.FC = () => {
   };
 
   const loadConversations = async () => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace || !activeAccount) return;
     try {
       const conversationsData = await conversationAPI.getByWorkspace(currentWorkspace._id);
-      setConversations(conversationsData || []);
+      const scopedConversations = (conversationsData || []).filter(
+        (conv) => conv.instagramAccountId === activeAccount._id,
+      );
+      setConversations(scopedConversations || []);
+      if (selectedConversation && selectedConversation.instagramAccountId !== activeAccount._id) {
+        setSelectedConversation(null);
+      }
     } catch (error) {
       console.error('Error loading conversations:', error);
     }

@@ -15,6 +15,11 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Workspace name is required' });
     }
 
+    const existing = await Workspace.findOne({ userId: req.userId });
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+
     const workspace = await Workspace.create({
       name,
       userId: req.userId,

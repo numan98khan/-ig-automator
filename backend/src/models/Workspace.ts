@@ -23,4 +23,6 @@ const workspaceSchema = new Schema<IWorkspace>({
   },
 });
 
+workspaceSchema.index({ userId: 1 }, { unique: true });
+
 export default mongoose.model<IWorkspace>('Workspace', workspaceSchema);

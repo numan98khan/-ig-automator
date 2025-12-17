@@ -16,6 +16,7 @@ import ResetPassword from './pages/ResetPassword';
 import Sandbox from './pages/Sandbox';
 import Dashboard from './pages/Dashboard';
 import Team from './pages/Team';
+import { AccountProvider } from './context/AccountContext';
 
 function App() {
   return (
@@ -32,7 +33,9 @@ function App() {
             path="/"
             element={
               <PrivateRoute requireWorkspace requireInstagram>
-                <Layout />
+                <AccountProvider>
+                  <Layout />
+                </AccountProvider>
               </PrivateRoute>
             }
           >

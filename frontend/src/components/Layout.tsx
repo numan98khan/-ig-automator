@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { instagramAPI, InstagramAccount, Workspace } from '../services/api';
 import {
   Instagram,
   MessageSquare,
@@ -18,22 +17,30 @@ import {
   Search,
   Users,
   Sparkles,
+  Plus,
+  Check,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
 import GlobalSearchModal from './GlobalSearchModal';
+import { useAccountContext } from '../context/AccountContext';
+import useOverlayClose from '../hooks/useOverlayClose';
 
 const Layout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, currentWorkspace, workspaces, setCurrentWorkspace, logout } = useAuth();
+  const { user, currentWorkspace, logout } = useAuth();
+  const { accounts, activeAccount, setActiveAccount, refreshAccounts } = useAccountContext();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [accounts, setAccounts] = useState<InstagramAccount[]>([]);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const accountMenuRef = useOverlayClose({ isOpen: accountMenuOpen, onClose: () => setAccountMenuOpen(false) });
+  const aiMenuRef = useOverlayClose({ isOpen: aiMenuOpen, onClose: () => setAiMenuOpen(false) });
+  const createMenuRef = useOverlayClose({ isOpen: createMenuOpen, onClose: () => setCreateMenuOpen(false) });
+  const userMenuRef = useOverlayClose({ isOpen: showUserMenu, onClose: () => setShowUserMenu(false) });
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
 
@@ -52,36 +59,21 @@ const Layout: React.FC = () => {
   ]), [location.pathname]);
 
   const aiMenuActive = aiLinks.some((link) => isActive(link.to));
-  const primaryAccount = useMemo(() => accounts.find((acc) => acc.status === 'connected') || accounts[0], [accounts]);
   const connectedAccountLabel = useMemo(() => {
-    if (!primaryAccount) return null;
+    if (!activeAccount) return null;
     const suffix = accounts.length > 1 ? ` +${accounts.length - 1}` : '';
-    const username = primaryAccount.username ? `@${primaryAccount.username}` : 'Connected IG';
+    const username = activeAccount.username ? `@${activeAccount.username}` : 'Connected IG';
     return `${username}${suffix}`;
-  }, [accounts.length, primaryAccount]);
+  }, [accounts, activeAccount]);
 
   const handleLogout = () => {
     logout();
     window.location.href = '/login';
   };
 
-  const handleWorkspaceSelect = (workspace: Workspace) => {
-    setCurrentWorkspace(workspace);
-    setWorkspaceMenuOpen(false);
-    navigate('/dashboard');
-  };
-
   useEffect(() => {
-    if (!currentWorkspace) {
-      setAccounts([]);
-      return;
-    }
-
-    instagramAPI
-      .getByWorkspace(currentWorkspace._id)
-      .then((data) => setAccounts(data || []))
-      .catch((error) => console.error('Failed to load Instagram accounts', error));
-  }, [currentWorkspace]);
+    refreshAccounts();
+  }, [refreshAccounts]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -108,42 +100,53 @@ const Layout: React.FC = () => {
       <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0 h-14">
         <div className="relative mx-auto max-w-7xl px-4 md:px-6 h-full flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}
-              className="flex items-center gap-3 px-3 py-2 rounded-xl border border-border bg-card hover:border-primary/50 transition shadow-sm"
-            >
-              <div className="p-2 bg-primary text-primary-foreground rounded-lg shadow-sm">
-                <Instagram className="w-5 h-5" />
-              </div>
-              <div className="text-left">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground font-semibold">Workspace</p>
-                <p className="text-sm font-semibold truncate">{currentWorkspace?.name || 'Select workspace'}</p>
-              </div>
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            </button>
+            <div className="relative" ref={accountMenuRef}>
+              <button
+                onClick={() => setAccountMenuOpen(!accountMenuOpen)}
+                className="flex items-center gap-3 px-3 py-2 rounded-xl border border-border bg-card hover:border-primary/50 transition shadow-sm h-11"
+              >
+                <div className="p-2 bg-primary text-primary-foreground rounded-lg shadow-sm">
+                  <Instagram className="w-5 h-5" />
+                </div>
+                <div className="text-left min-w-0">
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Instagram account</p>
+                  <p className="font-semibold text-sm text-foreground truncate">
+                    {connectedAccountLabel || 'Connect account'}
+                  </p>
+                  {currentWorkspace?.name && (
+                    <p className="text-[11px] text-muted-foreground truncate">Workspace · {currentWorkspace.name}</p>
+                  )}
+                </div>
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              </button>
 
-            {workspaceMenuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setWorkspaceMenuOpen(false)}
-                />
-                <div className="absolute top-[64px] left-4 w-72 bg-background border border-border rounded-xl shadow-xl z-20 p-3 space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground px-1">Switch workspace</p>
-                  {workspaces.map((workspace) => (
+              {accountMenuOpen && (
+                <div className="absolute top-12 left-0 w-[320px] bg-background border border-border rounded-xl shadow-2xl z-20 p-3 space-y-2 animate-fade-in">
+                  <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">Accounts</p>
+                      <p className="text-sm text-foreground">Switch Instagram accounts</p>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground">{accounts.length} connected</span>
+                  </div>
+                  {accounts.map((account) => (
                     <button
-                      key={workspace._id}
-                      onClick={() => handleWorkspaceSelect(workspace)}
+                      key={account._id}
+                      onClick={() => {
+                        setActiveAccount(account);
+                        setAccountMenuOpen(false);
+                      }}
                       className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition ${
-                        currentWorkspace?._id === workspace._id
-                          ? 'bg-primary/10 text-primary'
-                          : 'hover:bg-muted text-foreground'
+                        activeAccount?._id === account._id
+                          ? 'bg-primary/10 border border-primary/30'
+                          : 'hover:bg-muted text-foreground border border-transparent'
                       }`}
                     >
-                      <span className="truncate">{workspace.name}</span>
-                      {currentWorkspace?._id === workspace._id && (
-                        <span className="text-[11px] font-semibold">Current</span>
-                      )}
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm truncate">@{account.username}</p>
+                        <p className="text-xs text-muted-foreground">{account.status === 'connected' ? 'Connected' : 'Mock'}</p>
+                      </div>
+                      {activeAccount?._id === account._id && <Check className="w-4 h-4 text-primary" />}
                     </button>
                   ))}
                   <div className="border-t border-border/50 pt-2 space-y-1">
@@ -151,66 +154,21 @@ const Layout: React.FC = () => {
                       variant="ghost"
                       className="w-full justify-start px-2 h-10"
                       onClick={() => {
-                        setWorkspaceMenuOpen(false);
+                        setAccountMenuOpen(false);
                         navigate('/settings');
                       }}
+                      leftIcon={<Plus className="w-4 h-4" />}
                     >
-                      Manage accounts
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start px-2 h-10"
-                      onClick={() => {
-                        setWorkspaceMenuOpen(false);
-                        navigate('/settings');
-                      }}
-                    >
-                      Add Instagram account
+                      Connect another Instagram account
                     </Button>
                   </div>
                 </div>
-              </>
-            )}
-
-            {connectedAccountLabel && (
-              <div className="relative">
-                <button
-                  onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                  className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-border bg-background/70 hover:border-primary/60 transition text-sm"
-                >
-                  <span className="text-muted-foreground text-xs">Connected</span>
-                  <span className="font-semibold">{connectedAccountLabel}</span>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                </button>
-                {accountMenuOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setAccountMenuOpen(false)}
-                    />
-                    <div className="absolute top-12 left-0 w-72 bg-background border border-border rounded-xl shadow-xl z-20 p-3 space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground px-1">Connected Instagram accounts</p>
-                      {accounts.map((account) => (
-                        <div
-                          key={account._id}
-                          className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/40 text-sm"
-                        >
-                          <div>
-                            <p className="font-semibold">@{account.username}</p>
-                            <p className="text-xs text-muted-foreground">{account.status}</p>
-                          </div>
-                          <span className="px-2 py-1 rounded-full text-[11px] bg-primary/10 text-primary">Switch</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
-            <div className="hidden md:flex items-center gap-1 rounded-xl border border-border bg-card px-1 py-1 shadow-sm h-11">
+          <div className="flex items-center gap-3 flex-1 justify-center min-w-0">
+            <div className="hidden md:flex items-center gap-1 rounded-full border border-border bg-card px-1 py-1 shadow-sm h-11">
               {navLinks.map((link) => (
                 <Link
                   key={link.to}
@@ -225,7 +183,7 @@ const Layout: React.FC = () => {
                   {link.label}
                 </Link>
               ))}
-              <div className="relative">
+              <div className="relative" ref={aiMenuRef}>
                 <button
                   onClick={() => setAiMenuOpen(!aiMenuOpen)}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition ${
@@ -239,33 +197,29 @@ const Layout: React.FC = () => {
                   <ChevronDown className="w-4 h-4" />
                 </button>
                 {aiMenuOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setAiMenuOpen(false)}
-                    />
-                    <div className="absolute right-0 mt-2 w-64 bg-background border border-border rounded-xl shadow-xl py-2 z-20">
-                      {aiLinks.map((link) => (
-                        <Link
-                          key={link.to}
-                          to={link.to}
-                          onClick={() => setAiMenuOpen(false)}
-                          className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition ${
-                            isActive(link.to)
-                              ? 'bg-primary/10 text-primary'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                          }`}
-                        >
-                          <link.icon className="w-4 h-4" />
-                          {link.label}
-                        </Link>
-                      ))}
-                    </div>
-                  </>
+                  <div className="absolute right-0 mt-2 w-64 bg-background border border-border rounded-xl shadow-xl py-2 z-20">
+                    {aiLinks.map((link) => (
+                      <Link
+                        key={link.to}
+                        to={link.to}
+                        onClick={() => setAiMenuOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition ${
+                          isActive(link.to)
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                        }`}
+                      >
+                        <link.icon className="w-4 h-4" />
+                        {link.label}
+                      </Link>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
+          </div>
 
+          <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
             <button
               onClick={() => setSearchOpen(true)}
               className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-11"
@@ -275,7 +229,49 @@ const Layout: React.FC = () => {
               <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-md">⌘ K</span>
             </button>
 
-            <div className="relative hidden md:block">
+            <div className="relative hidden md:block" ref={createMenuRef}>
+              <Button
+                variant="outline"
+                className="h-11 px-3"
+                leftIcon={<Plus className="w-4 h-4" />}
+                onClick={() => setCreateMenuOpen(!createMenuOpen)}
+              >
+                New
+              </Button>
+              {createMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-background border border-border rounded-xl shadow-xl py-2 z-20 animate-fade-in">
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-muted"
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      navigate('/knowledge');
+                    }}
+                  >
+                    New knowledge item
+                  </button>
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-muted"
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      navigate('/sandbox');
+                    }}
+                  >
+                    New sandbox scenario
+                  </button>
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-muted"
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      navigate('/team');
+                    }}
+                  >
+                    Invite teammate
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="relative hidden md:block" ref={userMenuRef}>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center gap-2 pr-2 py-1 rounded-full hover:bg-muted transition border border-transparent hover:border-border"
@@ -287,25 +283,19 @@ const Layout: React.FC = () => {
               </button>
 
               {showUserMenu && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setShowUserMenu(false)}
-                  />
-                  <div className="absolute right-0 mt-2 w-56 bg-background border border-border rounded-lg shadow-xl py-1 z-20 animate-fade-in">
-                    <div className="px-4 py-3 border-b border-border/50 mb-1">
-                      <p className="text-sm font-medium truncate">{user?.email || user?.instagramUsername || 'User'}</p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      onClick={handleLogout}
-                      className="w-full justify-start px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-muted text-sm font-normal h-auto rounded-none"
-                      leftIcon={<LogOut className="w-4 h-4" />}
-                    >
-                      Logout
-                    </Button>
+                <div className="absolute right-0 mt-2 w-56 bg-background border border-border rounded-lg shadow-xl py-1 z-20 animate-fade-in">
+                  <div className="px-4 py-3 border-b border-border/50 mb-1">
+                    <p className="text-sm font-medium truncate">{user?.email || user?.instagramUsername || 'User'}</p>
                   </div>
-                </>
+                  <Button
+                    variant="ghost"
+                    onClick={handleLogout}
+                    className="w-full justify-start px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-muted text-sm font-normal h-auto rounded-none"
+                    leftIcon={<LogOut className="w-4 h-4" />}
+                  >
+                    Logout
+                  </Button>
+                </div>
               )}
             </div>
 
