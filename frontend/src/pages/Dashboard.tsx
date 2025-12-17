@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -17,195 +17,16 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { dashboardAPI, DashboardAttentionItem, DashboardInsightsResponse, DashboardSummaryResponse } from '../services/api';
 
 type TimeRange = 'today' | '7d' | '30d';
 type AttentionFilter = 'escalations' | 'unreplied' | 'followups' | 'high_intent';
-
-type AttentionItem = {
-  id: string;
-  name: string;
-  handle: string;
-  preview: string;
-  category: string;
-  lastMessageAgo: string;
-  badges: ('escalated' | 'sla' | 'followup' | 'high_intent')[];
-};
 
 const timeframeOptions: { value: TimeRange; label: string; helper: string }[] = [
   { value: 'today', label: 'Today', helper: 'Starts 12:00am local' },
   { value: '7d', label: '7d', helper: 'Rolling last 7 days' },
   { value: '30d', label: '30d', helper: 'Rolling last 30 days' },
 ];
-
-const kpiByRange = {
-  today: {
-    newConversations: 14,
-    inboundMessages: 82,
-    aiHandled: 68,
-    humanAlerts: { open: 9, critical: 3 },
-    medianFirstResponse: '3m',
-  },
-  '7d': {
-    newConversations: 108,
-    inboundMessages: 612,
-    aiHandled: 72,
-    humanAlerts: { open: 21, critical: 6 },
-    medianFirstResponse: '4m',
-  },
-  '30d': {
-    newConversations: 442,
-    inboundMessages: 2740,
-    aiHandled: 75,
-    humanAlerts: { open: 58, critical: 12 },
-    medianFirstResponse: '5m',
-  },
-};
-
-const attentionQueues: Record<AttentionFilter, AttentionItem[]> = {
-  escalations: [
-    {
-      id: 'esc-1',
-      name: 'Jordan Diaz',
-      handle: '@jordanfit',
-      preview: 'Needs human confirmation on custom order sizing and delivery windows.',
-      category: 'Order risk',
-      lastMessageAgo: '12m ago',
-      badges: ['escalated', 'sla'],
-    },
-    {
-      id: 'esc-2',
-      name: 'Sofia Patel',
-      handle: '@sofiacooks',
-      preview: 'Shared photos asking if the issue qualifies for a replacement.',
-      category: 'Support',
-      lastMessageAgo: '26m ago',
-      badges: ['escalated'],
-    },
-  ],
-  unreplied: [
-    {
-      id: 'unrep-1',
-      name: 'Marcus Lee',
-      handle: '@marcuslee',
-      preview: 'Do you have same-day slots this week? Looking to book fast.',
-      category: 'Booking',
-      lastMessageAgo: '9m ago',
-      badges: ['sla', 'high_intent'],
-    },
-    {
-      id: 'unrep-2',
-      name: 'Glow Studio',
-      handle: '@glowstudio',
-      preview: 'Checking pricing for bulk / reseller partnership.',
-      category: 'Sales',
-      lastMessageAgo: '18m ago',
-      badges: ['high_intent'],
-    },
-  ],
-  followups: [
-    {
-      id: 'follow-1',
-      name: 'Camila R.',
-      handle: '@camilar',
-      preview: 'Thanks! confirming if you received the docs I sent.',
-      category: 'Follow-up',
-      lastMessageAgo: '1d ago',
-      badges: ['followup'],
-    },
-    {
-      id: 'follow-2',
-      name: 'Beaumont Co',
-      handle: '@beaumont',
-      preview: 'Team asked for updated quote after the walk-through.',
-      category: 'Quote',
-      lastMessageAgo: '2d ago',
-      badges: ['followup', 'high_intent'],
-    },
-  ],
-  high_intent: [
-    {
-      id: 'intent-1',
-      name: 'Nora Chen',
-      handle: '@norachen',
-      preview: 'Ready to confirm appointment if Friday afternoon works.',
-      category: 'Booking',
-      lastMessageAgo: '22m ago',
-      badges: ['high_intent'],
-    },
-    {
-      id: 'intent-2',
-      name: 'Atlas Events',
-      handle: '@atlasevents',
-      preview: 'Asked for invoice link to pay deposit today.',
-      category: 'Order',
-      lastMessageAgo: '33m ago',
-      badges: ['high_intent', 'sla'],
-    },
-  ],
-};
-
-const outcomesByRange = {
-  today: {
-    leads: 18,
-    bookings: 11,
-    orders: 7,
-    support: 22,
-    escalated: 6,
-    goal: { attempts: 42, completions: 29 },
-  },
-  '7d': {
-    leads: 96,
-    bookings: 64,
-    orders: 38,
-    support: 144,
-    escalated: 28,
-    goal: { attempts: 214, completions: 166 },
-  },
-  '30d': {
-    leads: 372,
-    bookings: 286,
-    orders: 171,
-    support: 604,
-    escalated: 111,
-    goal: { attempts: 890, completions: 706 },
-  },
-};
-
-const aiMetricsByRange = {
-  today: {
-    escalationRate: '11%',
-    topReasons: ['Payment issue', 'Policy clarity', 'Tone check'],
-    topCategories: ['Support', 'Orders', 'Booking'],
-  },
-  '7d': {
-    escalationRate: '10%',
-    topReasons: ['Policy clarity', 'Sensitive topic', 'Missing context'],
-    topCategories: ['Support', 'Sales inquiries', 'Shipping', 'Booking', 'Returns'],
-  },
-  '30d': {
-    escalationRate: '9%',
-    topReasons: ['Policy clarity', 'Edge cases', 'Payment risk'],
-    topCategories: ['Support', 'Sales inquiries', 'Booking', 'Logistics', 'Account help'],
-  },
-};
-
-const knowledgeMetricsByRange = {
-  today: {
-    kbBacked: '64%',
-    topArticles: ['Refund policy highlights', 'Service menu + pricing', 'How to share photos'],
-    missingTopics: ['Bulk pricing matrix', 'Deposit policy by location', 'Order status steps'],
-  },
-  '7d': {
-    kbBacked: '67%',
-    topArticles: ['Service menu + pricing', 'Shipping and delivery', 'Appointment confirmation steps', 'Photo guidelines'],
-    missingTopics: ['Bulk pricing matrix', 'Edge-case damage photos', 'Wholesale onboarding'],
-  },
-  '30d': {
-    kbBacked: '70%',
-    topArticles: ['Shipping and delivery', 'Support triage checklist', 'FAQ: bookings', 'Warranty and returns', 'Order edits'],
-    missingTopics: ['International shipping cutoffs', 'Custom order sizing guide', 'After-hours escalation playbook'],
-  },
-};
 
 const badgeVariantMap = {
   escalated: { label: 'Escalated', variant: 'danger' as const },
@@ -218,12 +39,74 @@ const Dashboard: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const [range, setRange] = useState<TimeRange>('7d');
   const [attentionFilter, setAttentionFilter] = useState<AttentionFilter>('escalations');
+  const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
+  const [insights, setInsights] = useState<DashboardInsightsResponse | null>(null);
+  const [attentionItems, setAttentionItems] = useState<DashboardAttentionItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [attentionLoading, setAttentionLoading] = useState(false);
 
-  const kpis = useMemo(() => kpiByRange[range], [range]);
-  const outcomes = useMemo(() => outcomesByRange[range], [range]);
-  const aiMetrics = useMemo(() => aiMetricsByRange[range], [range]);
-  const knowledgeMetrics = useMemo(() => knowledgeMetricsByRange[range], [range]);
-  const attentionItems = useMemo(() => attentionQueues[attentionFilter], [attentionFilter]);
+  useEffect(() => {
+    if (!currentWorkspace) return;
+    setLoading(true);
+
+    const summaryPromise = dashboardAPI.getSummary(currentWorkspace._id, range);
+    const insightRange = range === 'today' ? '7d' : range;
+    const insightsPromise = dashboardAPI.getInsights(currentWorkspace._id, insightRange as '7d' | '30d');
+
+    Promise.all([summaryPromise, insightsPromise])
+      .then(([summaryData, insightsData]) => {
+        setSummary(summaryData);
+        setInsights(insightsData);
+      })
+      .catch((error) => {
+        console.error('Failed to load dashboard summary', error);
+        setSummary(null);
+        setInsights(null);
+      })
+      .finally(() => setLoading(false));
+  }, [currentWorkspace, range]);
+
+  useEffect(() => {
+    if (!currentWorkspace) return;
+    setAttentionLoading(true);
+
+    dashboardAPI.getAttention(currentWorkspace._id, attentionFilter)
+      .then((resp) => setAttentionItems(resp.items))
+      .catch((error) => {
+        console.error('Failed to load attention items', error);
+        setAttentionItems([]);
+      })
+      .finally(() => setAttentionLoading(false));
+  }, [currentWorkspace, attentionFilter]);
+
+  const kpis = useMemo(() => summary?.kpis || {
+    newConversations: 0,
+    inboundMessages: 0,
+    aiHandledRate: 0,
+    humanAlerts: { open: 0, critical: 0 },
+    medianFirstResponseMs: 0,
+  }, [summary]);
+
+  const outcomes = useMemo(() => summary?.outcomes || {
+    leads: 0,
+    bookings: 0,
+    orders: 0,
+    support: 0,
+    escalated: 0,
+    goal: { attempts: 0, completions: 0 },
+  }, [summary]);
+
+  const aiMetrics = useMemo(() => insights?.aiPerformance || {
+    escalationRate: 0,
+    topReasons: [],
+    topCategories: [],
+  }, [insights]);
+
+  const knowledgeMetrics = useMemo(() => insights?.knowledge || {
+    kbBackedRate: 0,
+    topArticles: [],
+    missingTopics: [],
+  }, [insights]);
 
   if (!currentWorkspace) {
     return (
@@ -296,7 +179,7 @@ const Dashboard: React.FC = () => {
             <ShieldCheck className="w-4 h-4 text-primary" />
           </div>
           <div className="mt-3 flex items-end gap-2">
-            <span className="text-3xl font-bold text-foreground">{kpis.aiHandled}%</span>
+            <span className="text-3xl font-bold text-foreground">{formatPercent(kpis.aiHandledRate)}</span>
             <Badge variant="primary">AI replies / threads</Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-2">Share of inbound threads where AI replied.</p>
@@ -320,7 +203,7 @@ const Dashboard: React.FC = () => {
             <Clock3 className="w-4 h-4 text-primary" />
           </div>
           <div className="mt-3 flex items-end gap-2">
-            <span className="text-3xl font-bold text-foreground">{kpis.medianFirstResponse}</span>
+            <span className="text-3xl font-bold text-foreground">{formatDuration(kpis.medianFirstResponseMs)}</span>
             <Badge variant="secondary">AI + human</Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-2">Includes AI assists where a human replied first.</p>
@@ -356,22 +239,26 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="divide-y divide-border/60">
-            {attentionItems.map((item) => (
+            {attentionLoading && (
+              <div className="p-6 text-center text-muted-foreground text-sm">Loading attention queue…</div>
+            )}
+
+            {!attentionLoading && attentionItems.map((item) => (
               <div key={item.id} className="p-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold">
-                    {item.name[0]}
+                    {(item.participantName || 'U')[0]}
                   </div>
                   <div>
                     <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      <span>{item.name}</span>
+                      <span>{item.participantName || 'Unknown'}</span>
                       <span className="text-muted-foreground">{item.handle}</span>
                     </div>
-                    <p className="text-sm text-foreground/90 line-clamp-2">{item.preview}</p>
+                    <p className="text-sm text-foreground/90 line-clamp-2">{item.lastMessagePreview || 'No preview available'}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary">{item.category}</Badge>
-                      <span className="text-xs text-muted-foreground">Last message {item.lastMessageAgo}</span>
-                      {item.badges.map((badge) => (
+                      {item.category && <Badge variant="secondary">{item.category}</Badge>}
+                      <span className="text-xs text-muted-foreground">Last message {formatTimeAgo(item.lastMessageAt)}</span>
+                      {(item.badges || []).map((badge) => (
                         <Badge key={badge} variant={badgeVariantMap[badge].variant}>
                           {badgeVariantMap[badge].label}
                         </Badge>
@@ -397,7 +284,7 @@ const Dashboard: React.FC = () => {
               </div>
             ))}
 
-            {attentionItems.length === 0 && (
+            {!attentionLoading && attentionItems.length === 0 && (
               <div className="p-6 text-center text-muted-foreground text-sm">All clear. No items need attention for this filter.</div>
             )}
           </div>
@@ -462,7 +349,7 @@ const Dashboard: React.FC = () => {
             <Sparkles className="w-5 h-5 text-primary" />
             <div>
               <p className="text-xs text-muted-foreground">Escalation rate</p>
-              <p className="text-lg font-semibold text-foreground">{aiMetrics.escalationRate} of AI replied conversations</p>
+              <p className="text-lg font-semibold text-foreground">{formatPercent(aiMetrics.escalationRate)} of AI replied conversations</p>
             </div>
           </div>
 
@@ -470,7 +357,7 @@ const Dashboard: React.FC = () => {
             <p className="text-xs text-muted-foreground mb-1">Top escalation reasons</p>
             <div className="flex flex-wrap gap-2">
               {aiMetrics.topReasons.map((reason) => (
-                <Badge key={reason} variant="secondary">{reason}</Badge>
+                <Badge key={reason.name} variant="secondary">{reason.name} ({reason.count})</Badge>
               ))}
             </div>
           </div>
@@ -479,7 +366,7 @@ const Dashboard: React.FC = () => {
             <p className="text-xs text-muted-foreground mb-1">Top categories handled</p>
             <div className="flex flex-wrap gap-2">
               {aiMetrics.topCategories.map((category) => (
-                <Badge key={category} variant="primary">{category}</Badge>
+                <Badge key={category.name} variant="primary">{category.name} ({category.count})</Badge>
               ))}
             </div>
           </div>
@@ -498,7 +385,7 @@ const Dashboard: React.FC = () => {
             <User className="w-5 h-5 text-primary" />
             <div>
               <p className="text-xs text-muted-foreground">Replies backed by knowledge base</p>
-              <p className="text-lg font-semibold text-foreground">{knowledgeMetrics.kbBacked} of AI replies</p>
+              <p className="text-lg font-semibold text-foreground">{formatPercent(knowledgeMetrics.kbBackedRate)} of AI replies</p>
             </div>
           </div>
 
@@ -506,7 +393,7 @@ const Dashboard: React.FC = () => {
             <p className="text-xs text-muted-foreground mb-1">Top KB articles used</p>
             <ul className="space-y-1 text-sm text-foreground/90 list-disc list-inside">
               {knowledgeMetrics.topArticles.map((article) => (
-                <li key={article}>{article}</li>
+                <li key={article.name}>{article.name} ({article.count})</li>
               ))}
             </ul>
           </div>
@@ -524,5 +411,32 @@ const Dashboard: React.FC = () => {
     </div>
   );
 };
+
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value)) return '0%';
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatDuration(ms?: number): string {
+  if (!ms || ms <= 0) return '–';
+  const minutes = Math.floor(ms / 60000);
+  const seconds = Math.floor((ms % 60000) / 1000);
+  if (minutes >= 1) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function formatTimeAgo(timestamp?: string): string {
+  if (!timestamp) return '—';
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 export default Dashboard;

@@ -11,9 +11,11 @@ export interface IEscalationUpdate {
 
 export interface IEscalation extends Document {
   conversationId: mongoose.Types.ObjectId;
+  workspaceId?: mongoose.Types.ObjectId;
   categoryId?: mongoose.Types.ObjectId;
   topicSummary: string;
   reason?: string;
+  severity?: 'normal' | 'high' | 'critical';
   status: EscalationStatus;
   createdBy: 'ai' | 'human' | 'system';
   createdAt: Date;
@@ -39,9 +41,11 @@ const escalationUpdateSchema = new Schema<IEscalationUpdate>(
 const escalationSchema = new Schema<IEscalation>(
   {
     conversationId: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true, index: true },
+    workspaceId: { type: Schema.Types.ObjectId, ref: 'Workspace', index: true },
     categoryId: { type: Schema.Types.ObjectId, ref: 'MessageCategory' },
     topicSummary: { type: String, required: true, trim: true },
     reason: { type: String, trim: true },
+    severity: { type: String, enum: ['normal', 'high', 'critical'], default: 'normal' },
     status: { type: String, enum: ['pending', 'in_progress', 'resolved', 'cancelled'], default: 'pending', index: true },
     createdBy: { type: String, enum: ['ai', 'human', 'system'], default: 'ai' },
     followUpCount: { type: Number, default: 0 },
@@ -55,5 +59,7 @@ const escalationSchema = new Schema<IEscalation>(
     timestamps: true,
   }
 );
+
+escalationSchema.index({ workspaceId: 1, status: 1, severity: 1, createdAt: -1 });
 
 export default mongoose.model<IEscalation>('Escalation', escalationSchema);

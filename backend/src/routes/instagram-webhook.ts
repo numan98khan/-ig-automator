@@ -16,6 +16,7 @@ import {
   incrementCategoryCount,
 } from '../services/aiCategorization';
 import { transcribeAudioFromUrl } from '../services/transcriptionService';
+import { trackDailyMetric } from '../services/reportingService';
 
 const router = express.Router();
 
@@ -240,6 +241,7 @@ async function handleMessagingEvent(messaging: any) {
     // Create message (we'll update with categorization data)
     const savedMessage = await Message.create({
       conversationId: conversation._id,
+      workspaceId: conversation.workspaceId,
       text: messageText,
       from: 'customer',
       instagramMessageId: messageId,
@@ -294,6 +296,12 @@ async function handleMessagingEvent(messaging: any) {
       messageId: savedMessage._id,
       participantHandle: conversation.participantHandle,
     });
+
+    const inboundIncrements: Record<string, number> = { inboundMessages: 1 };
+    if (isNewConversation) {
+      inboundIncrements.newConversations = 1;
+    }
+    await trackDailyMetric(conversation.workspaceId, timestamp, inboundIncrements);
 
     // === PHASE 2: AUTOMATION PROCESSING ===
     // Process automations asynchronously to not block webhook response
@@ -465,6 +473,8 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
       platform: 'instagram',
     });
 
+    let isNewConversation = false;
+
     if (!conversation) {
       conversation = await Conversation.create({
         workspaceId: igAccount.workspaceId,
@@ -480,6 +490,7 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
       });
 
       console.log(`✨ Created conversation for commenter ${conversation.participantHandle}`);
+      isNewConversation = true;
     } else {
       // Update existing conversation
       conversation.lastMessageAt = new Date();
@@ -491,6 +502,7 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
     // Store comment as a message
     const savedMessage = await Message.create({
       conversationId: conversation._id,
+      workspaceId: conversation.workspaceId,
       text: commentText,
       from: 'customer',
       instagramMessageId: commentId,
@@ -509,6 +521,12 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
       messageId: savedMessage._id,
       participantHandle: conversation.participantHandle,
       mediaId,
+    });
+
+    const commentDate = new Date();
+    await trackDailyMetric(conversation.workspaceId, commentDate, {
+      inboundMessages: 1,
+      ...(isNewConversation ? { newConversations: 1 } : {}),
     });
 
     // === PHASE 2: COMMENT → DM AUTOMATION ===

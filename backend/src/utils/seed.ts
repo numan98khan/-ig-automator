@@ -66,6 +66,7 @@ export const seedConversations = async (workspaceId: string, instagramAccountId:
       for (const msg of demo.messages) {
         await Message.create({
           conversationId: conversation._id,
+          workspaceId,
           text: msg.text,
           from: msg.from,
         });

@@ -163,5 +163,6 @@ const conversationSchema = new Schema<IConversation>({
 
 // Create compound index for efficient lookups
 conversationSchema.index({ instagramAccountId: 1, instagramConversationId: 1 });
+conversationSchema.index({ workspaceId: 1, updatedAt: -1 });
 
 export default mongoose.model<IConversation>('Conversation', conversationSchema);

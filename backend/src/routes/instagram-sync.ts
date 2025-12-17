@@ -20,6 +20,7 @@ import {
   getOrCreateCategory,
   incrementCategoryCount
 } from '../services/aiCategorization';
+import { trackDailyMetric } from '../services/reportingService';
 
 const router = express.Router();
 
@@ -262,6 +263,7 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
 
           await Message.create({
             conversationId: conversation._id,
+            workspaceId,
             text: igMsg.message || '[Attachment]',
             from: isFromCustomer ? 'customer' : 'user',
             instagramMessageId: igMsg.id,
@@ -346,6 +348,8 @@ router.post('/send-message', authenticate, async (req: AuthRequest, res: Respons
     if (conversation.platform !== 'instagram' || !conversation.participantInstagramId) {
       return res.status(400).json({ error: 'Can only send Instagram messages to Instagram conversations' });
     }
+
+    const workspaceId = conversation.workspaceId.toString();
 
     // Get Instagram account
     const igAccount = await InstagramAccount.findById(conversation.instagramAccountId).select('+accessToken');
@@ -475,6 +479,7 @@ router.post('/send-message', authenticate, async (req: AuthRequest, res: Respons
     try {
       message = await Message.create({
         conversationId: conversation._id,
+        workspaceId,
         text: messageText,
         from: 'user',
         platform: 'instagram',
@@ -484,9 +489,13 @@ router.post('/send-message', authenticate, async (req: AuthRequest, res: Respons
       });
 
       // Update conversation's last message
+      const sentAt = new Date();
       conversation.lastMessage = messageText;
-      conversation.lastMessageAt = new Date();
+      conversation.lastMessageAt = sentAt;
+      conversation.lastBusinessMessageAt = sentAt;
       await conversation.save();
+
+      await trackDailyMetric(workspaceId as string, sentAt, { outboundMessages: 1, humanReplies: 1 });
 
       console.log('✅ Message saved to database');
     } catch (dbError: any) {

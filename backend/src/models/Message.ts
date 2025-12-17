@@ -2,6 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IMessage extends Document {
   conversationId: mongoose.Types.ObjectId;
+  workspaceId: mongoose.Types.ObjectId;
   text: string;
   from: 'customer' | 'user' | 'ai';
 
@@ -41,6 +42,8 @@ export interface IMessage extends Document {
   // Automation source tracking
   automationSource?: 'comment_dm' | 'auto_reply' | 'followup';  // Source of automated message
 
+  kbItemIdsUsed?: string[];
+
   // Read receipts
   seenAt?: Date;                         // When the message was seen by the recipient
 
@@ -53,6 +56,12 @@ const messageSchema = new Schema<IMessage>({
     type: Schema.Types.ObjectId,
     ref: 'Conversation',
     required: true,
+  },
+  workspaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workspace',
+    required: true,
+    index: true,
   },
   text: {
     type: String,
@@ -135,6 +144,11 @@ const messageSchema = new Schema<IMessage>({
     sparse: true,
   },
 
+  kbItemIdsUsed: {
+    type: [String],
+    default: [],
+  },
+
   // Read receipts
   seenAt: {
     type: Date,
@@ -155,5 +169,7 @@ const messageSchema = new Schema<IMessage>({
 
 // Create compound index for efficient lookups
 messageSchema.index({ conversationId: 1, createdAt: -1 });
+messageSchema.index({ workspaceId: 1, conversationId: 1, createdAt: -1 });
+messageSchema.index({ workspaceId: 1, createdAt: -1 });
 
 export default mongoose.model<IMessage>('Message', messageSchema);
