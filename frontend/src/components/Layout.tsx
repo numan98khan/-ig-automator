@@ -98,7 +98,7 @@ const Layout: React.FC = () => {
 
       {/* Header */}
       <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0 h-14">
-        <div className="relative mx-auto max-w-7xl px-4 md:px-6 h-full flex items-center justify-between gap-4">
+        <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative" ref={accountMenuRef}>
               <button
