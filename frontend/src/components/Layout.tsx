@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
 import { instagramAPI, InstagramAccount, Workspace } from '../services/api';
 import {
   Instagram,
@@ -14,12 +13,9 @@ import {
   Menu,
   X as CloseIcon,
   AlertCircle,
-  Sun,
-  Moon,
   TestTube,
   LayoutDashboard,
   Search,
-  Plus,
   Users,
   Sparkles,
 } from 'lucide-react';
@@ -31,12 +27,10 @@ const Layout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, currentWorkspace, workspaces, setCurrentWorkspace, logout } = useAuth();
-  const { theme, setTheme } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [accounts, setAccounts] = useState<InstagramAccount[]>([]);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -111,8 +105,8 @@ const Layout: React.FC = () => {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0">
-        <div className="relative mx-auto max-w-7xl px-4 md:px-6 py-3 flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0 h-14">
+        <div className="relative mx-auto max-w-7xl px-4 md:px-6 h-full flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}
@@ -215,8 +209,8 @@ const Layout: React.FC = () => {
             )}
           </div>
 
-          <div className="flex items-center gap-2 flex-1 justify-end">
-            <div className="hidden md:flex items-center gap-1 rounded-xl border border-border bg-card px-1 py-1 shadow-sm">
+          <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+            <div className="hidden md:flex items-center gap-1 rounded-xl border border-border bg-card px-1 py-1 shadow-sm h-11">
               {navLinks.map((link) => (
                 <Link
                   key={link.to}
@@ -274,63 +268,11 @@ const Layout: React.FC = () => {
 
             <button
               onClick={() => setSearchOpen(true)}
-              className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground"
+              className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-11"
             >
               <Search className="w-4 h-4" />
               Search
               <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-md">⌘ K</span>
-            </button>
-
-            <div className="relative">
-              <Button
-                onClick={() => setCreateMenuOpen(!createMenuOpen)}
-                className="hidden md:inline-flex items-center gap-2"
-                leftIcon={<Plus className="w-4 h-4" />}
-              >
-                New
-              </Button>
-              {createMenuOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setCreateMenuOpen(false)}
-                  />
-                  <div className="absolute right-0 mt-2 w-60 bg-background border border-border rounded-xl shadow-xl py-2 z-20">
-                    <Link
-                      to="/knowledge"
-                      onClick={() => setCreateMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted transition"
-                    >
-                      <BookOpen className="w-4 h-4 text-primary" />
-                      New knowledge item
-                    </Link>
-                    <Link
-                      to="/sandbox"
-                      onClick={() => setCreateMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted transition"
-                    >
-                      <TestTube className="w-4 h-4 text-primary" />
-                      New sandbox scenario
-                    </Link>
-                    <Link
-                      to="/team"
-                      onClick={() => setCreateMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted transition"
-                    >
-                      <Users className="w-4 h-4 text-primary" />
-                      Invite teammate
-                    </Link>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              title="Toggle Theme"
-            >
-              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
 
             <div className="relative hidden md:block">
@@ -436,15 +378,6 @@ const Layout: React.FC = () => {
                   </Link>
                 ))}
               </div>
-
-              <div className="h-px bg-border/50 my-2" />
-
-              <button
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition font-medium"
-              >
-                {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}<span className="flex-1 text-left">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-              </button>
 
               <Button
                 variant="ghost"
