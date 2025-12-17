@@ -97,15 +97,15 @@ const Layout: React.FC = () => {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0 h-14">
-        <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0 h-16">
+        <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full grid grid-cols-[auto,1fr,auto] items-center gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative" ref={accountMenuRef}>
               <button
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                className="flex items-center gap-3 px-3 py-2 rounded-xl border border-border bg-card hover:border-primary/50 transition shadow-sm h-11"
+                className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-border bg-card hover:border-primary/50 transition shadow-sm h-12"
               >
-                <div className="p-2 bg-primary text-primary-foreground rounded-lg shadow-sm">
+                <div className="p-2.5 bg-primary text-primary-foreground rounded-lg shadow-sm">
                   <Instagram className="w-5 h-5" />
                 </div>
                 <div className="text-left min-w-0">
@@ -167,8 +167,8 @@ const Layout: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 flex-1 justify-center min-w-0">
-            <div className="hidden md:flex items-center gap-1 rounded-full border border-border bg-card px-1 py-1 shadow-sm h-11">
+          <div className="flex items-center gap-3 justify-center min-w-0">
+            <div className="hidden md:flex items-center gap-1 rounded-full border border-border bg-card px-1 py-1 shadow-sm h-12">
               {navLinks.map((link) => (
                 <Link
                   key={link.to}
@@ -219,10 +219,10 @@ const Layout: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+          <div className="flex items-center gap-2 justify-end min-w-0">
             <button
               onClick={() => setSearchOpen(true)}
-              className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-11"
+              className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-12"
             >
               <Search className="w-4 h-4" />
               Search
@@ -232,7 +232,7 @@ const Layout: React.FC = () => {
             <div className="relative hidden md:block" ref={createMenuRef}>
               <Button
                 variant="outline"
-                className="h-11 px-3"
+                className="h-12 px-3"
                 leftIcon={<Plus className="w-4 h-4" />}
                 onClick={() => setCreateMenuOpen(!createMenuOpen)}
               >
