@@ -19,18 +19,22 @@ import {
   Sparkles,
   Plus,
   Check,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
 import GlobalSearchModal from './GlobalSearchModal';
 import { useAccountContext } from '../context/AccountContext';
 import useOverlayClose from '../hooks/useOverlayClose';
+import { useTheme } from '../context/ThemeContext';
 
 const Layout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, currentWorkspace, logout } = useAuth();
   const { accounts, activeAccount, setActiveAccount, refreshAccounts } = useAccountContext();
+  const { theme, setTheme } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
@@ -227,6 +231,15 @@ const Layout: React.FC = () => {
               <Search className="w-4 h-4" />
               Search
               <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-md">⌘ K</span>
+            </button>
+
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-12"
+              aria-label="Toggle dark mode"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              <span className="hidden lg:inline">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
             </button>
 
             <div className="relative hidden md:block" ref={createMenuRef}>

@@ -106,8 +106,14 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ open, onClose, on
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-40 bg-background/70 backdrop-blur-sm flex items-start justify-center pt-24 px-4">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden">
+    <div
+      className="fixed inset-0 z-40 bg-background/70 backdrop-blur-sm flex items-start justify-center pt-24 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
           <Search className="w-5 h-5 text-muted-foreground" />
           <input
