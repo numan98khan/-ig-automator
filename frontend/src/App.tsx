@@ -14,6 +14,7 @@ import AcceptInvite from './pages/AcceptInvite';
 import RequestPasswordReset from './pages/RequestPasswordReset';
 import ResetPassword from './pages/ResetPassword';
 import Sandbox from './pages/Sandbox';
+import Dashboard from './pages/Dashboard';
 
 function App() {
   return (
@@ -34,9 +35,9 @@ function App() {
               </PrivateRoute>
             }
           >
-            <Route index element={<Navigate to="/inbox" replace />} />
-            {/* <Route index element={<Navigate to="/categories" replace />} /> */}
+            <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="inbox" element={<Inbox />} />
+            <Route path="dashboard" element={<Dashboard />} />
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="sandbox" element={<Sandbox />} />
             <Route path="settings" element={<Settings />} />

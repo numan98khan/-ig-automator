@@ -667,4 +667,71 @@ export const workspaceInviteAPI = {
   },
 };
 
+// Dashboard API
+export interface DashboardSummaryResponse {
+  range: string;
+  kpis: {
+    newConversations: number;
+    inboundMessages: number;
+    aiHandledRate: number;
+    humanAlerts: { open: number; critical: number };
+    medianFirstResponseMs: number;
+  };
+  outcomes: {
+    leads: number;
+    bookings: number;
+    orders: number;
+    support: number;
+    escalated: number;
+    goal: { attempts: number; completions: number };
+  };
+  trend: { date: string; inboundMessages: number; aiReplies: number; escalationsOpened: number; kbBackedReplies: number }[];
+}
+
+export interface DashboardAttentionItem {
+  id: string;
+  conversationId: string;
+  participantName?: string;
+  handle?: string;
+  lastMessagePreview?: string;
+  lastMessageAt?: string;
+  category?: string;
+  badges?: string[];
+  actions?: { canAssign?: boolean; canResolve?: boolean; canSnooze?: boolean };
+}
+
+export interface DashboardAttentionResponse {
+  filter: string;
+  items: DashboardAttentionItem[];
+}
+
+export interface DashboardInsightsResponse {
+  range: string;
+  aiPerformance: {
+    escalationRate: number;
+    topReasons: { name: string; count: number }[];
+    topCategories: { name: string; count: number }[];
+  };
+  knowledge: {
+    kbBackedRate: number;
+    topArticles: { name: string; count: number }[];
+    missingTopics: string[];
+  };
+}
+
+export const dashboardAPI = {
+  getSummary: async (workspaceId: string, range: 'today' | '7d' | '30d'): Promise<DashboardSummaryResponse> => {
+    const { data } = await api.get('/api/dashboard/summary', { params: { workspaceId, range } });
+    return data;
+  },
+  getAttention: async (workspaceId: string, filter: string): Promise<DashboardAttentionResponse> => {
+    const { data } = await api.get('/api/dashboard/attention', { params: { workspaceId, filter } });
+    return data;
+  },
+  getInsights: async (workspaceId: string, range: '7d' | '30d'): Promise<DashboardInsightsResponse> => {
+    const { data } = await api.get('/api/dashboard/insights', { params: { workspaceId, range } });
+    return data;
+  },
+};
+
 export default api;

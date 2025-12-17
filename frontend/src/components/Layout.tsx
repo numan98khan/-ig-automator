@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags, Menu, X as CloseIcon, AlertCircle, Sun, Moon, TestTube } from 'lucide-react';
+import { Instagram, MessageSquare, BookOpen, LogOut, ChevronDown, Settings, Tags, Menu, X as CloseIcon, AlertCircle, Sun, Moon, TestTube, LayoutDashboard } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
 
@@ -13,7 +13,7 @@ const Layout: React.FC = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
 
   const handleLogout = () => {
     logout();
@@ -21,7 +21,8 @@ const Layout: React.FC = () => {
   };
 
   const navLinks = [
-    { to: '/', label: 'Inbox', icon: MessageSquare, isActive: isActive('/') || isActive('/inbox') },
+    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
+    { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
     { to: '/knowledge', label: 'Knowledge', icon: BookOpen, isActive: isActive('/knowledge') },
     { to: '/sandbox', label: 'Sandbox', icon: TestTube, isActive: isActive('/sandbox') },
     { to: '/categories', label: 'Categories', icon: Tags, isActive: isActive('/categories') },

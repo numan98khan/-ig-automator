@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import Escalation, { IEscalation, EscalationStatus } from '../models/Escalation';
+import Conversation from '../models/Conversation';
+import { addCountIncrement, trackDailyMetric } from './reportingService';
 
 export async function getActiveTicket(conversationId: mongoose.Types.ObjectId | string): Promise<IEscalation | null> {
   return Escalation.findOne({
@@ -15,13 +17,23 @@ export async function createTicket(params: {
   reason?: string;
   createdBy?: 'ai' | 'human' | 'system';
   customerMessage?: string;
+  workspaceId?: mongoose.Types.ObjectId | string;
+  severity?: 'normal' | 'high' | 'critical';
 }): Promise<IEscalation> {
+  let workspaceId = params.workspaceId;
+  if (!workspaceId) {
+    const convo = await Conversation.findById(params.conversationId).select('workspaceId');
+    workspaceId = convo?.workspaceId;
+  }
+
   const ticket = await Escalation.create({
     conversationId: params.conversationId,
+    workspaceId,
     categoryId: params.categoryId,
     topicSummary: params.topicSummary,
     reason: params.reason,
     createdBy: params.createdBy || 'ai',
+    severity: params.severity,
     followUpCount: 0,
     updates: params.customerMessage
       ? [
@@ -35,6 +47,14 @@ export async function createTicket(params: {
     lastCustomerMessage: params.customerMessage,
     lastCustomerAt: params.customerMessage ? new Date() : undefined,
   });
+
+  if (workspaceId) {
+    const increments: Record<string, number> = { escalationsOpened: 1 };
+    if (params.reason) {
+      addCountIncrement(increments, 'escalationReasonCounts', params.reason);
+    }
+    await trackDailyMetric(workspaceId, new Date(), increments);
+  }
   return ticket;
 }
 
@@ -78,7 +98,11 @@ export async function addTicketUpdate(ticketId: mongoose.Types.ObjectId | string
 }
 
 export async function resolveTicket(escalationId: mongoose.Types.ObjectId | string, status: EscalationStatus = 'resolved') {
-  return Escalation.findByIdAndUpdate(escalationId, { status }, { new: true });
+  const updated = await Escalation.findByIdAndUpdate(escalationId, { status }, { new: true });
+  if (updated?.workspaceId) {
+    await trackDailyMetric(updated.workspaceId, new Date(), { escalationsClosed: 1 });
+  }
+  return updated;
 }
 
 export async function listWorkspaceTickets(workspaceId: mongoose.Types.ObjectId | string) {

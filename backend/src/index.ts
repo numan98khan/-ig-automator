@@ -22,6 +22,7 @@ import categoriesRoutes from './routes/categories';
 import escalationRoutes from './routes/escalations';
 import sandboxRoutes from './routes/sandbox';
 import { scheduler } from './services/scheduler';
+import dashboardRoutes from './routes/dashboard';
 
 // Load environment variables
 dotenv.config();
@@ -54,6 +55,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/categories', categoriesRoutes);
 app.use('/api/escalations', escalationRoutes);
 app.use('/api/sandbox', sandboxRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

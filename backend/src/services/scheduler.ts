@@ -1,4 +1,5 @@
 import { processDueFollowups } from './automationService';
+import { rebuildYesterdayReports } from './reportingService';
 
 /**
  * Simple in-memory scheduler for background jobs
@@ -34,8 +35,20 @@ class Scheduler {
       }
     });
 
+    // Rebuild daily reports once per day as a safety net
+    this.scheduleJob('daily-report-rebuild', 24 * 60 * 60 * 1000, async () => {
+      console.log('🧹 Rebuilding yesterday dashboard reports...');
+      try {
+        await rebuildYesterdayReports();
+        console.log('✅ Daily reports rebuilt');
+      } catch (error) {
+        console.error('❌ Error rebuilding reports:', error);
+      }
+    });
+
     console.log('✅ Scheduler started with the following jobs:');
     console.log('   - Follow-up processor: every 5 minutes');
+    console.log('   - Daily report rebuild: every 24 hours');
   }
 
   /**

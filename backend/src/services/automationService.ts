@@ -17,6 +17,7 @@ import {
 } from './aiCategorization';
 import { generateAIReply } from './aiReplyService';
 import { getActiveTicket, createTicket, addTicketUpdate } from './escalationService';
+import { addCountIncrement, mapGoalKey, trackDailyMetric } from './reportingService';
 import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
 import LeadCapture from '../models/LeadCapture';
 import BookingRequest from '../models/BookingRequest';
@@ -185,6 +186,10 @@ async function saveGoalOutcome(
       note: summary,
     });
   }
+
+  const completionIncrement: Record<string, number> = {};
+  addCountIncrement(completionIncrement, 'goalCompletions', mapGoalKey(goalType));
+  await trackDailyMetric(conversation.workspaceId, new Date(), completionIncrement);
 }
 
 /**
@@ -291,13 +296,21 @@ export async function processCommentDMAutomation(
       }
 
       // Save the DM as a message in the conversation
+      const sentAt = new Date();
       await Message.create({
         conversationId: conversation._id,
+        workspaceId,
         text: settings.commentDmTemplate,
         from: 'ai',
         platform: 'instagram',
         instagramMessageId: result.message_id,
         automationSource: 'comment_dm',
+        createdAt: sentAt,
+      });
+
+      await trackDailyMetric(workspaceId, sentAt, {
+        outboundMessages: 1,
+        aiReplies: 1,
       });
 
       return {
@@ -491,6 +504,8 @@ export async function processAutoReply(
       ? goalProgress.goalType
       : conversation.activeGoalType || (matchesWorkspaceGoal ? detectedGoal : undefined)) as GoalType | undefined;
 
+    const goalIncrements: Record<string, number> = {};
+
     if (goalType && goalType !== 'none') {
       const mergedFields = mergeGoalFields(conversation.goalCollectedFields, goalProgress?.collectedFields);
       conversation.goalCollectedFields = mergedFields;
@@ -499,9 +514,12 @@ export async function processAutoReply(
       conversation.goalLastInteractionAt = new Date();
       conversation.activeGoalType = goalType;
 
+      addCountIncrement(goalIncrements, 'goalAttempts', mapGoalKey(goalType));
+
       if (goalProgress?.status === 'completed' || goalProgress?.shouldCreateRecord) {
         await saveGoalOutcome(goalType, conversation, mergedFields, goalConfigs, goalProgress?.summary, goalProgress?.targetLink);
         conversation.goalState = 'completed';
+        addCountIncrement(goalIncrements, 'goalCompletions', mapGoalKey(goalType));
       }
 
       if (conversation.markModified) {
@@ -569,8 +587,11 @@ export async function processAutoReply(
     });
 
     // Save the reply as a message
+    const kbItemIdsUsed = (aiReply.knowledgeItemsUsed || []).map(item => item.id);
+    const sentAt = new Date();
     const savedMessage = await Message.create({
       conversationId: conversation._id,
+      workspaceId,
       text: aiReply.replyText,
       from: 'ai',
       platform: 'instagram',
@@ -579,6 +600,8 @@ export async function processAutoReply(
       aiTags: aiReply.tags,
       aiShouldEscalate: aiReply.shouldEscalate,
       aiEscalationReason: aiReply.escalationReason,
+      kbItemIdsUsed,
+      createdAt: sentAt,
     });
 
     if (sameTopicTicket && activeTicket) {
@@ -603,6 +626,23 @@ export async function processAutoReply(
           : undefined;
     }
     await conversation.save();
+
+    const increments: Record<string, number> = { outboundMessages: 1, aiReplies: 1, ...goalIncrements };
+    if (aiReply.tags && aiReply.tags.length > 0) {
+      aiReply.tags.forEach(tag => addCountIncrement(increments, 'tagCounts', tag));
+    }
+    if (aiReply.escalationReason) {
+      addCountIncrement(increments, 'escalationReasonCounts', aiReply.escalationReason);
+    }
+    if (kbItemIdsUsed.length > 0) {
+      increments.kbBackedReplies = 1;
+      kbItemIdsUsed.forEach(itemId => addCountIncrement(increments, 'kbArticleCounts', itemId));
+    }
+
+    const responseMetrics = calculateResponseTime(conversation, sentAt);
+    Object.assign(increments, responseMetrics);
+
+    await trackDailyMetric(workspaceId, sentAt, increments);
 
     return {
       success: true,
@@ -769,13 +809,16 @@ export async function processDueFollowups(): Promise<{
         }
 
         // Save the follow-up as a message
+        const sentAt = new Date();
         await Message.create({
           conversationId: conversation._id,
+          workspaceId: conversation.workspaceId,
           text: settings.followupTemplate,
           from: 'ai',
           platform: 'instagram',
           instagramMessageId: result.message_id,
           automationSource: 'followup',
+          createdAt: sentAt,
         });
 
         // Update conversation
@@ -792,6 +835,12 @@ export async function processDueFollowups(): Promise<{
         await task.save();
 
         stats.sent++;
+
+        await trackDailyMetric(task.workspaceId, sentAt, {
+          outboundMessages: 1,
+          aiReplies: 1,
+          followupsSent: 1,
+        });
       } catch (taskError: any) {
         console.error(`Error processing follow-up task ${task._id}:`, taskError);
         task.status = 'cancelled';
@@ -845,6 +894,23 @@ function buildFollowupResponse(followUpCount: number, base: string): string {
   // Rotate through templates based on follow-up count
   const variant = templates[followUpCount % templates.length];
   return variant;
+}
+
+function calculateResponseTime(conversation: any, sentAt: Date): Record<string, number> {
+  if (
+    conversation.lastCustomerMessageAt &&
+    (!conversation.lastBusinessMessageAt || new Date(conversation.lastBusinessMessageAt) < new Date(conversation.lastCustomerMessageAt))
+  ) {
+    const diff = sentAt.getTime() - new Date(conversation.lastCustomerMessageAt).getTime();
+    if (diff > 0) {
+      return {
+        firstResponseTimeSumMs: diff,
+        firstResponseTimeCount: 1,
+      };
+    }
+  }
+
+  return {};
 }
 
 /**

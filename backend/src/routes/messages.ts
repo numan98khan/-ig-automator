@@ -9,6 +9,7 @@ import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { sendMessage as sendInstagramMessage } from '../utils/instagram-api';
 import { generateAIReply } from '../services/aiReplyService';
 import { getActiveTicket, createTicket, addTicketUpdate } from '../services/escalationService';
+import { addCountIncrement, trackDailyMetric } from '../services/reportingService';
 
 const router = express.Router();
 
@@ -138,16 +139,28 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     }
 
     // Create message
+    const sentAt = new Date();
     const message = await Message.create({
       conversationId,
+      workspaceId: conversation.workspaceId,
       text,
       from: 'user',
+      createdAt: sentAt,
     });
 
     // Update conversation's lastMessageAt
     await Conversation.findByIdAndUpdate(conversationId, {
-      lastMessageAt: new Date(),
+      lastMessageAt: sentAt,
+      lastBusinessMessageAt: sentAt,
     });
+
+    const responseMetrics = calculateResponseTime(conversation, sentAt);
+    const increments: Record<string, number> = {
+      outboundMessages: 1,
+      humanReplies: 1,
+      ...responseMetrics,
+    };
+    await trackDailyMetric(conversation.workspaceId, sentAt, increments);
 
     res.status(201).json(message);
   } catch (error) {
@@ -245,8 +258,11 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
     // Only save to database AFTER successful send to Instagram
     let message;
     try {
+      const kbItemIdsUsed = (aiResponse.knowledgeItemsUsed || []).map(item => item.id);
+
       message = await Message.create({
         conversationId,
+        workspaceId: conversation.workspaceId,
         text: aiResponse.replyText,
         from: 'ai',
         platform: 'instagram',
@@ -254,6 +270,7 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
         aiTags: aiResponse.tags,
         aiShouldEscalate: aiResponse.shouldEscalate,
         aiEscalationReason: aiResponse.escalationReason,
+        kbItemIdsUsed,
       });
 
       // Escalation ticket handling
@@ -282,6 +299,7 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
       // Update conversation's lastMessageAt
       conversation.lastMessage = aiResponse.replyText;
       conversation.lastMessageAt = new Date();
+      conversation.lastBusinessMessageAt = new Date();
       if (aiResponse.shouldEscalate) {
         const holdMinutes = settings?.humanHoldMinutes || 60;
         const behavior = settings?.humanEscalationBehavior || 'ai_silent';
@@ -310,6 +328,24 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
         error: dbError.message,
       });
     }
+
+    const sentAt = message.createdAt || new Date();
+    const increments: Record<string, number> = { outboundMessages: 1, aiReplies: 1 };
+    if (aiResponse.tags && aiResponse.tags.length > 0) {
+      aiResponse.tags.forEach(tag => addCountIncrement(increments, 'tagCounts', tag));
+    }
+    if (aiResponse.escalationReason) {
+      addCountIncrement(increments, 'escalationReasonCounts', aiResponse.escalationReason);
+    }
+    if (message.kbItemIdsUsed && message.kbItemIdsUsed.length > 0) {
+      increments.kbBackedReplies = 1;
+      message.kbItemIdsUsed.forEach(itemId => addCountIncrement(increments, 'kbArticleCounts', itemId));
+    }
+
+    const responseMetrics = calculateResponseTime(conversation, new Date(sentAt));
+    Object.assign(increments, responseMetrics);
+
+    await trackDailyMetric(conversation.workspaceId, new Date(sentAt), increments);
 
     res.status(201).json({
       ...message.toObject(),
@@ -390,4 +426,21 @@ function buildFollowupResponse(followUpCount: number, base: string): string {
 function buildInitialEscalationReply(base: string): string {
   if (base && base.trim().length > 0) return base;
   return 'This needs a teammate to review personally, so I’ve flagged it for them. I won’t make commitments here, but I can help with other questions meanwhile.';
+}
+
+function calculateResponseTime(conversation: any, sentAt: Date): Record<string, number> {
+  if (
+    conversation.lastCustomerMessageAt &&
+    (!conversation.lastBusinessMessageAt || new Date(conversation.lastBusinessMessageAt) < new Date(conversation.lastCustomerMessageAt))
+  ) {
+    const diff = sentAt.getTime() - new Date(conversation.lastCustomerMessageAt).getTime();
+    if (diff > 0) {
+      return {
+        firstResponseTimeSumMs: diff,
+        firstResponseTimeCount: 1,
+      };
+    }
+  }
+
+  return {};
 }
