@@ -111,8 +111,8 @@ const Layout: React.FC = () => {
       </div>
 
       {/* Header */}
-      <header className="glass-panel sticky top-0 z-20 border-b border-border/50 px-4 md:px-6 py-3 flex-shrink-0 relative">
-        <div className="flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0">
+        <div className="relative mx-auto max-w-7xl px-4 md:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}
