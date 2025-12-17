@@ -15,6 +15,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
+import { Modal } from '../components/ui/Modal';
 import {
   Plus,
   Play,
@@ -29,6 +30,7 @@ import {
   Info,
   Send,
   RefreshCw,
+  Settings,
 } from 'lucide-react';
 
 function snapshotSettings(settings?: WorkspaceSettings | null): Partial<WorkspaceSettings> {
@@ -99,6 +101,8 @@ export default function Sandbox() {
   const [liveInput, setLiveInput] = useState('');
   const [liveSending, setLiveSending] = useState(false);
   const [selectedTurnIndex, setSelectedTurnIndex] = useState<number | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
 
   const selectedScenario = useMemo(
     () => scenarios.find((s) => s._id === selectedScenarioId) || null,
@@ -115,6 +119,23 @@ export default function Sandbox() {
       loadScenarios();
     }
   }, [currentWorkspace]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      setIsMobile(event.matches);
+    };
+
+    handleChange(mediaQuery);
+    mediaQuery.addEventListener('change', handleChange as any);
+    return () => mediaQuery.removeEventListener('change', handleChange as any);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile) {
+      setActiveTab('live');
+    }
+  }, [isMobile]);
 
   const loadWorkspaceSettings = async () => {
     if (!currentWorkspace) return;
@@ -327,6 +348,143 @@ export default function Sandbox() {
     return liveMessages[selectedTurnIndex] || null;
   }, [liveMessages, selectedTurnIndex]);
 
+  const renderSettingsForm = () => (
+    <div className="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
+      <div>
+        <p className="text-xs text-muted-foreground mb-1">Decision mode</p>
+        <select
+          className="w-full border rounded-md p-2 bg-background"
+          value={runConfig.decisionMode || ''}
+          onChange={(e) => setRunConfig((prev) => ({ ...prev, decisionMode: e.target.value as any }))}
+        >
+          <option value="">Use workspace default</option>
+          <option value="assist">Assist</option>
+          <option value="auto">Auto</option>
+        </select>
+      </div>
+      <div>
+        <p className="text-xs text-muted-foreground mb-1">Reply language</p>
+        <Input
+          value={runConfig.defaultReplyLanguage || ''}
+          onChange={(e) => setRunConfig((prev) => ({ ...prev, defaultReplyLanguage: e.target.value }))}
+          placeholder="e.g. en"
+        />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Primary goal</p>
+          <select
+            className="w-full border rounded-md p-2 bg-background"
+            value={runConfig.primaryGoal || ''}
+            onChange={(e) => setRunConfig((prev) => ({ ...prev, primaryGoal: (e.target.value as GoalType) || undefined }))}
+          >
+            <option value="">Use workspace default</option>
+            <option value="none">None</option>
+            <option value="capture_lead">Capture lead</option>
+            <option value="book_appointment">Book appointment</option>
+            <option value="start_order">Start order</option>
+            <option value="handle_support">Handle support</option>
+            <option value="drive_to_channel">Drive to channel</option>
+          </select>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Secondary goal</p>
+          <select
+            className="w-full border rounded-md p-2 bg-background"
+            value={runConfig.secondaryGoal || ''}
+            onChange={(e) =>
+              setRunConfig((prev) => ({ ...prev, secondaryGoal: (e.target.value as GoalType) || undefined }))
+            }
+          >
+            <option value="">Use workspace default</option>
+            <option value="none">None</option>
+            <option value="capture_lead">Capture lead</option>
+            <option value="book_appointment">Book appointment</option>
+            <option value="start_order">Start order</option>
+            <option value="handle_support">Handle support</option>
+            <option value="drive_to_channel">Drive to channel</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <p className="text-xs text-muted-foreground mb-1">Max reply sentences</p>
+        <Input
+          type="number"
+          value={runConfig.maxReplySentences ?? ''}
+          onChange={(e) =>
+            setRunConfig((prev) => ({
+              ...prev,
+              maxReplySentences: e.target.value === '' ? undefined : Number(e.target.value),
+            }))
+          }
+          placeholder="Use workspace default"
+        />
+      </div>
+      <div>
+        <p className="text-xs text-muted-foreground mb-1">Human escalation behavior</p>
+        <select
+          className="w-full border rounded-md p-2 bg-background"
+          value={runConfig.humanEscalationBehavior || ''}
+          onChange={(e) =>
+            setRunConfig((prev) => ({
+              ...prev,
+              humanEscalationBehavior: (e.target.value as any) || undefined,
+            }))
+          }
+        >
+          <option value="">Use workspace default</option>
+          <option value="ai_silent">AI silent</option>
+          <option value="ai_allowed">AI allowed</option>
+        </select>
+      </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Sparkles className="w-4 h-4 text-primary" /> Applies to both scenario simulations and live chat runs.
+      </div>
+    </div>
+  );
+
+  const renderTurnDetails = () => {
+    if (effectiveTab !== 'live') {
+      return <p>Details are shown inline in the scenario script.</p>;
+    }
+
+    if (selectedLiveTurn && selectedLiveTurn.meta) {
+      return (
+        <>
+          <p className="text-xs text-muted-foreground">Inspecting latest AI turn.</p>
+          <div className="space-y-1 text-foreground">
+            {selectedLiveTurn.meta.detectedLanguage && (
+              <p>Detected language: {selectedLiveTurn.meta.detectedLanguage}</p>
+            )}
+            {selectedLiveTurn.meta.categoryName && <p>Category: {selectedLiveTurn.meta.categoryName}</p>}
+            {selectedLiveTurn.meta.goalMatched && selectedLiveTurn.meta.goalMatched !== 'none' && (
+              <p>Goal hit: {selectedLiveTurn.meta.goalMatched}</p>
+            )}
+            <p>Escalate: {selectedLiveTurn.meta.shouldEscalate ? 'Yes' : 'No'}</p>
+            {selectedLiveTurn.meta.escalationReason && <p>Reason: {selectedLiveTurn.meta.escalationReason}</p>}
+            {selectedLiveTurn.meta.tags && selectedLiveTurn.meta.tags.length > 0 && (
+              <p>Tags: {selectedLiveTurn.meta.tags.join(', ')}</p>
+            )}
+            {selectedLiveTurn.meta.knowledgeItemsUsed && selectedLiveTurn.meta.knowledgeItemsUsed.length > 0 && (
+              <div>
+                <p className="font-medium text-sm">Knowledge used</p>
+                <ul className="list-disc list-inside text-xs text-muted-foreground">
+                  {selectedLiveTurn.meta.knowledgeItemsUsed.map((item) => (
+                    <li key={item.id}>{item.title}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </>
+      );
+    }
+
+    return <p>Select an AI reply from the live chat to see details.</p>;
+  };
+
+  const effectiveTab = isMobile ? 'live' : activeTab;
+
   return (
     <div className="p-4 md:p-6 h-[calc(100vh-88px)]">
       {(error || success) && (
@@ -336,131 +494,154 @@ export default function Sandbox() {
         </div>
       )}
 
-      <div className="grid gap-4 h-full lg:grid-cols-[260px_1fr_320px]">
-        <Card className="h-full flex flex-col">
-          <div className="p-4 border-b flex items-center justify-between gap-2">
-            <div>
-              <div className="text-lg font-semibold flex items-center gap-2">
-                <TestTube className="w-5 h-5 text-primary" /> Sandbox
-              </div>
-              <p className="text-xs text-muted-foreground">Simulate without touching Instagram.</p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={resetForm}
-              leftIcon={<Plus className="w-4 h-4" />}
-              title="New scenario"
-            >
-              <span className="sr-only">New Scenario</span>
-            </Button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-6">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm font-medium text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4" /> Saved Scenarios
+      <div
+        className={
+          isMobile ? 'flex flex-col gap-4 h-full' : 'grid gap-4 h-full lg:grid-cols-[260px_1fr_320px]'
+        }
+      >
+        {!isMobile && (
+          <Card className="h-full flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between gap-2">
+              <div>
+                <div className="text-lg font-semibold flex items-center gap-2">
+                  <TestTube className="w-5 h-5 text-primary" /> Sandbox
                 </div>
-                <span className="text-xs">{scenarios.length}</span>
+                <p className="text-xs text-muted-foreground">Simulate without touching Instagram.</p>
               </div>
-              <div className="space-y-2">
-                {scenarios.length === 0 && (
-                  <p className="text-xs text-muted-foreground">No scenarios yet. Create one to start testing.</p>
-                )}
-                {scenarios.map((scenario) => (
-                  <div
-                    key={scenario._id}
-                    className={`p-3 rounded-lg border transition cursor-pointer ${
-                      selectedScenarioId === scenario._id
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:bg-muted'
-                    }`}
-                    onClick={() => handleSelectScenario(scenario)}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="font-medium">{scenario.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Updated {new Date(scenario.updatedAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteScenario(scenario._id);
-                        }}
-                        className="text-muted-foreground hover:text-destructive"
-                        title="Delete scenario"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    {scenario.description && (
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{scenario.description}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={resetForm}
+                leftIcon={<Plus className="w-4 h-4" />}
+                title="New scenario"
+              >
+                <span className="sr-only">New Scenario</span>
+              </Button>
             </div>
 
-            <div className="space-y-3">
-              <button
-                className="w-full flex items-center justify-between text-sm font-medium text-left"
-                onClick={() => setShowHistory((prev) => !prev)}
-              >
-                <span className="flex items-center gap-2 text-muted-foreground">
-                  <Clock className="w-4 h-4" /> Simulation History
-                </span>
-                {showHistory ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-              </button>
-
-              {showHistory && (
-                <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
-                  {runHistory.length === 0 && (
-                    <p className="text-xs text-muted-foreground">No runs yet for this scenario.</p>
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm font-medium text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" /> Saved Scenarios
+                  </div>
+                  <span className="text-xs">{scenarios.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {scenarios.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No scenarios yet. Create one to start testing.</p>
                   )}
-                  {runHistory.map((run) => (
+                  {scenarios.map((scenario) => (
                     <div
-                      key={run._id}
+                      key={scenario._id}
                       className={`p-3 rounded-lg border transition cursor-pointer ${
-                        activeRunId === run._id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'
+                        selectedScenarioId === scenario._id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:bg-muted'
                       }`}
-                      onClick={() => handleSelectRun(run)}
+                      onClick={() => handleSelectScenario(scenario)}
                     >
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground">Run {run._id.slice(-6)}</span>
-                        <span>{new Date(run.createdAt).toLocaleString()}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="font-medium">{scenario.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Updated {new Date(scenario.updatedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteScenario(scenario._id);
+                          }}
+                          className="text-muted-foreground hover:text-destructive"
+                          title="Delete scenario"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">{runSummary(run)}</p>
+                      {scenario.description && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{scenario.description}</p>
+                      )}
                     </div>
                   ))}
                 </div>
-              )}
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  className="w-full flex items-center justify-between text-sm font-medium text-left"
+                  onClick={() => setShowHistory((prev) => !prev)}
+                >
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <Clock className="w-4 h-4" /> Simulation History
+                  </span>
+                  {showHistory ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+
+                {showHistory && (
+                  <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+                    {runHistory.length === 0 && (
+                      <p className="text-xs text-muted-foreground">No runs yet for this scenario.</p>
+                    )}
+                    {runHistory.map((run) => (
+                      <div
+                        key={run._id}
+                        className={`p-3 rounded-lg border transition cursor-pointer ${
+                          activeRunId === run._id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'
+                        }`}
+                        onClick={() => handleSelectRun(run)}
+                      >
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">Run {run._id.slice(-6)}</span>
+                          <span>{new Date(run.createdAt).toLocaleString()}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{runSummary(run)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         <Card className="h-full flex flex-col overflow-hidden">
           <div className="border-b bg-card z-10">
-            <div className="px-4 pt-4 flex items-center gap-2">
-              <Button
-                variant={activeTab === 'scenario' ? 'primary' : 'ghost'}
-                size="sm"
-                onClick={() => setActiveTab('scenario')}
-              >
-                Scenario simulation
-              </Button>
-              <Button
-                variant={activeTab === 'live' ? 'primary' : 'ghost'}
-                size="sm"
-                onClick={() => setActiveTab('live')}
-              >
-                Live test chat
-              </Button>
+            <div className="px-4 pt-4 flex flex-wrap items-center gap-2 justify-between">
+              <div className="flex items-center gap-2">
+                {!isMobile && (
+                  <>
+                    <Button
+                      variant={effectiveTab === 'scenario' ? 'primary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setActiveTab('scenario')}
+                    >
+                      Scenario simulation
+                    </Button>
+                    <Button
+                      variant={effectiveTab === 'live' ? 'primary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setActiveTab('live')}
+                    >
+                      Live test chat
+                    </Button>
+                  </>
+                )}
+                {isMobile && <p className="text-sm font-medium">Live test chat</p>}
+              </div>
+              {isMobile && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  leftIcon={<Settings className="w-4 h-4" />}
+                  onClick={() => setShowConfigModal(true)}
+                >
+                  Run config
+                </Button>
+              )}
             </div>
 
-            {activeTab === 'scenario' ? (
+            {effectiveTab === 'scenario' ? (
               <div className="p-4 flex flex-col gap-3">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                   <div className="flex-1 space-y-2">
@@ -525,7 +706,7 @@ export default function Sandbox() {
             )}
           </div>
 
-          {activeTab === 'scenario' ? (
+          {effectiveTab === 'scenario' ? (
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium">Conversation Script</h3>
@@ -639,6 +820,11 @@ export default function Sandbox() {
                   );
                 })}
               </div>
+              {isMobile && effectiveTab === 'live' && (
+                <div className="p-4 border-t bg-card text-sm text-muted-foreground space-y-2">
+                  {renderTurnDetails()}
+                </div>
+              )}
               <div className="p-4 border-t bg-card flex items-center gap-2">
                 <Input
                   value={liveInput}
@@ -659,161 +845,50 @@ export default function Sandbox() {
           )}
         </Card>
 
-        <Card className="h-full flex flex-col overflow-hidden">
-          <div className="border-b p-4 flex gap-2">
-            <Button
-              variant={inspectorTab === 'details' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setInspectorTab('details')}
-            >
-              Turn details
-            </Button>
-            <Button
-              variant={inspectorTab === 'settings' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setInspectorTab('settings')}
-            >
-              Session settings
-            </Button>
-          </div>
+          {!isMobile && (
+            <Card className="h-full flex flex-col overflow-hidden">
+              <div className="border-b p-4 flex gap-2">
+                <Button
+                  variant={inspectorTab === 'details' ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setInspectorTab('details')}
+                >
+                  Turn details
+                </Button>
+                <Button
+                  variant={inspectorTab === 'settings' ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setInspectorTab('settings')}
+                >
+                  Session settings
+                </Button>
+              </div>
 
-          {inspectorTab === 'details' ? (
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 text-sm text-muted-foreground">
-              {activeTab === 'live' ? (
-                selectedLiveTurn && selectedLiveTurn.meta ? (
-                  <>
-                    <p className="text-xs text-muted-foreground">Inspecting latest AI turn.</p>
-                    <div className="space-y-1 text-foreground">
-                      {selectedLiveTurn.meta.detectedLanguage && (
-                        <p>Detected language: {selectedLiveTurn.meta.detectedLanguage}</p>
-                      )}
-                      {selectedLiveTurn.meta.categoryName && <p>Category: {selectedLiveTurn.meta.categoryName}</p>}
-                      {selectedLiveTurn.meta.goalMatched && selectedLiveTurn.meta.goalMatched !== 'none' && (
-                        <p>Goal hit: {selectedLiveTurn.meta.goalMatched}</p>
-                      )}
-                      <p>Escalate: {selectedLiveTurn.meta.shouldEscalate ? 'Yes' : 'No'}</p>
-                      {selectedLiveTurn.meta.escalationReason && <p>Reason: {selectedLiveTurn.meta.escalationReason}</p>}
-                      {selectedLiveTurn.meta.tags && selectedLiveTurn.meta.tags.length > 0 && (
-                        <p>Tags: {selectedLiveTurn.meta.tags.join(', ')}</p>
-                      )}
-                      {selectedLiveTurn.meta.knowledgeItemsUsed &&
-                        selectedLiveTurn.meta.knowledgeItemsUsed.length > 0 && (
-                          <div>
-                            <p className="font-medium text-sm">Knowledge used</p>
-                            <ul className="list-disc list-inside text-xs text-muted-foreground">
-                              {selectedLiveTurn.meta.knowledgeItemsUsed.map((item) => (
-                                <li key={item.id}>{item.title}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                    </div>
-                  </>
-                ) : (
-                  <p>Select an AI reply from the live chat to see details.</p>
-                )
+              {inspectorTab === 'details' ? (
+                <div className="flex-1 overflow-y-auto p-4 space-y-2 text-sm text-muted-foreground">
+                  {renderTurnDetails()}
+                </div>
               ) : (
-                <p>Details are shown inline in the scenario script.</p>
+                renderSettingsForm()
               )}
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Decision mode</p>
-                <select
-                  className="w-full border rounded-md p-2 bg-background"
-                  value={runConfig.decisionMode || ''}
-                  onChange={(e) => setRunConfig((prev) => ({ ...prev, decisionMode: e.target.value as any }))}
-                >
-                  <option value="">Use workspace default</option>
-                  <option value="assist">Assist</option>
-                  <option value="auto">Auto</option>
-                </select>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Reply language</p>
-                <Input
-                  value={runConfig.defaultReplyLanguage || ''}
-                  onChange={(e) => setRunConfig((prev) => ({ ...prev, defaultReplyLanguage: e.target.value }))}
-                  placeholder="e.g. en"
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Primary goal</p>
-                  <select
-                    className="w-full border rounded-md p-2 bg-background"
-                    value={runConfig.primaryGoal || ''}
-                    onChange={(e) =>
-                      setRunConfig((prev) => ({ ...prev, primaryGoal: (e.target.value as GoalType) || undefined }))
-                    }
-                  >
-                    <option value="">Use workspace default</option>
-                    <option value="none">None</option>
-                    <option value="capture_lead">Capture lead</option>
-                    <option value="book_appointment">Book appointment</option>
-                    <option value="start_order">Start order</option>
-                    <option value="handle_support">Handle support</option>
-                    <option value="drive_to_channel">Drive to channel</option>
-                  </select>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Secondary goal</p>
-                  <select
-                    className="w-full border rounded-md p-2 bg-background"
-                    value={runConfig.secondaryGoal || ''}
-                    onChange={(e) =>
-                      setRunConfig((prev) => ({ ...prev, secondaryGoal: (e.target.value as GoalType) || undefined }))
-                    }
-                  >
-                    <option value="">Use workspace default</option>
-                    <option value="none">None</option>
-                    <option value="capture_lead">Capture lead</option>
-                    <option value="book_appointment">Book appointment</option>
-                    <option value="start_order">Start order</option>
-                    <option value="handle_support">Handle support</option>
-                    <option value="drive_to_channel">Drive to channel</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Max reply sentences</p>
-                <Input
-                  type="number"
-                  value={runConfig.maxReplySentences ?? ''}
-                  onChange={(e) =>
-                    setRunConfig((prev) => ({
-                      ...prev,
-                      maxReplySentences: e.target.value === '' ? undefined : Number(e.target.value),
-                    }))
-                  }
-                  placeholder="Use workspace default"
-                />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Human escalation behavior</p>
-                <select
-                  className="w-full border rounded-md p-2 bg-background"
-                  value={runConfig.humanEscalationBehavior || ''}
-                  onChange={(e) =>
-                    setRunConfig((prev) => ({
-                      ...prev,
-                      humanEscalationBehavior: (e.target.value as any) || undefined,
-                    }))
-                  }
-                >
-                  <option value="">Use workspace default</option>
-                  <option value="ai_silent">AI silent</option>
-                  <option value="ai_allowed">AI allowed</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Sparkles className="w-4 h-4 text-primary" /> Applies to both scenario simulations and live chat runs.
-              </div>
-            </div>
+            </Card>
           )}
-        </Card>
       </div>
+      {isMobile && (
+        <Modal
+          isOpen={showConfigModal}
+          onClose={() => setShowConfigModal(false)}
+          title="Run configuration"
+          size="lg"
+          footer={
+            <Button variant="secondary" onClick={() => setShowConfigModal(false)}>
+              Close
+            </Button>
+          }
+        >
+          {renderSettingsForm()}
+        </Modal>
+      )}
     </div>
   );
 }
