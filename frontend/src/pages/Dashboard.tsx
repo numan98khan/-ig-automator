@@ -42,12 +42,10 @@ const Dashboard: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [insights, setInsights] = useState<DashboardInsightsResponse | null>(null);
   const [attentionItems, setAttentionItems] = useState<DashboardAttentionItem[]>([]);
-  const [loading, setLoading] = useState(false);
   const [attentionLoading, setAttentionLoading] = useState(false);
 
   useEffect(() => {
     if (!currentWorkspace) return;
-    setLoading(true);
 
     const summaryPromise = dashboardAPI.getSummary(currentWorkspace._id, range);
     const insightRange = range === 'today' ? '7d' : range;
@@ -62,8 +60,7 @@ const Dashboard: React.FC = () => {
         console.error('Failed to load dashboard summary', error);
         setSummary(null);
         setInsights(null);
-      })
-      .finally(() => setLoading(false));
+      });
   }, [currentWorkspace, range]);
 
   useEffect(() => {
@@ -258,11 +255,21 @@ const Dashboard: React.FC = () => {
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {item.category && <Badge variant="secondary">{item.category}</Badge>}
                       <span className="text-xs text-muted-foreground">Last message {formatTimeAgo(item.lastMessageAt)}</span>
-                      {(item.badges || []).map((badge) => (
-                        <Badge key={badge} variant={badgeVariantMap[badge].variant}>
-                          {badgeVariantMap[badge].label}
-                        </Badge>
-                      ))}
+                      {(item.badges || []).map((badge) => {
+                        const isBadgeKey = (value: string): value is keyof typeof badgeVariantMap =>
+                          value in badgeVariantMap;
+
+                        if (!isBadgeKey(badge)) {
+                          return null;
+                        }
+
+                        const config = badgeVariantMap[badge];
+                        return (
+                          <Badge key={badge} variant={config.variant}>
+                            {config.label}
+                          </Badge>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
