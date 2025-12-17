@@ -29,7 +29,6 @@ import {
   Sparkles,
   Info,
   Send,
-  RefreshCw,
   Settings,
 } from 'lucide-react';
 
@@ -82,14 +81,14 @@ export default function Sandbox() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [messages, setMessages] = useState<SandboxMessage[]>([{ role: 'customer', text: '' }]);
-  const [runSteps, setRunSteps] = useState<SandboxRunStep[]>([]);
+  const [, setRunSteps] = useState<SandboxRunStep[]>([]);
   const [runConfig, setRunConfig] = useState<Partial<WorkspaceSettings>>({});
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings | null>(null);
   const [runHistory, setRunHistory] = useState<SandboxRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [viewingHistory, setViewingHistory] = useState(false);
-  const [openDetailIndex, setOpenDetailIndex] = useState<number | null>(null);
+  const [, setViewingHistory] = useState(false);
+  const [, setOpenDetailIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -196,18 +195,6 @@ export default function Sandbox() {
     loadRunsForScenario(scenario._id);
   };
 
-  const handleAddMessage = () => {
-    setMessages((prev) => [...prev, { role: 'customer', text: '' }]);
-  };
-
-  const handleRemoveMessage = (index: number) => {
-    setMessages((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleMessageChange = (index: number, text: string) => {
-    setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, text } : msg)));
-  };
-
   const loadRunsForScenario = async (scenarioId: string) => {
     try {
       const history = await sandboxAPI.listRuns(scenarioId);
@@ -303,12 +290,6 @@ export default function Sandbox() {
     } finally {
       setRunning(false);
     }
-  };
-
-  const resetLiveSession = () => {
-    setLiveMessages([]);
-    setLiveInput('');
-    setSelectedTurnIndex(null);
   };
 
   const sendLiveMessage = async () => {
@@ -513,7 +494,7 @@ export default function Sandbox() {
   const effectiveTab = isMobile ? 'live' : activeTab;
 
   return (
-    <div className="p-4 md:p-6 min-h-[calc(100vh-88px)] flex flex-col">
+    <div className="p-4 md:p-6 min-h-[calc(100vh-88px)] flex flex-col bg-background">
       {(error || success) && (
         <div className="mb-3 space-y-1">
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -634,187 +615,23 @@ export default function Sandbox() {
           </Card>
         )}
 
-        <Card className="h-full flex flex-col overflow-hidden min-h-0">
-          <div className="border-b bg-card z-10">
-            <div className="px-4 pt-4 flex flex-wrap items-center gap-2 justify-between">
-              <div className="flex items-center gap-2">
-                {!isMobile && (
-                  <>
-                    <Button
-                      variant={effectiveTab === 'scenario' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => setActiveTab('scenario')}
-                    >
-                      Scenario simulation
-                    </Button>
-                    <Button
-                      variant={effectiveTab === 'live' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => setActiveTab('live')}
-                    >
-                      Live test chat
-                    </Button>
-                  </>
-                )}
-                {isMobile && <p className="text-sm font-medium">Live test chat</p>}
-              </div>
-              {isMobile && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  leftIcon={<Settings className="w-4 h-4" />}
-                  onClick={() => setShowConfigModal(true)}
-                >
-                  Run config
-                </Button>
-              )}
+        {isMobile ? (
+          <div className="flex flex-col flex-1 min-h-0 bg-background">
+            <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-2 border-b">
+              <p className="text-sm font-medium">Live test chat</p>
+              <Button
+                size="sm"
+                variant="secondary"
+                leftIcon={<Settings className="w-4 h-4" />}
+                onClick={() => setShowConfigModal(true)}
+              >
+                Run config
+              </Button>
             </div>
-
-            {effectiveTab === 'scenario' ? (
-              <div className="p-4 flex flex-col gap-3">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <div className="flex-1 space-y-2">
-                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Scenario name" />
-                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <Badge variant="secondary">Mode: {effectiveConfig.decisionMode || 'assist'}</Badge>
-                      <Badge variant="secondary">Goal: {effectiveConfig.primaryGoal || 'none'}</Badge>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      onClick={saveScenario}
-                      disabled={loading}
-                      leftIcon={<Save className="w-4 h-4" />}
-                      title={selectedScenario ? 'Save Scenario' : 'Create Scenario'}
-                    >
-                      <span className="sr-only">{selectedScenario ? 'Save Scenario' : 'Create Scenario'}</span>
-                    </Button>
-                    <Button
-                      variant="primary"
-                      onClick={runScenario}
-                      disabled={running || !selectedScenarioId}
-                      leftIcon={<Play className="w-4 h-4" />}
-                      title={running ? 'Running simulation' : activeRunId ? 'Re-run Simulation' : 'Run Simulation'}
-                    >
-                      <span className="sr-only">
-                        {running ? 'Running simulation' : activeRunId ? 'Re-run Simulation' : 'Run Simulation'}
-                      </span>
-                    </Button>
-                  </div>
-                </div>
-                <Input
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Optional description"
-                />
-              </div>
-            ) : (
-              <div className="p-4 flex flex-col gap-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="secondary">Mode: {effectiveConfig.decisionMode || 'assist'}</Badge>
-                    <Badge variant="secondary">Lang: {effectiveConfig.defaultReplyLanguage || 'en'}</Badge>
-                    <Badge variant="secondary">Primary: {effectiveConfig.primaryGoal || 'none'}</Badge>
-                    <Badge variant="secondary">Secondary: {effectiveConfig.secondaryGoal || 'none'}</Badge>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      leftIcon={<RefreshCw className="w-4 h-4" />}
-                      onClick={resetLiveSession}
-                    >
-                      Reset session
-                    </Button>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground flex items-center gap-2">
-                  <Info className="w-4 h-4" /> Live chat uses sandbox mode and keeps state until you reset.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {effectiveTab === 'scenario' ? (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium">Conversation Script</h3>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={handleAddMessage}
-                  leftIcon={<Plus className="w-4 h-4" />}
-                >
-                  Add message
-                </Button>
-              </div>
-
-              {messages.map((msg, index) => {
-                const meta = runSteps[index]?.meta;
-                const hasReply = Boolean(runSteps[index]?.aiReplyText);
-                const detailsOpen = openDetailIndex === index;
-                return (
-                  <div key={index} className="p-3 border border-border rounded-lg space-y-3 bg-muted/30">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Step {index + 1} – Customer</span>
-                      {messages.length > 1 && !viewingHistory && (
-                        <button
-                          className="text-destructive hover:underline"
-                          onClick={() => handleRemoveMessage(index)}
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                    <textarea
-                      className="w-full rounded-md border border-border bg-background p-2 text-sm focus:ring-2 focus:ring-primary"
-                      rows={3}
-                      value={msg.text}
-                      onChange={(e) => handleMessageChange(index, e.target.value)}
-                      placeholder="Customer says..."
-                    />
-                    <div className="rounded-md bg-background border border-dashed border-border p-3 space-y-2">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground">AI Reply</span>
-                        {running && <span>Simulating…</span>}
-                      </div>
-                      {hasReply ? (
-                        <div
-                          className={`p-3 rounded-md border ${
-                            detailsOpen ? 'border-primary bg-primary/5' : 'border-border bg-muted/20'
-                          }`}
-                          onClick={() => setOpenDetailIndex(detailsOpen ? null : index)}
-                        >
-                          <p className="text-sm whitespace-pre-wrap">{runSteps[index].aiReplyText}</p>
-                          {meta && metaBadges(meta)}
-                          {detailsOpen && meta && (
-                            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                              {meta.categoryName && <p>Category: {meta.categoryName}</p>}
-                              {meta.goalMatched && meta.goalMatched !== 'none' && <p>Goal: {meta.goalMatched}</p>}
-                              <p>Escalate: {meta.shouldEscalate ? 'Yes' : 'No'}</p>
-                              {meta.tags && meta.tags.length > 0 && <p>Tags: {meta.tags.join(', ')}</p>}
-                              {meta.knowledgeItemsUsed && meta.knowledgeItemsUsed.length > 0 && (
-                                <p>
-                                  Knowledge: {meta.knowledgeItemsUsed.map((item) => item.title).join(', ')}
-                                </p>
-                              )}
-                              {meta.escalationReason && <p>Reason: {meta.escalationReason}</p>}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-xs text-muted-foreground">Run the simulation to see the AI reply.</div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 min-h-0 flex flex-col">
               <div
                 ref={liveScrollRef}
-                className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30"
+                className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4 bg-gradient-to-b from-background to-muted/30"
               >
                 {liveMessages.length === 0 && (
                   <div className="text-sm text-muted-foreground">Send a message to start a sandbox chat.</div>
@@ -824,46 +641,35 @@ export default function Sandbox() {
                   return (
                     <div
                       key={idx}
-                      className={`max-w-2xl ${isAI ? 'mr-auto' : 'ml-auto'} space-y-1`}
+                      className={`flex w-full ${isAI ? 'justify-start' : 'justify-end'}`}
                       onClick={() => isAI && setSelectedTurnIndex(idx)}
                     >
-                      {msg.typing ? (
-                        <div className="rounded-lg px-3 py-2 border bg-background border-border">
-                          <p className="text-sm text-muted-foreground">Thinking…</p>
-                        </div>
-                      ) : (
+                      <div className={`flex flex-col max-w-[85%] space-y-1 ${isAI ? 'items-start' : 'items-end'}`}>
                         <div
-                          className={`rounded-lg px-3 py-2 border ${
-                            isAI
-                              ? selectedTurnIndex === idx
-                                ? 'bg-primary/10 border-primary'
-                                : 'bg-background border-border'
-                              : 'bg-primary text-primary-foreground border-primary'
+                          className={`rounded-2xl px-3 py-2 shadow-sm border ${
+                            msg.typing
+                              ? 'bg-muted text-muted-foreground border-border'
+                              : isAI
+                                ? selectedTurnIndex === idx
+                                  ? 'bg-primary/10 border-primary text-foreground'
+                                  : 'bg-muted border-border text-foreground'
+                                : 'bg-primary text-primary-foreground border-primary'
                           }`}
                         >
-                          <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                          <p className="text-sm whitespace-pre-wrap">
+                            {msg.typing ? 'Thinking…' : msg.text}
+                          </p>
                         </div>
-                      )}
-                      {isAI && (
-                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                          <div className="flex flex-wrap gap-1">
-                            {msg.meta && metaBadges(msg.meta)}
-                          </div>
-                          <button className="text-muted-foreground hover:text-foreground flex items-center gap-1">
-                            <ChevronRight className="w-3 h-3" /> Details
-                          </button>
-                        </div>
-                      )}
+                        {isAI && msg.meta && (
+                          <div className="text-[11px] text-muted-foreground w-full">{metaBadges(msg.meta)}</div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
-              {isMobile && effectiveTab === 'live' && (
-                <div className="p-4 border-t bg-card text-sm text-muted-foreground space-y-2">
-                  {renderTurnDetails()}
-                </div>
-              )}
-              <div className="p-4 border-t bg-card flex items-center gap-2 sticky bottom-0">
+              <div className="p-4 border-t bg-background text-sm text-muted-foreground space-y-2">{renderTurnDetails()}</div>
+              <div className="p-3 border-t bg-background flex items-center gap-2 sticky bottom-0">
                 <Input
                   value={liveInput}
                   onChange={(e) => setLiveInput(e.target.value)}
@@ -880,8 +686,176 @@ export default function Sandbox() {
                 </Button>
               </div>
             </div>
-          )}
-        </Card>
+          </div>
+        ) : (
+          <Card className="h-full flex flex-col overflow-hidden min-h-0">
+            <div className="border-b bg-card z-10">
+              <div className="px-4 pt-4 flex flex-wrap items-center gap-2 justify-between">
+                <div className="flex items-center gap-2">
+                  {!isMobile && (
+                    <>
+                      <Button
+                        variant={effectiveTab === 'scenario' ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => setActiveTab('scenario')}
+                      >
+                        Scenario simulation
+                      </Button>
+                      <Button
+                        variant={effectiveTab === 'live' ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => setActiveTab('live')}
+                      >
+                        Live test chat
+                      </Button>
+                    </>
+                  )}
+                  {isMobile && <p className="text-sm font-medium">Live test chat</p>}
+                </div>
+                {isMobile && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    leftIcon={<Settings className="w-4 h-4" />}
+                    onClick={() => setShowConfigModal(true)}
+                  >
+                    Run config
+                  </Button>
+                )}
+              </div>
+
+              {effectiveTab === 'scenario' ? (
+                <div className="p-4 flex flex-col gap-3">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div className="flex-1 space-y-2">
+                      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Scenario name" />
+                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <Badge variant="secondary">Mode: {effectiveConfig.decisionMode || 'assist'}</Badge>
+                        <Badge variant="secondary">Goal: {effectiveConfig.primaryGoal || 'none'}</Badge>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={saveScenario}
+                        disabled={loading}
+                        leftIcon={<Save className="w-4 h-4" />}
+                        title={selectedScenario ? 'Save Scenario' : 'Create Scenario'}
+                      >
+                        <span className="sr-only">{selectedScenario ? 'Save Scenario' : 'Create Scenario'}</span>
+                      </Button>
+                      <Button
+                        variant="primary"
+                        onClick={runScenario}
+                        disabled={running || !selectedScenarioId}
+                        leftIcon={<Play className="w-4 h-4" />}
+                        title={running ? 'Running simulation' : activeRunId ? 'Re-run Simulation' : 'Run Simulation'}
+                      >
+                        <span className="sr-only">
+                          {running ? 'Running simulation' : activeRunId ? 'Re-run Simulation' : 'Run Simulation'}
+                        </span>
+                      </Button>
+                    </div>
+                  </div>
+                  <Input
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Optional description"
+                  />
+                </div>
+              ) : (
+                <div className="p-4 flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary">Mode: {effectiveConfig.decisionMode || 'assist'}</Badge>
+                      <Badge variant="secondary">Lang: {effectiveConfig.defaultReplyLanguage || 'en'}</Badge>
+                      <Badge variant="secondary">Primary: {effectiveConfig.primaryGoal || 'none'}</Badge>
+                      <Badge variant="secondary">Secondary: {effectiveConfig.secondaryGoal || 'none'}</Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setShowConfigModal(true)}
+                        leftIcon={<Settings className="w-4 h-4" />}
+                      >
+                        Run config
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => setLiveMessages([])}>
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 flex flex-col min-h-[320px] rounded-lg border bg-background">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                      {liveMessages.length === 0 && (
+                        <div className="text-sm text-muted-foreground">Send a message to start a sandbox chat.</div>
+                      )}
+                      {liveMessages.map((msg, idx) => {
+                        const isAI = msg.from === 'ai';
+                        return (
+                          <div
+                            key={idx}
+                            className={`flex w-full ${isAI ? 'justify-start' : 'justify-end'}`}
+                            onClick={() => isAI && setSelectedTurnIndex(idx)}
+                          >
+                            <div className={`flex flex-col max-w-[70%] space-y-1 ${isAI ? 'items-start' : 'items-end'}`}>
+                              <div
+                                className={`rounded-2xl px-3 py-2 shadow-sm border ${
+                                  msg.typing
+                                    ? 'bg-muted text-muted-foreground border-border'
+                                    : isAI
+                                      ? selectedTurnIndex === idx
+                                        ? 'bg-primary/10 border-primary text-foreground'
+                                        : 'bg-background border-border text-foreground'
+                                      : 'bg-primary text-primary-foreground border-primary'
+                                }`}
+                              >
+                                <p className="text-sm whitespace-pre-wrap">
+                                  {msg.typing ? 'Thinking…' : msg.text}
+                                </p>
+                              </div>
+                              {isAI && msg.meta && (
+                                <div className="text-[11px] text-muted-foreground w-full">{metaBadges(msg.meta)}</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="border-t p-3 flex items-center gap-2">
+                      <Input
+                        value={liveInput}
+                        onChange={(e) => setLiveInput(e.target.value)}
+                        placeholder="Type a test message..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            sendLiveMessage();
+                          }
+                        }}
+                      />
+                      <Button onClick={sendLiveMessage} disabled={liveSending} leftIcon={<Send className="w-4 h-4" />}>
+                        {liveSending ? 'Sending…' : 'Send'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Info className="w-4 h-4" /> Live chat uses sandbox mode and keeps state until you reset.
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      <span>Inspector shows AI metadata after each reply.</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
 
           {!isMobile && (
             <Card className="h-full flex flex-col overflow-hidden">
