@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   sandboxAPI,
   SandboxMessage,
@@ -96,13 +96,14 @@ export default function Sandbox() {
   const [success, setSuccess] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<'details' | 'settings'>('details');
   const [liveMessages, setLiveMessages] = useState<
-    { from: 'customer' | 'ai'; text: string; meta?: SandboxRunStepMeta }[]
+    { from: 'customer' | 'ai'; text: string; meta?: SandboxRunStepMeta; typing?: boolean }[]
   >([]);
   const [liveInput, setLiveInput] = useState('');
   const [liveSending, setLiveSending] = useState(false);
   const [selectedTurnIndex, setSelectedTurnIndex] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const liveScrollRef = useRef<HTMLDivElement | null>(null);
 
   const selectedScenario = useMemo(
     () => scenarios.find((s) => s._id === selectedScenarioId) || null,
@@ -136,6 +137,12 @@ export default function Sandbox() {
       setActiveTab('live');
     }
   }, [isMobile]);
+
+  useEffect(() => {
+    if (liveScrollRef.current) {
+      liveScrollRef.current.scrollTop = liveScrollRef.current.scrollHeight;
+    }
+  }, [liveMessages]);
 
   const loadWorkspaceSettings = async () => {
     if (!currentWorkspace) return;
@@ -314,22 +321,42 @@ export default function Sandbox() {
     setLiveSending(true);
     setError(null);
 
+    const optimisticMessages: {
+      from: 'customer' | 'ai';
+      text: string;
+      meta?: SandboxRunStepMeta;
+      typing?: boolean;
+    }[] = [
+      ...liveMessages,
+      { from: 'customer', text: customerText },
+      { from: 'ai', text: 'Thinking…', typing: true },
+    ];
+    setLiveMessages(optimisticMessages);
+    setLiveInput('');
+
     try {
       const result = await sandboxAPI.quickRun(currentWorkspace._id, customerSequence, runConfig);
       const lastStep = result.steps[result.steps.length - 1];
 
-      const newMessages: { from: 'customer' | 'ai'; text: string; meta?: SandboxRunStepMeta }[] = [
-        ...liveMessages,
-        { from: 'customer', text: customerText },
-        { from: 'ai', text: lastStep?.aiReplyText || '', meta: lastStep?.meta },
-      ];
+      setLiveMessages((prev) => {
+        const updated = [...prev];
+        const typingIndex = updated.findIndex((m) => m.typing);
+        const aiMessage = { from: 'ai' as const, text: lastStep?.aiReplyText || '', meta: lastStep?.meta };
 
-      setLiveMessages(newMessages);
-      setLiveInput('');
-      setSelectedTurnIndex(newMessages.length - 1);
+        if (typingIndex >= 0) {
+          updated[typingIndex] = aiMessage;
+          setSelectedTurnIndex(typingIndex);
+        } else {
+          updated.push(aiMessage);
+          setSelectedTurnIndex(updated.length - 1);
+        }
+
+        return updated;
+      });
     } catch (err: any) {
       console.error('Failed to send live test message', err);
       setError(err.message || 'Failed to run live test');
+      setLiveMessages((prev) => prev.filter((m) => !m.typing));
     } finally {
       setLiveSending(false);
     }
@@ -486,7 +513,7 @@ export default function Sandbox() {
   const effectiveTab = isMobile ? 'live' : activeTab;
 
   return (
-    <div className="p-4 md:p-6 h-[calc(100vh-88px)]">
+    <div className="p-4 md:p-6 min-h-[calc(100vh-88px)] flex flex-col">
       {(error || success) && (
         <div className="mb-3 space-y-1">
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -496,7 +523,9 @@ export default function Sandbox() {
 
       <div
         className={
-          isMobile ? 'flex flex-col gap-4 h-full' : 'grid gap-4 h-full lg:grid-cols-[260px_1fr_320px]'
+          isMobile
+            ? 'flex flex-col gap-4 flex-1 min-h-0'
+            : 'grid gap-4 flex-1 min-h-0 lg:grid-cols-[260px_1fr_320px]'
         }
       >
         {!isMobile && (
@@ -605,7 +634,7 @@ export default function Sandbox() {
           </Card>
         )}
 
-        <Card className="h-full flex flex-col overflow-hidden">
+        <Card className="h-full flex flex-col overflow-hidden min-h-0">
           <div className="border-b bg-card z-10">
             <div className="px-4 pt-4 flex flex-wrap items-center gap-2 justify-between">
               <div className="flex items-center gap-2">
@@ -782,8 +811,11 @@ export default function Sandbox() {
               })}
             </div>
           ) : (
-            <div className="flex-1 flex flex-col">
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30">
+            <div className="flex-1 flex flex-col min-h-0">
+              <div
+                ref={liveScrollRef}
+                className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30"
+              >
                 {liveMessages.length === 0 && (
                   <div className="text-sm text-muted-foreground">Send a message to start a sandbox chat.</div>
                 )}
@@ -795,17 +827,23 @@ export default function Sandbox() {
                       className={`max-w-2xl ${isAI ? 'mr-auto' : 'ml-auto'} space-y-1`}
                       onClick={() => isAI && setSelectedTurnIndex(idx)}
                     >
-                      <div
-                        className={`rounded-lg px-3 py-2 border ${
-                          isAI
-                            ? selectedTurnIndex === idx
-                              ? 'bg-primary/10 border-primary'
-                              : 'bg-background border-border'
-                            : 'bg-primary text-primary-foreground border-primary'
-                        }`}
-                      >
-                        <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
-                      </div>
+                      {msg.typing ? (
+                        <div className="rounded-lg px-3 py-2 border bg-background border-border">
+                          <p className="text-sm text-muted-foreground">Thinking…</p>
+                        </div>
+                      ) : (
+                        <div
+                          className={`rounded-lg px-3 py-2 border ${
+                            isAI
+                              ? selectedTurnIndex === idx
+                                ? 'bg-primary/10 border-primary'
+                                : 'bg-background border-border'
+                              : 'bg-primary text-primary-foreground border-primary'
+                          }`}
+                        >
+                          <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                        </div>
+                      )}
                       {isAI && (
                         <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                           <div className="flex flex-wrap gap-1">
@@ -825,7 +863,7 @@ export default function Sandbox() {
                   {renderTurnDetails()}
                 </div>
               )}
-              <div className="p-4 border-t bg-card flex items-center gap-2">
+              <div className="p-4 border-t bg-card flex items-center gap-2 sticky bottom-0">
                 <Input
                   value={liveInput}
                   onChange={(e) => setLiveInput(e.target.value)}
