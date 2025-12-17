@@ -44,11 +44,9 @@ const Layout: React.FC = () => {
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const accountMenuRef = useOverlayClose({ isOpen: accountMenuOpen, onClose: () => setAccountMenuOpen(false) });
   const aiMenuRef = useOverlayClose({ isOpen: aiMenuOpen, onClose: () => setAiMenuOpen(false) });
-  const createMenuRef = useOverlayClose({ isOpen: createMenuOpen, onClose: () => setCreateMenuOpen(false) });
   const userMenuRef = useOverlayClose({ isOpen: showUserMenu, onClose: () => setShowUserMenu(false) });
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
@@ -240,15 +238,23 @@ const Layout: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 justify-end min-w-0">
-            <button
-              onClick={() => setSearchOpen(true)}
-              className="hidden md:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-10"
-            >
-              <Search className="w-4 h-4" />
-              Search
-              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md">⌘ K</span>
-            </button>
+          <div className="flex items-center gap-2 justify-end min-w-0">
+            <div className="hidden md:flex items-center gap-1.5">
+              <button
+                onClick={() => setSearchOpen(true)}
+                className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-border bg-card hover:border-primary/60 transition text-muted-foreground"
+              >
+                <Search className="w-4 h-4" />
+                <span className="sr-only">Open search</span>
+              </button>
+              <button
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-border bg-card hover:border-primary/60 transition text-muted-foreground"
+                aria-label="Toggle dark mode"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+            </div>
 
             <Button
               variant="outline"
@@ -262,58 +268,6 @@ const Layout: React.FC = () => {
             >
               Help
             </Button>
-
-            <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-10"
-              aria-label="Toggle dark mode"
-            >
-              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              <span className="hidden lg:inline">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-            </button>
-
-            <div className="relative hidden md:block" ref={createMenuRef}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-10 px-2"
-                leftIcon={<Plus className="w-4 h-4" />}
-                onClick={() => setCreateMenuOpen(!createMenuOpen)}
-              >
-                New
-              </Button>
-              {createMenuOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-background border border-border rounded-xl shadow-xl py-2 z-20 animate-fade-in">
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-muted"
-                    onClick={() => {
-                      setCreateMenuOpen(false);
-                      navigate('/knowledge');
-                    }}
-                  >
-                    New knowledge item
-                  </button>
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-muted"
-                    onClick={() => {
-                      setCreateMenuOpen(false);
-                      navigate('/sandbox');
-                    }}
-                  >
-                    New sandbox scenario
-                  </button>
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-muted"
-                    onClick={() => {
-                      setCreateMenuOpen(false);
-                      navigate('/team');
-                    }}
-                  >
-                    Invite teammate
-                  </button>
-                </div>
-              )}
-            </div>
 
             <div className="relative hidden md:block" ref={userMenuRef}>
               <button
