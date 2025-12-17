@@ -8,12 +8,14 @@ interface Props {
   children: React.ReactNode;
   requireWorkspace?: boolean;
   requireInstagram?: boolean;
+  requireAdmin?: boolean;
 }
 
 const PrivateRoute: React.FC<Props> = ({
   children,
   requireWorkspace = false,
-  requireInstagram = false
+  requireInstagram = false,
+  requireAdmin = false
 }) => {
   const { user, currentWorkspace, loading } = useAuth();
   const [checkingInstagram, setCheckingInstagram] = useState(requireInstagram);
@@ -52,6 +54,10 @@ const PrivateRoute: React.FC<Props> = ({
 
   if (!user) {
     return <Navigate to="/landing" state={{ from: location }} replace />;
+  }
+
+  if (requireAdmin && user.role !== 'admin') {
+    return <Navigate to="/" replace />;
   }
 
   if (requireWorkspace && !currentWorkspace) {

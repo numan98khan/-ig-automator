@@ -6,6 +6,7 @@ export interface IUser extends Document {
   password?: string;
   firstName?: string;
   lastName?: string;
+  role: 'user' | 'admin';
   instagramUserId?: string; // Instagram user ID for OAuth-only authentication
   instagramUsername?: string; // Instagram username
   isProvisional: boolean; // True if user created via Instagram only (no email/password yet)
@@ -38,6 +39,11 @@ const userSchema = new Schema<IUser>({
     type: String,
     unique: true,
     sparse: true,
+  },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user',
   },
   instagramUsername: {
     type: String,

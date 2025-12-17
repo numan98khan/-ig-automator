@@ -21,6 +21,8 @@ import {
   Check,
   Moon,
   Sun,
+  LifeBuoy,
+  ShieldCheck,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
@@ -28,6 +30,8 @@ import GlobalSearchModal from './GlobalSearchModal';
 import { useAccountContext } from '../context/AccountContext';
 import useOverlayClose from '../hooks/useOverlayClose';
 import { useTheme } from '../context/ThemeContext';
+import SupportTicketModal from './SupportTicketModal';
+import { recordBreadcrumb } from '../services/diagnostics';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -41,6 +45,7 @@ const Layout: React.FC = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const accountMenuRef = useOverlayClose({ isOpen: accountMenuOpen, onClose: () => setAccountMenuOpen(false) });
   const aiMenuRef = useOverlayClose({ isOpen: aiMenuOpen, onClose: () => setAiMenuOpen(false) });
   const createMenuRef = useOverlayClose({ isOpen: createMenuOpen, onClose: () => setCreateMenuOpen(false) });
@@ -54,13 +59,21 @@ const Layout: React.FC = () => {
     { to: '/sandbox', label: 'Sandbox (Test)', icon: TestTube },
   ]), []);
 
-  const navLinks = useMemo(() => ([
-    { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
-    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
-    { to: '/alerts', label: 'Alerts', icon: AlertCircle, isActive: isActive('/alerts') },
-    { to: '/team', label: 'Team', icon: Users, isActive: isActive('/team') },
-    { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
-  ]), [location.pathname]);
+  const navLinks = useMemo(() => {
+    const links = [
+      { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
+      { to: '/alerts', label: 'Alerts', icon: AlertCircle, isActive: isActive('/alerts') },
+      { to: '/team', label: 'Team', icon: Users, isActive: isActive('/team') },
+      { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
+    ];
+
+    if (user?.role === 'admin') {
+      links.push({ to: '/admin', label: 'Admin', icon: ShieldCheck, isActive: isActive('/admin') });
+    }
+
+    return links;
+  }, [location.pathname, user?.role]);
 
   const aiMenuActive = aiLinks.some((link) => isActive(link.to));
   const connectedAccountLabel = useMemo(() => {
@@ -78,6 +91,10 @@ const Layout: React.FC = () => {
   useEffect(() => {
     refreshAccounts();
   }, [refreshAccounts]);
+
+  useEffect(() => {
+    recordBreadcrumb({ type: 'route', label: location.pathname, meta: { path: location.pathname } });
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -233,6 +250,18 @@ const Layout: React.FC = () => {
               <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-md">⌘ K</span>
             </button>
 
+            <Button
+              variant="outline"
+              className="h-12 px-3 hidden md:inline-flex"
+              leftIcon={<LifeBuoy className="w-4 h-4" />}
+              onClick={() => {
+                setSupportOpen(true);
+                recordBreadcrumb({ type: 'action', label: 'opened_help' });
+              }}
+            >
+              Help
+            </Button>
+
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               className="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-12"
@@ -300,6 +329,18 @@ const Layout: React.FC = () => {
                   <div className="px-4 py-3 border-b border-border/50 mb-1">
                     <p className="text-sm font-medium truncate">{user?.email || user?.instagramUsername || 'User'}</p>
                   </div>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setSupportOpen(true);
+                      recordBreadcrumb({ type: 'action', label: 'report_issue_dropdown' });
+                    }}
+                    className="w-full justify-start px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-muted text-sm font-normal h-auto rounded-none"
+                    leftIcon={<LifeBuoy className="w-4 h-4" />}
+                  >
+                    Report issue
+                  </Button>
                   <Button
                     variant="ghost"
                     onClick={handleLogout}
@@ -414,6 +455,18 @@ const Layout: React.FC = () => {
             </div>
             <Button
               variant="ghost"
+              onClick={() => {
+                setShowUserMenu(false);
+                setSupportOpen(true);
+                recordBreadcrumb({ type: 'action', label: 'report_issue_mobile' });
+              }}
+              className="w-full justify-start px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted font-medium h-auto rounded-none"
+              leftIcon={<LifeBuoy className="w-4 h-4" />}
+            >
+              Report issue
+            </Button>
+            <Button
+              variant="ghost"
               onClick={handleLogout}
               className="w-full justify-start px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted font-medium h-auto rounded-none"
               leftIcon={<LogOut className="w-4 h-4" />}
@@ -436,6 +489,7 @@ const Layout: React.FC = () => {
         </div>
       </main>
 
+      <SupportTicketModal open={supportOpen} onClose={() => setSupportOpen(false)} />
       <GlobalSearchModal
         open={searchOpen}
         onClose={() => setSearchOpen(false)}

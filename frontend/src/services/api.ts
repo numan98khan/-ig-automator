@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { generateRequestId, recordRequestId } from './diagnostics';
 
 // API Base URL configuration
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -16,8 +17,30 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  const requestId = generateRequestId();
+  if (!config.headers['x-request-id']) {
+    config.headers['x-request-id'] = requestId;
+  }
+  recordRequestId(config.headers['x-request-id'] as string);
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => {
+    const responseRequestId = response.headers['x-request-id'];
+    if (responseRequestId) {
+      recordRequestId(responseRequestId as string);
+    }
+    return response;
+  },
+  (error) => {
+    const responseRequestId = error?.response?.headers?.['x-request-id'];
+    if (responseRequestId) {
+      recordRequestId(responseRequestId as string);
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Types
 export interface User {
@@ -25,6 +48,7 @@ export interface User {
   email?: string;
   firstName?: string;
   lastName?: string;
+  role?: 'user' | 'admin';
   instagramUserId?: string;
   instagramUsername?: string;
   isProvisional: boolean;
@@ -730,6 +754,74 @@ export const dashboardAPI = {
   },
   getInsights: async (workspaceId: string, range: '7d' | '30d'): Promise<DashboardInsightsResponse> => {
     const { data } = await api.get('/api/dashboard/insights', { params: { workspaceId, range } });
+    return data;
+  },
+};
+
+export interface SupportTicket {
+  _id: string;
+  workspaceId: string;
+  instagramAccountId?: string;
+  userId: string;
+  type: 'bug' | 'support' | 'feature' | 'billing';
+  severity?: 'low' | 'medium' | 'high' | 'blocking';
+  subject?: string;
+  description: string;
+  status: 'open' | 'triage' | 'needs_user' | 'in_progress' | 'resolved' | 'closed';
+  assigneeUserId?: string;
+  tags: string[];
+  context?: Record<string, any>;
+  attachments?: { name: string; url?: string; type?: string }[];
+  requestIds?: string[];
+  breadcrumbs?: any[];
+  resolvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupportTicketComment {
+  _id: string;
+  ticketId: string;
+  authorType: 'user' | 'admin' | 'system';
+  authorId?: string;
+  message: string;
+  attachments?: { name: string; url?: string; type?: string }[];
+  createdAt: string;
+}
+
+export const supportAPI = {
+  create: async (payload: any): Promise<SupportTicket> => {
+    const { data } = await api.post('/api/support-tickets', payload);
+    return data;
+  },
+  list: async (params: {
+    workspaceId?: string;
+    status?: string;
+    type?: string;
+    severity?: string;
+    tag?: string;
+  }): Promise<{ tickets: SupportTicket[] }> => {
+    const { data } = await api.get('/api/support-tickets', { params });
+    return data;
+  },
+  getById: async (
+    ticketId: string
+  ): Promise<{ ticket: SupportTicket; comments: SupportTicketComment[] }> => {
+    const { data } = await api.get(`/api/support-tickets/${ticketId}`);
+    return data;
+  },
+  update: async (
+    ticketId: string,
+    payload: Partial<Pick<SupportTicket, 'status' | 'tags' | 'severity' | 'assigneeUserId'>>
+  ): Promise<SupportTicket> => {
+    const { data } = await api.patch(`/api/support-tickets/${ticketId}`, payload);
+    return data;
+  },
+  comment: async (
+    ticketId: string,
+    payload: { message: string; attachments?: { name: string; url?: string; type?: string }[] }
+  ): Promise<SupportTicketComment> => {
+    const { data } = await api.post(`/api/support-tickets/${ticketId}/comments`, payload);
     return data;
   },
 };

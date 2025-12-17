@@ -35,6 +35,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       user: {
         id: user._id,
         email: user.email,
+        role: user.role,
       },
     });
   } catch (error) {
@@ -72,6 +73,7 @@ router.post('/login', async (req: Request, res: Response) => {
       user: {
         id: user._id,
         email: user.email,
+        role: user.role,
       },
     });
   } catch (error) {
@@ -105,6 +107,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
         emailVerified: user.emailVerified,
         defaultWorkspaceId: user.defaultWorkspaceId,
         createdAt: user.createdAt,
+        role: user.role,
       },
       workspaces,
     });
@@ -173,6 +176,7 @@ router.post('/secure-account', authenticate, async (req: AuthRequest, res: Respo
         email: user.email,
         isProvisional: user.isProvisional,
         emailVerified: user.emailVerified,
+        role: user.role,
       },
     });
   } catch (error) {
