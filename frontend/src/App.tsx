@@ -15,6 +15,7 @@ import RequestPasswordReset from './pages/RequestPasswordReset';
 import ResetPassword from './pages/ResetPassword';
 import Sandbox from './pages/Sandbox';
 import Dashboard from './pages/Dashboard';
+import Team from './pages/Team';
 
 function App() {
   return (
@@ -42,7 +43,9 @@ function App() {
             <Route path="sandbox" element={<Sandbox />} />
             <Route path="settings" element={<Settings />} />
             <Route path="categories" element={<Categories />} />
-            <Route path="escalations" element={<Escalations />} />
+            <Route path="alerts" element={<Escalations />} />
+            <Route path="escalations" element={<Navigate to="/alerts" replace />} />
+            <Route path="team" element={<Team />} />
           </Route>
           <Route path="*" element={<Navigate to="/landing" />} />
         </Routes>
