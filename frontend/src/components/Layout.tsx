@@ -240,19 +240,20 @@ const Layout: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 justify-end min-w-0">
+          <div className="flex items-center gap-1.5 justify-end min-w-0">
             <button
               onClick={() => setSearchOpen(true)}
-              className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-12"
+              className="hidden md:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-10"
             >
               <Search className="w-4 h-4" />
               Search
-              <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-md">⌘ K</span>
+              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md">⌘ K</span>
             </button>
 
             <Button
               variant="outline"
-              className="h-12 px-3 hidden md:inline-flex"
+              size="sm"
+              className="h-10 px-2 hidden md:inline-flex"
               leftIcon={<LifeBuoy className="w-4 h-4" />}
               onClick={() => {
                 setSupportOpen(true);
@@ -264,7 +265,7 @@ const Layout: React.FC = () => {
 
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-12"
+              className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-10"
               aria-label="Toggle dark mode"
             >
               {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -274,7 +275,8 @@ const Layout: React.FC = () => {
             <div className="relative hidden md:block" ref={createMenuRef}>
               <Button
                 variant="outline"
-                className="h-12 px-3"
+                size="sm"
+                className="h-10 px-2"
                 leftIcon={<Plus className="w-4 h-4" />}
                 onClick={() => setCreateMenuOpen(!createMenuOpen)}
               >
