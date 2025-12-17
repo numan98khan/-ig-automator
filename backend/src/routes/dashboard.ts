@@ -30,9 +30,14 @@ router.get('/summary', authenticate, async (req: AuthRequest, res: Response) => 
     const docs = await ReportDailyWorkspace.find({
       workspaceId,
       date: { $gte: formatDateKey(bounds.start), $lt: formatDateKey(bounds.end) },
-    }).sort({ date: 1 });
+    })
+      .sort({ date: 1 })
+      .lean();
 
     const totals = docs.reduce((acc, doc) => {
+      const attempts = mapToRecord(doc.goalAttempts);
+      const completions = mapToRecord(doc.goalCompletions);
+
       acc.newConversations += doc.newConversations || 0;
       acc.inboundMessages += doc.inboundMessages || 0;
       acc.aiReplies += doc.aiReplies || 0;
@@ -40,8 +45,8 @@ router.get('/summary', authenticate, async (req: AuthRequest, res: Response) => 
       acc.kbBackedReplies += doc.kbBackedReplies || 0;
       acc.firstResponseTimeSumMs += doc.firstResponseTimeSumMs || 0;
       acc.firstResponseTimeCount += doc.firstResponseTimeCount || 0;
-      acc.goalAttempts = combineMap(acc.goalAttempts, doc.goalAttempts || {});
-      acc.goalCompletions = combineMap(acc.goalCompletions, doc.goalCompletions || {});
+      acc.goalAttempts = combineMap(acc.goalAttempts, attempts);
+      acc.goalCompletions = combineMap(acc.goalCompletions, completions);
       return acc;
     }, {
       newConversations: 0,
@@ -151,15 +156,19 @@ router.get('/insights', authenticate, async (req: AuthRequest, res: Response) =>
     const docs = await ReportDailyWorkspace.find({
       workspaceId,
       date: { $gte: formatDateKey(bounds.start), $lt: formatDateKey(bounds.end) },
-    });
+    }).lean();
 
     const totals = docs.reduce((acc, doc) => {
+      const categoryCounts = mapToRecord(doc.categoryCounts);
+      const escalationReasons = mapToRecord(doc.escalationReasonCounts);
+      const kbArticles = mapToRecord(doc.kbArticleCounts);
+
       acc.aiReplies += doc.aiReplies || 0;
       acc.escalations += doc.escalationsOpened || 0;
       acc.kbBacked += doc.kbBackedReplies || 0;
-      acc.categoryCounts = combineMap(acc.categoryCounts, doc.categoryCounts || {});
-      acc.escalationReasons = combineMap(acc.escalationReasons, doc.escalationReasonCounts || {});
-      acc.kbArticles = combineMap(acc.kbArticles, doc.kbArticleCounts || {});
+      acc.categoryCounts = combineMap(acc.categoryCounts, categoryCounts);
+      acc.escalationReasons = combineMap(acc.escalationReasons, escalationReasons);
+      acc.kbArticles = combineMap(acc.kbArticles, kbArticles);
       return acc;
     }, {
       aiReplies: 0,
@@ -299,6 +308,14 @@ function combineMap(base: Record<string, number>, incoming: Record<string, numbe
     merged[key] = (merged[key] || 0) + (value || 0);
   });
   return merged;
+}
+
+function mapToRecord(value: Record<string, number> | Map<string, number> | undefined): Record<string, number> {
+  if (!value) return {};
+  if (value instanceof Map) {
+    return Object.fromEntries(value.entries());
+  }
+  return value;
 }
 
 async function hydrateCategoryNames(counts: Record<string, number>) {

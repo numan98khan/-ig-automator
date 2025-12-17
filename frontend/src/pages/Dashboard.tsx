@@ -152,7 +152,7 @@ const Dashboard: React.FC = () => {
             <Sparkles className="w-4 h-4 text-primary" />
           </div>
           <div className="mt-3 flex items-end gap-2">
-            <span className="text-3xl font-bold text-foreground">{kpis.newConversations}</span>
+            <span className="text-3xl font-bold text-foreground">{formatNumber(kpis.newConversations)}</span>
             <Badge variant="secondary">{range.toUpperCase()}</Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-2">Fresh threads started by customers.</p>
@@ -164,7 +164,7 @@ const Dashboard: React.FC = () => {
             <MessageSquare className="w-4 h-4 text-primary" />
           </div>
           <div className="mt-3 flex items-end gap-2">
-            <span className="text-3xl font-bold text-foreground">{kpis.inboundMessages}</span>
+            <span className="text-3xl font-bold text-foreground">{formatNumber(kpis.inboundMessages)}</span>
             <Badge variant="secondary">Across channels</Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-2">Customer messages received in this window.</p>
@@ -188,8 +188,8 @@ const Dashboard: React.FC = () => {
             <AlertTriangle className="w-4 h-4 text-amber-500" />
           </div>
           <div className="mt-3 flex items-end gap-2">
-            <span className="text-3xl font-bold text-foreground">{kpis.humanAlerts.open}</span>
-            <Badge variant="danger">{kpis.humanAlerts.critical} critical</Badge>
+            <span className="text-3xl font-bold text-foreground">{formatNumber(kpis.humanAlerts.open)}</span>
+            <Badge variant="danger">{formatNumber(kpis.humanAlerts.critical)} critical</Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-2">Open escalations or SLA risks needing humans.</p>
         </div>
@@ -310,30 +310,30 @@ const Dashboard: React.FC = () => {
           <div className="grid grid-cols-2 gap-3">
             <div className="p-4 bg-muted/40 rounded-xl border border-border/50">
               <p className="text-xs text-muted-foreground">Leads captured</p>
-              <div className="text-2xl font-semibold text-foreground">{outcomes.leads}</div>
+              <div className="text-2xl font-semibold text-foreground">{formatNumber(outcomes.leads)}</div>
             </div>
             <div className="p-4 bg-muted/40 rounded-xl border border-border/50">
               <p className="text-xs text-muted-foreground">Booking intent</p>
-              <div className="text-2xl font-semibold text-foreground">{outcomes.bookings}</div>
+              <div className="text-2xl font-semibold text-foreground">{formatNumber(outcomes.bookings)}</div>
             </div>
             <div className="p-4 bg-muted/40 rounded-xl border border-border/50">
               <p className="text-xs text-muted-foreground">Order started</p>
-              <div className="text-2xl font-semibold text-foreground">{outcomes.orders}</div>
+              <div className="text-2xl font-semibold text-foreground">{formatNumber(outcomes.orders)}</div>
             </div>
             <div className="p-4 bg-muted/40 rounded-xl border border-border/50">
               <p className="text-xs text-muted-foreground">Support resolved</p>
-              <div className="text-2xl font-semibold text-foreground">{outcomes.support}</div>
+              <div className="text-2xl font-semibold text-foreground">{formatNumber(outcomes.support)}</div>
             </div>
             <div className="p-4 bg-muted/40 rounded-xl border border-border/50">
               <p className="text-xs text-muted-foreground">Escalated to human</p>
-              <div className="text-2xl font-semibold text-foreground">{outcomes.escalated}</div>
+              <div className="text-2xl font-semibold text-foreground">{formatNumber(outcomes.escalated)}</div>
             </div>
             <div className="p-4 bg-primary/5 rounded-xl border border-primary/20">
               <p className="text-xs text-muted-foreground">Goal attempts → completions</p>
               <div className="text-lg font-semibold text-foreground flex items-center gap-2">
-                {outcomes.goal.attempts}
+                {formatNumber(outcomes.goal.attempts)}
                 <ArrowUpRight className="w-4 h-4 text-primary" />
-                {outcomes.goal.completions}
+                {formatNumber(outcomes.goal.completions)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">Primary/secondary goal conversions.</p>
             </div>
@@ -362,20 +362,32 @@ const Dashboard: React.FC = () => {
 
           <div>
             <p className="text-xs text-muted-foreground mb-1">Top escalation reasons</p>
-            <div className="flex flex-wrap gap-2">
-              {aiMetrics.topReasons.map((reason) => (
-                <Badge key={reason.name} variant="secondary">{reason.name} ({reason.count})</Badge>
-              ))}
-            </div>
+            {aiMetrics.topReasons.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No escalations logged for this range.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {aiMetrics.topReasons.map((reason) => (
+                  <Badge key={reason.name} variant="secondary">
+                    {reason.name} ({formatNumber(reason.count)})
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
             <p className="text-xs text-muted-foreground mb-1">Top categories handled</p>
-            <div className="flex flex-wrap gap-2">
-              {aiMetrics.topCategories.map((category) => (
-                <Badge key={category.name} variant="primary">{category.name} ({category.count})</Badge>
-              ))}
-            </div>
+            {aiMetrics.topCategories.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No categorized AI replies yet.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {aiMetrics.topCategories.map((category) => (
+                  <Badge key={category.name} variant="primary">
+                    {category.name} ({formatNumber(category.count)})
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -398,20 +410,28 @@ const Dashboard: React.FC = () => {
 
           <div>
             <p className="text-xs text-muted-foreground mb-1">Top KB articles used</p>
-            <ul className="space-y-1 text-sm text-foreground/90 list-disc list-inside">
-              {knowledgeMetrics.topArticles.map((article) => (
-                <li key={article.name}>{article.name} ({article.count})</li>
-              ))}
-            </ul>
+            {knowledgeMetrics.topArticles.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No knowledge-backed replies yet.</p>
+            ) : (
+              <ul className="space-y-1 text-sm text-foreground/90 list-disc list-inside">
+                {knowledgeMetrics.topArticles.map((article) => (
+                  <li key={article.name}>{article.name} ({formatNumber(article.count)})</li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div>
             <p className="text-xs text-muted-foreground mb-1">Missing KB topics</p>
-            <ul className="space-y-1 text-sm text-foreground/90 list-disc list-inside">
-              {knowledgeMetrics.missingTopics.map((topic) => (
-                <li key={topic}>{topic}</li>
-              ))}
-            </ul>
+            {knowledgeMetrics.missingTopics.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No gaps detected from AI replies.</p>
+            ) : (
+              <ul className="space-y-1 text-sm text-foreground/90 list-disc list-inside">
+                {knowledgeMetrics.missingTopics.map((topic) => (
+                  <li key={topic}>{topic}</li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </div>
@@ -421,7 +441,13 @@ const Dashboard: React.FC = () => {
 
 function formatPercent(value: number): string {
   if (!Number.isFinite(value)) return '0%';
-  return `${Math.round(value * 100)}%`;
+  const percent = Math.max(0, Math.min(100, value * 100));
+  return `${(Math.round(percent * 10) / 10).toFixed(1)}%`;
+}
+
+function formatNumber(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  return new Intl.NumberFormat('en-US').format(value);
 }
 
 function formatDuration(ms?: number): string {
