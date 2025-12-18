@@ -437,11 +437,10 @@ const Inbox: React.FC = () => {
                   <button
                     key={filter.key}
                     onClick={() => setActiveFilter(filter.key as 'all' | 'unreplied' | 'escalated' | 'highIntent')}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
-                      activeFilter === filter.key
-                        ? 'bg-primary/10 text-primary border-primary/40'
-                        : 'text-muted-foreground border-border hover:text-foreground hover:border-primary/40'
-                    }`}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${activeFilter === filter.key
+                      ? 'bg-primary/10 text-primary border-primary/40'
+                      : 'text-muted-foreground border-border hover:text-foreground hover:border-primary/40'
+                      }`}
                   >
                     {filter.label}
                   </button>
@@ -471,11 +470,10 @@ const Inbox: React.FC = () => {
                 <div
                   key={conv._id || conv.instagramConversationId}
                   onClick={() => setSelectedConversation(conv)}
-                  className={`p-3 cursor-pointer transition-all duration-200 ${
-                    selectedConversation?._id === conv._id || selectedConversation?.instagramConversationId === conv.instagramConversationId
-                      ? 'bg-primary/5 border-l-2 border-l-primary'
-                      : 'hover:bg-muted/60 border-l-2 border-l-transparent'
-                  }`}
+                  className={`p-3 cursor-pointer transition-all duration-200 ${selectedConversation?._id === conv._id || selectedConversation?.instagramConversationId === conv.instagramConversationId
+                    ? 'bg-primary/5 border-l-2 border-l-primary'
+                    : 'hover:bg-muted/60 border-l-2 border-l-transparent'
+                    }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -584,16 +582,15 @@ const Inbox: React.FC = () => {
                       >
                         <div className="relative max-w-[85%] md:max-w-2xl group">
                           <div
-                            className={`px-3.5 py-3 rounded-xl text-sm leading-relaxed shadow-sm ${
-                              msg.from === 'customer'
-                                ? 'bg-secondary text-foreground border border-border'
-                                : msg.from === 'ai'
-                                  ? 'bg-muted text-foreground border border-border'
-                                  : 'bg-primary text-primary-foreground shadow-md'
-                            }`}
+                            className={`px-3.5 py-3 rounded-xl text-sm leading-relaxed shadow-sm ${msg.from === 'customer'
+                              ? 'bg-secondary text-foreground border border-border'
+                              : msg.from === 'ai'
+                                ? 'bg-primary text-primary-foreground shadow-md' //'bg-muted text-foreground border border-border'
+                                : 'bg-primary text-primary-foreground shadow-md'
+                              }`}
                           >
                             {msg.from === 'ai' && (
-                              <div className="flex items-center gap-1.5 mb-1.5 text-foreground/80 text-[11px] font-semibold uppercase tracking-wide">
+                              <div className="flex items-center gap-1.5 mb-1.5 text-muted/80 text-[11px] font-semibold uppercase tracking-wide">
                                 <Sparkles className="w-3 h-3" />
                                 <span>AI Assistant</span>
                               </div>
@@ -621,9 +618,8 @@ const Inbox: React.FC = () => {
                             {msg.text && <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>}
 
                             <div
-                              className={`flex items-center justify-end gap-1.5 mt-1.5 text-[11px] ${
-                                msg.from === 'customer' ? 'text-muted-foreground' : 'text-primary-foreground/80'
-                              }`}
+                              className={`flex items-center justify-end gap-1.5 mt-1.5 text-[11px] ${msg.from === 'customer' ? 'text-muted-foreground' : 'text-primary-foreground/80'
+                                }`}
                             >
                               <span>{formatTime(msg.createdAt)}</span>
                               {msg.from !== 'customer' && (
@@ -660,9 +656,8 @@ const Inbox: React.FC = () => {
                                 <button
                                   key={cat._id}
                                   onClick={() => handleCategoryChange(msg._id, cat._id)}
-                                  className={`w-full text-left px-3 py-2 text-sm transition hover:bg-muted/50 ${
-                                    msg.categoryId?._id === cat._id ? 'text-primary font-medium bg-primary/5' : 'text-foreground'
-                                  }`}
+                                  className={`w-full text-left px-3 py-2 text-sm transition hover:bg-muted/50 ${msg.categoryId?._id === cat._id ? 'text-primary font-medium bg-primary/5' : 'text-foreground'
+                                    }`}
                                 >
                                   {cat.nameEn}
                                 </button>
@@ -683,9 +678,8 @@ const Inbox: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setAutoReplyEnabled((prev) => !prev)}
-                        className={`px-2.5 py-1 rounded-full border text-[11px] font-medium transition ${
-                          autoReplyEnabled ? 'bg-primary/10 text-primary border-primary/40' : 'text-muted-foreground border-border'
-                        }`}
+                        className={`px-2.5 py-1 rounded-full border text-[11px] font-medium transition ${autoReplyEnabled ? 'bg-primary/10 text-primary border-primary/40' : 'text-muted-foreground border-border'
+                          }`}
                       >
                         {autoReplyEnabled ? 'On' : 'Off'}
                       </button>
@@ -780,11 +774,10 @@ const Inbox: React.FC = () => {
                 <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-2">
                   <div className="flex items-center justify-between text-sm font-semibold text-foreground">
                     <span>Escalation</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      selectedConversation.humanRequired
-                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100'
-                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100'
-                    }`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${selectedConversation.humanRequired
+                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100'
+                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100'
+                      }`}>
                       {selectedConversation.humanRequired ? 'Open' : 'Clear'}
                     </span>
                   </div>

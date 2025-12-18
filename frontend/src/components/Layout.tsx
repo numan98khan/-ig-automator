@@ -124,7 +124,7 @@ const Layout: React.FC = () => {
             <div className="relative" ref={accountMenuRef}>
               <button
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                className="flex items-center gap-2 md:gap-3 px-2.5 md:px-3 py-2 rounded-full border border-border bg-card hover:border-primary/50 transition shadow-sm h-10 md:h-12"
+                className="flex items-center gap-2 md:gap-3 px-2.5 md:px-3 md:pl-1 py-2 rounded-full border border-border bg-card hover:border-primary/50 transition shadow-sm h-10 md:h-12"
                 aria-label="Switch Instagram account"
               >
                 <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border border-border bg-muted flex items-center justify-center overflow-hidden text-foreground">
@@ -135,7 +135,7 @@ const Layout: React.FC = () => {
                   )}
                 </div>
                 <div className="hidden md:flex text-left min-w-0 flex-col leading-tight">
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Instagram</p>
+                  {/* <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Instagram</p> */}
                   <p className="font-semibold text-sm text-foreground truncate">
                     {connectedAccountLabel || 'Connect account'}
                   </p>
@@ -150,7 +150,7 @@ const Layout: React.FC = () => {
               </button>
 
               {accountMenuOpen && (
-                <div className="absolute top-12 left-0 w-[320px] bg-background border border-border rounded-xl shadow-2xl z-20 p-3 space-y-2 animate-fade-in">
+                <div className="absolute top-14 left-0 w-[320px] bg-background border border-border rounded-xl shadow-2xl z-20 p-3 space-y-2 animate-fade-in">
                   <div className="flex items-center justify-between pb-2 border-b border-border/60">
                     <div>
                       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">Accounts</p>
@@ -165,11 +165,10 @@ const Layout: React.FC = () => {
                         setActiveAccount(account);
                         setAccountMenuOpen(false);
                       }}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition ${
-                        activeAccount?._id === account._id
-                          ? 'bg-primary/10 border border-primary/30'
-                          : 'hover:bg-muted text-foreground border border-transparent'
-                      }`}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition ${activeAccount?._id === account._id
+                        ? 'bg-primary/10 border border-primary/30'
+                        : 'hover:bg-muted text-foreground border border-transparent'
+                        }`}
                     >
                       <div className="min-w-0">
                         <p className="font-semibold text-sm truncate">@{account.username}</p>
@@ -202,11 +201,10 @@ const Layout: React.FC = () => {
                 <Link
                   key={link.to}
                   to={link.to}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    link.isActive
-                      ? 'bg-primary/10 text-primary shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  }`}
+                  className={`flex items-center gap-2 px-3 py-2 text-sm font-medium transition-all duration-200 ${link.isActive
+                    ? 'bg-primary/10 text-primary shadow-sm rounded-full'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted rounded-full'
+                    }`}
                 >
                   <link.icon className={`w-4 h-4 ${link.isActive ? 'text-primary' : ''}`} />
                   {link.label}
@@ -215,11 +213,10 @@ const Layout: React.FC = () => {
               <div className="relative" ref={aiMenuRef}>
                 <button
                   onClick={() => setAiMenuOpen(!aiMenuOpen)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition ${
-                    aiMenuActive
-                      ? 'bg-primary/10 text-primary shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  }`}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-semibold transition ${aiMenuActive
+                    ? 'bg-primary/10 text-primary shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
                 >
                   <Sparkles className={`w-4 h-4 ${aiMenuActive ? 'text-primary' : ''}`} />
                   AI
@@ -232,11 +229,10 @@ const Layout: React.FC = () => {
                         key={link.to}
                         to={link.to}
                         onClick={() => setAiMenuOpen(false)}
-                        className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition ${
-                          isActive(link.to)
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                        }`}
+                        className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition ${isActive(link.to)
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                          }`}
                       >
                         <link.icon className="w-4 h-4" />
                         {link.label}
@@ -358,11 +354,10 @@ const Layout: React.FC = () => {
                     key={link.to}
                     to={link.to}
                     onClick={() => setShowMobileMenu(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
-                      link.isActive
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                    }`}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${link.isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      }`}
                   >
                     <link.icon className="w-5 h-5" />
                     {link.label}
@@ -377,11 +372,10 @@ const Layout: React.FC = () => {
                     key={link.to}
                     to={link.to}
                     onClick={() => setShowMobileMenu(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
-                      isActive(link.to)
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                    }`}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${isActive(link.to)
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      }`}
                   >
                     <link.icon className="w-5 h-5" />
                     {link.label}
