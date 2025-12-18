@@ -24,7 +24,6 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
 
     const conversations = await Conversation.find({ workspaceId })
       .sort({ lastMessageAt: -1 })
-      .populate('instagramAccountId')
       .populate('categoryId');
 
     // Get last message for each conversation
@@ -34,8 +33,13 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
           .sort({ createdAt: -1 })
           .limit(1);
 
+        const convObj = conv.toObject();
         return {
-          ...conv.toObject(),
+          ...convObj,
+          instagramAccountId:
+            typeof convObj.instagramAccountId === 'object' && convObj.instagramAccountId !== null
+              ? (convObj.instagramAccountId as any)._id?.toString?.() || convObj.instagramAccountId?.toString?.()
+              : convObj.instagramAccountId?.toString?.(),
           lastMessage: lastMessage ? lastMessage.text : '',
           isSynced: true, // Local conversations are synced
           categoryName: conv.categoryId ? (conv.categoryId as any).name : undefined,
@@ -95,7 +99,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
               lastMessageAt: new Date(igConv.updated_time),
               platform: 'instagram',
               isSynced: false,
-              instagramAccountId: igAccount._id,
+              instagramAccountId: igAccount._id.toString(),
               workspaceId: workspaceId,
             };
           })
