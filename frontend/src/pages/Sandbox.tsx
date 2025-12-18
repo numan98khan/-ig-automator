@@ -9,6 +9,9 @@ import {
   GoalType,
   settingsAPI,
   SandboxRunStepMeta,
+  SandboxWorkspaceState,
+  SandboxScenarioDraftState,
+  SandboxLiveChatState,
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
@@ -34,34 +37,7 @@ import {
   PanelRightOpen,
 } from 'lucide-react';
 
-const RUN_CONFIG_STORAGE_KEY = (workspaceId: string) => `sandbox:runConfig:${workspaceId}`;
-const LIVE_CHAT_STORAGE_KEY = (workspaceId: string) => `sandbox:liveChat:${workspaceId}`;
-const SCENARIO_DRAFT_STORAGE_KEY = (workspaceId: string) => `sandbox:scenarioDraft:${workspaceId}`;
-
 const logSandbox = (...args: any[]) => console.log('[Sandbox]', ...args);
-
-function loadFromStorage<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch (err) {
-    console.error('Failed to read sandbox storage', err);
-    return null;
-  }
-}
-
-type LiveChatState = {
-  messages: { from: 'customer' | 'ai'; text: string; meta?: SandboxRunStepMeta; typing?: boolean }[];
-  input?: string;
-  selectedTurnIndex?: number | null;
-};
-
-type ScenarioDraftState = {
-  name?: string;
-  description?: string;
-  messages?: SandboxMessage[];
-  selectedScenarioId?: string | null;
-};
 
 function snapshotSettings(settings?: WorkspaceSettings | null): Partial<WorkspaceSettings> {
   if (!settings) return {};
@@ -117,7 +93,7 @@ export default function Sandbox() {
   const [runConfig, setRunConfig] = useState<Partial<WorkspaceSettings>>({});
   const [runConfigHydrated, setRunConfigHydrated] = useState(false);
   const hydratedWorkspaceIdRef = useRef<string | null>(null);
-  const awaitingWorkspaceDefaultsRef = useRef(false);
+  const [sandboxStateHydrated, setSandboxStateHydrated] = useState(false);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings | null>(null);
   const [runHistory, setRunHistory] = useState<SandboxRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -164,27 +140,86 @@ export default function Sandbox() {
 
   useEffect(() => {
     if (!currentWorkspace) return;
+    let canceled = false;
 
-    const storedLiveChat = loadFromStorage<LiveChatState>(LIVE_CHAT_STORAGE_KEY(currentWorkspace._id));
-    if (storedLiveChat) {
-      setLiveMessages(storedLiveChat.messages || []);
-      setLiveInput(storedLiveChat.input || '');
-      setSelectedTurnIndex(storedLiveChat.selectedTurnIndex ?? null);
-    }
+    const hydrateSandboxState = async () => {
+      setSandboxStateHydrated(false);
+      setRunConfigHydrated(false);
+      hydratedWorkspaceIdRef.current = null;
+      setRunConfig({});
+      setLiveMessages([]);
+      setLiveInput('');
+      setSelectedTurnIndex(null);
+      setSelectedScenarioId(null);
+      setName('');
+      setDescription('');
+      setMessages([{ role: 'customer', text: '' }]);
+      setRunSteps([]);
+      setRunHistory([]);
+      setActiveRunId(null);
+      setOpenDetailIndex(null);
+      setViewingHistory(false);
+      setShowHistory(false);
 
-    const storedScenarioDraft = loadFromStorage<ScenarioDraftState>(SCENARIO_DRAFT_STORAGE_KEY(currentWorkspace._id));
-    if (storedScenarioDraft) {
-      setName(storedScenarioDraft.name || '');
-      setDescription(storedScenarioDraft.description || '');
-      setMessages(
-        storedScenarioDraft.messages && storedScenarioDraft.messages.length > 0
-          ? storedScenarioDraft.messages
-          : [{ role: 'customer', text: '' }]
-      );
-      if (storedScenarioDraft.selectedScenarioId) {
-        persistedScenarioIdRef.current = storedScenarioDraft.selectedScenarioId;
+      try {
+        logSandbox('Loading sandbox state', currentWorkspace._id);
+        const state = await sandboxAPI.getState(currentWorkspace._id);
+
+        if (canceled) return;
+
+        if (state?.runConfig && Object.keys(state.runConfig).length > 0) {
+          logSandbox('Restoring sandbox run config from Mongo', {
+            workspaceId: currentWorkspace._id,
+            runConfig: state.runConfig,
+          });
+          setRunConfig(state.runConfig);
+          setRunConfigHydrated(true);
+          hydratedWorkspaceIdRef.current = currentWorkspace._id;
+        }
+
+        if (state?.liveChat) {
+          logSandbox('Restoring live chat from Mongo', {
+            workspaceId: currentWorkspace._id,
+            liveChat: state.liveChat,
+          });
+          setLiveMessages(state.liveChat.messages || []);
+          setLiveInput(state.liveChat.input || '');
+          setSelectedTurnIndex(state.liveChat.selectedTurnIndex ?? null);
+        }
+
+        if (state?.scenarioDraft) {
+          logSandbox('Restoring scenario draft from Mongo', {
+            workspaceId: currentWorkspace._id,
+            scenarioDraft: state.scenarioDraft,
+          });
+          setName(state.scenarioDraft.name || '');
+          setDescription(state.scenarioDraft.description || '');
+          setMessages(
+            state.scenarioDraft.messages && state.scenarioDraft.messages.length > 0
+              ? state.scenarioDraft.messages
+              : [{ role: 'customer', text: '' }]
+          );
+          setSelectedScenarioId(state.scenarioDraft.selectedScenarioId || null);
+          if (state.scenarioDraft.selectedScenarioId) {
+            persistedScenarioIdRef.current = state.scenarioDraft.selectedScenarioId;
+          }
+        }
+      } catch (err: any) {
+        if (canceled) return;
+        console.error('Failed to load sandbox state', err);
+        setError(err.message || 'Failed to load sandbox state');
+      } finally {
+        if (!canceled) {
+          setSandboxStateHydrated(true);
+        }
       }
-    }
+    };
+
+    hydrateSandboxState();
+
+    return () => {
+      canceled = true;
+    };
   }, [currentWorkspace]);
 
   useEffect(() => {
@@ -210,35 +245,46 @@ export default function Sandbox() {
     }
   }, [liveMessages]);
 
-  useEffect(() => {
-    if (!currentWorkspace || !runConfigHydrated) return;
-    logSandbox('Persisting run config', {
-      workspaceId: currentWorkspace._id,
-      runConfig,
-    });
-    localStorage.setItem(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id), JSON.stringify(runConfig));
-  }, [currentWorkspace, runConfig, runConfigHydrated]);
+  const persistSandboxState = async (
+    payload: Partial<Pick<SandboxWorkspaceState, 'runConfig' | 'liveChat' | 'scenarioDraft'>>
+  ) => {
+    if (!currentWorkspace) return;
+    try {
+      logSandbox('Persisting sandbox state', {
+        workspaceId: currentWorkspace._id,
+        payload,
+      });
+      await sandboxAPI.saveState(currentWorkspace._id, payload);
+    } catch (err) {
+      console.error('Failed to persist sandbox state', err);
+    }
+  };
 
   useEffect(() => {
-    if (!currentWorkspace) return;
-    const liveChatState: LiveChatState = {
+    if (!currentWorkspace || !runConfigHydrated || !sandboxStateHydrated) return;
+    persistSandboxState({ runConfig });
+  }, [currentWorkspace, runConfig, runConfigHydrated, sandboxStateHydrated]);
+
+  useEffect(() => {
+    if (!currentWorkspace || !sandboxStateHydrated) return;
+    const liveChatState: SandboxLiveChatState = {
       messages: liveMessages,
       input: liveInput,
       selectedTurnIndex,
     };
-    localStorage.setItem(LIVE_CHAT_STORAGE_KEY(currentWorkspace._id), JSON.stringify(liveChatState));
-  }, [currentWorkspace, liveInput, liveMessages, selectedTurnIndex]);
+    persistSandboxState({ liveChat: liveChatState });
+  }, [currentWorkspace, liveInput, liveMessages, selectedTurnIndex, sandboxStateHydrated]);
 
   useEffect(() => {
-    if (!currentWorkspace) return;
-    const draftState: ScenarioDraftState = {
+    if (!currentWorkspace || !sandboxStateHydrated) return;
+    const draftState: SandboxScenarioDraftState = {
       name,
       description,
       messages,
       selectedScenarioId,
     };
-    localStorage.setItem(SCENARIO_DRAFT_STORAGE_KEY(currentWorkspace._id), JSON.stringify(draftState));
-  }, [currentWorkspace, description, messages, name, selectedScenarioId]);
+    persistSandboxState({ scenarioDraft: draftState });
+  }, [currentWorkspace, description, messages, name, selectedScenarioId, sandboxStateHydrated]);
 
   const loadWorkspaceSettings = async () => {
     if (!currentWorkspace) return;
@@ -254,77 +300,17 @@ export default function Sandbox() {
   };
 
   useEffect(() => {
-    if (!currentWorkspace) return;
-
-    if (hydratedWorkspaceIdRef.current !== currentWorkspace._id) {
-      logSandbox('Workspace changed, resetting hydration state', {
-        previousWorkspaceId: hydratedWorkspaceIdRef.current,
-        nextWorkspaceId: currentWorkspace._id,
-      });
-      setRunConfigHydrated(false);
-      hydratedWorkspaceIdRef.current = null;
-      awaitingWorkspaceDefaultsRef.current = false;
-    }
-  }, [currentWorkspace]);
-
-  useEffect(() => {
-    if (!currentWorkspace || runConfigHydrated) return;
-
-    const storedRunConfig = loadFromStorage<Partial<WorkspaceSettings>>(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id));
-    if (storedRunConfig) {
-      logSandbox('Restoring run config from storage', {
-        workspaceId: currentWorkspace._id,
-        storedRunConfig,
-      });
-      setRunConfig(storedRunConfig);
-      setRunConfigHydrated(true);
-      hydratedWorkspaceIdRef.current = currentWorkspace._id;
-      awaitingWorkspaceDefaultsRef.current = false;
-      return;
-    }
-
-    if (!workspaceSettings) {
-      awaitingWorkspaceDefaultsRef.current = true;
-      logSandbox('No stored run config found, awaiting workspace defaults', {
-        workspaceId: currentWorkspace._id,
-      });
-      return;
-    }
+    if (!currentWorkspace || runConfigHydrated || !workspaceSettings) return;
 
     logSandbox('Applying workspace defaults for run config', {
       workspaceId: currentWorkspace._id,
       workspaceDefaults: snapshotSettings(workspaceSettings),
     });
+
     setRunConfig(snapshotSettings(workspaceSettings));
     setRunConfigHydrated(true);
     hydratedWorkspaceIdRef.current = currentWorkspace._id;
-    awaitingWorkspaceDefaultsRef.current = false;
   }, [currentWorkspace, workspaceSettings, runConfigHydrated]);
-
-  useEffect(() => {
-    if (!currentWorkspace || !workspaceSettings || !awaitingWorkspaceDefaultsRef.current) return;
-
-    logSandbox('Workspace defaults now available, checking for empty run config', {
-      workspaceId: currentWorkspace._id,
-      awaitingWorkspaceDefaults: awaitingWorkspaceDefaultsRef.current,
-      currentRunConfig: runConfig,
-    });
-
-    setRunConfig((prev) => {
-      if (Object.keys(prev).length === 0) {
-        logSandbox('Hydrating run config with workspace defaults after awaiting', {
-          workspaceId: currentWorkspace._id,
-          workspaceDefaults: snapshotSettings(workspaceSettings),
-        });
-        return snapshotSettings(workspaceSettings);
-      }
-      return prev;
-    });
-
-    setRunConfigHydrated(true);
-    awaitingWorkspaceDefaultsRef.current = false;
-    hydratedWorkspaceIdRef.current = currentWorkspace._id;
-  }, [currentWorkspace, workspaceSettings, runConfigHydrated, runConfig]);
 
   const loadScenarios = async () => {
     if (!currentWorkspace) return;
@@ -344,21 +330,6 @@ export default function Sandbox() {
     }
   };
 
-  const clearScenarioDraftStorage = () => {
-    if (!currentWorkspace) return;
-    localStorage.removeItem(SCENARIO_DRAFT_STORAGE_KEY(currentWorkspace._id));
-  };
-
-  const clearRunConfigStorage = () => {
-    if (!currentWorkspace) return;
-    localStorage.removeItem(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id));
-  };
-
-  const clearLiveChatStorage = () => {
-    if (!currentWorkspace) return;
-    localStorage.removeItem(LIVE_CHAT_STORAGE_KEY(currentWorkspace._id));
-  };
-
   const resetForm = () => {
     setSelectedScenarioId(null);
     setName('');
@@ -372,8 +343,6 @@ export default function Sandbox() {
     logSandbox('Resetting form, applying workspace defaults to run config');
     setRunConfig(snapshotSettings(workspaceSettings));
     setActiveTab('scenario');
-    clearScenarioDraftStorage();
-    clearRunConfigStorage();
   };
 
   const handleSelectScenario = (scenario: SandboxScenario) => {
@@ -550,7 +519,6 @@ export default function Sandbox() {
     setLiveMessages([]);
     setSelectedTurnIndex(null);
     setLiveInput('');
-    clearLiveChatStorage();
   };
 
   const convertLiveChatToScenario = () => {

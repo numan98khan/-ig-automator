@@ -236,6 +236,26 @@ export interface SandboxMessage {
   text: string;
 }
 
+export interface SandboxLiveMessage {
+  from: 'customer' | 'ai';
+  text: string;
+  meta?: SandboxRunStepMeta;
+  typing?: boolean;
+}
+
+export interface SandboxLiveChatState {
+  messages: SandboxLiveMessage[];
+  input?: string;
+  selectedTurnIndex?: number | null;
+}
+
+export interface SandboxScenarioDraftState {
+  name?: string;
+  description?: string;
+  messages?: SandboxMessage[];
+  selectedScenarioId?: string | null;
+}
+
 export interface SandboxScenario {
   _id: string;
   workspaceId: string;
@@ -267,6 +287,17 @@ export interface SandboxRunResponse {
   steps: SandboxRunStep[];
   createdAt: string;
   settingsSnapshot?: Record<string, any>;
+}
+
+export interface SandboxWorkspaceState {
+  _id?: string;
+  workspaceId: string;
+  userId: string;
+  runConfig?: Partial<WorkspaceSettings>;
+  liveChat?: SandboxLiveChatState;
+  scenarioDraft?: SandboxScenarioDraftState;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SandboxRun extends SandboxRunResponse {
@@ -591,6 +622,19 @@ export const categoriesAPI = {
 };
 
 export const sandboxAPI = {
+  getState: async (workspaceId: string): Promise<SandboxWorkspaceState | null> => {
+    const { data } = await api.get('/api/sandbox/state', { params: { workspaceId } });
+    return data || null;
+  },
+
+  saveState: async (
+    workspaceId: string,
+    payload: Partial<Pick<SandboxWorkspaceState, 'runConfig' | 'liveChat' | 'scenarioDraft'>>
+  ): Promise<SandboxWorkspaceState> => {
+    const { data } = await api.put('/api/sandbox/state', { workspaceId, ...payload });
+    return data;
+  },
+
   listScenarios: async (workspaceId: string): Promise<SandboxScenario[]> => {
     const { data } = await api.get('/api/sandbox/scenarios', { params: { workspaceId } });
     return data;
