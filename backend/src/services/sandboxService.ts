@@ -4,7 +4,13 @@ import SandboxRun, { SandboxRunStep } from '../models/SandboxRun';
 import MessageCategory from '../models/MessageCategory';
 import { categorizeMessage } from './aiCategorization';
 import { generateAIReply } from './aiReplyService';
-import { getWorkspaceSettings, getGoalConfigs, detectGoalIntent, goalMatchesWorkspace } from './automationService';
+import {
+  getWorkspaceSettings,
+  getGoalConfigs,
+  detectGoalIntent,
+  goalMatchesWorkspace,
+  pauseForTypingIfNeeded,
+} from './automationService';
 import { GoalType } from '../types/automationGoals';
 import { IMessage } from '../models/Message';
 
@@ -36,6 +42,7 @@ function recordSettingsSnapshot(settings: any) {
     allowHashtags: settings?.allowHashtags,
     allowEmojis: settings?.allowEmojis,
     maxReplySentences: settings?.maxReplySentences,
+    skipTypingPauseInSandbox: settings?.skipTypingPauseInSandbox,
     primaryGoal: settings?.primaryGoal,
     secondaryGoal: settings?.secondaryGoal,
     goalConfigs: settings?.goalConfigs,
@@ -57,6 +64,8 @@ async function simulateMessages(
   const steps: SandboxRunStep[] = [];
 
   for (const messageText of messages) {
+    await pauseForTypingIfNeeded('mock', settings);
+
     const categorization = await categorizeMessage(messageText, workspaceId);
     const category = await MessageCategory.findOne({ workspaceId, nameEn: categorization.categoryName });
     const detectedGoal = detectGoalIntent(messageText || '');
@@ -88,6 +97,7 @@ async function simulateMessages(
       },
       messageHistory: history,
       mode: 'sandbox',
+      workspaceSettingsOverride: settings,
     });
 
     steps.push({

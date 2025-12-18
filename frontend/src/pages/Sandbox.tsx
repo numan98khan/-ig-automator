@@ -9,6 +9,9 @@ import {
   GoalType,
   settingsAPI,
   SandboxRunStepMeta,
+  SandboxWorkspaceState,
+  SandboxScenarioDraftState,
+  SandboxLiveChatState,
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
@@ -34,6 +37,8 @@ import {
   PanelRightOpen,
 } from 'lucide-react';
 
+const logSandbox = (...args: any[]) => console.log('[Sandbox]', ...args);
+
 function snapshotSettings(settings?: WorkspaceSettings | null): Partial<WorkspaceSettings> {
   if (!settings) return {};
   return {
@@ -47,6 +52,7 @@ function snapshotSettings(settings?: WorkspaceSettings | null): Partial<Workspac
     humanEscalationBehavior: settings.humanEscalationBehavior,
     escalationGuidelines: settings.escalationGuidelines,
     humanHoldMinutes: settings.humanHoldMinutes,
+    skipTypingPauseInSandbox: settings.skipTypingPauseInSandbox,
   };
 }
 
@@ -85,6 +91,9 @@ export default function Sandbox() {
   const [messages, setMessages] = useState<SandboxMessage[]>([{ role: 'customer', text: '' }]);
   const [runSteps, setRunSteps] = useState<SandboxRunStep[]>([]);
   const [runConfig, setRunConfig] = useState<Partial<WorkspaceSettings>>({});
+  const [runConfigHydrated, setRunConfigHydrated] = useState(false);
+  const hydratedWorkspaceIdRef = useRef<string | null>(null);
+  const [sandboxStateHydrated, setSandboxStateHydrated] = useState(false);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings | null>(null);
   const [runHistory, setRunHistory] = useState<SandboxRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -106,6 +115,7 @@ export default function Sandbox() {
   const [isMobile, setIsMobile] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const liveScrollRef = useRef<HTMLDivElement | null>(null);
+  const persistedScenarioIdRef = useRef<string | null>(null);
 
   const selectedScenario = useMemo(
     () => scenarios.find((s) => s._id === selectedScenarioId) || null,
@@ -126,6 +136,90 @@ export default function Sandbox() {
       loadWorkspaceSettings();
       loadScenarios();
     }
+  }, [currentWorkspace]);
+
+  useEffect(() => {
+    if (!currentWorkspace) return;
+    let canceled = false;
+
+    const hydrateSandboxState = async () => {
+      setSandboxStateHydrated(false);
+      setRunConfigHydrated(false);
+      hydratedWorkspaceIdRef.current = null;
+      setRunConfig({});
+      setLiveMessages([]);
+      setLiveInput('');
+      setSelectedTurnIndex(null);
+      setSelectedScenarioId(null);
+      setName('');
+      setDescription('');
+      setMessages([{ role: 'customer', text: '' }]);
+      setRunSteps([]);
+      setRunHistory([]);
+      setActiveRunId(null);
+      setOpenDetailIndex(null);
+      setViewingHistory(false);
+      setShowHistory(false);
+
+      try {
+        logSandbox('Loading sandbox state', currentWorkspace._id);
+        const state = await sandboxAPI.getState(currentWorkspace._id);
+
+        if (canceled) return;
+
+        if (state?.runConfig && Object.keys(state.runConfig).length > 0) {
+          logSandbox('Restoring sandbox run config from Mongo', {
+            workspaceId: currentWorkspace._id,
+            runConfig: state.runConfig,
+          });
+          setRunConfig(state.runConfig);
+          setRunConfigHydrated(true);
+          hydratedWorkspaceIdRef.current = currentWorkspace._id;
+        }
+
+        if (state?.liveChat) {
+          logSandbox('Restoring live chat from Mongo', {
+            workspaceId: currentWorkspace._id,
+            liveChat: state.liveChat,
+          });
+          setLiveMessages(state.liveChat.messages || []);
+          setLiveInput(state.liveChat.input || '');
+          setSelectedTurnIndex(state.liveChat.selectedTurnIndex ?? null);
+        }
+
+        if (state?.scenarioDraft) {
+          logSandbox('Restoring scenario draft from Mongo', {
+            workspaceId: currentWorkspace._id,
+            scenarioDraft: state.scenarioDraft,
+          });
+          setName(state.scenarioDraft.name || '');
+          setDescription(state.scenarioDraft.description || '');
+          setMessages(
+            state.scenarioDraft.messages && state.scenarioDraft.messages.length > 0
+              ? state.scenarioDraft.messages
+              : [{ role: 'customer', text: '' }]
+          );
+          setSelectedScenarioId(state.scenarioDraft.selectedScenarioId || null);
+          if (state.scenarioDraft.selectedScenarioId) {
+            persistedScenarioIdRef.current = state.scenarioDraft.selectedScenarioId;
+          }
+        }
+      } catch (err: any) {
+        if (canceled) return;
+        console.error('Failed to load sandbox state', err);
+        setError(err.message || 'Failed to load sandbox state');
+      } finally {
+        if (!canceled) {
+          setSandboxStateHydrated(true);
+        }
+      }
+    };
+
+    hydrateSandboxState();
+
+    return () => {
+      canceled = true;
+    };
   }, [currentWorkspace]);
 
   useEffect(() => {
@@ -151,23 +245,85 @@ export default function Sandbox() {
     }
   }, [liveMessages]);
 
+  const persistSandboxState = async (
+    payload: Partial<Pick<SandboxWorkspaceState, 'runConfig' | 'liveChat' | 'scenarioDraft'>>
+  ) => {
+    if (!currentWorkspace) return;
+    try {
+      logSandbox('Persisting sandbox state', {
+        workspaceId: currentWorkspace._id,
+        payload,
+      });
+      await sandboxAPI.saveState(currentWorkspace._id, payload);
+    } catch (err) {
+      console.error('Failed to persist sandbox state', err);
+    }
+  };
+
+  useEffect(() => {
+    if (!currentWorkspace || !runConfigHydrated || !sandboxStateHydrated) return;
+    persistSandboxState({ runConfig });
+  }, [currentWorkspace, runConfig, runConfigHydrated, sandboxStateHydrated]);
+
+  useEffect(() => {
+    if (!currentWorkspace || !sandboxStateHydrated) return;
+    const liveChatState: SandboxLiveChatState = {
+      messages: liveMessages,
+      input: liveInput,
+      selectedTurnIndex,
+    };
+    persistSandboxState({ liveChat: liveChatState });
+  }, [currentWorkspace, liveInput, liveMessages, selectedTurnIndex, sandboxStateHydrated]);
+
+  useEffect(() => {
+    if (!currentWorkspace || !sandboxStateHydrated) return;
+    const draftState: SandboxScenarioDraftState = {
+      name,
+      description,
+      messages,
+      selectedScenarioId,
+    };
+    persistSandboxState({ scenarioDraft: draftState });
+  }, [currentWorkspace, description, messages, name, selectedScenarioId, sandboxStateHydrated]);
+
   const loadWorkspaceSettings = async () => {
     if (!currentWorkspace) return;
     try {
+      logSandbox('Loading workspace settings', currentWorkspace._id);
       const data = await settingsAPI.getByWorkspace(currentWorkspace._id);
       setWorkspaceSettings(data);
-      setRunConfig(snapshotSettings(data));
+      logSandbox('Workspace settings loaded', data);
     } catch (err: any) {
       console.error('Failed to load workspace settings', err);
       setError(err.message || 'Failed to load workspace settings');
     }
   };
 
+  useEffect(() => {
+    if (!currentWorkspace || runConfigHydrated || !workspaceSettings) return;
+
+    logSandbox('Applying workspace defaults for run config', {
+      workspaceId: currentWorkspace._id,
+      workspaceDefaults: snapshotSettings(workspaceSettings),
+    });
+
+    setRunConfig(snapshotSettings(workspaceSettings));
+    setRunConfigHydrated(true);
+    hydratedWorkspaceIdRef.current = currentWorkspace._id;
+  }, [currentWorkspace, workspaceSettings, runConfigHydrated]);
+
   const loadScenarios = async () => {
     if (!currentWorkspace) return;
     try {
       const data = await sandboxAPI.listScenarios(currentWorkspace._id);
       setScenarios(data);
+      if (persistedScenarioIdRef.current) {
+        const matched = data.find((s) => s._id === persistedScenarioIdRef.current);
+        if (matched) {
+          handleSelectScenario(matched);
+        }
+        persistedScenarioIdRef.current = null;
+      }
     } catch (err: any) {
       console.error('Failed to load scenarios', err);
       setError(err.message || 'Failed to load scenarios');
@@ -184,6 +340,7 @@ export default function Sandbox() {
     setActiveRunId(null);
     setOpenDetailIndex(null);
     setViewingHistory(false);
+    logSandbox('Resetting form, applying workspace defaults to run config');
     setRunConfig(snapshotSettings(workspaceSettings));
     setActiveTab('scenario');
   };
@@ -198,6 +355,7 @@ export default function Sandbox() {
     setActiveRunId(null);
     setOpenDetailIndex(null);
     setViewingHistory(false);
+    logSandbox('Selecting scenario, applying workspace defaults to run config', scenario._id);
     setRunConfig(snapshotSettings(workspaceSettings));
     setActiveTab('scenario');
     loadRunsForScenario(scenario._id);
@@ -357,9 +515,49 @@ export default function Sandbox() {
     }
   };
 
+  const clearLiveChat = () => {
+    setLiveMessages([]);
+    setSelectedTurnIndex(null);
+    setLiveInput('');
+  };
+
+  const convertLiveChatToScenario = () => {
+    const customerMessages = liveMessages.filter((m) => m.from === 'customer' && m.text.trim());
+
+    if (customerMessages.length === 0) {
+      setError('Add at least one customer message in live chat before converting.');
+      return;
+    }
+
+    const timestamp = new Date().toLocaleString();
+
+    setSelectedScenarioId(null);
+    setMessages(customerMessages.map((m) => ({ role: 'customer', text: m.text })));
+    setActiveTab('scenario');
+    setRunSteps([]);
+    setRunHistory([]);
+    setActiveRunId(null);
+    setOpenDetailIndex(null);
+    setViewingHistory(false);
+    setSelectedTurnIndex(null);
+    setSuccess('Live chat copied to scenario builder');
+
+    if (!name) {
+      setName(`Simulation from live chat (${timestamp})`);
+    }
+
+    if (!description) {
+      setDescription('Converted from live sandbox conversation.');
+    }
+  };
+
   const handleSelectRun = (run: SandboxRun) => {
     setActiveRunId(run._id);
     setRunSteps(run.steps || []);
+    logSandbox('Selecting run, hydrating run config from snapshot or workspace defaults', {
+      runId: run._id,
+      hasSettingsSnapshot: Boolean(run.settingsSnapshot),
+    });
     setRunConfig(run.settingsSnapshot || snapshotSettings(workspaceSettings));
     setOpenDetailIndex(null);
     setViewingHistory(true);
@@ -384,6 +582,11 @@ export default function Sandbox() {
     if (selectedTurnIndex === null) return null;
     return liveMessages[selectedTurnIndex] || null;
   }, [liveMessages, selectedTurnIndex]);
+
+  const hasCustomerLiveMessages = useMemo(
+    () => liveMessages.some((msg) => msg.from === 'customer' && msg.text.trim()),
+    [liveMessages]
+  );
 
   const renderSimulationTranscript = () => {
     if (runSteps.length === 0) {
@@ -484,6 +687,22 @@ export default function Sandbox() {
           placeholder="Use workspace default"
         />
       </div>
+      <label className="flex items-start gap-2 text-sm text-foreground">
+        <input
+          type="checkbox"
+          className="mt-[2px]"
+          checked={!!runConfig.skipTypingPauseInSandbox}
+          onChange={(e) =>
+            setRunConfig((prev) => ({ ...prev, skipTypingPauseInSandbox: e.target.checked || undefined }))
+          }
+        />
+        <div className="space-y-1">
+          <p className="font-medium">Disable typing pause in sandbox</p>
+          <p className="text-xs text-muted-foreground">
+            Skip the simulated human-typing delay when running sandbox chats.
+          </p>
+        </div>
+      </label>
       <div>
         <p className="text-xs text-muted-foreground mb-1">Human escalation behavior</p>
         <select
@@ -676,14 +895,26 @@ export default function Sandbox() {
           <div className="flex flex-col flex-1 min-h-0 bg-background">
             <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-2 border-b">
               <p className="text-sm font-medium">Live test chat</p>
-              <Button
-                size="sm"
-                variant="secondary"
-                leftIcon={<Settings className="w-4 h-4" />}
-                onClick={() => setShowConfigModal(true)}
-              >
-                Run config
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  leftIcon={<Settings className="w-4 h-4" />}
+                  onClick={() => setShowConfigModal(true)}
+                >
+                  Run config
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  leftIcon={<Save className="w-4 h-4" />}
+                  onClick={convertLiveChatToScenario}
+                  disabled={!hasCustomerLiveMessages}
+                  title={hasCustomerLiveMessages ? 'Copy live chat into a new simulation' : 'Add a customer message first'}
+                >
+                  Save as sim
+                </Button>
+              </div>
             </div>
             <div className="flex-1 min-h-0 flex flex-col">
               <div
@@ -896,20 +1127,30 @@ export default function Sandbox() {
                       <Badge variant="secondary">Primary: {effectiveConfig.primaryGoal || 'none'}</Badge>
                       <Badge variant="secondary">Secondary: {effectiveConfig.secondaryGoal || 'none'}</Badge>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setShowConfigModal(true)}
-                        leftIcon={<Settings className="w-4 h-4" />}
-                      >
-                        Run config
-                      </Button>
-                      <Button size="sm" variant="secondary" onClick={() => setLiveMessages([])}>
-                        Clear
-                      </Button>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setShowConfigModal(true)}
+                      leftIcon={<Settings className="w-4 h-4" />}
+                    >
+                      Run config
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={convertLiveChatToScenario}
+                      leftIcon={<Save className="w-4 h-4" />}
+                      disabled={!hasCustomerLiveMessages}
+                      title={hasCustomerLiveMessages ? 'Copy live chat into a new simulation' : 'Add a customer message first'}
+                    >
+                      Save as simulation
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={clearLiveChat}>
+                      Clear
+                    </Button>
                   </div>
+                </div>
 
                   <div className="flex-1 flex flex-col min-h-[320px] rounded-lg glass-panel">
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">

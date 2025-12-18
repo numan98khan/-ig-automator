@@ -4,6 +4,7 @@ import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import SandboxScenario from '../models/SandboxScenario';
 import SandboxRun from '../models/SandboxRun';
 import { runQuickSandbox, runSandboxScenario } from '../services/sandboxService';
+import SandboxWorkspaceState from '../models/SandboxWorkspaceState';
 
 const router = express.Router();
 
@@ -24,6 +25,59 @@ router.get('/scenarios', authenticate, async (req: AuthRequest, res: Response) =
     res.json(scenarios);
   } catch (error) {
     console.error('List sandbox scenarios error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/state', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string;
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'workspaceId is required' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+
+    const state = await SandboxWorkspaceState.findOne({ workspaceId, userId: req.userId });
+    res.json(state || {});
+  } catch (error) {
+    console.error('Get sandbox state error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/state', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { workspaceId, runConfig, liveChat, scenarioDraft } = req.body || {};
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'workspaceId is required' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+
+    const update: Record<string, any> = {};
+
+    if (runConfig !== undefined) update.runConfig = runConfig;
+    if (liveChat !== undefined) update.liveChat = liveChat;
+    if (scenarioDraft !== undefined) update.scenarioDraft = scenarioDraft;
+
+    const state = await SandboxWorkspaceState.findOneAndUpdate(
+      { workspaceId, userId: req.userId },
+      { $set: update, $setOnInsert: { workspaceId, userId: req.userId } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    res.json(state);
+  } catch (error) {
+    console.error('Update sandbox state error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
