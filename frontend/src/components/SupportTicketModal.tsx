@@ -151,7 +151,7 @@ export default function SupportTicketModal({
             <label className="text-sm font-medium text-muted-foreground space-y-1">
               Type
               <select
-                className="w-full border border-border rounded-lg px-3 py-2 bg-card"
+                className="w-full bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 value={type}
                 onChange={(e) => setType(e.target.value as typeof type)}
               >
@@ -166,7 +166,7 @@ export default function SupportTicketModal({
             <label className="text-sm font-medium text-muted-foreground space-y-1">
               Severity <span className="text-xs text-muted-foreground">(optional)</span>
               <select
-                className="w-full border border-border rounded-lg px-3 py-2 bg-card"
+                className="w-full bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 value={severity}
                 onChange={(e) => setSeverity(e.target.value as typeof severity)}
               >

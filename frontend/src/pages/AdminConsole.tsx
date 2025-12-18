@@ -83,7 +83,7 @@ export default function AdminConsole() {
             Filters
           </div>
           <select
-            className="border border-border rounded-lg px-2 py-1"
+            className="bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             value={filters.status}
             onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
           >
@@ -95,7 +95,7 @@ export default function AdminConsole() {
             ))}
           </select>
           <select
-            className="border border-border rounded-lg px-2 py-1"
+            className="bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             value={filters.type}
             onChange={(e) => setFilters((prev) => ({ ...prev, type: e.target.value }))}
           >
@@ -107,7 +107,7 @@ export default function AdminConsole() {
             ))}
           </select>
           <select
-            className="border border-border rounded-lg px-2 py-1"
+            className="bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             value={filters.severity}
             onChange={(e) => setFilters((prev) => ({ ...prev, severity: e.target.value }))}
           >
@@ -159,7 +159,7 @@ export default function AdminConsole() {
                     <p className="text-xs text-muted-foreground">Workspace: {selectedTicket.workspaceId}</p>
                   </div>
                   <select
-                    className="border border-border rounded-lg px-2 py-1 text-sm"
+                    className="bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     value={selectedTicket.status}
                     onChange={(e) => updateStatus(selectedTicket._id, e.target.value as SupportTicket['status'])}
                   >
