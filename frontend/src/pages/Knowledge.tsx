@@ -188,7 +188,7 @@ const Knowledge: React.FC = () => {
             {filteredItems.map((item) => (
               <div
                 key={item._id}
-                className="group relative bg-card hover:bg-muted/50 border border-border rounded-xl p-5 transition-all duration-200 cursor-pointer hover:shadow-md"
+                className="group relative glass-panel hover:bg-muted/50 border border-border rounded-xl p-5 transition-all duration-200 cursor-pointer hover:shadow-md"
                 onClick={() => handleOpenModal(item)}
               >
                 <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">

@@ -111,10 +111,14 @@ const Layout: React.FC = () => {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground relative selection:bg-primary/30 transition-colors duration-300">
 
-      {/* Background Gradients (Subtler) */}
-      <div className="fixed inset-0 pointer-events-none z-0 opacity-50 dark:opacity-100">
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-primary/10 rounded-full blur-[120px] animate-pulse-slow" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-accent/10 rounded-full blur-[120px] animate-pulse-slow" />
+      {/* Topographic / Contour Lines Background */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute inset-0 bg-contour-lines" aria-hidden />
+        <div
+          className="absolute inset-0 bg-[radial-gradient(140%_130%_at_18%_18%,rgba(255,255,255,0.1),transparent_48%)] dark:bg-[radial-gradient(140%_130%_at_18%_18%,rgba(255,255,255,0.08),transparent_46%)]"
+          aria-hidden
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/35 dark:from-black/40" aria-hidden />
       </div>
 
       {/* Header */}
