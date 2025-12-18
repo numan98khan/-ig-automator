@@ -559,7 +559,7 @@ export default function Sandbox() {
   }, [inspectorOpen, isMobile]);
 
   return (
-    <div className="p-4 md:p-6 min-h-[calc(100vh-88px)] flex flex-col bg-background">
+    <div className="p-4 md:p-6 min-h-[calc(100vh-88px)] flex flex-col ">
       {(error || success) && (
         <div className="mb-3 space-y-1">
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -911,7 +911,7 @@ export default function Sandbox() {
                     </div>
                   </div>
 
-                  <div className="flex-1 flex flex-col min-h-[320px] rounded-lg border bg-background">
+                  <div className="flex-1 flex flex-col min-h-[320px] rounded-lg glass-panel">
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                       {liveMessages.length === 0 && (
                         <div className="text-sm text-muted-foreground">Send a message to start a sandbox chat.</div>
@@ -982,7 +982,7 @@ export default function Sandbox() {
         )}
 
         {!isMobile && inspectorOpen && (
-          <Card className="h-full flex flex-col overflow-hidden">
+          <Card className="h-full flex flex-col overflow-hidden glass-panel" variant="outline">
             <div className="border-b p-4 flex gap-2">
               <Button
                 variant={inspectorTab === 'details' ? 'primary' : 'ghost'}
