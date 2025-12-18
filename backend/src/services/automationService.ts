@@ -26,6 +26,8 @@ import SupportTicketStub from '../models/SupportTicketStub';
 import ChannelDriveEvent from '../models/ChannelDriveEvent';
 
 const HUMAN_TYPING_PAUSE_MS = 3500; // Small pause to mimic human response timing
+const SKIP_TYPING_PAUSE_IN_SANDBOX =
+  process.env.SANDBOX_SKIP_TYPING_PAUSE === 'true' || process.env.SANDBOX_SKIP_TYPING_PAUSE === '1';
 
 function wait(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -387,7 +389,10 @@ export async function processAutoReply(
     }
 
     // Wait briefly to see if the customer is still typing/adding more context
-    if (HUMAN_TYPING_PAUSE_MS > 0) {
+    const shouldPauseForTyping =
+      HUMAN_TYPING_PAUSE_MS > 0 && !(SKIP_TYPING_PAUSE_IN_SANDBOX && conversation.platform === 'mock');
+
+    if (shouldPauseForTyping) {
       await wait(HUMAN_TYPING_PAUSE_MS);
     }
 
