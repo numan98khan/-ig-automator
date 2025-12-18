@@ -120,13 +120,7 @@
   }
 }
 
-<<<<<<< Updated upstream
-/* Micro dot grid texture for subtle structure */
-.bg-dot-grid {
-  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.08) 1px, transparent 0);
-  background-size: 28px 28px;
-  opacity: 0.08;
-=======
+
 /* Topographic / Contour Line Texture */
 .bg-contour-lines {
   /* background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27420%27%20height%3D%27420%27%20viewBox%3D%270%200%20420%20420%27%20fill%3D%27none%27%3E%0A%20%20%3Cg%20stroke%3D%27rgba%28255%2C255%2C255%2C0.65%29%27%20stroke-width%3D%271%27%3E%0A%20%20%20%20%3Cpath%20d%3D%27M-40%20110%20C70%2050%20150%2090%20260%2040%20C340%205%20430%2070%20470%20160%27%20/%3E%0A%20%20%20%20%3Cpath%20d%3D%27M-60%20200%20C40%20150%20150%20220%20250%20170%20C340%20130%20420%20150%20500%20220%27%20/%3E%0A%20%20%20%20%3Cpath%20d%3D%27M-30%20300%20C70%20250%20170%20330%20260%20290%20C340%20255%20430%20280%20480%20350%27%20/%3E%0A%20%20%20%20%3Cpath%20d%3D%27M20%20-30%20C120%2030%20200%2010%20280%2080%20C330%20125%20390%20130%20450%20110%27%20/%3E%0A%20%20%20%20%3Cpath%20d%3D%27M-20%2040%20C60%2010%20150%2040%20220%2010%20C300%20-20%20390%2010%20450%2060%27%20/%3E%0A%20%20%20%20%3Cpath%20d%3D%27M10%20380%20C100%20340%20200%20380%20270%20340%20C340%20300%20430%20320%20480%20370%27%20/%3E%0A%20%20%3C/g%3E%0A%3C/svg%3E"); */
@@ -140,7 +134,7 @@
   /* fills the element */
   opacity: 0.15;
   mix-blend-mode: soft-light;
->>>>>>> Stashed changes
+
 }
 
 #root {
