@@ -120,157 +120,162 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="mb-8 border-b border-white/5 overflow-x-auto">
-        <div className="flex gap-1 min-w-max">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-all font-medium text-sm md:text-base whitespace-nowrap ${activeTab === tab.id
-                  ? 'border-primary text-white bg-white/5 rounded-t-lg'
-                  : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5 rounded-t-lg'
-                  }`}
-              >
-                <Icon className="w-4 h-4" />
-                {tab.label}
-                {tab.badge && (
-                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {error && (
-        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 animate-fade-in">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span className="flex-1 font-medium text-sm">{error}</span>
-        </div>
-      )}
-
-      {success && (
-        <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-3 text-green-400 animate-fade-in">
-          <CheckCircle className="w-5 h-5" />
-          <span className="flex-1 font-medium text-sm">{success}</span>
-        </div>
-      )}
-
-      {activeTab === 'account' && (
-        <div className="space-y-6 animate-fade-in">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-primary" /> Account Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                <span className="text-sm font-medium text-slate-300">Type</span>
-                <Badge variant={user?.isProvisional ? 'warning' : 'success'}>
-                  {user?.isProvisional ? 'Provisional' : 'Secured'}
-                </Badge>
-              </div>
-
-              {user?.email && (
-                <>
-                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                    <span className="text-sm font-medium text-slate-300">Email</span>
-                    <span className="text-sm text-slate-400">{user.email}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                    <span className="text-sm font-medium text-slate-300">Verified</span>
-                    <div className="flex items-center gap-3">
-                      <Badge variant={user.emailVerified ? 'success' : 'warning'}>
-                        {user.emailVerified ? 'Verified' : 'Unverified'}
-                      </Badge>
-                      {!user.emailVerified && (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={handleResendVerification}
-                          disabled={saving}
-                          isLoading={saving}
-                        >
-                          Verify Now
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {user?.instagramUsername && (
-                <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                  <span className="text-sm font-medium text-slate-300">Instagram</span>
-                  <span className="text-sm text-slate-400">@{user.instagramUsername}</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {user?.isProvisional && !user?.email && (
-            <Card className="border-primary/20 bg-primary/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-white">
-                  <Mail className="w-5 h-5 text-accent" /> Secure Your Account
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-slate-400">
-                  Add an email and password to secure your account and access all features.
-                </p>
-                <Input
-                  label="Email Address"
-                  type="email"
-                  value={accountForm.email}
-                  onChange={(e) => setAccountForm(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="your@email.com"
-                />
-                <div className="relative">
-                  <Input
-                    label="Password"
-                    type={accountForm.showPassword ? 'text' : 'password'}
-                    value={accountForm.password}
-                    onChange={(e) => setAccountForm(prev => ({ ...prev, password: e.target.value }))}
-                    placeholder="Min. 8 characters"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setAccountForm(prev => ({ ...prev, showPassword: !prev.showPassword }))}
-                    className="absolute right-3 top-[34px] text-slate-500 hover:text-white transition"
-                  >
-                    {accountForm.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <Input
-                  label="Confirm Password"
-                  type={accountForm.showPassword ? 'text' : 'password'}
-                  value={accountForm.confirmPassword}
-                  onChange={(e) => setAccountForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                  placeholder="Confirm password"
-                />
-                <Button
-                  className="w-full"
-                  onClick={handleSecureAccount}
-                  isLoading={saving}
+      <div className="flex flex-col lg:flex-row gap-6">
+        <aside className="lg:w-64 flex-shrink-0">
+          <div className="bg-white/5 border border-white/10 rounded-xl p-2 space-y-1">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${isActive
+                    ? 'bg-primary/10 text-white border border-primary/30'
+                    : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
+                    }`}
                 >
-                  Secure Account
-                </Button>
-              </CardContent>
-            </Card>
+                  <Icon className="w-4 h-4" />
+                  <span className="flex-1 text-sm font-medium">{tab.label}</span>
+                  {tab.badge && (
+                    <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <div className="flex-1 space-y-6">
+          {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 animate-fade-in">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span className="flex-1 font-medium text-sm">{error}</span>
+            </div>
+          )}
+
+          {success && (
+            <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-3 text-green-400 animate-fade-in">
+              <CheckCircle className="w-5 h-5" />
+              <span className="flex-1 font-medium text-sm">{success}</span>
+            </div>
+          )}
+
+          {activeTab === 'account' && (
+            <div className="space-y-6 animate-fade-in">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-primary" /> Account Status
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
+                    <span className="text-sm font-medium text-slate-300">Type</span>
+                    <Badge variant={user?.isProvisional ? 'warning' : 'success'}>
+                      {user?.isProvisional ? 'Provisional' : 'Secured'}
+                    </Badge>
+                  </div>
+
+                  {user?.email && (
+                    <>
+                      <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
+                        <span className="text-sm font-medium text-slate-300">Email</span>
+                        <span className="text-sm text-slate-400">{user.email}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
+                        <span className="text-sm font-medium text-slate-300">Verified</span>
+                        <div className="flex items-center gap-3">
+                          <Badge variant={user.emailVerified ? 'success' : 'warning'}>
+                            {user.emailVerified ? 'Verified' : 'Unverified'}
+                          </Badge>
+                          {!user.emailVerified && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={handleResendVerification}
+                              disabled={saving}
+                              isLoading={saving}
+                            >
+                              Verify Now
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {user?.instagramUsername && (
+                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
+                      <span className="text-sm font-medium text-slate-300">Instagram</span>
+                      <span className="text-sm text-slate-400">@{user.instagramUsername}</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {user?.isProvisional && !user?.email && (
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-white">
+                      <Mail className="w-5 h-5 text-accent" /> Secure Your Account
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-slate-400">
+                      Add an email and password to secure your account and access all features.
+                    </p>
+                    <Input
+                      label="Email Address"
+                      type="email"
+                      value={accountForm.email}
+                      onChange={(e) => setAccountForm(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="your@email.com"
+                    />
+                    <div className="relative">
+                      <Input
+                        label="Password"
+                        type={accountForm.showPassword ? 'text' : 'password'}
+                        value={accountForm.password}
+                        onChange={(e) => setAccountForm(prev => ({ ...prev, password: e.target.value }))}
+                        placeholder="Min. 8 characters"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setAccountForm(prev => ({ ...prev, showPassword: !prev.showPassword }))}
+                        className="absolute right-3 top-[34px] text-slate-500 hover:text-white transition"
+                      >
+                        {accountForm.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <Input
+                      label="Confirm Password"
+                      type={accountForm.showPassword ? 'text' : 'password'}
+                      value={accountForm.confirmPassword}
+                      onChange={(e) => setAccountForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                      placeholder="Confirm password"
+                    />
+                    <Button
+                      className="w-full"
+                      onClick={handleSecureAccount}
+                      isLoading={saving}
+                    >
+                      Secure Account
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'team' && (
+            <div className="space-y-6 animate-fade-in">
+              <Team />
+            </div>
           )}
         </div>
-      )}
-
-      {activeTab === 'team' && (
-        <div className="space-y-6 animate-fade-in">
-          <Team />
-        </div>
-      )}
+      </div>
     </div>
   );
 }
