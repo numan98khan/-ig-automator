@@ -113,6 +113,7 @@ export default function Sandbox() {
   const [messages, setMessages] = useState<SandboxMessage[]>([{ role: 'customer', text: '' }]);
   const [runSteps, setRunSteps] = useState<SandboxRunStep[]>([]);
   const [runConfig, setRunConfig] = useState<Partial<WorkspaceSettings>>({});
+  const [runConfigHydrated, setRunConfigHydrated] = useState(false);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings | null>(null);
   const [runHistory, setRunHistory] = useState<SandboxRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -206,9 +207,9 @@ export default function Sandbox() {
   }, [liveMessages]);
 
   useEffect(() => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace || !runConfigHydrated) return;
     localStorage.setItem(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id), JSON.stringify(runConfig));
-  }, [currentWorkspace, runConfig]);
+  }, [currentWorkspace, runConfig, runConfigHydrated]);
 
   useEffect(() => {
     if (!currentWorkspace) return;
@@ -245,14 +246,18 @@ export default function Sandbox() {
   useEffect(() => {
     if (!currentWorkspace) return;
 
+    setRunConfigHydrated(false);
+
     const storedRunConfig = loadFromStorage<Partial<WorkspaceSettings>>(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id));
     if (storedRunConfig) {
       setRunConfig(storedRunConfig);
+      setRunConfigHydrated(true);
       return;
     }
 
     if (workspaceSettings) {
       setRunConfig(snapshotSettings(workspaceSettings));
+      setRunConfigHydrated(true);
     }
   }, [currentWorkspace, workspaceSettings]);
 
