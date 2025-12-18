@@ -69,6 +69,7 @@ export interface InstagramAccount {
   username: string;
   workspaceId: string;
   status: 'connected' | 'mock';
+  profilePictureUrl?: string;
   createdAt: string;
 }
 

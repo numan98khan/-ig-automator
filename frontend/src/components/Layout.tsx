@@ -76,10 +76,12 @@ const Layout: React.FC = () => {
   const aiMenuActive = aiLinks.some((link) => isActive(link.to));
   const connectedAccountLabel = useMemo(() => {
     if (!activeAccount) return null;
-    const suffix = accounts.length > 1 ? ` +${accounts.length - 1}` : '';
-    const username = activeAccount.username ? `@${activeAccount.username}` : 'Connected IG';
-    return `${username}${suffix}`;
-  }, [accounts, activeAccount]);
+    return activeAccount.username ? `@${activeAccount.username}` : 'Connected IG';
+  }, [activeAccount]);
+
+  const accountAvatar = useMemo(() => {
+    return (activeAccount as any)?.profilePictureUrl || (activeAccount as any)?.avatarUrl || null;
+  }, [activeAccount]);
 
   const handleLogout = () => {
     logout();
@@ -118,25 +120,33 @@ const Layout: React.FC = () => {
       {/* Header */}
       <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0 h-16">
         <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full grid grid-cols-[auto,1fr,auto] items-center gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             <div className="relative" ref={accountMenuRef}>
               <button
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-border bg-card hover:border-primary/50 transition shadow-sm h-12"
+                className="flex items-center gap-2 md:gap-3 px-2.5 md:px-3 py-2 rounded-full border border-border bg-card hover:border-primary/50 transition shadow-sm h-10 md:h-12"
+                aria-label="Switch Instagram account"
               >
-                <div className="p-2.5 bg-primary text-primary-foreground rounded-lg shadow-sm">
-                  <Instagram className="w-5 h-5" />
+                <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border border-border bg-muted flex items-center justify-center overflow-hidden text-foreground">
+                  {accountAvatar ? (
+                    <img src={accountAvatar} alt="Account avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <Instagram className="w-4 h-4 text-primary" />
+                  )}
                 </div>
-                <div className="text-left min-w-0">
-                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Instagram account</p>
+                <div className="hidden md:flex text-left min-w-0 flex-col leading-tight">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Instagram</p>
                   <p className="font-semibold text-sm text-foreground truncate">
                     {connectedAccountLabel || 'Connect account'}
                   </p>
                   {currentWorkspace?.name && (
-                    <p className="text-[11px] text-muted-foreground truncate">Workspace · {currentWorkspace.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{currentWorkspace.name}</p>
                   )}
                 </div>
-                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                <span className="sr-only">
+                  Workspace {currentWorkspace?.name || 'not selected'}
+                </span>
+                <ChevronDown className="w-4 h-4 text-muted-foreground hidden md:block" />
               </button>
 
               {accountMenuOpen && (
