@@ -26,6 +26,20 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       .sort({ lastMessageAt: -1 })
       .populate('categoryId');
 
+    const normalizeId = (value: unknown): string | undefined => {
+      if (!value) return undefined;
+      if (typeof value === 'string') return value;
+      if (typeof value === 'object') {
+        const obj = value as { _id?: unknown };
+        if (obj && obj._id) return obj._id.toString();
+        if ('toString' in (obj || {}) && typeof (obj as any).toString === 'function') {
+          return (obj as any).toString();
+        }
+      }
+      if (typeof value === 'number' || typeof value === 'bigint') return String(value);
+      return undefined;
+    };
+
     // Get last message for each conversation
     const conversationsWithLastMessage = await Promise.all(
       conversations.map(async (conv) => {
@@ -36,10 +50,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
         const convObj = conv.toObject();
         return {
           ...convObj,
-          instagramAccountId:
-            typeof convObj.instagramAccountId === 'object' && convObj.instagramAccountId !== null
-              ? (convObj.instagramAccountId as any)._id?.toString?.() || convObj.instagramAccountId?.toString?.()
-              : convObj.instagramAccountId?.toString?.(),
+          instagramAccountId: normalizeId(convObj.instagramAccountId),
           lastMessage: lastMessage ? lastMessage.text : '',
           isSynced: true, // Local conversations are synced
           categoryName: conv.categoryId ? (conv.categoryId as any).name : undefined,
