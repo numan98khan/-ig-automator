@@ -191,6 +191,7 @@ export interface WorkspaceSettings {
   escalationExamples?: string[];
   humanEscalationBehavior?: 'ai_silent' | 'ai_allowed';
   humanHoldMinutes?: number;
+  skipTypingPauseInSandbox?: boolean;
   commentDmEnabled: boolean;
   commentDmTemplate: string;
   dmAutoReplyEnabled: boolean;

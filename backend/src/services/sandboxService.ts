@@ -36,6 +36,7 @@ function recordSettingsSnapshot(settings: any) {
     allowHashtags: settings?.allowHashtags,
     allowEmojis: settings?.allowEmojis,
     maxReplySentences: settings?.maxReplySentences,
+    skipTypingPauseInSandbox: settings?.skipTypingPauseInSandbox,
     primaryGoal: settings?.primaryGoal,
     secondaryGoal: settings?.secondaryGoal,
     goalConfigs: settings?.goalConfigs,

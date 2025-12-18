@@ -389,8 +389,10 @@ export async function processAutoReply(
     }
 
     // Wait briefly to see if the customer is still typing/adding more context
-    const shouldPauseForTyping =
-      HUMAN_TYPING_PAUSE_MS > 0 && !(SKIP_TYPING_PAUSE_IN_SANDBOX && conversation.platform === 'mock');
+    const skipTypingPause =
+      conversation.platform === 'mock' && (SKIP_TYPING_PAUSE_IN_SANDBOX || settings.skipTypingPauseInSandbox);
+
+    const shouldPauseForTyping = HUMAN_TYPING_PAUSE_MS > 0 && !skipTypingPause;
 
     if (shouldPauseForTyping) {
       await wait(HUMAN_TYPING_PAUSE_MS);

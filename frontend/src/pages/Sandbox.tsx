@@ -47,6 +47,7 @@ function snapshotSettings(settings?: WorkspaceSettings | null): Partial<Workspac
     humanEscalationBehavior: settings.humanEscalationBehavior,
     escalationGuidelines: settings.escalationGuidelines,
     humanHoldMinutes: settings.humanHoldMinutes,
+    skipTypingPauseInSandbox: settings.skipTypingPauseInSandbox,
   };
 }
 
@@ -484,6 +485,22 @@ export default function Sandbox() {
           placeholder="Use workspace default"
         />
       </div>
+      <label className="flex items-start gap-2 text-sm text-foreground">
+        <input
+          type="checkbox"
+          className="mt-[2px]"
+          checked={!!runConfig.skipTypingPauseInSandbox}
+          onChange={(e) =>
+            setRunConfig((prev) => ({ ...prev, skipTypingPauseInSandbox: e.target.checked || undefined }))
+          }
+        />
+        <div className="space-y-1">
+          <p className="font-medium">Disable typing pause in sandbox</p>
+          <p className="text-xs text-muted-foreground">
+            Skip the simulated human-typing delay when running sandbox chats.
+          </p>
+        </div>
+      </label>
       <div>
         <p className="text-xs text-muted-foreground mb-1">Human escalation behavior</p>
         <select

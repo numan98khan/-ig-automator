@@ -24,6 +24,7 @@ export interface IWorkspaceSettings extends Document {
   escalationExamples?: string[];
   humanEscalationBehavior?: 'ai_silent' | 'ai_allowed';
   humanHoldMinutes?: number;
+  skipTypingPauseInSandbox?: boolean;
 
   // Feature 1: Comment → DM Automation
   commentDmEnabled: boolean;
@@ -113,6 +114,10 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
     default: 3,
     min: 1,
     max: 5,
+  },
+  skipTypingPauseInSandbox: {
+    type: Boolean,
+    default: false,
   },
   decisionMode: {
     type: String,

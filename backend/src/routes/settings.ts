@@ -61,6 +61,7 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       escalationExamples,
       humanEscalationBehavior,
       humanHoldMinutes,
+      skipTypingPauseInSandbox,
       commentDmEnabled,
       commentDmTemplate,
       dmAutoReplyEnabled,
@@ -96,6 +97,7 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     if (escalationExamples !== undefined) updateData.escalationExamples = escalationExamples;
     if (humanEscalationBehavior !== undefined) updateData.humanEscalationBehavior = humanEscalationBehavior;
     if (humanHoldMinutes !== undefined) updateData.humanHoldMinutes = humanHoldMinutes;
+    if (skipTypingPauseInSandbox !== undefined) updateData.skipTypingPauseInSandbox = skipTypingPauseInSandbox;
     if (commentDmEnabled !== undefined) updateData.commentDmEnabled = commentDmEnabled;
     if (commentDmTemplate !== undefined) updateData.commentDmTemplate = commentDmTemplate;
     if (dmAutoReplyEnabled !== undefined) updateData.dmAutoReplyEnabled = dmAutoReplyEnabled;
