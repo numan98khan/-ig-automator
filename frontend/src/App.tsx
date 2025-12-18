@@ -15,10 +15,10 @@ import RequestPasswordReset from './pages/RequestPasswordReset';
 import ResetPassword from './pages/ResetPassword';
 import Sandbox from './pages/Sandbox';
 import Dashboard from './pages/Dashboard';
-import Team from './pages/Team';
 import { AccountProvider } from './context/AccountContext';
 import Support from './pages/Support';
 import AdminConsole from './pages/AdminConsole';
+import Automations from './pages/Automations';
 
 function App() {
   return (
@@ -47,11 +47,12 @@ function App() {
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="sandbox" element={<Sandbox />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="automations" element={<Automations />} />
             <Route path="support" element={<Support />} />
             <Route path="categories" element={<Categories />} />
             <Route path="alerts" element={<Escalations />} />
             <Route path="escalations" element={<Navigate to="/alerts" replace />} />
-            <Route path="team" element={<Team />} />
+            <Route path="team" element={<Navigate to="/settings?tab=team" replace />} />
           </Route>
           <Route
             path="/admin"

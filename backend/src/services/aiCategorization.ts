@@ -72,6 +72,7 @@ export async function categorizeMessage(
     });
 
     const responseText = response.output_text?.trim() || '{}';
+    const structured = extractStructuredJson<CategorizationResult>(response);
 
     let result: CategorizationResult = {
       categoryName: 'General',
@@ -81,7 +82,7 @@ export async function categorizeMessage(
     };
 
     try {
-      const parsed = JSON.parse(responseText);
+      const parsed = structured || safeParseJson(responseText);
       result = {
         categoryName: parsed.categoryName || 'General',
         detectedLanguage: parsed.detectedLanguage || 'en',
@@ -118,6 +119,32 @@ export async function categorizeMessage(
       detectedLanguage: 'en',
       confidence: 0.0,
     };
+  }
+}
+
+function extractStructuredJson<T>(response: any): T | null {
+  if (!response?.output) {
+    return null;
+  }
+
+  for (const item of response.output) {
+    if (!item?.content) continue;
+    for (const content of item.content) {
+      if (content?.type === 'output_text' && content.parsed) {
+        return content.parsed as T;
+      }
+    }
+  }
+
+  return null;
+}
+
+function safeParseJson(content: string): any {
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    console.error('Failed to parse JSON content', content);
+    return {};
   }
 }
 

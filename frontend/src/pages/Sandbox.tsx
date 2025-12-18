@@ -105,7 +105,7 @@ export default function Sandbox() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [inspectorTab, setInspectorTab] = useState<'details' | 'settings'>('details');
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [liveMessages, setLiveMessages] = useState<
     { from: 'customer' | 'ai'; text: string; meta?: SandboxRunStepMeta; typing?: boolean }[]
   >([]);
@@ -116,6 +116,9 @@ export default function Sandbox() {
   const [showConfigModal, setShowConfigModal] = useState(false);
   const liveScrollRef = useRef<HTMLDivElement | null>(null);
   const persistedScenarioIdRef = useRef<string | null>(null);
+  const runConfigReadyRef = useRef(false);
+  const liveChatReadyRef = useRef(false);
+  const scenarioDraftReadyRef = useRef(false);
 
   const selectedScenario = useMemo(
     () => scenarios.find((s) => s._id === selectedScenarioId) || null,
@@ -140,6 +143,9 @@ export default function Sandbox() {
 
   useEffect(() => {
     if (!currentWorkspace) return;
+    if (hydratedWorkspaceIdRef.current === currentWorkspace._id && sandboxStateHydrated) {
+      return;
+    }
     let canceled = false;
 
     const hydrateSandboxState = async () => {
@@ -160,6 +166,9 @@ export default function Sandbox() {
       setOpenDetailIndex(null);
       setViewingHistory(false);
       setShowHistory(false);
+      runConfigReadyRef.current = false;
+      liveChatReadyRef.current = false;
+      scenarioDraftReadyRef.current = false;
 
       try {
         logSandbox('Loading sandbox state', currentWorkspace._id);
@@ -210,6 +219,7 @@ export default function Sandbox() {
         setError(err.message || 'Failed to load sandbox state');
       } finally {
         if (!canceled) {
+          hydratedWorkspaceIdRef.current = currentWorkspace._id;
           setSandboxStateHydrated(true);
         }
       }
@@ -220,7 +230,7 @@ export default function Sandbox() {
     return () => {
       canceled = true;
     };
-  }, [currentWorkspace]);
+  }, [currentWorkspace, sandboxStateHydrated]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 768px)');
@@ -262,6 +272,10 @@ export default function Sandbox() {
 
   useEffect(() => {
     if (!currentWorkspace || !runConfigHydrated || !sandboxStateHydrated) return;
+    if (!runConfigReadyRef.current) {
+      runConfigReadyRef.current = true;
+      return;
+    }
     persistSandboxState({ runConfig });
   }, [currentWorkspace, runConfig, runConfigHydrated, sandboxStateHydrated]);
 
@@ -272,6 +286,10 @@ export default function Sandbox() {
       input: liveInput,
       selectedTurnIndex,
     };
+    if (!liveChatReadyRef.current) {
+      liveChatReadyRef.current = true;
+      return;
+    }
     persistSandboxState({ liveChat: liveChatState });
   }, [currentWorkspace, liveInput, liveMessages, selectedTurnIndex, sandboxStateHydrated]);
 
@@ -283,6 +301,10 @@ export default function Sandbox() {
       messages,
       selectedScenarioId,
     };
+    if (!scenarioDraftReadyRef.current) {
+      scenarioDraftReadyRef.current = true;
+      return;
+    }
     persistSandboxState({ scenarioDraft: draftState });
   }, [currentWorkspace, description, messages, name, selectedScenarioId, sandboxStateHydrated]);
 
@@ -767,15 +789,26 @@ export default function Sandbox() {
   };
 
   const effectiveTab = isMobile ? 'live' : activeTab;
+  const showScenarioSidebar = !isMobile && activeTab === 'scenario';
   const layoutClass = useMemo(() => {
     if (isMobile) {
       return 'flex flex-col gap-4 flex-1 min-h-0';
     }
 
-    return inspectorOpen
-      ? 'grid gap-4 flex-1 min-h-0 lg:grid-cols-[260px_1fr_320px]'
-      : 'grid gap-4 flex-1 min-h-0 lg:grid-cols-[260px_1fr]';
-  }, [inspectorOpen, isMobile]);
+    if (showScenarioSidebar && inspectorOpen) {
+      return 'grid gap-4 flex-1 min-h-0 lg:grid-cols-[260px_1fr_320px]';
+    }
+
+    if (showScenarioSidebar) {
+      return 'grid gap-4 flex-1 min-h-0 lg:grid-cols-[260px_1fr]';
+    }
+
+    if (inspectorOpen) {
+      return 'grid gap-4 flex-1 min-h-0 lg:grid-cols-[1fr_320px]';
+    }
+
+    return 'flex flex-col gap-4 flex-1 min-h-0';
+  }, [inspectorOpen, isMobile, showScenarioSidebar]);
 
   return (
     <div className="p-4 md:p-6 min-h-[calc(100vh-88px)] flex flex-col ">
@@ -787,7 +820,7 @@ export default function Sandbox() {
       )}
 
       <div className={layoutClass}>
-        {!isMobile && (
+        {showScenarioSidebar && (
           <Card className="h-full flex flex-col glass-panel shadow-sm" variant="outline">
             <div className="p-4 border-b flex items-center justify-between gap-2">
               <div>

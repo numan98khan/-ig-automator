@@ -422,7 +422,8 @@ Generate a response following all rules above. Return JSON with:
     });
 
     responseContent = response.output_text || '{}';
-    const raw = safeParseJson(responseContent);
+    const structured = extractStructuredJson<AIReplyResult>(response);
+    const raw = structured || safeParseJson(responseContent);
     const collectedFieldsDefaults = {
       name: null,
       phone: null,
@@ -603,6 +604,23 @@ function safeParseJson(content: string): any {
       throw primaryError;
     }
   }
+}
+
+function extractStructuredJson<T>(response: any): T | null {
+  if (!response?.output) {
+    return null;
+  }
+
+  for (const item of response.output) {
+    if (!item?.content) continue;
+    for (const content of item.content) {
+      if (content?.type === 'output_text' && content.parsed) {
+        return content.parsed as T;
+      }
+    }
+  }
+
+  return null;
 }
 
 function repairJson(content: string): string {

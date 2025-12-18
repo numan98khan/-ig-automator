@@ -57,7 +57,7 @@ const Inbox: React.FC = () => {
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'unreplied' | 'escalated' | 'highIntent'>('all');
-  const [contextOpen, setContextOpen] = useState(true);
+  const [contextOpen, setContextOpen] = useState(false);
   const [draftSource, setDraftSource] = useState<'ai' | null>(null);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
 
@@ -158,16 +158,6 @@ const Inbox: React.FC = () => {
       }
     }
   }, [currentWorkspace, activeAccount]);
-
-  useEffect(() => {
-    const updateContextPreference = () => {
-      setContextOpen(window.innerWidth >= 1024);
-    };
-
-    updateContextPreference();
-    window.addEventListener('resize', updateContextPreference);
-    return () => window.removeEventListener('resize', updateContextPreference);
-  }, []);
 
   const loadData = async () => {
     if (!currentWorkspace) return;
