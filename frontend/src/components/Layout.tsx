@@ -113,11 +113,11 @@ const Layout: React.FC = () => {
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute inset-0 bg-contour-lines" aria-hidden />
         <div
-          className="absolute inset-0 bg-[radial-gradient(140%_130%_at_18%_18%,rgba(255,255,255,0.12),transparent_48%)] dark:bg-[radial-gradient(140%_130%_at_18%_18%,rgba(255,255,255,0.08),transparent_46%)]"
+          className="absolute inset-0 bg-[radial-gradient(140%_130%_at_18%_18%,rgba(16,107,163,0.14),transparent_52%)] dark:bg-[radial-gradient(140%_130%_at_18%_18%,rgba(72,175,240,0.12),transparent_48%)]"
           aria-hidden
         />
         <div
-          className="absolute inset-0 bg-gradient-to-b from-white/70 via-white/25 to-white/70 dark:from-black/25 dark:via-transparent dark:to-black/45"
+          className="absolute inset-0 bg-gradient-to-b from-[#c7d9e5]/80 via-white/45 to-[#eff3f6]/85 dark:from-[#0e1a22]/85 dark:via-transparent dark:to-[#0c141c]/90"
           aria-hidden
         />
       </div>
