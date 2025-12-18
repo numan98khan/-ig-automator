@@ -134,7 +134,6 @@ export default function Sandbox() {
   const [isMobile, setIsMobile] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const liveScrollRef = useRef<HTMLDivElement | null>(null);
-  const restoredRunConfigRef = useRef(false);
   const persistedScenarioIdRef = useRef<string | null>(null);
 
   const selectedScenario = useMemo(
@@ -160,14 +159,6 @@ export default function Sandbox() {
 
   useEffect(() => {
     if (!currentWorkspace) return;
-
-    restoredRunConfigRef.current = false;
-
-    const storedRunConfig = loadFromStorage<Partial<WorkspaceSettings>>(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id));
-    if (storedRunConfig) {
-      restoredRunConfigRef.current = true;
-      setRunConfig(storedRunConfig);
-    }
 
     const storedLiveChat = loadFromStorage<LiveChatState>(LIVE_CHAT_STORAGE_KEY(currentWorkspace._id));
     if (storedLiveChat) {
@@ -245,15 +236,25 @@ export default function Sandbox() {
     try {
       const data = await settingsAPI.getByWorkspace(currentWorkspace._id);
       setWorkspaceSettings(data);
-      setRunConfig((prev) => {
-        if (restoredRunConfigRef.current) return prev;
-        return snapshotSettings(data);
-      });
     } catch (err: any) {
       console.error('Failed to load workspace settings', err);
       setError(err.message || 'Failed to load workspace settings');
     }
   };
+
+  useEffect(() => {
+    if (!currentWorkspace) return;
+
+    const storedRunConfig = loadFromStorage<Partial<WorkspaceSettings>>(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id));
+    if (storedRunConfig) {
+      setRunConfig(storedRunConfig);
+      return;
+    }
+
+    if (workspaceSettings) {
+      setRunConfig(snapshotSettings(workspaceSettings));
+    }
+  }, [currentWorkspace, workspaceSettings]);
 
   const loadScenarios = async () => {
     if (!currentWorkspace) return;
