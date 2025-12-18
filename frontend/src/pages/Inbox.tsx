@@ -404,7 +404,7 @@ const Inbox: React.FC = () => {
         <div className="flex h-full min-h-0 gap-3 md:gap-4 px-0">
           {/* Conversation List */}
           <div
-            className={`w-full md:w-[340px] lg:w-[360px] flex-shrink-0 flex flex-col rounded-xl border border-border bg-card/80 backdrop-blur-sm shadow-sm min-h-0 ${selectedConversation ? 'hidden md:flex' : 'flex'}`}
+            className={`w-full md:w-[340px] lg:w-[360px] flex-shrink-0 flex flex-col rounded-xl border border-border glass-panel shadow-sm min-h-0 ${selectedConversation ? 'hidden md:flex' : 'flex'}`}
           >
             <div className="p-3 border-b border-border bg-background/50">
               <div className="flex items-center justify-between gap-2 mb-3">
@@ -512,7 +512,7 @@ const Inbox: React.FC = () => {
 
           {/* Chat Area */}
           <div
-            className={`flex-1 flex flex-col rounded-xl border border-border bg-card/80 backdrop-blur-sm shadow-sm min-h-0 ${selectedConversation ? 'flex' : 'hidden md:flex'}`}
+            className={`flex-1 flex flex-col rounded-xl border border-border glass-panel shadow-sm min-h-0 ${selectedConversation ? 'flex' : 'hidden md:flex'}`}
           >
             {selectedConversation ? (
               <>
@@ -737,7 +737,7 @@ const Inbox: React.FC = () => {
 
           {/* Context Drawer */}
           {contextOpen && selectedConversation && (
-            <aside className="hidden lg:flex w-[320px] flex-shrink-0 flex-col rounded-xl border border-border bg-card/80 backdrop-blur-sm shadow-sm min-h-0 p-4 gap-4">
+            <aside className="hidden lg:flex w-[320px] flex-shrink-0 flex-col rounded-xl border border-border glass-panel shadow-sm min-h-0 p-4 gap-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-foreground">Context</h3>
                 <button

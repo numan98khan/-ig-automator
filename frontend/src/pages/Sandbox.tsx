@@ -569,7 +569,7 @@ export default function Sandbox() {
 
       <div className={layoutClass}>
         {!isMobile && (
-          <Card className="h-full flex flex-col bg-card/80 backdrop-blur-sm shadow-sm" variant="outline">
+          <Card className="h-full flex flex-col glass-panel shadow-sm" variant="outline">
             <div className="p-4 border-b flex items-center justify-between gap-2">
               <div>
                 <div className="text-lg font-semibold flex items-center gap-2">
@@ -604,8 +604,8 @@ export default function Sandbox() {
                     <div
                       key={scenario._id}
                       className={`p-3 rounded-lg border transition cursor-pointer ${selectedScenarioId === scenario._id
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:bg-muted'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:bg-muted'
                         }`}
                       onClick={() => handleSelectScenario(scenario)}
                     >
@@ -704,12 +704,12 @@ export default function Sandbox() {
                       <div className={`flex flex-col max-w-[85%] space-y-1 ${isAI ? 'items-start' : 'items-end'}`}>
                         <div
                           className={`rounded-2xl px-3 py-2 shadow-sm border ${msg.typing
-                              ? 'bg-muted text-muted-foreground border-border'
-                              : isAI
-                                ? selectedTurnIndex === idx
-                                  ? 'bg-primary/10 border-primary text-foreground'
-                                  : 'bg-muted border-border text-foreground'
-                                : 'bg-primary text-primary-foreground border-primary'
+                            ? 'bg-muted text-muted-foreground border-border'
+                            : isAI
+                              ? selectedTurnIndex === idx
+                                ? 'bg-primary/10 border-primary text-foreground'
+                                : 'bg-muted border-border text-foreground'
+                              : 'bg-primary text-primary-foreground border-primary'
                             }`}
                         >
                           <p className="text-sm whitespace-pre-wrap">
@@ -744,7 +744,7 @@ export default function Sandbox() {
             </div>
           </div>
         ) : (
-          <Card className="h-full flex flex-col overflow-hidden min-h-0 bg-card/80 backdrop-blur-sm shadow-sm" variant="outline">
+          <Card className="h-full flex flex-col overflow-hidden min-h-0 glass-panel shadow-sm" variant="outline">
             <div className="border-b bg-card z-10">
               <div className="px-4 pt-4 flex flex-wrap items-center gap-2 justify-between">
                 <div className="flex items-center gap-2">
@@ -927,12 +927,12 @@ export default function Sandbox() {
                             <div className={`flex flex-col max-w-[70%] space-y-1 ${isAI ? 'items-start' : 'items-end'}`}>
                               <div
                                 className={`rounded-2xl px-3 py-2 shadow-sm border ${msg.typing
-                                    ? 'bg-muted text-muted-foreground border-border'
-                                    : isAI
-                                      ? selectedTurnIndex === idx
-                                        ? 'bg-primary/10 border-primary text-foreground'
-                                        : 'bg-background border-border text-foreground'
-                                      : 'bg-primary text-primary-foreground border-primary'
+                                  ? 'bg-muted text-muted-foreground border-border'
+                                  : isAI
+                                    ? selectedTurnIndex === idx
+                                      ? 'bg-primary/10 border-primary text-foreground'
+                                      : 'bg-background border-border text-foreground'
+                                    : 'bg-primary text-primary-foreground border-primary'
                                   }`}
                               >
                                 <p className="text-sm whitespace-pre-wrap">

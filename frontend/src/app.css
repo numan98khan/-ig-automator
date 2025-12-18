@@ -37,6 +37,12 @@
     /* Zinc 950 */
 
     --radius: 0.5rem;
+
+    --card: 255 255 255;
+    --card-foreground: 9 9 11;
+
+    --glass-blur: 1px;
+    --glass-opacity: 0.02;
   }
 
   .dark {
@@ -68,6 +74,9 @@
     /* Zinc 800 */
     --ring: 212 212 216;
     /* Zinc 300 */
+
+    --card: 0 0 0;
+    --card-foreground: 250 250 250;
   }
 
   * {
@@ -104,7 +113,9 @@
 /* Glassmorphism Utilities */
 @layer components {
   .glass-panel {
-    @apply bg-background/50 backdrop-blur-md border border-border/50;
+    @apply border border-border/50;
+    background-color: rgb(var(--card) / var(--glass-opacity));
+    backdrop-filter: blur(var(--glass-blur));
   }
 
   .glass-button {

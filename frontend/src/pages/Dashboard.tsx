@@ -126,14 +126,14 @@ const Dashboard: React.FC = () => {
             Instant snapshot of inbox health, outcomes, and where humans need to jump in.
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm border border-border rounded-xl p-1 shadow-sm w-full md:w-auto">
+        <div className="flex items-center gap-2 glass-panel rounded-xl p-1 shadow-sm w-full md:w-auto">
           {timeframeOptions.map((option) => (
             <button
               key={option.value}
               onClick={() => setRange(option.value)}
               className={`flex flex-col px-4 py-2 rounded-lg text-left transition-all duration-200 ${range === option.value
-                  ? 'bg-primary/10 border border-primary/30 text-primary font-semibold shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-primary/10 border border-primary/30 text-primary font-semibold shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
               <span className="text-sm">{option.label}</span>
@@ -145,7 +145,7 @@ const Dashboard: React.FC = () => {
 
       {/* KPI Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl p-4 shadow-sm">
+        <div className="glass-panel rounded-2xl p-4 shadow-sm">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>New conversations</span>
             <Sparkles className="w-4 h-4 text-primary" />
@@ -157,7 +157,7 @@ const Dashboard: React.FC = () => {
           <p className="text-xs text-muted-foreground mt-2">Fresh threads started by customers.</p>
         </div>
 
-        <div className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl p-4 shadow-sm">
+        <div className="glass-panel rounded-2xl p-4 shadow-sm">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>Total inbound messages</span>
             <MessageSquare className="w-4 h-4 text-primary" />
@@ -169,7 +169,7 @@ const Dashboard: React.FC = () => {
           <p className="text-xs text-muted-foreground mt-2">Customer messages received in this window.</p>
         </div>
 
-        <div className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl p-4 shadow-sm">
+        <div className="glass-panel rounded-2xl p-4 shadow-sm">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>AI-handled %</span>
             <ShieldCheck className="w-4 h-4 text-primary" />
@@ -181,7 +181,7 @@ const Dashboard: React.FC = () => {
           <p className="text-xs text-muted-foreground mt-2">Share of inbound threads where AI replied.</p>
         </div>
 
-        <div className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl p-4 shadow-sm">
+        <div className="glass-panel rounded-2xl p-4 shadow-sm">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>Human alerts</span>
             <AlertTriangle className="w-4 h-4 text-amber-500" />
@@ -193,7 +193,7 @@ const Dashboard: React.FC = () => {
           <p className="text-xs text-muted-foreground mt-2">Open escalations or SLA risks needing humans.</p>
         </div>
 
-        <div className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl p-4 shadow-sm">
+        <div className="glass-panel rounded-2xl p-4 shadow-sm">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>Median first-response time</span>
             <Clock3 className="w-4 h-4 text-primary" />
@@ -208,7 +208,7 @@ const Dashboard: React.FC = () => {
 
       {/* Needs Attention Now */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 bg-card/80 backdrop-blur-sm border border-border rounded-2xl shadow-sm">
+        <div className="xl:col-span-2 glass-panel rounded-2xl shadow-sm">
           <div className="p-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between border-b border-border/70">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">Needs attention now</p>
@@ -296,7 +296,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl shadow-sm p-5 space-y-4">
+        <div className="glass-panel rounded-2xl shadow-sm p-5 space-y-4">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">Outcomes</p>
@@ -342,7 +342,7 @@ const Dashboard: React.FC = () => {
 
       {/* AI & Knowledge */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl shadow-sm p-5 space-y-3">
+        <div className="glass-panel rounded-2xl shadow-sm p-5 space-y-3">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">AI performance</p>
@@ -390,7 +390,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl shadow-sm p-5 space-y-3">
+        <div className="glass-panel rounded-2xl shadow-sm p-5 space-y-3">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">Knowledge effectiveness</p>

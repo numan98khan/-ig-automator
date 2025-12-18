@@ -94,7 +94,7 @@ export default function Escalations() {
       )}
 
       {items.length === 0 && (
-        <div className="p-12 border-2 border-dashed border-border rounded-xl text-center text-muted-foreground">
+        <div className="p-12 glass-panel border-dashed rounded-xl text-center text-muted-foreground">
           <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-8 h-8 text-muted-foreground" />
           </div>
@@ -105,7 +105,7 @@ export default function Escalations() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {items.map((item) => (
-          <div key={item.escalation._id} className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-sm">
+          <div key={item.escalation._id} className="glass-panel rounded-xl p-5 space-y-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -157,10 +157,10 @@ export default function Escalations() {
                   <div
                     key={msg._id}
                     className={`text-sm p-3 rounded-lg border ${msg.from === 'ai'
-                        ? 'bg-primary/5 border-primary/10 text-foreground'
-                        : msg.from === 'customer'
-                          ? 'bg-muted/50 border-border text-foreground'
-                          : 'bg-green-500/5 border-green-500/10 text-foreground'
+                      ? 'bg-primary/5 border-primary/10 text-foreground'
+                      : msg.from === 'customer'
+                        ? 'bg-muted/50 border-border text-foreground'
+                        : 'bg-green-500/5 border-green-500/10 text-foreground'
                       }`}
                   >
                     <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
