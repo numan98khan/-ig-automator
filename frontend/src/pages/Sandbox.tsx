@@ -283,35 +283,26 @@ export default function Sandbox() {
       return;
     }
 
-    if (workspaceSettings) {
-      logSandbox('Applying workspace defaults for run config', {
+    if (!workspaceSettings) {
+      awaitingWorkspaceDefaultsRef.current = true;
+      logSandbox('No stored run config found, awaiting workspace defaults', {
         workspaceId: currentWorkspace._id,
-        workspaceDefaults: snapshotSettings(workspaceSettings),
       });
-      setRunConfig(snapshotSettings(workspaceSettings));
-      setRunConfigHydrated(true);
-      hydratedWorkspaceIdRef.current = currentWorkspace._id;
-      awaitingWorkspaceDefaultsRef.current = false;
       return;
     }
 
-    setRunConfig({});
+    logSandbox('Applying workspace defaults for run config', {
+      workspaceId: currentWorkspace._id,
+      workspaceDefaults: snapshotSettings(workspaceSettings),
+    });
+    setRunConfig(snapshotSettings(workspaceSettings));
     setRunConfigHydrated(true);
     hydratedWorkspaceIdRef.current = currentWorkspace._id;
-    awaitingWorkspaceDefaultsRef.current = true;
-    logSandbox('No stored run config found, awaiting workspace defaults', {
-      workspaceId: currentWorkspace._id,
-    });
+    awaitingWorkspaceDefaultsRef.current = false;
   }, [currentWorkspace, workspaceSettings, runConfigHydrated]);
 
   useEffect(() => {
-    if (
-      !currentWorkspace ||
-      !workspaceSettings ||
-      !runConfigHydrated ||
-      !awaitingWorkspaceDefaultsRef.current
-    )
-      return;
+    if (!currentWorkspace || !workspaceSettings || !awaitingWorkspaceDefaultsRef.current) return;
 
     logSandbox('Workspace defaults now available, checking for empty run config', {
       workspaceId: currentWorkspace._id,
@@ -330,9 +321,10 @@ export default function Sandbox() {
       return prev;
     });
 
+    setRunConfigHydrated(true);
     awaitingWorkspaceDefaultsRef.current = false;
     hydratedWorkspaceIdRef.current = currentWorkspace._id;
-  }, [currentWorkspace, workspaceSettings, runConfigHydrated]);
+  }, [currentWorkspace, workspaceSettings, runConfigHydrated, runConfig]);
 
   const loadScenarios = async () => {
     if (!currentWorkspace) return;
