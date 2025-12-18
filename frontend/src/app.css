@@ -41,8 +41,8 @@
     --card: 255 255 255;
     --card-foreground: 9 9 11;
 
-    --glass-blur: 3px;
-    --glass-opacity: 0.05;
+    --glass-blur: 12px;
+    --glass-opacity: 0.72;
   }
 
   .dark {
@@ -77,6 +77,9 @@
 
     --card: 0 0 0;
     --card-foreground: 250 250 250;
+
+    --glass-blur: 10px;
+    --glass-opacity: 0.08;
   }
 
   * {
