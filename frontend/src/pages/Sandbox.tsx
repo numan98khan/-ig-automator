@@ -114,6 +114,8 @@ export default function Sandbox() {
   const [runSteps, setRunSteps] = useState<SandboxRunStep[]>([]);
   const [runConfig, setRunConfig] = useState<Partial<WorkspaceSettings>>({});
   const [runConfigHydrated, setRunConfigHydrated] = useState(false);
+  const hydratedWorkspaceIdRef = useRef<string | null>(null);
+  const awaitingWorkspaceDefaultsRef = useRef(false);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings | null>(null);
   const [runHistory, setRunHistory] = useState<SandboxRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -246,20 +248,58 @@ export default function Sandbox() {
   useEffect(() => {
     if (!currentWorkspace) return;
 
-    setRunConfigHydrated(false);
+    if (hydratedWorkspaceIdRef.current !== currentWorkspace._id) {
+      setRunConfigHydrated(false);
+      hydratedWorkspaceIdRef.current = null;
+      awaitingWorkspaceDefaultsRef.current = false;
+    }
+  }, [currentWorkspace]);
+
+  useEffect(() => {
+    if (!currentWorkspace || runConfigHydrated) return;
 
     const storedRunConfig = loadFromStorage<Partial<WorkspaceSettings>>(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id));
     if (storedRunConfig) {
       setRunConfig(storedRunConfig);
       setRunConfigHydrated(true);
+      hydratedWorkspaceIdRef.current = currentWorkspace._id;
+      awaitingWorkspaceDefaultsRef.current = false;
       return;
     }
 
     if (workspaceSettings) {
       setRunConfig(snapshotSettings(workspaceSettings));
       setRunConfigHydrated(true);
+      hydratedWorkspaceIdRef.current = currentWorkspace._id;
+      awaitingWorkspaceDefaultsRef.current = false;
+      return;
     }
-  }, [currentWorkspace, workspaceSettings]);
+
+    setRunConfig({});
+    setRunConfigHydrated(true);
+    hydratedWorkspaceIdRef.current = currentWorkspace._id;
+    awaitingWorkspaceDefaultsRef.current = true;
+  }, [currentWorkspace, workspaceSettings, runConfigHydrated]);
+
+  useEffect(() => {
+    if (
+      !currentWorkspace ||
+      !workspaceSettings ||
+      !runConfigHydrated ||
+      !awaitingWorkspaceDefaultsRef.current
+    )
+      return;
+
+    setRunConfig((prev) => {
+      if (Object.keys(prev).length === 0) {
+        return snapshotSettings(workspaceSettings);
+      }
+      return prev;
+    });
+
+    awaitingWorkspaceDefaultsRef.current = false;
+    hydratedWorkspaceIdRef.current = currentWorkspace._id;
+  }, [currentWorkspace, workspaceSettings, runConfigHydrated]);
 
   const loadScenarios = async () => {
     if (!currentWorkspace) return;
