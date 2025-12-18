@@ -143,6 +143,9 @@ export default function Sandbox() {
 
   useEffect(() => {
     if (!currentWorkspace) return;
+    if (hydratedWorkspaceIdRef.current === currentWorkspace._id && sandboxStateHydrated) {
+      return;
+    }
     let canceled = false;
 
     const hydrateSandboxState = async () => {
@@ -216,6 +219,7 @@ export default function Sandbox() {
         setError(err.message || 'Failed to load sandbox state');
       } finally {
         if (!canceled) {
+          hydratedWorkspaceIdRef.current = currentWorkspace._id;
           setSandboxStateHydrated(true);
         }
       }
@@ -226,7 +230,7 @@ export default function Sandbox() {
     return () => {
       canceled = true;
     };
-  }, [currentWorkspace]);
+  }, [currentWorkspace, sandboxStateHydrated]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 768px)');
