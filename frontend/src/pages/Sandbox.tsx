@@ -116,6 +116,9 @@ export default function Sandbox() {
   const [showConfigModal, setShowConfigModal] = useState(false);
   const liveScrollRef = useRef<HTMLDivElement | null>(null);
   const persistedScenarioIdRef = useRef<string | null>(null);
+  const runConfigReadyRef = useRef(false);
+  const liveChatReadyRef = useRef(false);
+  const scenarioDraftReadyRef = useRef(false);
 
   const selectedScenario = useMemo(
     () => scenarios.find((s) => s._id === selectedScenarioId) || null,
@@ -160,6 +163,9 @@ export default function Sandbox() {
       setOpenDetailIndex(null);
       setViewingHistory(false);
       setShowHistory(false);
+      runConfigReadyRef.current = false;
+      liveChatReadyRef.current = false;
+      scenarioDraftReadyRef.current = false;
 
       try {
         logSandbox('Loading sandbox state', currentWorkspace._id);
@@ -262,6 +268,10 @@ export default function Sandbox() {
 
   useEffect(() => {
     if (!currentWorkspace || !runConfigHydrated || !sandboxStateHydrated) return;
+    if (!runConfigReadyRef.current) {
+      runConfigReadyRef.current = true;
+      return;
+    }
     persistSandboxState({ runConfig });
   }, [currentWorkspace, runConfig, runConfigHydrated, sandboxStateHydrated]);
 
@@ -272,6 +282,10 @@ export default function Sandbox() {
       input: liveInput,
       selectedTurnIndex,
     };
+    if (!liveChatReadyRef.current) {
+      liveChatReadyRef.current = true;
+      return;
+    }
     persistSandboxState({ liveChat: liveChatState });
   }, [currentWorkspace, liveInput, liveMessages, selectedTurnIndex, sandboxStateHydrated]);
 
@@ -283,6 +297,10 @@ export default function Sandbox() {
       messages,
       selectedScenarioId,
     };
+    if (!scenarioDraftReadyRef.current) {
+      scenarioDraftReadyRef.current = true;
+      return;
+    }
     persistSandboxState({ scenarioDraft: draftState });
   }, [currentWorkspace, description, messages, name, selectedScenarioId, sandboxStateHydrated]);
 
