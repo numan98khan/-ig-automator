@@ -89,6 +89,7 @@ async function simulateMessages(
       },
       messageHistory: history,
       mode: 'sandbox',
+      workspaceSettingsOverride: settings,
     });
 
     steps.push({

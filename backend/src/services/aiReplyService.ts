@@ -5,7 +5,7 @@ import Message, { IMessage } from '../models/Message';
 import KnowledgeItem from '../models/KnowledgeItem';
 import CategoryKnowledge from '../models/CategoryKnowledge';
 import MessageCategory from '../models/MessageCategory';
-import WorkspaceSettings from '../models/WorkspaceSettings';
+import WorkspaceSettings, { IWorkspaceSettings } from '../models/WorkspaceSettings';
 import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
 
 const openai = new OpenAI({
@@ -46,6 +46,7 @@ export interface AIReplyOptions {
     goalState?: 'idle' | 'collecting' | 'completed';
     collectedFields?: Record<string, any>;
   };
+  workspaceSettingsOverride?: Partial<IWorkspaceSettings>;
 }
 
 /**
@@ -63,10 +64,12 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     messageHistory,
   } = options;
 
-  const [knowledgeItems, workspaceSettings] = await Promise.all([
+  const [knowledgeItems, baseWorkspaceSettings] = await Promise.all([
     KnowledgeItem.find({ workspaceId }),
-    WorkspaceSettings.findOne({ workspaceId }),
+    options.workspaceSettingsOverride ? null : WorkspaceSettings.findOne({ workspaceId }),
   ]);
+
+  const workspaceSettings = options.workspaceSettingsOverride || baseWorkspaceSettings;
 
   const messages: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = messageHistory
     ? [...messageHistory].slice(-historyLimit)
