@@ -38,6 +38,8 @@ const RUN_CONFIG_STORAGE_KEY = (workspaceId: string) => `sandbox:runConfig:${wor
 const LIVE_CHAT_STORAGE_KEY = (workspaceId: string) => `sandbox:liveChat:${workspaceId}`;
 const SCENARIO_DRAFT_STORAGE_KEY = (workspaceId: string) => `sandbox:scenarioDraft:${workspaceId}`;
 
+const logSandbox = (...args: any[]) => console.log('[Sandbox]', ...args);
+
 function loadFromStorage<T>(key: string): T | null {
   try {
     const raw = localStorage.getItem(key);
@@ -210,6 +212,10 @@ export default function Sandbox() {
 
   useEffect(() => {
     if (!currentWorkspace || !runConfigHydrated) return;
+    logSandbox('Persisting run config', {
+      workspaceId: currentWorkspace._id,
+      runConfig,
+    });
     localStorage.setItem(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id), JSON.stringify(runConfig));
   }, [currentWorkspace, runConfig, runConfigHydrated]);
 
@@ -237,8 +243,10 @@ export default function Sandbox() {
   const loadWorkspaceSettings = async () => {
     if (!currentWorkspace) return;
     try {
+      logSandbox('Loading workspace settings', currentWorkspace._id);
       const data = await settingsAPI.getByWorkspace(currentWorkspace._id);
       setWorkspaceSettings(data);
+      logSandbox('Workspace settings loaded', data);
     } catch (err: any) {
       console.error('Failed to load workspace settings', err);
       setError(err.message || 'Failed to load workspace settings');
@@ -249,6 +257,10 @@ export default function Sandbox() {
     if (!currentWorkspace) return;
 
     if (hydratedWorkspaceIdRef.current !== currentWorkspace._id) {
+      logSandbox('Workspace changed, resetting hydration state', {
+        previousWorkspaceId: hydratedWorkspaceIdRef.current,
+        nextWorkspaceId: currentWorkspace._id,
+      });
       setRunConfigHydrated(false);
       hydratedWorkspaceIdRef.current = null;
       awaitingWorkspaceDefaultsRef.current = false;
@@ -260,6 +272,10 @@ export default function Sandbox() {
 
     const storedRunConfig = loadFromStorage<Partial<WorkspaceSettings>>(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id));
     if (storedRunConfig) {
+      logSandbox('Restoring run config from storage', {
+        workspaceId: currentWorkspace._id,
+        storedRunConfig,
+      });
       setRunConfig(storedRunConfig);
       setRunConfigHydrated(true);
       hydratedWorkspaceIdRef.current = currentWorkspace._id;
@@ -268,6 +284,10 @@ export default function Sandbox() {
     }
 
     if (workspaceSettings) {
+      logSandbox('Applying workspace defaults for run config', {
+        workspaceId: currentWorkspace._id,
+        workspaceDefaults: snapshotSettings(workspaceSettings),
+      });
       setRunConfig(snapshotSettings(workspaceSettings));
       setRunConfigHydrated(true);
       hydratedWorkspaceIdRef.current = currentWorkspace._id;
@@ -279,6 +299,9 @@ export default function Sandbox() {
     setRunConfigHydrated(true);
     hydratedWorkspaceIdRef.current = currentWorkspace._id;
     awaitingWorkspaceDefaultsRef.current = true;
+    logSandbox('No stored run config found, awaiting workspace defaults', {
+      workspaceId: currentWorkspace._id,
+    });
   }, [currentWorkspace, workspaceSettings, runConfigHydrated]);
 
   useEffect(() => {
@@ -290,8 +313,18 @@ export default function Sandbox() {
     )
       return;
 
+    logSandbox('Workspace defaults now available, checking for empty run config', {
+      workspaceId: currentWorkspace._id,
+      awaitingWorkspaceDefaults: awaitingWorkspaceDefaultsRef.current,
+      currentRunConfig: runConfig,
+    });
+
     setRunConfig((prev) => {
       if (Object.keys(prev).length === 0) {
+        logSandbox('Hydrating run config with workspace defaults after awaiting', {
+          workspaceId: currentWorkspace._id,
+          workspaceDefaults: snapshotSettings(workspaceSettings),
+        });
         return snapshotSettings(workspaceSettings);
       }
       return prev;
@@ -344,6 +377,7 @@ export default function Sandbox() {
     setActiveRunId(null);
     setOpenDetailIndex(null);
     setViewingHistory(false);
+    logSandbox('Resetting form, applying workspace defaults to run config');
     setRunConfig(snapshotSettings(workspaceSettings));
     setActiveTab('scenario');
     clearScenarioDraftStorage();
@@ -360,6 +394,7 @@ export default function Sandbox() {
     setActiveRunId(null);
     setOpenDetailIndex(null);
     setViewingHistory(false);
+    logSandbox('Selecting scenario, applying workspace defaults to run config', scenario._id);
     setRunConfig(snapshotSettings(workspaceSettings));
     setActiveTab('scenario');
     loadRunsForScenario(scenario._id);
@@ -559,6 +594,10 @@ export default function Sandbox() {
   const handleSelectRun = (run: SandboxRun) => {
     setActiveRunId(run._id);
     setRunSteps(run.steps || []);
+    logSandbox('Selecting run, hydrating run config from snapshot or workspace defaults', {
+      runId: run._id,
+      hasSettingsSnapshot: Boolean(run.settingsSnapshot),
+    });
     setRunConfig(run.settingsSnapshot || snapshotSettings(workspaceSettings));
     setOpenDetailIndex(null);
     setViewingHistory(true);
