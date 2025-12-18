@@ -137,7 +137,7 @@ const Team: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-background/80 backdrop-blur-sm border border-border/60 rounded-2xl p-4 md:p-6 shadow-sm">
+      <div className="bg-card/80 backdrop-blur-sm border border-border/60 rounded-2xl p-4 md:p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold text-primary">
@@ -162,7 +162,7 @@ const Team: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-4">
+          <div className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl p-4 shadow-sm space-y-4">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <h2 className="text-lg font-semibold">Active members</h2>
@@ -214,7 +214,7 @@ const Team: React.FC = () => {
             )}
           </div>
 
-          <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
+          <div className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="w-4 h-4 text-primary" />
               <h3 className="font-semibold">Roles & permissions</h3>
@@ -229,7 +229,7 @@ const Team: React.FC = () => {
         </div>
 
         <div className="space-y-4">
-          <form onSubmit={handleInvite} className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-4">
+          <form onSubmit={handleInvite} className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl p-4 shadow-sm space-y-4">
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Mail className="w-4 h-4" />
               Invite teammates
@@ -268,7 +268,7 @@ const Team: React.FC = () => {
             </div>
           </form>
 
-          <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-3">
+          <div className="bg-card/80 backdrop-blur-sm border border-border rounded-2xl p-4 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">Pending invites</h3>
               <Badge variant="secondary">{invites.length}</Badge>

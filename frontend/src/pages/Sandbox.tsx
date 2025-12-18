@@ -322,10 +322,10 @@ export default function Sandbox() {
       meta?: SandboxRunStepMeta;
       typing?: boolean;
     }[] = [
-      ...liveMessages,
-      { from: 'customer', text: customerText },
-      { from: 'ai', text: 'Thinking…', typing: true },
-    ];
+        ...liveMessages,
+        { from: 'customer', text: customerText },
+        { from: 'ai', text: 'Thinking…', typing: true },
+      ];
     setLiveMessages(optimisticMessages);
     setLiveInput('');
 
@@ -569,7 +569,7 @@ export default function Sandbox() {
 
       <div className={layoutClass}>
         {!isMobile && (
-          <Card className="h-full flex flex-col">
+          <Card className="h-full flex flex-col bg-card/80 backdrop-blur-sm shadow-sm" variant="outline">
             <div className="p-4 border-b flex items-center justify-between gap-2">
               <div>
                 <div className="text-lg font-semibold flex items-center gap-2">
@@ -603,11 +603,10 @@ export default function Sandbox() {
                   {scenarios.map((scenario) => (
                     <div
                       key={scenario._id}
-                      className={`p-3 rounded-lg border transition cursor-pointer ${
-                        selectedScenarioId === scenario._id
+                      className={`p-3 rounded-lg border transition cursor-pointer ${selectedScenarioId === scenario._id
                           ? 'border-primary bg-primary/5'
                           : 'border-border hover:bg-muted'
-                      }`}
+                        }`}
                       onClick={() => handleSelectScenario(scenario)}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -655,9 +654,8 @@ export default function Sandbox() {
                     {runHistory.map((run) => (
                       <div
                         key={run._id}
-                        className={`p-3 rounded-lg border transition cursor-pointer ${
-                          activeRunId === run._id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'
-                        }`}
+                        className={`p-3 rounded-lg border transition cursor-pointer ${activeRunId === run._id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'
+                          }`}
                         onClick={() => handleSelectRun(run)}
                       >
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -705,15 +703,14 @@ export default function Sandbox() {
                     >
                       <div className={`flex flex-col max-w-[85%] space-y-1 ${isAI ? 'items-start' : 'items-end'}`}>
                         <div
-                          className={`rounded-2xl px-3 py-2 shadow-sm border ${
-                            msg.typing
+                          className={`rounded-2xl px-3 py-2 shadow-sm border ${msg.typing
                               ? 'bg-muted text-muted-foreground border-border'
                               : isAI
                                 ? selectedTurnIndex === idx
                                   ? 'bg-primary/10 border-primary text-foreground'
                                   : 'bg-muted border-border text-foreground'
                                 : 'bg-primary text-primary-foreground border-primary'
-                          }`}
+                            }`}
                         >
                           <p className="text-sm whitespace-pre-wrap">
                             {msg.typing ? 'Thinking…' : msg.text}
@@ -747,7 +744,7 @@ export default function Sandbox() {
             </div>
           </div>
         ) : (
-          <Card className="h-full flex flex-col overflow-hidden min-h-0">
+          <Card className="h-full flex flex-col overflow-hidden min-h-0 bg-card/80 backdrop-blur-sm shadow-sm" variant="outline">
             <div className="border-b bg-card z-10">
               <div className="px-4 pt-4 flex flex-wrap items-center gap-2 justify-between">
                 <div className="flex items-center gap-2">
@@ -929,15 +926,14 @@ export default function Sandbox() {
                           >
                             <div className={`flex flex-col max-w-[70%] space-y-1 ${isAI ? 'items-start' : 'items-end'}`}>
                               <div
-                                className={`rounded-2xl px-3 py-2 shadow-sm border ${
-                                  msg.typing
+                                className={`rounded-2xl px-3 py-2 shadow-sm border ${msg.typing
                                     ? 'bg-muted text-muted-foreground border-border'
                                     : isAI
                                       ? selectedTurnIndex === idx
                                         ? 'bg-primary/10 border-primary text-foreground'
                                         : 'bg-background border-border text-foreground'
                                       : 'bg-primary text-primary-foreground border-primary'
-                                }`}
+                                  }`}
                               >
                                 <p className="text-sm whitespace-pre-wrap">
                                   {msg.typing ? 'Thinking…' : msg.text}
@@ -985,34 +981,34 @@ export default function Sandbox() {
           </Card>
         )}
 
-          {!isMobile && inspectorOpen && (
-            <Card className="h-full flex flex-col overflow-hidden">
-              <div className="border-b p-4 flex gap-2">
-                <Button
-                  variant={inspectorTab === 'details' ? 'primary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setInspectorTab('details')}
-                >
-                  Turn details
-                </Button>
-                <Button
-                  variant={inspectorTab === 'settings' ? 'primary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setInspectorTab('settings')}
-                >
-                  Session settings
-                </Button>
-              </div>
+        {!isMobile && inspectorOpen && (
+          <Card className="h-full flex flex-col overflow-hidden">
+            <div className="border-b p-4 flex gap-2">
+              <Button
+                variant={inspectorTab === 'details' ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setInspectorTab('details')}
+              >
+                Turn details
+              </Button>
+              <Button
+                variant={inspectorTab === 'settings' ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setInspectorTab('settings')}
+              >
+                Session settings
+              </Button>
+            </div>
 
-              {inspectorTab === 'details' ? (
-                <div className="flex-1 overflow-y-auto p-4 space-y-2 text-sm text-muted-foreground">
-                  {renderTurnDetails()}
-                </div>
-              ) : (
-                renderSettingsForm()
-              )}
-            </Card>
-          )}
+            {inspectorTab === 'details' ? (
+              <div className="flex-1 overflow-y-auto p-4 space-y-2 text-sm text-muted-foreground">
+                {renderTurnDetails()}
+              </div>
+            ) : (
+              renderSettingsForm()
+            )}
+          </Card>
+        )}
       </div>
       {isMobile && (
         <Modal
