@@ -15,7 +15,6 @@ import {
   TestTube,
   LayoutDashboard,
   Search,
-  Users,
   Sparkles,
   Plus,
   Check,
@@ -62,8 +61,7 @@ const Layout: React.FC = () => {
       { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
       { to: '/alerts', label: 'Alerts', icon: AlertCircle, isActive: isActive('/alerts') },
-      { to: '/team', label: 'Team', icon: Users, isActive: isActive('/team') },
-      { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
+      { to: '/automations', label: 'Automations', icon: Settings, isActive: isActive('/automations') },
     ];
 
     if (user?.role === 'admin') {
@@ -309,6 +307,17 @@ const Layout: React.FC = () => {
                   </Button>
                   <Button
                     variant="ghost"
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      navigate('/settings');
+                    }}
+                    className="w-full justify-start px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-muted text-sm font-normal h-auto rounded-none"
+                    leftIcon={<Settings className="w-4 h-4" />}
+                  >
+                    Settings
+                  </Button>
+                  <Button
+                    variant="ghost"
                     onClick={handleLogout}
                     className="w-full justify-start px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-muted text-sm font-normal h-auto rounded-none"
                     leftIcon={<LogOut className="w-4 h-4" />}
@@ -410,10 +419,10 @@ const Layout: React.FC = () => {
             className="fixed inset-0 z-10 md:hidden"
             onClick={() => setShowUserMenu(false)}
           />
-          <div className="absolute top-16 right-4 w-56 bg-background border border-border rounded-lg shadow-xl py-1 z-20 md:hidden animate-fade-in">
-            <div className="px-4 py-3 border-b border-border/50">
-              <p className="text-sm font-medium truncate">{user?.email || user?.instagramUsername || 'User'}</p>
-              {currentWorkspace && (
+            <div className="absolute top-16 right-4 w-56 bg-background border border-border rounded-lg shadow-xl py-1 z-20 md:hidden animate-fade-in">
+              <div className="px-4 py-3 border-b border-border/50">
+                <p className="text-sm font-medium truncate">{user?.email || user?.instagramUsername || 'User'}</p>
+                {currentWorkspace && (
                 <p className="text-xs text-muted-foreground mt-0.5">{currentWorkspace.name}</p>
               )}
             </div>
@@ -428,6 +437,17 @@ const Layout: React.FC = () => {
               leftIcon={<LifeBuoy className="w-4 h-4" />}
             >
               Report issue
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setShowUserMenu(false);
+                navigate('/settings');
+              }}
+              className="w-full justify-start px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted font-medium h-auto rounded-none"
+              leftIcon={<Settings className="w-4 h-4" />}
+            >
+              Settings
             </Button>
             <Button
               variant="ghost"

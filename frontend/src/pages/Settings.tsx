@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { settingsAPI, authAPI, WorkspaceSettings, AutomationStats, GoalType, GoalConfigs } from '../services/api';
 import {
@@ -16,14 +17,16 @@ import {
   AlertCircle,
   Loader2,
   Zap,
-  Info
+  Info,
+  Users,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
+import Team from './Team';
 
-type TabType = 'account' | 'automations';
+type TabType = 'account' | 'automations' | 'team';
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -81,6 +84,7 @@ const DEFAULT_GOAL_CONFIGS: GoalConfigs = {
 
 export default function Settings() {
   const { user, currentWorkspace, refreshUser } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('account');
   const [, setSettings] = useState<WorkspaceSettings | null>(null);
   const [stats, setStats] = useState<AutomationStats | null>(null);
@@ -120,12 +124,28 @@ export default function Settings() {
     goalConfigs: DEFAULT_GOAL_CONFIGS,
   });
 
+  const handleTabChange = useCallback((tab: TabType) => {
+    setActiveTab(tab);
+    if (tab === 'account') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ tab });
+    }
+  }, [setSearchParams]);
+
   useEffect(() => {
     // Auto-select account tab if user is provisional
     if (user?.isProvisional || !user?.emailVerified) {
-      setActiveTab('account');
+      handleTabChange('account');
     }
-  }, [user]);
+  }, [handleTabChange, user]);
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'automations' || tabParam === 'account' || tabParam === 'team') {
+      setActiveTab(tabParam as TabType);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (currentWorkspace && activeTab === 'automations') {
@@ -453,6 +473,11 @@ export default function Settings() {
       label: 'Automations',
       icon: Sliders,
     },
+    {
+      id: 'team' as TabType,
+      label: 'Team & Access',
+      icon: Users,
+    },
   ];
 
   return (
@@ -483,7 +508,7 @@ export default function Settings() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-all font-medium text-sm md:text-base whitespace-nowrap ${activeTab === tab.id
                   ? 'border-primary text-white bg-white/5 rounded-t-lg'
                   : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5 rounded-t-lg'
@@ -934,6 +959,12 @@ export default function Settings() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {activeTab === 'team' && (
+        <div className="space-y-6 animate-fade-in">
+          <Team />
         </div>
       )}
     </div>
