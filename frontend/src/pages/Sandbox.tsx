@@ -34,6 +34,33 @@ import {
   PanelRightOpen,
 } from 'lucide-react';
 
+const RUN_CONFIG_STORAGE_KEY = (workspaceId: string) => `sandbox:runConfig:${workspaceId}`;
+const LIVE_CHAT_STORAGE_KEY = (workspaceId: string) => `sandbox:liveChat:${workspaceId}`;
+const SCENARIO_DRAFT_STORAGE_KEY = (workspaceId: string) => `sandbox:scenarioDraft:${workspaceId}`;
+
+function loadFromStorage<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch (err) {
+    console.error('Failed to read sandbox storage', err);
+    return null;
+  }
+}
+
+type LiveChatState = {
+  messages: { from: 'customer' | 'ai'; text: string; meta?: SandboxRunStepMeta; typing?: boolean }[];
+  input?: string;
+  selectedTurnIndex?: number | null;
+};
+
+type ScenarioDraftState = {
+  name?: string;
+  description?: string;
+  messages?: SandboxMessage[];
+  selectedScenarioId?: string | null;
+};
+
 function snapshotSettings(settings?: WorkspaceSettings | null): Partial<WorkspaceSettings> {
   if (!settings) return {};
   return {
@@ -107,6 +134,8 @@ export default function Sandbox() {
   const [isMobile, setIsMobile] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const liveScrollRef = useRef<HTMLDivElement | null>(null);
+  const restoredRunConfigRef = useRef(false);
+  const persistedScenarioIdRef = useRef<string | null>(null);
 
   const selectedScenario = useMemo(
     () => scenarios.find((s) => s._id === selectedScenarioId) || null,
@@ -126,6 +155,39 @@ export default function Sandbox() {
     if (currentWorkspace) {
       loadWorkspaceSettings();
       loadScenarios();
+    }
+  }, [currentWorkspace]);
+
+  useEffect(() => {
+    if (!currentWorkspace) return;
+
+    restoredRunConfigRef.current = false;
+
+    const storedRunConfig = loadFromStorage<Partial<WorkspaceSettings>>(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id));
+    if (storedRunConfig) {
+      restoredRunConfigRef.current = true;
+      setRunConfig(storedRunConfig);
+    }
+
+    const storedLiveChat = loadFromStorage<LiveChatState>(LIVE_CHAT_STORAGE_KEY(currentWorkspace._id));
+    if (storedLiveChat) {
+      setLiveMessages(storedLiveChat.messages || []);
+      setLiveInput(storedLiveChat.input || '');
+      setSelectedTurnIndex(storedLiveChat.selectedTurnIndex ?? null);
+    }
+
+    const storedScenarioDraft = loadFromStorage<ScenarioDraftState>(SCENARIO_DRAFT_STORAGE_KEY(currentWorkspace._id));
+    if (storedScenarioDraft) {
+      setName(storedScenarioDraft.name || '');
+      setDescription(storedScenarioDraft.description || '');
+      setMessages(
+        storedScenarioDraft.messages && storedScenarioDraft.messages.length > 0
+          ? storedScenarioDraft.messages
+          : [{ role: 'customer', text: '' }]
+      );
+      if (storedScenarioDraft.selectedScenarioId) {
+        persistedScenarioIdRef.current = storedScenarioDraft.selectedScenarioId;
+      }
     }
   }, [currentWorkspace]);
 
@@ -152,12 +214,41 @@ export default function Sandbox() {
     }
   }, [liveMessages]);
 
+  useEffect(() => {
+    if (!currentWorkspace) return;
+    localStorage.setItem(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id), JSON.stringify(runConfig));
+  }, [currentWorkspace, runConfig]);
+
+  useEffect(() => {
+    if (!currentWorkspace) return;
+    const liveChatState: LiveChatState = {
+      messages: liveMessages,
+      input: liveInput,
+      selectedTurnIndex,
+    };
+    localStorage.setItem(LIVE_CHAT_STORAGE_KEY(currentWorkspace._id), JSON.stringify(liveChatState));
+  }, [currentWorkspace, liveInput, liveMessages, selectedTurnIndex]);
+
+  useEffect(() => {
+    if (!currentWorkspace) return;
+    const draftState: ScenarioDraftState = {
+      name,
+      description,
+      messages,
+      selectedScenarioId,
+    };
+    localStorage.setItem(SCENARIO_DRAFT_STORAGE_KEY(currentWorkspace._id), JSON.stringify(draftState));
+  }, [currentWorkspace, description, messages, name, selectedScenarioId]);
+
   const loadWorkspaceSettings = async () => {
     if (!currentWorkspace) return;
     try {
       const data = await settingsAPI.getByWorkspace(currentWorkspace._id);
       setWorkspaceSettings(data);
-      setRunConfig(snapshotSettings(data));
+      setRunConfig((prev) => {
+        if (restoredRunConfigRef.current) return prev;
+        return snapshotSettings(data);
+      });
     } catch (err: any) {
       console.error('Failed to load workspace settings', err);
       setError(err.message || 'Failed to load workspace settings');
@@ -169,10 +260,32 @@ export default function Sandbox() {
     try {
       const data = await sandboxAPI.listScenarios(currentWorkspace._id);
       setScenarios(data);
+      if (persistedScenarioIdRef.current) {
+        const matched = data.find((s) => s._id === persistedScenarioIdRef.current);
+        if (matched) {
+          handleSelectScenario(matched);
+        }
+        persistedScenarioIdRef.current = null;
+      }
     } catch (err: any) {
       console.error('Failed to load scenarios', err);
       setError(err.message || 'Failed to load scenarios');
     }
+  };
+
+  const clearScenarioDraftStorage = () => {
+    if (!currentWorkspace) return;
+    localStorage.removeItem(SCENARIO_DRAFT_STORAGE_KEY(currentWorkspace._id));
+  };
+
+  const clearRunConfigStorage = () => {
+    if (!currentWorkspace) return;
+    localStorage.removeItem(RUN_CONFIG_STORAGE_KEY(currentWorkspace._id));
+  };
+
+  const clearLiveChatStorage = () => {
+    if (!currentWorkspace) return;
+    localStorage.removeItem(LIVE_CHAT_STORAGE_KEY(currentWorkspace._id));
   };
 
   const resetForm = () => {
@@ -187,6 +300,8 @@ export default function Sandbox() {
     setViewingHistory(false);
     setRunConfig(snapshotSettings(workspaceSettings));
     setActiveTab('scenario');
+    clearScenarioDraftStorage();
+    clearRunConfigStorage();
   };
 
   const handleSelectScenario = (scenario: SandboxScenario) => {
@@ -358,6 +473,43 @@ export default function Sandbox() {
     }
   };
 
+  const clearLiveChat = () => {
+    setLiveMessages([]);
+    setSelectedTurnIndex(null);
+    setLiveInput('');
+    clearLiveChatStorage();
+  };
+
+  const convertLiveChatToScenario = () => {
+    const customerMessages = liveMessages.filter((m) => m.from === 'customer' && m.text.trim());
+
+    if (customerMessages.length === 0) {
+      setError('Add at least one customer message in live chat before converting.');
+      return;
+    }
+
+    const timestamp = new Date().toLocaleString();
+
+    setSelectedScenarioId(null);
+    setMessages(customerMessages.map((m) => ({ role: 'customer', text: m.text })));
+    setActiveTab('scenario');
+    setRunSteps([]);
+    setRunHistory([]);
+    setActiveRunId(null);
+    setOpenDetailIndex(null);
+    setViewingHistory(false);
+    setSelectedTurnIndex(null);
+    setSuccess('Live chat copied to scenario builder');
+
+    if (!name) {
+      setName(`Simulation from live chat (${timestamp})`);
+    }
+
+    if (!description) {
+      setDescription('Converted from live sandbox conversation.');
+    }
+  };
+
   const handleSelectRun = (run: SandboxRun) => {
     setActiveRunId(run._id);
     setRunSteps(run.steps || []);
@@ -385,6 +537,11 @@ export default function Sandbox() {
     if (selectedTurnIndex === null) return null;
     return liveMessages[selectedTurnIndex] || null;
   }, [liveMessages, selectedTurnIndex]);
+
+  const hasCustomerLiveMessages = useMemo(
+    () => liveMessages.some((msg) => msg.from === 'customer' && msg.text.trim()),
+    [liveMessages]
+  );
 
   const renderSimulationTranscript = () => {
     if (runSteps.length === 0) {
@@ -695,14 +852,26 @@ export default function Sandbox() {
           <div className="flex flex-col flex-1 min-h-0 bg-background">
             <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-2 border-b">
               <p className="text-sm font-medium">Live test chat</p>
-              <Button
-                size="sm"
-                variant="secondary"
-                leftIcon={<Settings className="w-4 h-4" />}
-                onClick={() => setShowConfigModal(true)}
-              >
-                Run config
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  leftIcon={<Settings className="w-4 h-4" />}
+                  onClick={() => setShowConfigModal(true)}
+                >
+                  Run config
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  leftIcon={<Save className="w-4 h-4" />}
+                  onClick={convertLiveChatToScenario}
+                  disabled={!hasCustomerLiveMessages}
+                  title={hasCustomerLiveMessages ? 'Copy live chat into a new simulation' : 'Add a customer message first'}
+                >
+                  Save as sim
+                </Button>
+              </div>
             </div>
             <div className="flex-1 min-h-0 flex flex-col">
               <div
@@ -916,20 +1085,30 @@ export default function Sandbox() {
                       <Badge variant="secondary">Primary: {effectiveConfig.primaryGoal || 'none'}</Badge>
                       <Badge variant="secondary">Secondary: {effectiveConfig.secondaryGoal || 'none'}</Badge>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setShowConfigModal(true)}
-                        leftIcon={<Settings className="w-4 h-4" />}
-                      >
-                        Run config
-                      </Button>
-                      <Button size="sm" variant="secondary" onClick={() => setLiveMessages([])}>
-                        Clear
-                      </Button>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setShowConfigModal(true)}
+                      leftIcon={<Settings className="w-4 h-4" />}
+                    >
+                      Run config
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={convertLiveChatToScenario}
+                      leftIcon={<Save className="w-4 h-4" />}
+                      disabled={!hasCustomerLiveMessages}
+                      title={hasCustomerLiveMessages ? 'Copy live chat into a new simulation' : 'Add a customer message first'}
+                    >
+                      Save as simulation
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={clearLiveChat}>
+                      Clear
+                    </Button>
                   </div>
+                </div>
 
                   <div className="flex-1 flex flex-col min-h-[320px] rounded-lg border bg-background">
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
