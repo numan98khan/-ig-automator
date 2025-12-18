@@ -21,6 +21,8 @@ import {
   Check,
   Moon,
   Sun,
+  LifeBuoy,
+  ShieldCheck,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
@@ -28,6 +30,8 @@ import GlobalSearchModal from './GlobalSearchModal';
 import { useAccountContext } from '../context/AccountContext';
 import useOverlayClose from '../hooks/useOverlayClose';
 import { useTheme } from '../context/ThemeContext';
+import SupportTicketModal from './SupportTicketModal';
+import { recordBreadcrumb } from '../services/diagnostics';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -40,10 +44,9 @@ const Layout: React.FC = () => {
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const accountMenuRef = useOverlayClose({ isOpen: accountMenuOpen, onClose: () => setAccountMenuOpen(false) });
   const aiMenuRef = useOverlayClose({ isOpen: aiMenuOpen, onClose: () => setAiMenuOpen(false) });
-  const createMenuRef = useOverlayClose({ isOpen: createMenuOpen, onClose: () => setCreateMenuOpen(false) });
   const userMenuRef = useOverlayClose({ isOpen: showUserMenu, onClose: () => setShowUserMenu(false) });
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
@@ -54,21 +57,31 @@ const Layout: React.FC = () => {
     { to: '/sandbox', label: 'Sandbox (Test)', icon: TestTube },
   ]), []);
 
-  const navLinks = useMemo(() => ([
-    { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
-    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
-    { to: '/alerts', label: 'Alerts', icon: AlertCircle, isActive: isActive('/alerts') },
-    { to: '/team', label: 'Team', icon: Users, isActive: isActive('/team') },
-    { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
-  ]), [location.pathname]);
+  const navLinks = useMemo(() => {
+    const links = [
+      { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
+      { to: '/alerts', label: 'Alerts', icon: AlertCircle, isActive: isActive('/alerts') },
+      { to: '/team', label: 'Team', icon: Users, isActive: isActive('/team') },
+      { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
+    ];
+
+    if (user?.role === 'admin') {
+      links.push({ to: '/admin', label: 'Admin', icon: ShieldCheck, isActive: isActive('/admin') });
+    }
+
+    return links;
+  }, [location.pathname, user?.role]);
 
   const aiMenuActive = aiLinks.some((link) => isActive(link.to));
   const connectedAccountLabel = useMemo(() => {
     if (!activeAccount) return null;
-    const suffix = accounts.length > 1 ? ` +${accounts.length - 1}` : '';
-    const username = activeAccount.username ? `@${activeAccount.username}` : 'Connected IG';
-    return `${username}${suffix}`;
-  }, [accounts, activeAccount]);
+    return activeAccount.username ? `@${activeAccount.username}` : 'Connected IG';
+  }, [activeAccount]);
+
+  const accountAvatar = useMemo(() => {
+    return (activeAccount as any)?.profilePictureUrl || (activeAccount as any)?.avatarUrl || null;
+  }, [activeAccount]);
 
   const handleLogout = () => {
     logout();
@@ -78,6 +91,10 @@ const Layout: React.FC = () => {
   useEffect(() => {
     refreshAccounts();
   }, [refreshAccounts]);
+
+  useEffect(() => {
+    recordBreadcrumb({ type: 'route', label: location.pathname, meta: { path: location.pathname } });
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -103,25 +120,33 @@ const Layout: React.FC = () => {
       {/* Header */}
       <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0 h-16">
         <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full grid grid-cols-[auto,1fr,auto] items-center gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             <div className="relative" ref={accountMenuRef}>
               <button
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-border bg-card hover:border-primary/50 transition shadow-sm h-12"
+                className="flex items-center gap-2 md:gap-3 px-2.5 md:px-3 py-2 rounded-full border border-border bg-card hover:border-primary/50 transition shadow-sm h-10 md:h-12"
+                aria-label="Switch Instagram account"
               >
-                <div className="p-2.5 bg-primary text-primary-foreground rounded-lg shadow-sm">
-                  <Instagram className="w-5 h-5" />
+                <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border border-border bg-muted flex items-center justify-center overflow-hidden text-foreground">
+                  {accountAvatar ? (
+                    <img src={accountAvatar} alt="Account avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <Instagram className="w-4 h-4 text-primary" />
+                  )}
                 </div>
-                <div className="text-left min-w-0">
-                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Instagram account</p>
+                <div className="hidden md:flex text-left min-w-0 flex-col leading-tight">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Instagram</p>
                   <p className="font-semibold text-sm text-foreground truncate">
                     {connectedAccountLabel || 'Connect account'}
                   </p>
                   {currentWorkspace?.name && (
-                    <p className="text-[11px] text-muted-foreground truncate">Workspace · {currentWorkspace.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{currentWorkspace.name}</p>
                   )}
                 </div>
-                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                <span className="sr-only">
+                  Workspace {currentWorkspace?.name || 'not selected'}
+                </span>
+                <ChevronDown className="w-4 h-4 text-muted-foreground hidden md:block" />
               </button>
 
               {accountMenuOpen && (
@@ -224,65 +249,35 @@ const Layout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 justify-end min-w-0">
-            <button
-              onClick={() => setSearchOpen(true)}
-              className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-12"
-            >
-              <Search className="w-4 h-4" />
-              Search
-              <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-md">⌘ K</span>
-            </button>
-
-            <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:border-primary/60 transition text-sm text-muted-foreground h-12"
-              aria-label="Toggle dark mode"
-            >
-              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              <span className="hidden lg:inline">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-            </button>
-
-            <div className="relative hidden md:block" ref={createMenuRef}>
-              <Button
-                variant="outline"
-                className="h-12 px-3"
-                leftIcon={<Plus className="w-4 h-4" />}
-                onClick={() => setCreateMenuOpen(!createMenuOpen)}
+            <div className="hidden md:flex items-center gap-1.5">
+              <button
+                onClick={() => setSearchOpen(true)}
+                className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-border bg-card hover:border-primary/60 transition text-muted-foreground"
               >
-                New
-              </Button>
-              {createMenuOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-background border border-border rounded-xl shadow-xl py-2 z-20 animate-fade-in">
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-muted"
-                    onClick={() => {
-                      setCreateMenuOpen(false);
-                      navigate('/knowledge');
-                    }}
-                  >
-                    New knowledge item
-                  </button>
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-muted"
-                    onClick={() => {
-                      setCreateMenuOpen(false);
-                      navigate('/sandbox');
-                    }}
-                  >
-                    New sandbox scenario
-                  </button>
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-muted"
-                    onClick={() => {
-                      setCreateMenuOpen(false);
-                      navigate('/team');
-                    }}
-                  >
-                    Invite teammate
-                  </button>
-                </div>
-              )}
+                <Search className="w-4 h-4" />
+                <span className="sr-only">Open search</span>
+              </button>
+              <button
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-border bg-card hover:border-primary/60 transition text-muted-foreground"
+                aria-label="Toggle dark mode"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
             </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-10 px-2 hidden md:inline-flex"
+              leftIcon={<LifeBuoy className="w-4 h-4" />}
+              onClick={() => {
+                setSupportOpen(true);
+                recordBreadcrumb({ type: 'action', label: 'opened_help' });
+              }}
+            >
+              Help
+            </Button>
 
             <div className="relative hidden md:block" ref={userMenuRef}>
               <button
@@ -300,6 +295,18 @@ const Layout: React.FC = () => {
                   <div className="px-4 py-3 border-b border-border/50 mb-1">
                     <p className="text-sm font-medium truncate">{user?.email || user?.instagramUsername || 'User'}</p>
                   </div>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setSupportOpen(true);
+                      recordBreadcrumb({ type: 'action', label: 'report_issue_dropdown' });
+                    }}
+                    className="w-full justify-start px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-muted text-sm font-normal h-auto rounded-none"
+                    leftIcon={<LifeBuoy className="w-4 h-4" />}
+                  >
+                    Report issue
+                  </Button>
                   <Button
                     variant="ghost"
                     onClick={handleLogout}
@@ -414,6 +421,18 @@ const Layout: React.FC = () => {
             </div>
             <Button
               variant="ghost"
+              onClick={() => {
+                setShowUserMenu(false);
+                setSupportOpen(true);
+                recordBreadcrumb({ type: 'action', label: 'report_issue_mobile' });
+              }}
+              className="w-full justify-start px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted font-medium h-auto rounded-none"
+              leftIcon={<LifeBuoy className="w-4 h-4" />}
+            >
+              Report issue
+            </Button>
+            <Button
+              variant="ghost"
               onClick={handleLogout}
               className="w-full justify-start px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted font-medium h-auto rounded-none"
               leftIcon={<LogOut className="w-4 h-4" />}
@@ -436,6 +455,7 @@ const Layout: React.FC = () => {
         </div>
       </main>
 
+      <SupportTicketModal open={supportOpen} onClose={() => setSupportOpen(false)} />
       <GlobalSearchModal
         open={searchOpen}
         onClose={() => setSearchOpen(false)}

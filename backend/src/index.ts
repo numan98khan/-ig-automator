@@ -23,6 +23,8 @@ import escalationRoutes from './routes/escalations';
 import sandboxRoutes from './routes/sandbox';
 import { scheduler } from './services/scheduler';
 import dashboardRoutes from './routes/dashboard';
+import supportTicketRoutes from './routes/supportTickets';
+import { requestIdMiddleware } from './middleware/requestId';
 
 // Load environment variables
 dotenv.config();
@@ -34,6 +36,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(requestIdMiddleware);
 
 // Connect to database
 connectDB();
@@ -56,6 +59,7 @@ app.use('/api/categories', categoriesRoutes);
 app.use('/api/escalations', escalationRoutes);
 app.use('/api/sandbox', sandboxRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/support-tickets', supportTicketRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
