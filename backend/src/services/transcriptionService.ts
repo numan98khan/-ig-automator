@@ -153,7 +153,8 @@ Return JSON with: { "detectedLanguage": "xx", "translation": "..." or null }`,
       store: false,
     });
 
-    const result = JSON.parse(response.output_text || '{}');
+    const structured = extractStructuredJson<{ detectedLanguage?: string; translation?: string | null }>(response);
+    const result = structured || safeParseJson(response.output_text || '{}');
 
     return {
       transcription,
@@ -163,5 +164,31 @@ Return JSON with: { "detectedLanguage": "xx", "translation": "..." or null }`,
   } catch (error: any) {
     console.error('Error in transcribeAndTranslate:', error.message);
     throw error;
+  }
+}
+
+function extractStructuredJson<T>(response: any): T | null {
+  if (!response?.output) {
+    return null;
+  }
+
+  for (const item of response.output) {
+    if (!item?.content) continue;
+    for (const content of item.content) {
+      if (content?.type === 'output_text' && content.parsed) {
+        return content.parsed as T;
+      }
+    }
+  }
+
+  return null;
+}
+
+function safeParseJson(content: string): any {
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    console.error('Failed to parse JSON content', content);
+    return {};
   }
 }
