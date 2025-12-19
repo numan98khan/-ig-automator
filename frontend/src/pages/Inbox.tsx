@@ -396,7 +396,7 @@ const Inbox: React.FC = () => {
           <div
             className={`w-full md:w-[340px] lg:w-[360px] flex-shrink-0 flex flex-col rounded-xl border border-border glass-panel shadow-sm min-h-0 ${selectedConversation ? 'hidden md:flex' : 'flex'}`}
           >
-            <div className="p-3 border-b border-border bg-background/50">
+            <div className="p-3 border-b border-border bg-background/50 rounded-t-xl">
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="min-w-0">
                   <h2 className="text-base font-semibold leading-tight text-foreground">Inbox</h2>
@@ -506,7 +506,7 @@ const Inbox: React.FC = () => {
           >
             {selectedConversation ? (
               <>
-                <div className="px-4 md:px-5 py-3 border-b border-border bg-background/60 flex items-center justify-between gap-3">
+                <div className="px-4 md:px-5 py-3 border-b border-border bg-background/60 flex items-center justify-between gap-3 rounded-t-xl">
                   <div className="flex items-center gap-3 min-w-0">
                     <button
                       onClick={() => setSelectedConversation(null)}
@@ -661,7 +661,7 @@ const Inbox: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="px-4 md:px-5 py-3 border-t border-border bg-background/60">
+                <div className="px-4 md:px-5 py-3 border-t border-border bg-background/60 rounded-b-xl">
                   <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-foreground">AI auto-replies</span>
