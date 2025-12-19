@@ -1,28 +1,36 @@
-import React from 'react';
+import React from "react";
 
 interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'primary' | 'secondary' | 'success' | 'warning' | 'danger' | 'neutral';
+  variant?: "primary" | "secondary" | "success" | "warning" | "danger" | "neutral";
   className?: string;
 }
 
 export const Badge: React.FC<BadgeProps> = ({
   children,
-  variant = 'primary',
-  className = '',
+  variant = "primary",
+  className = "",
 }) => {
-  const variants = {
-    primary: 'bg-primary/20 text-primary-foreground border-primary/20',
-    secondary: 'bg-secondary/20 text-secondary-foreground border-secondary/20',
-    success: 'bg-green-500/20 text-green-300 border-green-500/20',
-    warning: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/20',
-    danger: 'bg-red-500/20 text-red-300 border-red-500/20',
-    neutral: 'bg-white/10 text-gray-300 border-white/10',
+  // Theme-first:
+  // - Use token colors (text-foreground / text-primary / border-border, etc.)
+  // - Avoid primary-foreground for text (it's usually for solid buttons)
+  // - For status colors, use Tailwind but make them work in both themes via "text-*" not pale-only values
+  const variants: Record<NonNullable<BadgeProps["variant"]>, string> = {
+    primary: "bg-primary/10 text-primary border-primary/20",
+    secondary: "bg-secondary text-secondary-foreground border-border",
+    success: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-300",
+    warning: "bg-amber-500/10 text-amber-700 border-amber-500/20 dark:text-amber-300",
+    danger: "bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-300",
+    neutral: "bg-muted text-muted-foreground border-border",
   };
 
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${variants[variant]} ${className}`}
+      className={[
+        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border",
+        variants[variant],
+        className,
+      ].join(" ")}
     >
       {children}
     </span>
