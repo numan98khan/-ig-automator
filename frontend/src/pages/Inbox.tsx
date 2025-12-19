@@ -61,6 +61,36 @@ const Inbox: React.FC = () => {
   const [draftSource, setDraftSource] = useState<'ai' | null>(null);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
 
+  const lastMessage = useMemo(() => messages[messages.length - 1], [messages]);
+  const lastSpeaker = lastMessage?.from;
+  const hasAgentSent = useMemo(() => messages.some((msg) => msg.from !== 'customer'), [messages]);
+  const hasAiDraft = draftSource === 'ai';
+
+  const roleChips = useMemo(() => {
+    const chips: { label: string; tone: 'neutral' | 'brand' | 'muted' }[] = [];
+
+    if (lastSpeaker === 'customer') {
+      chips.push({ label: 'Customer', tone: 'neutral' });
+    }
+
+    if (hasAiDraft) {
+      chips.push({ label: 'AI Draft', tone: 'muted' });
+    } else if (lastSpeaker && lastSpeaker !== 'customer') {
+      chips.push({ label: 'Sent', tone: 'brand' });
+    } else if (hasAgentSent) {
+      chips.push({ label: 'Sent', tone: 'brand' });
+    }
+
+    return chips;
+  }, [hasAgentSent, hasAiDraft, lastSpeaker]);
+
+  const getInitial = (name?: string) => name?.trim()?.[0]?.toUpperCase() || 'C';
+
+  const lastMessage = useMemo(() => messages[messages.length - 1], [messages]);
+  const lastSpeaker = lastMessage?.from;
+  const hasAgentSent = useMemo(() => messages.some((msg) => msg.from !== 'customer'), [messages]);
+  const hasAiDraft = draftSource === 'ai';
+
   const handleSyncConversation = async () => {
     if (!selectedConversation || !selectedConversation.instagramConversationId) return;
 
@@ -531,6 +561,22 @@ const Inbox: React.FC = () => {
                           </span>
                         )}
                       </div>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        {roleChips.map((chip) => (
+                          <span
+                            key={chip.label}
+                            className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                              chip.tone === 'brand'
+                                ? 'bg-primary/10 text-primary border-primary/30'
+                                : chip.tone === 'muted'
+                                  ? 'bg-muted/70 text-foreground border-border/70'
+                                  : 'bg-secondary text-foreground border-border'
+                            }`}
+                          >
+                            {chip.label}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -563,100 +609,116 @@ const Inbox: React.FC = () => {
 
                 <div className="flex-1 overflow-y-auto px-4 md:px-5 py-4 custom-scrollbar">
                   <div className="max-w-3xl mx-auto space-y-3">
-                    {messages.map((msg) => (
-                      <div
-                        key={msg._id}
-                        className={`flex ${msg.from === 'customer' ? 'justify-start' : 'justify-end'}`}
-                        onMouseEnter={() => msg.from === 'customer' && setHoveredMessageId(msg._id)}
-                        onMouseLeave={() => setHoveredMessageId(null)}
-                      >
-                        <div className="relative max-w-[85%] md:max-w-2xl group">
+                    {messages.map((msg) => {
+                      const isCustomer = msg.from === 'customer';
+                      const isAI = msg.from === 'ai';
+                      const bubbleBase = isCustomer
+                        ? 'bg-secondary text-foreground border border-border'
+                        : isAI
+                          ? 'bg-primary/12 text-foreground border border-primary/30'
+                          : 'bg-primary text-primary-foreground shadow-md';
+                      const bubbleWidth = isCustomer ? 'max-w-[82%] md:max-w-2xl' : 'max-w-[76%] md:max-w-[70%]';
+
+                      return (
+                        <div
+                          key={msg._id}
+                          className={`flex items-start gap-2 ${isCustomer ? 'justify-start' : 'justify-end flex-row-reverse'}`}
+                          onMouseEnter={() => isCustomer && setHoveredMessageId(msg._id)}
+                          onMouseLeave={() => setHoveredMessageId(null)}
+                        >
                           <div
-                            className={`px-3.5 py-3 rounded-xl text-sm leading-relaxed shadow-sm ${msg.from === 'customer'
-                              ? 'bg-secondary text-foreground border border-border'
-                              : msg.from === 'ai'
-                                ? 'bg-primary text-primary-foreground shadow-md' //'bg-muted text-foreground border border-border'
-                                : 'bg-primary text-primary-foreground shadow-md'
-                              }`}
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${
+                              isCustomer
+                                ? 'bg-secondary text-foreground border border-border'
+                                : isAI
+                                  ? 'bg-primary/15 text-primary border border-primary/30'
+                                  : 'bg-primary text-primary-foreground shadow-sm'
+                            }`}
+                            aria-hidden
                           >
-                            {msg.from === 'ai' && (
-                              <div className="flex items-center gap-1.5 mb-1.5 text-muted/80 text-[11px] font-semibold uppercase tracking-wide">
-                                <Sparkles className="w-3 h-3" />
-                                <span>AI Assistant</span>
+                            {isAI ? <Sparkles className="w-4 h-4" /> : getInitial(isCustomer ? selectedConversation?.participantName : 'You')}
+                          </div>
+                          <div className={`relative ${bubbleWidth} group`}>
+                            <div className={`px-3.5 py-3 rounded-xl text-sm leading-relaxed ${bubbleBase}`}>
+                              {isAI && (
+                                <div className="flex items-center gap-1.5 mb-1.5 text-primary font-semibold text-[11px] uppercase tracking-wide">
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>AI Assistant</span>
+                                </div>
+                              )}
+
+                              {msg.attachments && msg.attachments.length > 0 && (
+                                <div className="space-y-2 mb-2">
+                                  {msg.attachments.map((attachment, index) => (
+                                    <div key={index}>
+                                      {attachment.type === 'image' && <ImageAttachment attachment={attachment} />}
+                                      {attachment.type === 'video' && <VideoAttachment attachment={attachment} />}
+                                      {(attachment.type === 'audio' || attachment.type === 'voice') && <VoiceAttachment attachment={attachment} />}
+                                      {attachment.type === 'file' && <FileAttachment attachment={attachment} />}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {msg.linkPreview && (
+                                <div className="mb-2">
+                                  <LinkPreviewComponent linkPreview={msg.linkPreview} />
+                                </div>
+                              )}
+
+                              {msg.text && <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>}
+
+                              <div
+                                className={`flex items-center justify-end gap-1.5 mt-1.5 text-[11px] ${isCustomer ? 'text-muted-foreground' : isAI ? 'text-primary' : 'text-primary-foreground/85'
+                                  }`}
+                              >
+                                <span>{formatTime(msg.createdAt)}</span>
+                                {!isCustomer && (
+                                  <span title={msg.seenAt ? 'Seen' : 'Sent'}>
+                                    {msg.seenAt ? <CheckCheck className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {isCustomer && hoveredMessageId === msg._id && !categoryDropdownOpen && (
+                              <div className="absolute left-0 -bottom-9 animate-fade-in z-10">
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  className="text-xs h-7 px-2.5 bg-background border-border"
+                                  onClick={() => setCategoryDropdownOpen(msg._id)}
+                                  leftIcon={<Tag className="w-3.5 h-3.5" />}
+                                >
+                                  {msg.categoryId?.nameEn || 'Categorize'}
+                                </Button>
                               </div>
                             )}
 
-                            {msg.attachments && msg.attachments.length > 0 && (
-                              <div className="space-y-2 mb-2">
-                                {msg.attachments.map((attachment, index) => (
-                                  <div key={index}>
-                                    {attachment.type === 'image' && <ImageAttachment attachment={attachment} />}
-                                    {attachment.type === 'video' && <VideoAttachment attachment={attachment} />}
-                                    {(attachment.type === 'audio' || attachment.type === 'voice') && <VoiceAttachment attachment={attachment} />}
-                                    {attachment.type === 'file' && <FileAttachment attachment={attachment} />}
-                                  </div>
+                            {categoryDropdownOpen === msg._id && (
+                              <div
+                                ref={categoryDropdownRef}
+                                className="absolute left-0 top-full mt-2 z-20 bg-card border border-border rounded-lg py-1 min-w-[200px] max-h-60 overflow-y-auto animate-fade-in shadow-lg"
+                              >
+                                <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground border-b border-border uppercase tracking-wider">
+                                  Select Category
+                                </div>
+                                {categories.map((cat) => (
+                                  <button
+                                    key={cat._id}
+                                    onClick={() => handleCategoryChange(msg._id, cat._id)}
+                                    className={`w-full text-left px-3 py-2 text-sm transition hover:bg-muted/50 ${msg.categoryId?._id === cat._id ? 'text-primary font-medium bg-primary/5' : 'text-foreground'
+                                      }`}
+                                  >
+                                    {cat.nameEn}
+                                  </button>
                                 ))}
                               </div>
                             )}
-
-                            {msg.linkPreview && (
-                              <div className="mb-2">
-                                <LinkPreviewComponent linkPreview={msg.linkPreview} />
-                              </div>
-                            )}
-
-                            {msg.text && <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>}
-
-                            <div
-                              className={`flex items-center justify-end gap-1.5 mt-1.5 text-[11px] ${msg.from === 'customer' ? 'text-muted-foreground' : 'text-primary-foreground/80'
-                                }`}
-                            >
-                              <span>{formatTime(msg.createdAt)}</span>
-                              {msg.from !== 'customer' && (
-                                <span title={msg.seenAt ? 'Seen' : 'Sent'}>
-                                  {msg.seenAt ? <CheckCheck className="w-3 h-3" /> : <Check className="w-3 h-3" />}
-                                </span>
-                              )}
-                            </div>
                           </div>
-
-                          {msg.from === 'customer' && hoveredMessageId === msg._id && !categoryDropdownOpen && (
-                            <div className="absolute left-0 -bottom-9 animate-fade-in z-10">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                className="text-xs h-7 px-2.5 bg-background border-border"
-                                onClick={() => setCategoryDropdownOpen(msg._id)}
-                                leftIcon={<Tag className="w-3.5 h-3.5" />}
-                              >
-                                {msg.categoryId?.nameEn || 'Categorize'}
-                              </Button>
-                            </div>
-                          )}
-
-                          {categoryDropdownOpen === msg._id && (
-                            <div
-                              ref={categoryDropdownRef}
-                              className="absolute left-0 top-full mt-2 z-20 bg-card border border-border rounded-lg py-1 min-w-[200px] max-h-60 overflow-y-auto animate-fade-in shadow-lg"
-                            >
-                              <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground border-b border-border uppercase tracking-wider">
-                                Select Category
-                              </div>
-                              {categories.map((cat) => (
-                                <button
-                                  key={cat._id}
-                                  onClick={() => handleCategoryChange(msg._id, cat._id)}
-                                  className={`w-full text-left px-3 py-2 text-sm transition hover:bg-muted/50 ${msg.categoryId?._id === cat._id ? 'text-primary font-medium bg-primary/5' : 'text-foreground'
-                                    }`}
-                                >
-                                  {cat.nameEn}
-                                </button>
-                              ))}
-                            </div>
-                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div ref={messagesEndRef} />
                   </div>
                 </div>
