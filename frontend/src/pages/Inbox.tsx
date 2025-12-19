@@ -603,7 +603,7 @@ const Inbox: React.FC = () => {
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-4 md:px-5 py-4 custom-scrollbar">
-                  <div className="max-w-3xl mx-auto space-y-3">
+                  <div className="w-full space-y-3">
                     {messages.map((msg) => {
                       const isCustomer = msg.from === 'customer';
                       const isAI = msg.from === 'ai';
