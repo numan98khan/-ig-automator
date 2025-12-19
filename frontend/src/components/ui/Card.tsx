@@ -18,7 +18,7 @@ export const Card: React.FC<CardProps> = ({
   const variants = {
     glass: 'glass-panel',
     solid: 'bg-surface border border-border',
-    outline: 'bg-transparent border border-white/10',
+    outline: 'glass-panel border border-border/70 shadow-sm',
   };
 
   const hoverStyles = hover ? 'hover:border-primary/50 transition-colors duration-300' : '';
