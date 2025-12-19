@@ -111,18 +111,22 @@ export default function Settings() {
     },
   ];
 
+  const infoTileClass = 'flex items-center justify-between p-4 rounded-xl border border-border/70 dark:border-white/10 bg-muted/60 dark:bg-white/5 backdrop-blur-sm';
+  const infoLabelClass = 'text-sm font-medium text-foreground';
+  const infoValueClass = 'text-sm text-muted-foreground';
+
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
-          <p className="text-slate-400">Manage your workspace security and team access.</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Settings</h1>
+          <p className="text-muted-foreground">Manage your workspace security and team access.</p>
         </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
         <aside className="lg:w-64 flex-shrink-0">
-          <div className="bg-white/5 border border-white/10 rounded-xl p-2 space-y-1">
+          <div className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-2 space-y-1 shadow-sm backdrop-blur-sm">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -131,8 +135,8 @@ export default function Settings() {
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
                   className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${isActive
-                    ? 'bg-primary/10 text-white border border-primary/30'
-                    : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
+                    ? 'bg-primary/12 text-foreground border border-primary/30 shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-white/5 border border-transparent'
                     }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -170,8 +174,8 @@ export default function Settings() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                    <span className="text-sm font-medium text-slate-300">Type</span>
+                  <div className={infoTileClass}>
+                    <span className={infoLabelClass}>Type</span>
                     <Badge variant={user?.isProvisional ? 'warning' : 'success'}>
                       {user?.isProvisional ? 'Provisional' : 'Secured'}
                     </Badge>
@@ -179,13 +183,13 @@ export default function Settings() {
 
                   {user?.email && (
                     <>
-                      <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                        <span className="text-sm font-medium text-slate-300">Email</span>
-                        <span className="text-sm text-slate-400">{user.email}</span>
+                      <div className={infoTileClass}>
+                        <span className={infoLabelClass}>Email</span>
+                        <span className={infoValueClass}>{user.email}</span>
                       </div>
 
-                      <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                        <span className="text-sm font-medium text-slate-300">Verified</span>
+                      <div className={infoTileClass}>
+                        <span className={infoLabelClass}>Verified</span>
                         <div className="flex items-center gap-3">
                           <Badge variant={user.emailVerified ? 'success' : 'warning'}>
                             {user.emailVerified ? 'Verified' : 'Unverified'}
@@ -207,9 +211,9 @@ export default function Settings() {
                   )}
 
                   {user?.instagramUsername && (
-                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                      <span className="text-sm font-medium text-slate-300">Instagram</span>
-                      <span className="text-sm text-slate-400">@{user.instagramUsername}</span>
+                    <div className={infoTileClass}>
+                      <span className={infoLabelClass}>Instagram</span>
+                      <span className={infoValueClass}>@{user.instagramUsername}</span>
                     </div>
                   )}
                 </CardContent>
@@ -218,12 +222,12 @@ export default function Settings() {
               {user?.isProvisional && !user?.email && (
                 <Card className="border-primary/20 bg-primary/5">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-white">
+                    <CardTitle className="flex items-center gap-2">
                       <Mail className="w-5 h-5 text-accent" /> Secure Your Account
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-muted-foreground">
                       Add an email and password to secure your account and access all features.
                     </p>
                     <Input
@@ -244,7 +248,7 @@ export default function Settings() {
                       <button
                         type="button"
                         onClick={() => setAccountForm(prev => ({ ...prev, showPassword: !prev.showPassword }))}
-                        className="absolute right-3 top-[34px] text-slate-500 hover:text-white transition"
+                        className="absolute right-3 top-[34px] text-muted-foreground hover:text-foreground transition"
                       >
                         {accountForm.showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
