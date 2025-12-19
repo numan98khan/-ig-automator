@@ -86,11 +86,6 @@ const Inbox: React.FC = () => {
 
   const getInitial = (name?: string) => name?.trim()?.[0]?.toUpperCase() || 'C';
 
-  const lastMessage = useMemo(() => messages[messages.length - 1], [messages]);
-  const lastSpeaker = lastMessage?.from;
-  const hasAgentSent = useMemo(() => messages.some((msg) => msg.from !== 'customer'), [messages]);
-  const hasAiDraft = draftSource === 'ai';
-
   const handleSyncConversation = async () => {
     if (!selectedConversation || !selectedConversation.instagramConversationId) return;
 
