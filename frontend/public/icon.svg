@@ -1,21 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#2563eb"/>
-  <g fill="#ffffff">
-    <!-- Document shape -->
-    <path d="M 140 100 L 300 100 L 372 172 L 372 412 L 140 412 Z" stroke="#ffffff" stroke-width="4" fill="none"/>
-
-    <!-- Folded corner -->
-    <path d="M 300 100 L 300 172 L 372 172" fill="#ffffff" opacity="0.3"/>
-
-    <!-- Document lines -->
-    <line x1="180" y1="220" x2="332" y2="220" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
-    <line x1="180" y1="260" x2="332" y2="260" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
-    <line x1="180" y1="300" x2="280" y2="300" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
-
-    <!-- AI Sparkle -->
-    <g transform="translate(340, 350)">
-      <path d="M 0,-20 L 5,-5 L 20,0 L 5,5 L 0,20 L -5,5 L -20,0 L -5,-5 Z" fill="#fbbf24"/>
-      <circle cx="0" cy="0" r="8" fill="#fbbf24"/>
-    </g>
-  </g>
+<?xml version="1.0" encoding="utf-8"?><!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+<svg width="800px" height="800px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M3 5V20.7929C3 21.2383 3.53857 21.4614 3.85355 21.1464L7.70711 17.2929C7.89464 17.1054 8.149 17 8.41421 17H19C20.1046 17 21 16.1046 21 15V5C21 3.89543 20.1046 3 19 3H5C3.89543 3 3 3.89543 3 5Z" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M15 12C14.2005 12.6224 13.1502 13 12 13C10.8498 13 9.79952 12.6224 9 12" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M9 8.01953V8" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M15 8.01953V8" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
