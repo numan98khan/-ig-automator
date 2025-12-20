@@ -15,6 +15,10 @@ import {
   Send,
   ShieldCheck,
   Workflow,
+  Compass,
+  CreditCard,
+  LockKeyhole,
+  LineChart,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -151,6 +155,12 @@ const Landing: React.FC = () => {
               <span className="text-xs text-muted-foreground">Insta DM AI Automator</span>
             </div>
           </div>
+          <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
+            <a href="#overview" className="hover:text-foreground transition-colors">Overview</a>
+            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
+            <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
+            <a href="#trust" className="hover:text-foreground transition-colors">Trust</a>
+          </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -159,14 +169,14 @@ const Landing: React.FC = () => {
             >
               {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
-            <Button variant="ghost" className="text-sm">Contact Support</Button>
+            <Button variant="ghost" className="text-sm hidden md:inline-flex">Contact Support</Button>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col justify-center px-4 py-12 md:py-20 relative z-10">
-        <div className="max-w-5xl w-full mx-auto text-center space-y-4 md:space-y-6">
+      <div id="overview" className="flex-1 flex flex-col justify-center px-4 py-12 md:py-20 relative z-10">
+        <div className="max-w-6xl w-full mx-auto text-center space-y-4 md:space-y-6">
 
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/40 border border-border text-muted-foreground text-[11px] font-medium mb-4 md:mb-6 animate-fade-in backdrop-blur-md">
             <Sparkles className="w-3 h-3 text-amber-500" />
@@ -327,7 +337,7 @@ const Landing: React.FC = () => {
           </div>
 
           {/* Features Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-20 md:mt-32 px-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
+          <div id="features" className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-20 md:mt-32 px-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
             <div className="glass-panel p-6 rounded-2xl text-left hover:bg-muted/50 transition-colors group border border-border/50">
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
                 <Workflow className="w-6 h-6" />
@@ -358,6 +368,110 @@ const Landing: React.FC = () => {
               </p>
             </div>
           </div>
+
+          {/* Overview Bar */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-14 text-left">
+            <div className="glass-panel p-5 rounded-2xl border border-border/60 bg-background/60 backdrop-blur-md flex items-start gap-3">
+              <Compass className="w-5 h-5 text-primary mt-1" />
+              <div>
+                <p className="text-sm text-muted-foreground">Overview</p>
+                <p className="text-base text-foreground">Single console for AI replies, routing, and handoffs built for Instagram speed.</p>
+              </div>
+            </div>
+            <div className="glass-panel p-5 rounded-2xl border border-border/60 bg-background/60 backdrop-blur-md flex items-start gap-3">
+              <LineChart className="w-5 h-5 text-emerald-400 mt-1" />
+              <div>
+                <p className="text-sm text-muted-foreground">Performance</p>
+                <p className="text-base text-foreground">Measure response gains, approval stops, and agent saves in one view.</p>
+              </div>
+            </div>
+            <div className="glass-panel p-5 rounded-2xl border border-border/60 bg-background/60 backdrop-blur-md flex items-start gap-3">
+              <LockKeyhole className="w-5 h-5 text-amber-300 mt-1" />
+              <div>
+                <p className="text-sm text-muted-foreground">Compliance</p>
+                <p className="text-base text-foreground">Role-aware guardrails with auditable histories for every send function.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Pricing */}
+          <section id="pricing" className="mt-20 md:mt-28 text-left">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Pricing</p>
+                <h2 className="text-2xl md:text-3xl font-extrabold text-foreground mt-2">Clear plans for scaling send functions</h2>
+                <p className="text-muted-foreground mt-2 max-w-2xl">Start fast with Instagram login, then grow into approvals, multi-workspace routing, and advanced analytics.</p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CreditCard className="w-4 h-4" />
+                <span>Usage-based after free trial</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-[1.2fr,0.8fr] gap-6">
+              <div className="glass-panel p-6 md:p-8 rounded-2xl border border-border/60 bg-card/60 backdrop-blur-md space-y-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Pro</p>
+                    <p className="text-3xl font-extrabold text-foreground mt-1">$89<span className="text-base font-semibold text-muted-foreground"> / month</span></p>
+                  </div>
+                  <div className="px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/30">Best for teams</div>
+                </div>
+                <ul className="space-y-3 text-sm text-foreground">
+                  <li className="flex items-start gap-2"><ShieldCheck className="w-4 h-4 text-primary mt-0.5" />Unlimited send functions with role-aware guardrails</li>
+                  <li className="flex items-start gap-2"><Workflow className="w-4 h-4 text-primary mt-0.5" />Approvals, routing, and human handoffs in one canvas</li>
+                  <li className="flex items-start gap-2"><MessageSquare className="w-4 h-4 text-primary mt-0.5" />On-brand AI replies trained on your offers and policies</li>
+                  <li className="flex items-start gap-2"><LineChart className="w-4 h-4 text-primary mt-0.5" />Analytics on saves, response speed, and deflection</li>
+                </ul>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={handleInstagramLogin}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-white font-semibold hover:shadow-glow hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Instagram className="w-4 h-4" />}
+                    Continue with Instagram
+                  </button>
+                  <Button variant="ghost" className="px-4">Talk to sales</Button>
+                </div>
+              </div>
+              <div className="glass-panel p-6 md:p-8 rounded-2xl border border-border/60 bg-background/60 backdrop-blur-md space-y-4">
+                <p className="text-sm text-muted-foreground">Need enterprise?</p>
+                <p className="text-xl font-semibold text-foreground">Custom guardrails, SSO, audit exports, and deployment support.</p>
+                <Button variant="outline" className="w-full justify-center">Book a demo</Button>
+              </div>
+            </div>
+          </section>
+
+          {/* Trust */}
+          <section id="trust" className="mt-20 md:mt-24 text-left">
+            <div className="glass-panel p-6 md:p-8 rounded-2xl border border-border/60 bg-card/50 backdrop-blur-md">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Trust & Security</p>
+                  <h3 className="text-2xl font-extrabold text-foreground">Built for sensitive inboxes</h3>
+                  <p className="text-muted-foreground max-w-2xl">SendFx ships with approvals, role-scoped access, and auditable histories so you can automate confidently without losing control of brand and compliance.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm text-foreground min-w-[240px]">
+                  <div className="p-3 rounded-xl border border-border/60 bg-background/60">
+                    <p className="font-semibold">SOC2-ready</p>
+                    <p className="text-muted-foreground text-xs mt-1">Controls mapped and reviewed.</p>
+                  </div>
+                  <div className="p-3 rounded-xl border border-border/60 bg-background/60">
+                    <p className="font-semibold">Data isolation</p>
+                    <p className="text-muted-foreground text-xs mt-1">Workspace-level boundaries.</p>
+                  </div>
+                  <div className="p-3 rounded-xl border border-border/60 bg-background/60">
+                    <p className="font-semibold">Human in loop</p>
+                    <p className="text-muted-foreground text-xs mt-1">Approval stops when needed.</p>
+                  </div>
+                  <div className="p-3 rounded-xl border border-border/60 bg-background/60">
+                    <p className="font-semibold">Audit trails</p>
+                    <p className="text-muted-foreground text-xs mt-1">Every send function recorded.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
 
