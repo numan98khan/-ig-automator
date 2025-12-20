@@ -21,7 +21,6 @@ import {
   Moon,
   Sun,
   LifeBuoy,
-  ShieldCheck,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
@@ -64,12 +63,8 @@ const Layout: React.FC = () => {
       { to: '/automations', label: 'Automations', icon: Settings, isActive: isActive('/automations') },
     ];
 
-    if (user?.role === 'admin') {
-      links.push({ to: '/admin', label: 'Admin', icon: ShieldCheck, isActive: isActive('/admin') });
-    }
-
     return links;
-  }, [location.pathname, user?.role]);
+  }, [location.pathname]);
 
   const aiMenuActive = aiLinks.some((link) => isActive(link.to));
   const connectedAccountLabel = useMemo(() => {

@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Instagram, Loader2, Sparkles, MessageSquare, Zap, AlertCircle, ArrowRight, Mail, Lock, Sun, Moon } from 'lucide-react';
+import {
+  Instagram,
+  Loader2,
+  Sparkles,
+  MessageSquare,
+  Zap,
+  AlertCircle,
+  ArrowRight,
+  Mail,
+  Lock,
+  Sun,
+  Moon,
+  Send,
+  ShieldCheck,
+  Workflow,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { Button } from '../components/ui/Button';
@@ -121,10 +136,13 @@ const Landing: React.FC = () => {
       <header className="p-6 relative z-10">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-primary rounded-xl shadow-glow">
-              <Instagram className="w-6 h-6 text-white" />
+            <div className="p-2 bg-gradient-to-br from-primary to-indigo-500 rounded-xl shadow-glow">
+              <Send className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold text-foreground tracking-tight">AI Inbox</span>
+            <div className="flex flex-col">
+              <span className="text-xl font-bold text-foreground tracking-tight">SendFx</span>
+              <span className="text-xs text-muted-foreground">Insta DM AI Automator</span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -145,21 +163,36 @@ const Landing: React.FC = () => {
 
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/50 border border-border text-muted-foreground text-xs font-medium mb-8 animate-fade-in backdrop-blur-md">
             <Sparkles className="w-3 h-3 text-amber-500" />
-            <span>Now with GPT-4 Turbo Integration</span>
+            <span>SendFx — new with GPT-4 Turbo flows</span>
           </div>
 
           {/* Hero Title */}
           <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold text-foreground mb-6 tracking-tight leading-tight animate-slide-up">
-            Master your DMs
+            Send functions.
             <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 animate-gradient-x">
-              using Intelligence.
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-500 via-primary to-indigo-400 animate-gradient-x">
+              Master every DM.
             </span>
           </h1>
 
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '0.1s' }}>
-            Automate your Instagram customer support with AI-powered responses. Train your assistant, manage conversations, and scale effortlessly.
+            SendFx is the DM command center for Instagram—ship AI-powered replies, auto-routes, and human handoffs in one canvas. Build functions, set guardrails, and keep your brand voice consistent across every conversation.
           </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground mb-8 animate-slide-up" style={{ animationDelay: '0.15s' }}>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-background/60 border border-border backdrop-blur">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Safety-first guardrails</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-background/60 border border-border backdrop-blur">
+              <Workflow className="w-4 h-4 text-primary" />
+              <span>Composable send flows</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-background/60 border border-border backdrop-blur">
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span>Live in minutes</span>
+            </div>
+          </div>
 
           {/* CTA Section */}
           <div className="flex flex-col items-center gap-4 animate-slide-up" style={{ animationDelay: '0.2s' }}>
@@ -290,31 +323,31 @@ const Landing: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-20 md:mt-32 px-4 animate-slide-up" style={{ animationDelay: '0.3s' }}>
             <div className="glass-panel p-6 rounded-2xl text-left hover:bg-muted/50 transition-colors group border border-border/50">
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 text-primary group-hover:scale-110 transition-transform">
-                <MessageSquare className="w-6 h-6" />
+                <Workflow className="w-6 h-6" />
               </div>
-              <h3 className="font-semibold text-lg text-foreground mb-2">Smart Replies</h3>
+              <h3 className="font-semibold text-lg text-foreground mb-2">Function Builder</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                Context-aware responses that sound just like you, generated in milliseconds.
+                Stack AI prompts, actions, and conditions to ship send-ready flows without code.
               </p>
             </div>
 
             <div className="glass-panel p-6 rounded-2xl text-left hover:bg-muted/50 transition-colors group border border-border/50">
               <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center mb-4 text-accent group-hover:scale-110 transition-transform">
-                <Sparkles className="w-6 h-6" />
+                <MessageSquare className="w-6 h-6" />
               </div>
-              <h3 className="font-semibold text-lg text-foreground mb-2">Knowledge Base</h3>
+              <h3 className="font-semibold text-lg text-foreground mb-2">On-brand Replies</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                Feed the AI your documents and guidelines to ensure accurate information.
+                Train SendFx on your tone, offers, and policies so every DM feels human and consistent.
               </p>
             </div>
 
             <div className="glass-panel p-6 rounded-2xl text-left hover:bg-muted/50 transition-colors group border border-border/50">
               <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center mb-4 text-foreground group-hover:scale-110 transition-transform">
-                <Zap className="w-6 h-6" />
+                <ShieldCheck className="w-6 h-6" />
               </div>
-              <h3 className="font-semibold text-lg text-foreground mb-2">24/7 Automation</h3>
+              <h3 className="font-semibold text-lg text-foreground mb-2">Guardrails & Handoffs</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                Never miss a DM. Handle thousands of conversations simultaneously, day or night.
+                Route edge cases to humans, set approval stops, and keep compliance locked in.
               </p>
             </div>
           </div>
@@ -323,7 +356,7 @@ const Landing: React.FC = () => {
 
       {/* Footer */}
       <footer className="p-8 text-center text-slate-600 text-sm relative z-10">
-        <p>© 2024 AI Automator. Built for creators.</p>
+        <p>© 2024 SendFx. AI send functions for Instagram.</p>
       </footer>
     </div>
   );
