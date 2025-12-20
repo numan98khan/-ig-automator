@@ -116,19 +116,26 @@ const Landing: React.FC = () => {
     <div className="min-h-screen bg-background relative overflow-hidden flex flex-col selection:bg-primary/30">
 
       {/* Background Ambience */}
-      {/* Background Ambience - Horizon Effect */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {/* Main Horizon Glow - Broad & Soft */}
-        <div className="absolute top-[20%] left-1/2 -translate-x-1/2 w-[140%] h-[80%] rounded-[100%] bg-gradient-to-b from-violet-600/20 via-indigo-600/10 to-transparent blur-[100px] opacity-50 dark:opacity-40" />
+        {/* Mesh gradient blobs */}
+        <div className="absolute top-[-10%] left-[-10%] w-[45%] h-[45%] rounded-full bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.2),_transparent_60%)] blur-3xl" />
+        <div className="absolute top-[10%] right-[-12%] w-[50%] h-[50%] rounded-full bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.18),_transparent_60%)] blur-3xl" />
+        <div className="absolute bottom-[-12%] left-[5%] w-[60%] h-[60%] rounded-full bg-[radial-gradient(circle_at_center,_rgba(94,234,212,0.16),_transparent_65%)] blur-3xl" />
 
-        {/* Sharper Inner Horizon - Defines the 'Arch' */}
-        <div className="absolute top-[30%] left-1/2 -translate-x-1/2 w-[110%] h-[60%] rounded-[100%] bg-gradient-to-b from-indigo-500/30 via-purple-500/10 to-transparent blur-[80px] opacity-60 dark:opacity-50" />
+        {/* Grid overlay */}
+        <div
+          className="absolute inset-0 opacity-[0.07] mix-blend-soft-light"
+          style={{
+            backgroundImage: `linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)`,
+            backgroundSize: '48px 48px',
+          }}
+        />
 
-        {/* Core Glow - Intense & Focused */}
-        <div className="absolute top-[35%] left-1/2 -translate-x-1/2 w-[80%] h-[40%] rounded-[100%] bg-gradient-to-b from-violet-400/20 via-indigo-400/10 to-transparent blur-[60px] opacity-70 dark:opacity-60" />
+        {/* Vignette */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(0,0,0,0)_0%,_rgba(0,0,0,0.25)_70%,_rgba(0,0,0,0.5)_100%)]" />
 
         {/* Subtle Grain Overlay */}
-        <div className="absolute inset-0 opacity-[0.04] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noiseFilter\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.65\' numOctaves=\'3\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noiseFilter)\'/%3E%3C/svg%3E")' }} />
+        <div className="absolute inset-0 opacity-[0.05] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noiseFilter\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.65\' numOctaves=\'3\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noiseFilter)\'/%3E%3C/svg%3E")' }} />
       </div>
 
 
@@ -140,7 +147,7 @@ const Landing: React.FC = () => {
               <Send className="w-6 h-6 text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xl font-bold text-foreground tracking-tight">SendFx</span>
+              <span className="text-xl font-extrabold text-foreground tracking-tight">SendFx</span>
               <span className="text-xs text-muted-foreground">Insta DM AI Automator</span>
             </div>
           </div>
@@ -159,15 +166,15 @@ const Landing: React.FC = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col justify-center px-4 py-12 md:py-20 relative z-10">
-        <div className="max-w-5xl w-full mx-auto text-center">
+        <div className="max-w-5xl w-full mx-auto text-center space-y-4 md:space-y-6">
 
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/50 border border-border text-muted-foreground text-xs font-medium mb-8 animate-fade-in backdrop-blur-md">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/40 border border-border text-muted-foreground text-[11px] font-medium mb-4 md:mb-6 animate-fade-in backdrop-blur-md">
             <Sparkles className="w-3 h-3 text-amber-500" />
             <span>SendFx — new with GPT-4 Turbo flows</span>
           </div>
 
           {/* Hero Title */}
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold text-foreground mb-6 tracking-tight leading-tight animate-slide-up">
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-foreground mb-4 md:mb-6 tracking-tight md:tracking-tighter leading-[1.05] md:leading-[1.08] animate-slide-up">
             Send functions.
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-500 via-primary to-indigo-400 animate-gradient-x">
@@ -175,20 +182,20 @@ const Landing: React.FC = () => {
             </span>
           </h1>
 
-          <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '0.1s' }}>
+          <p className="text-lg md:text-xl text-muted-foreground mb-12 md:mb-14 max-w-2xl mx-auto leading-[1.8] animate-slide-up" style={{ animationDelay: '0.1s' }}>
             SendFx is the DM command center for Instagram—ship AI-powered replies, auto-routes, and human handoffs in one canvas. Build functions, set guardrails, and keep your brand voice consistent across every conversation.
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground mb-8 animate-slide-up" style={{ animationDelay: '0.15s' }}>
-            <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-background/60 border border-border backdrop-blur">
+          <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground mb-10 md:mb-14 animate-slide-up" style={{ animationDelay: '0.15s' }}>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/70 border border-border backdrop-blur-sm">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
               <span>Safety-first guardrails</span>
             </div>
-            <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-background/60 border border-border backdrop-blur">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/70 border border-border backdrop-blur-sm">
               <Workflow className="w-4 h-4 text-primary" />
               <span>Composable send flows</span>
             </div>
-            <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-background/60 border border-border backdrop-blur">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/70 border border-border backdrop-blur-sm">
               <Zap className="w-4 h-4 text-amber-400" />
               <span>Live in minutes</span>
             </div>
