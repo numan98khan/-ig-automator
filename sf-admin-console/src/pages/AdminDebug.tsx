@@ -219,7 +219,7 @@ export default function AdminDebug() {
           <div className="flex flex-col gap-1">
             <span className="text-sm text-muted-foreground">Base URL:</span>
             <code className="text-sm text-foreground bg-muted px-3 py-2 rounded border border-border">
-              {import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/admin
+              {import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/admin
             </code>
           </div>
           <div className="flex flex-col gap-1">
@@ -232,7 +232,7 @@ export default function AdminDebug() {
             <span className="text-sm text-muted-foreground">Request Example:</span>
             <pre className="text-xs text-foreground bg-muted px-3 py-2 rounded border border-border overflow-auto">
 {`curl -H "Authorization: Bearer YOUR_TOKEN" \\
-     ${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/admin/workspaces`}
+     ${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/admin/workspaces`}
             </pre>
           </div>
         </div>
