@@ -25,6 +25,7 @@ import { scheduler } from './services/scheduler';
 import dashboardRoutes from './routes/dashboard';
 import supportTicketRoutes from './routes/supportTickets';
 import { requestIdMiddleware } from './middleware/requestId';
+import assistantRoutes from './routes/assistant';
 
 // Load environment variables
 dotenv.config();
@@ -60,6 +61,7 @@ app.use('/api/escalations', escalationRoutes);
 app.use('/api/sandbox', sandboxRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/support-tickets', supportTicketRoutes);
+app.use('/api/assistant', assistantRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
