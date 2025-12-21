@@ -73,25 +73,22 @@ export const adminApi = {
   getDatabaseStats: () => api.get('/system/database'),
   getActiveConnections: () => api.get('/system/connections'),
 
-  // AI Assistant Configuration per workspace
-  getAssistantConfig: (workspaceId: string) => api.get(`/assistant/config/${workspaceId}`),
-  updateAssistantConfig: (workspaceId: string, config: any) =>
-    api.put(`/assistant/config/${workspaceId}`, config),
+  // Global AI Assistant Configuration (public assistant)
+  getGlobalAssistantConfig: () => api.get('/assistant/config'),
+  updateGlobalAssistantConfig: (config: any) => api.put('/assistant/config', config),
 
-  // Knowledge Base Management per workspace
-  getWorkspaceKnowledgeItems: (workspaceId: string) => api.get(`/knowledge/workspace/${workspaceId}`),
-  createKnowledgeItem: (data: {
+  // Global Knowledge Base Management (public assistant)
+  getGlobalKnowledgeItems: () => api.get('/knowledge'),
+  createGlobalKnowledgeItem: (data: {
     title: string
     content: string
-    workspaceId: string
     storageMode: 'vector' | 'text'
   }) => api.post('/knowledge', data),
-  updateKnowledgeItem: (id: string, data: {
+  updateGlobalKnowledgeItem: (id: string, data: {
     title?: string
     content?: string
     storageMode?: 'vector' | 'text'
   }) => api.put(`/knowledge/${id}`, data),
-  deleteKnowledgeItem: (id: string) => api.delete(`/knowledge/${id}`),
-  reindexKnowledge: (workspaceId: string) =>
-    api.post(`/knowledge/workspace/${workspaceId}/reindex-vector`),
+  deleteGlobalKnowledgeItem: (id: string) => api.delete(`/knowledge/${id}`),
+  reindexGlobalKnowledge: () => api.post('/knowledge/reindex-vector'),
 }

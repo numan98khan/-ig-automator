@@ -10,6 +10,7 @@ import MessageCategory from '../models/MessageCategory';
 import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
+import GlobalAssistantConfig from '../models/GlobalAssistantConfig';
 
 const router = express.Router();
 
@@ -431,6 +432,38 @@ router.put('/assistant/config/:workspaceId', authenticate, requireAdmin, async (
   }
 });
 
+// Global assistant config (god-eye)
+router.get('/assistant/config', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const config = (await GlobalAssistantConfig.findOne().lean()) || {};
+    res.json({
+      data: {
+        assistantName: config.assistantName || 'SendFx Assistant',
+        assistantDescription: config.assistantDescription || 'Ask about product, pricing, or guardrails',
+        systemPrompt: config.systemPrompt || '',
+      },
+    });
+  } catch (error) {
+    console.error('Admin global assistant config get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/assistant/config', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { assistantName, assistantDescription, systemPrompt } = req.body || {};
+    const config = await GlobalAssistantConfig.findOneAndUpdate(
+      {},
+      { $set: { assistantName, assistantDescription, systemPrompt } },
+      { new: true, upsert: true },
+    );
+    res.json({ data: { success: true, message: 'Configuration updated', settings: config } });
+  } catch (error) {
+    console.error('Admin global assistant config update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Admin knowledge passthrough (no membership filter)
 router.get('/knowledge/workspace/:workspaceId', authenticate, requireAdmin, async (req, res) => {
   try {
@@ -442,11 +475,24 @@ router.get('/knowledge/workspace/:workspaceId', authenticate, requireAdmin, asyn
   }
 });
 
+// Global knowledge (workspace-agnostic)
+router.get('/knowledge', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const items = await KnowledgeItem.find({ $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] })
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ data: items });
+  } catch (error) {
+    console.error('Admin knowledge global list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.post('/knowledge', authenticate, requireAdmin, async (req, res) => {
   try {
     const { title, content, workspaceId, storageMode = 'vector' } = req.body || {};
-    if (!title || !content || !workspaceId) {
-      return res.status(400).json({ error: 'title, content, and workspaceId are required' });
+    if (!title || !content) {
+      return res.status(400).json({ error: 'title and content are required' });
     }
     const item = await KnowledgeItem.create({ title, content, workspaceId, storageMode });
     res.status(201).json({ data: item });
@@ -488,6 +534,15 @@ router.post('/knowledge/workspace/:workspaceId/reindex-vector', authenticate, re
     res.redirect(307, `/api/knowledge/workspace/${req.params.workspaceId}/reindex-vector`);
   } catch (error) {
     console.error('Admin knowledge reindex error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/knowledge/reindex-vector', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    res.json({ data: { success: true, message: 'Global knowledge reindex request accepted (no-op placeholder)' } });
+  } catch (error) {
+    console.error('Admin knowledge global reindex error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -13,7 +13,6 @@ import {
 
 export default function AIAssistantConfig() {
   const queryClient = useQueryClient()
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['system-prompt'])
   )
@@ -24,31 +23,10 @@ export default function AIAssistantConfig() {
   )
   const [isSaving, setIsSaving] = useState(false)
 
-  // Fetch workspaces to target assistant configuration
-  const { data: workspaceData, isLoading: loadingWorkspaces } = useQuery({
-    queryKey: ['assistant-workspaces'],
-    queryFn: () => adminApi.getWorkspaces({ limit: 200 }),
-  })
-
-  const workspaces = (() => {
-    const payload = unwrapData<any>(workspaceData)
-    if (Array.isArray(payload)) return payload
-    if (Array.isArray(payload?.workspaces)) return payload.workspaces
-    return []
-  })()
-
-  // Default workspace to first available
-  useEffect(() => {
-    if (!selectedWorkspaceId && workspaces.length > 0) {
-      setSelectedWorkspaceId(workspaces[0]._id)
-    }
-  }, [selectedWorkspaceId, workspaces])
-
-  // Fetch assistant config for selected workspace
+  // Fetch global assistant config
   const { data: configData } = useQuery({
-    queryKey: ['assistant-config', selectedWorkspaceId],
-    queryFn: () => adminApi.getAssistantConfig(selectedWorkspaceId!),
-    enabled: !!selectedWorkspaceId,
+    queryKey: ['global-assistant-config'],
+    queryFn: () => adminApi.getGlobalAssistantConfig(),
   })
 
   // Update state when config data changes
@@ -63,11 +41,10 @@ export default function AIAssistantConfig() {
     }
   }, [configData])
 
-  // Fetch workspace knowledge items
+  // Fetch global knowledge items
   const { data: knowledgeData, isLoading: loadingKnowledge } = useQuery({
-    queryKey: ['workspace-knowledge', selectedWorkspaceId],
-    queryFn: () => adminApi.getWorkspaceKnowledgeItems(selectedWorkspaceId!),
-    enabled: !!selectedWorkspaceId,
+    queryKey: ['global-knowledge-items'],
+    queryFn: () => adminApi.getGlobalKnowledgeItems(),
   })
 
   const knowledgePayload = unwrapData<any>(knowledgeData)
@@ -80,9 +57,9 @@ export default function AIAssistantConfig() {
   // Mutation for updating config
   const updateConfigMutation = useMutation({
     mutationFn: (config: any) =>
-      adminApi.updateAssistantConfig(selectedWorkspaceId!, config),
+      adminApi.updateGlobalAssistantConfig(config),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assistant-config', selectedWorkspaceId] })
+      queryClient.invalidateQueries({ queryKey: ['global-assistant-config'] })
       setIsSaving(false)
     },
     onError: () => {
@@ -92,9 +69,9 @@ export default function AIAssistantConfig() {
 
   // Mutation for reindexing knowledge
   const reindexMutation = useMutation({
-    mutationFn: () => adminApi.reindexKnowledge(selectedWorkspaceId!),
+    mutationFn: () => adminApi.reindexGlobalKnowledge(),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workspace-knowledge', selectedWorkspaceId] })
+      queryClient.invalidateQueries({ queryKey: ['global-knowledge-items'] })
     },
   })
 
@@ -109,7 +86,6 @@ export default function AIAssistantConfig() {
   }
 
   const handleSaveConfig = () => {
-    if (!selectedWorkspaceId) return
     setIsSaving(true)
     updateConfigMutation.mutate({
       systemPrompt,
@@ -119,7 +95,6 @@ export default function AIAssistantConfig() {
   }
 
   const handleReindexKnowledge = () => {
-    if (!selectedWorkspaceId) return
     if (
       confirm(
         'This will re-embed all vector-based knowledge items. Continue?'
@@ -149,33 +124,9 @@ export default function AIAssistantConfig() {
               SendFx Assistant
             </h1>
             <p className="text-sm sm:text-base text-muted-foreground">
-              Configure the workspace assistant and knowledge used for automated replies
+              Configure the public assistant and shared knowledge used for automated replies
             </p>
           </div>
-        </div>
-      </div>
-
-      {/* Workspace Selector */}
-      <div className="card">
-        <div className="flex flex-col gap-3">
-          <label className="text-sm font-medium text-foreground">Workspace</label>
-          {loadingWorkspaces ? (
-            <p className="text-muted-foreground text-sm">Loading workspaces...</p>
-          ) : workspaces.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No workspaces available.</p>
-          ) : (
-            <select
-              value={selectedWorkspaceId ?? ''}
-              onChange={(e) => setSelectedWorkspaceId(e.target.value)}
-              className="input max-w-md"
-            >
-              {workspaces.map((w: any) => (
-                <option key={w._id} value={w._id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          )}
         </div>
       </div>
 
