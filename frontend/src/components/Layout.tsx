@@ -62,6 +62,7 @@ const Layout: React.FC = () => {
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
       { to: '/alerts', label: 'Alerts', icon: AlertCircle, isActive: isActive('/alerts') },
       { to: '/automations', label: 'Automations', icon: Settings, isActive: isActive('/automations') },
+      { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
     ];
 
     return links;
