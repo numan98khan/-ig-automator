@@ -7,8 +7,6 @@ import {
   RefreshCw,
   FileText,
   Settings,
-  Database,
-  Sparkles,
 } from 'lucide-react'
 
 export default function AIAssistantConfig() {
@@ -109,13 +107,6 @@ export default function AIAssistantConfig() {
       reindexMutation.mutate()
     }
   }
-
-  const vectorItems = knowledgeItems.filter(
-    (item: any) => item.storageMode === 'vector'
-  )
-  const textItems = knowledgeItems.filter(
-    (item: any) => item.storageMode === 'text'
-  )
 
   return (
     <div className="space-y-6">
