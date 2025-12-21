@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IKnowledgeItem extends Document {
   title: string;
   content: string;
-  workspaceId: mongoose.Types.ObjectId;
+  workspaceId?: mongoose.Types.ObjectId;
   storageMode: 'vector' | 'text';
   createdAt: Date;
 }
@@ -21,7 +21,7 @@ const knowledgeItemSchema = new Schema<IKnowledgeItem>({
   workspaceId: {
     type: Schema.Types.ObjectId,
     ref: 'Workspace',
-    required: true,
+    required: false,
   },
   storageMode: {
     type: String,

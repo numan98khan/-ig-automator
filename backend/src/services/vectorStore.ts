@@ -5,6 +5,7 @@ import KnowledgeItem from '../models/KnowledgeItem';
 const connectionString = process.env.PGVECTOR_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL;
 const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDINGS_MODEL || 'text-embedding-3-small';
 const EMBEDDING_DIMENSION = 1536;
+export const GLOBAL_WORKSPACE_KEY = 'global';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -36,6 +37,7 @@ const getPool = (): Pool | null => {
 };
 
 const embeddingToSql = (embedding: number[]) => `[${embedding.join(',')}]`;
+const getWorkspaceKey = (workspaceId?: string | null) => workspaceId || GLOBAL_WORKSPACE_KEY;
 
 const ensureStore = async () => {
   if (initialized) return true;
@@ -81,7 +83,7 @@ const embedText = async (text: string): Promise<number[]> => {
 
 export interface KnowledgeDocument {
   id: string;
-  workspaceId: string;
+  workspaceId?: string | null;
   title: string;
   content: string;
 }
@@ -95,6 +97,7 @@ export interface RetrievedContext {
 
 export const upsertKnowledgeEmbedding = async (doc: KnowledgeDocument) => {
   try {
+    const workspaceKey = getWorkspaceKey(doc.workspaceId);
     const client = getPool();
     if (!client) return;
     const ready = await ensureStore();
@@ -116,7 +119,7 @@ export const upsertKnowledgeEmbedding = async (doc: KnowledgeDocument) => {
             embedding = EXCLUDED.embedding,
             updated_at = NOW()
       `,
-      [doc.id, doc.workspaceId, doc.title, doc.content, embeddingToSql(embedding)],
+      [doc.id, workspaceKey, doc.title, doc.content, embeddingToSql(embedding)],
     );
   } catch (error) {
     console.error('Vector upsert failed:', error);
@@ -137,6 +140,7 @@ export const deleteKnowledgeEmbedding = async (id: string) => {
 
 export const searchWorkspaceKnowledge = async (workspaceId: string, query: string, topK = 5): Promise<RetrievedContext[]> => {
   try {
+    const workspaceKey = getWorkspaceKey(workspaceId);
     const client = getPool();
     if (!client) return [];
     const ready = await ensureStore();
@@ -153,7 +157,7 @@ export const searchWorkspaceKnowledge = async (workspaceId: string, query: strin
         ORDER BY embedding <=> $2::vector
         LIMIT $3
       `,
-      [workspaceId, embeddingToSql(queryEmbedding), topK],
+      [workspaceKey, embeddingToSql(queryEmbedding), topK],
     );
 
     return result.rows.map((row: any) => ({
@@ -169,6 +173,7 @@ export const searchWorkspaceKnowledge = async (workspaceId: string, query: strin
 };
 
 export const reindexWorkspaceKnowledge = async (workspaceId: string) => {
+  const workspaceKey = getWorkspaceKey(workspaceId);
   const items = await KnowledgeItem.find({
     workspaceId,
     $or: [{ storageMode: { $exists: false } }, { storageMode: 'vector' }],
@@ -176,7 +181,25 @@ export const reindexWorkspaceKnowledge = async (workspaceId: string) => {
   for (const item of items) {
     await upsertKnowledgeEmbedding({
       id: item._id.toString(),
-      workspaceId,
+      workspaceId: workspaceKey,
+      title: item.title,
+      content: item.content,
+    });
+  }
+};
+
+export const reindexGlobalKnowledge = async () => {
+  const items = await KnowledgeItem.find({
+    $and: [
+      { $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] },
+      { $or: [{ storageMode: { $exists: false } }, { storageMode: 'vector' }] },
+    ],
+  });
+
+  for (const item of items) {
+    await upsertKnowledgeEmbedding({
+      id: item._id.toString(),
+      workspaceId: GLOBAL_WORKSPACE_KEY,
       title: item.title,
       content: item.content,
     });

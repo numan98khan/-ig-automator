@@ -91,6 +91,10 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Knowledge item not found' });
     }
 
+    if (!item.workspaceId) {
+      return res.status(400).json({ error: 'workspaceId missing on knowledge item' });
+    }
+
     // Verify workspace belongs to user
     const workspace = await Workspace.findOne({
       _id: item.workspaceId,
@@ -134,6 +138,10 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     const item = await KnowledgeItem.findById(id);
     if (!item) {
       return res.status(404).json({ error: 'Knowledge item not found' });
+    }
+
+    if (!item.workspaceId) {
+      return res.status(400).json({ error: 'workspaceId missing on knowledge item' });
     }
 
     // Verify workspace belongs to user

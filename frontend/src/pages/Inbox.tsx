@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
+import ReactMarkdown from 'react-markdown';
 import {
   conversationAPI,
   messageAPI,
@@ -605,7 +606,13 @@ const Inbox: React.FC = () => {
                               </div>
                             )}
 
-                            {msg.text && <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text}</p>}
+                            {msg.text && (
+                              <ReactMarkdown
+                                className="prose prose-invert prose-sm max-w-none text-sm leading-relaxed [&>*]:my-2 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                              >
+                                {msg.text}
+                              </ReactMarkdown>
+                            )}
 
                             <div
                               className={`flex items-center justify-end gap-1.5 mt-1.5 text-[11px] ${msg.from === 'customer' ? 'text-muted-foreground' : 'text-primary-foreground/80'
