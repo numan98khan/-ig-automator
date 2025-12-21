@@ -8,7 +8,6 @@ import WorkspaceDetail from './pages/WorkspaceDetail'
 import Conversations from './pages/Conversations'
 import ConversationDetail from './pages/ConversationDetail'
 import Users from './pages/Users'
-import SystemHealth from './pages/SystemHealth'
 import Analytics from './pages/Analytics'
 import AIAssistantConfig from './pages/AIAssistantConfig'
 import AdminDebug from './pages/AdminDebug'
@@ -31,7 +30,6 @@ function App() {
                 <Route path="/users" element={<Users />} />
                 <Route path="/ai-assistant" element={<AIAssistantConfig />} />
                 <Route path="/analytics" element={<Analytics />} />
-                <Route path="/system-health" element={<SystemHealth />} />
                 <Route path="/debug" element={<AdminDebug />} />
               </Routes>
             </Layout>

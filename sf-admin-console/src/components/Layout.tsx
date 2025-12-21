@@ -5,7 +5,6 @@ import {
   Building2,
   MessageSquare,
   Users,
-  Activity,
   BarChart3,
   Bot,
   Menu,
@@ -31,7 +30,6 @@ export default function Layout({ children }: LayoutProps) {
     { name: 'Users', href: '/users', icon: Users },
     { name: 'AI Assistant', href: '/ai-assistant', icon: Bot },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-    { name: 'System Health', href: '/system-health', icon: Activity },
     { name: 'Debug', href: '/debug', icon: Bug },
   ]
 
