@@ -30,6 +30,7 @@ import useOverlayClose from '../hooks/useOverlayClose';
 import { useTheme } from '../context/ThemeContext';
 import SupportTicketModal from './SupportTicketModal';
 import { recordBreadcrumb } from '../services/diagnostics';
+import AssistantWidget from './AssistantWidget';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -500,6 +501,12 @@ const Layout: React.FC = () => {
           <Outlet />
         </div>
       </main>
+
+      <AssistantWidget
+        locationHint={location.pathname}
+        workspaceName={currentWorkspace?.name}
+        workspaceId={currentWorkspace?._id}
+      />
 
       <SupportTicketModal open={supportOpen} onClose={() => setSupportOpen(false)} />
       <GlobalSearchModal

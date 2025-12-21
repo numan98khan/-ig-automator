@@ -135,6 +135,7 @@ export interface KnowledgeItem {
   _id: string;
   title: string;
   content: string;
+  storageMode?: 'vector' | 'text';
   workspaceId: string;
   createdAt: string;
 }
@@ -490,13 +491,13 @@ export const knowledgeAPI = {
     return data;
   },
 
-  create: async (title: string, content: string, workspaceId: string): Promise<KnowledgeItem> => {
-    const { data } = await api.post('/api/knowledge', { title, content, workspaceId });
+  create: async (title: string, content: string, workspaceId: string, storageMode: 'vector' | 'text'): Promise<KnowledgeItem> => {
+    const { data } = await api.post('/api/knowledge', { title, content, workspaceId, storageMode });
     return data;
   },
 
-  update: async (id: string, title: string, content: string): Promise<KnowledgeItem> => {
-    const { data } = await api.put(`/api/knowledge/${id}`, { title, content });
+  update: async (id: string, title: string, content: string, storageMode: 'vector' | 'text'): Promise<KnowledgeItem> => {
+    const { data } = await api.put(`/api/knowledge/${id}`, { title, content, storageMode });
     return data;
   },
 
