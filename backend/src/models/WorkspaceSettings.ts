@@ -11,6 +11,9 @@ import {
 
 export interface IWorkspaceSettings extends Document {
   workspaceId: mongoose.Types.ObjectId;
+  assistantName?: string;
+  assistantDescription?: string;
+  systemPrompt?: string;
 
   // Language settings
   defaultLanguage: string;        // Legacy default
@@ -84,6 +87,18 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
     ref: 'Workspace',
     required: true,
     unique: true,
+  },
+  assistantName: {
+    type: String,
+    trim: true,
+  },
+  assistantDescription: {
+    type: String,
+    trim: true,
+  },
+  systemPrompt: {
+    type: String,
+    trim: true,
   },
 
   // Language settings
