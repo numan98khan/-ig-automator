@@ -11,6 +11,7 @@ import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
+import Tier from '../models/Tier';
 import {
   GLOBAL_WORKSPACE_KEY,
   deleteKnowledgeEmbedding,
@@ -26,6 +27,23 @@ const toInt = (value: any, fallback: number) => {
   return Number.isNaN(n) ? fallback : n;
 };
 const STORAGE_MODES = ['vector', 'text'];
+const ALLOWED_STATUSES = ['active', 'inactive', 'deprecated'];
+const LIMIT_KEYS = ['aiMessages', 'instagramAccounts', 'teamMembers', 'automations', 'knowledgeItems', 'messageCategories'];
+
+const parseLimits = (rawLimits: any = {}) => {
+  const limits: Record<string, number | undefined> = {};
+  LIMIT_KEYS.forEach((key) => {
+    const value = rawLimits[key];
+    if (value === undefined || value === null || value === '') {
+      return;
+    }
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      limits[key] = parsed;
+    }
+  });
+  return limits;
+};
 
 // Admin god-eye: list all workspaces
 router.get('/workspaces', authenticate, requireAdmin, async (req, res) => {
@@ -79,6 +97,128 @@ router.get('/workspaces', authenticate, requireAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Admin list workspaces error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Admin: manage tiers
+router.get('/tiers', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const page = Math.max(1, toInt(req.query.page, 1));
+    const limit = Math.min(100, Math.max(1, toInt(req.query.limit, 20)));
+    const search = (req.query.search as string)?.trim();
+    const status = (req.query.status as string)?.trim();
+
+    const filter: any = {};
+    if (search) {
+      filter.name = { $regex: search, $options: 'i' };
+    }
+    if (status && ALLOWED_STATUSES.includes(status)) {
+      filter.status = status;
+    }
+
+    const [tiers, total] = await Promise.all([
+      Tier.find(filter)
+        .sort({ isDefault: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      Tier.countDocuments(filter),
+    ]);
+
+    res.json({
+      data: {
+        tiers,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit) || 1,
+          totalItems: total,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Admin list tiers error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const tier = await Tier.findById(req.params.id).lean();
+    if (!tier) return res.status(404).json({ error: 'Tier not found' });
+    res.json({ data: tier });
+  } catch (error) {
+    console.error('Admin get tier error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/tiers', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, description, allowCustomCategories = true, isDefault = false, isCustom = false } = req.body || {};
+    const status = ALLOWED_STATUSES.includes(req.body?.status) ? req.body.status : 'active';
+
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    const limits = parseLimits(req.body?.limits || req.body);
+
+    const tier = await Tier.create({
+      name: name.trim(),
+      description,
+      allowCustomCategories,
+      isDefault,
+      isCustom,
+      status,
+      limits,
+    });
+
+    res.status(201).json({ data: tier });
+  } catch (error: any) {
+    console.error('Admin create tier error:', error);
+    res.status(400).json({ error: error.message || 'Failed to create tier' });
+  }
+});
+
+router.put('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const tier = await Tier.findById(req.params.id);
+    if (!tier) return res.status(404).json({ error: 'Tier not found' });
+
+    const { name, description, allowCustomCategories, isDefault, isCustom } = req.body || {};
+    const status = ALLOWED_STATUSES.includes(req.body?.status) ? req.body.status : undefined;
+    const limits = parseLimits(req.body?.limits || req.body);
+
+    if (name !== undefined) tier.name = name;
+    if (description !== undefined) tier.description = description;
+    if (allowCustomCategories !== undefined) tier.allowCustomCategories = allowCustomCategories;
+    if (isDefault !== undefined) tier.isDefault = isDefault;
+    if (isCustom !== undefined) tier.isCustom = isCustom;
+    if (status) tier.status = status;
+    if (Object.keys(limits).length > 0) {
+      tier.limits = { ...(tier.limits || {}), ...limits };
+    }
+
+    await tier.save();
+    res.json({ data: tier });
+  } catch (error: any) {
+    console.error('Admin update tier error:', error);
+    res.status(400).json({ error: error.message || 'Failed to update tier' });
+  }
+});
+
+router.delete('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const tier = await Tier.findById(req.params.id);
+    if (!tier) return res.status(404).json({ error: 'Tier not found' });
+    if (tier.isDefault) {
+      return res.status(400).json({ error: 'Cannot delete the default tier' });
+    }
+    await Tier.deleteOne({ _id: req.params.id });
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin delete tier error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

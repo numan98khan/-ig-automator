@@ -8,6 +8,7 @@ import WorkspaceDetail from './pages/WorkspaceDetail'
 import Conversations from './pages/Conversations'
 import ConversationDetail from './pages/ConversationDetail'
 import Users from './pages/Users'
+import Tiers from './pages/Tiers'
 import Analytics from './pages/Analytics'
 import AIAssistantConfig from './pages/AIAssistantConfig'
 import AdminDebug from './pages/AdminDebug'
@@ -28,6 +29,7 @@ function App() {
                 <Route path="/conversations" element={<Conversations />} />
                 <Route path="/conversations/:id" element={<ConversationDetail />} />
                 <Route path="/users" element={<Users />} />
+                <Route path="/tiers" element={<Tiers />} />
                 <Route path="/ai-assistant" element={<AIAssistantConfig />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/debug" element={<AdminDebug />} />

@@ -11,6 +11,7 @@ import {
   LogOut,
   X,
   Bug,
+  Layers,
 } from 'lucide-react'
 import { useAdminAuth } from '../context/AdminAuthContext'
 
@@ -28,6 +29,7 @@ export default function Layout({ children }: LayoutProps) {
     { name: 'Workspaces', href: '/workspaces', icon: Building2 },
     { name: 'Conversations', href: '/conversations', icon: MessageSquare },
     { name: 'Users', href: '/users', icon: Users },
+    { name: 'Tiers', href: '/tiers', icon: Layers },
     { name: 'AI Assistant', href: '/ai-assistant', icon: Bot },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Debug', href: '/debug', icon: Bug },

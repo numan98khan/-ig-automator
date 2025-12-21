@@ -18,6 +18,33 @@ export const unwrapData = <T = any>(response: any): T => {
   return payload as T
 }
 
+export type TierStatus = 'active' | 'inactive' | 'deprecated'
+
+export interface TierLimits {
+  aiMessages?: number
+  instagramAccounts?: number
+  teamMembers?: number
+  automations?: number
+  knowledgeItems?: number
+  messageCategories?: number
+}
+
+export interface TierInput {
+  name?: string
+  description?: string
+  limits?: TierLimits
+  allowCustomCategories?: boolean
+  isDefault?: boolean
+  isCustom?: boolean
+  status?: TierStatus
+}
+
+export interface Tier extends TierInput {
+  _id: string
+  createdAt: string
+  updatedAt: string
+}
+
 // Add auth token to all requests
 api.interceptors.request.use(
   (config) => {
@@ -91,4 +118,12 @@ export const adminApi = {
   }) => api.put(`/knowledge/${id}`, data),
   deleteGlobalKnowledgeItem: (id: string) => api.delete(`/knowledge/${id}`),
   reindexGlobalKnowledge: () => api.post('/knowledge/reindex-vector'),
+
+  // Tiers
+  getTiers: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>
+    api.get('/tiers', { params }),
+  getTierById: (id: string) => api.get(`/tiers/${id}`),
+  createTier: (data: TierInput) => api.post('/tiers', data),
+  updateTier: (id: string, data: TierInput) => api.put(`/tiers/${id}`, data),
+  deleteTier: (id: string) => api.delete(`/tiers/${id}`),
 }
