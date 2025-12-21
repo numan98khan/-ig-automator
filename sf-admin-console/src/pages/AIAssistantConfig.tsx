@@ -48,7 +48,12 @@ export default function AIAssistantConfig() {
     queryFn: () => adminApi.getGlobalKnowledgeItems(),
   })
 
-  const knowledgeItems = unwrapData<any>(knowledgeData) || []
+  const knowledgePayload = unwrapData<any>(knowledgeData)
+  const knowledgeItems = Array.isArray(knowledgePayload)
+    ? knowledgePayload
+    : Array.isArray(knowledgePayload?.items)
+    ? knowledgePayload.items
+    : []
 
   // Mutation for updating config
   const updateConfigMutation = useMutation({
