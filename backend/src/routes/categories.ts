@@ -6,6 +6,7 @@ import CategoryKnowledge from '../models/CategoryKnowledge';
 import Workspace from '../models/Workspace';
 import Message from '../models/Message';
 import { initializeDefaultCategories } from '../services/aiCategorization';
+import { assertWorkspaceLimit, getWorkspaceOwnerTier } from '../services/tierService';
 
 const router = express.Router();
 
@@ -93,6 +94,17 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     const existing = await MessageCategory.findOne({ workspaceId, nameEn });
     if (existing) {
       return res.status(400).json({ error: 'Category with this name already exists' });
+    }
+
+    const ownerTier = await getWorkspaceOwnerTier(workspaceId);
+    if (ownerTier.tier && ownerTier.tier.allowCustomCategories === false) {
+      return res.status(403).json({ error: 'Custom categories are not allowed for this tier' });
+    }
+
+    const categoryCount = await MessageCategory.countDocuments({ workspaceId });
+    const limitCheck = await assertWorkspaceLimit(workspaceId, 'messageCategories', categoryCount + 1);
+    if (!limitCheck.allowed) {
+      return res.status(403).json({ error: `Category limit reached for this workspace (limit: ${limitCheck.limit})` });
     }
 
     const category = await MessageCategory.create({

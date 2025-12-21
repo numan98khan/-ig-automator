@@ -8,6 +8,7 @@ import {
   reindexWorkspaceKnowledge,
   upsertKnowledgeEmbedding,
 } from '../services/vectorStore';
+import { assertWorkspaceLimit } from '../services/tierService';
 
 const router = express.Router();
 const STORAGE_MODES = ['vector', 'text'];
@@ -50,6 +51,12 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
 
     if (!isOwner && role !== 'admin') {
       return res.status(403).json({ error: 'Only workspace owners and admins can create knowledge items' });
+    }
+
+    const currentCount = await KnowledgeItem.countDocuments({ workspaceId });
+    const limitCheck = await assertWorkspaceLimit(workspaceId, 'knowledgeItems', currentCount + 1);
+    if (!limitCheck.allowed) {
+      return res.status(403).json({ error: `Knowledge limit reached for this workspace (limit: ${limitCheck.limit})` });
     }
 
     const item = await KnowledgeItem.create({

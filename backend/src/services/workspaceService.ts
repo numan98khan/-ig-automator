@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import WorkspaceMember, { WorkspaceMemberRole } from '../models/WorkspaceMember';
 import Workspace from '../models/Workspace';
 import User from '../models/User';
+import { assignTierFromOwner, assertWorkspaceLimit } from './tierService';
 
 /**
  * Check if a user is a member of a workspace
@@ -79,11 +80,19 @@ export async function addMember(
     throw new Error('User is already a member of this workspace');
   }
 
+  const currentCount = await WorkspaceMember.countDocuments({ workspaceId });
+  const limitCheck = await assertWorkspaceLimit(workspaceId, 'teamMembers', currentCount + 1);
+  if (!limitCheck.allowed) {
+    throw new Error(`Team member limit reached for this workspace (limit: ${limitCheck.limit})`);
+  }
+
   const membership = await WorkspaceMember.create({
     workspaceId,
     userId,
     role,
   });
+
+  await assignTierFromOwner(workspaceId, userId);
 
   return membership;
 }

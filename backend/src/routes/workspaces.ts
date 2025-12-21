@@ -3,6 +3,7 @@ import Workspace from '../models/Workspace';
 import WorkspaceMember from '../models/WorkspaceMember';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { getWorkspaceMembers, updateMemberRole, removeMember, hasPermission } from '../services/workspaceService';
+import { ensureUserTier } from '../services/tierService';
 
 const router = express.Router();
 
@@ -24,6 +25,8 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       name,
       userId: req.userId,
     });
+
+    await ensureUserTier(req.userId!);
 
     // Create WorkspaceMember entry for the owner
     await WorkspaceMember.create({

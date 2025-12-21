@@ -8,6 +8,8 @@ import {
   instagramAPI,
   instagramSyncAPI,
   categoriesAPI,
+  tierAPI,
+  TierSummaryResponse,
   Conversation,
   Message,
   InstagramAccount,
@@ -50,6 +52,7 @@ const Inbox: React.FC = () => {
   const [generatingAI, setGeneratingAI] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncingAll, setSyncingAll] = useState(false);
+  const [workspaceTier, setWorkspaceTier] = useState<TierSummaryResponse['workspace']>();
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -164,14 +167,16 @@ const Inbox: React.FC = () => {
     if (!currentWorkspace) return;
     try {
       setLoading(true);
-      const [accountsData, conversationsData, categoriesData] = await Promise.all([
+      const [accountsData, conversationsData, categoriesData, tierData] = await Promise.all([
         instagramAPI.getByWorkspace(currentWorkspace._id),
         conversationAPI.getByWorkspace(currentWorkspace._id),
         categoriesAPI.getByWorkspace(currentWorkspace._id),
+        tierAPI.getWorkspace(currentWorkspace._id),
       ]);
 
       setInstagramAccounts(accountsData || accountContextList || []);
       setCategories(categoriesData || []);
+      setWorkspaceTier(tierData);
 
       if (!activeAccount) {
         setConversations([]);
@@ -318,6 +323,12 @@ const Inbox: React.FC = () => {
 
   const handleConnectInstagram = async () => {
     if (!currentWorkspace) return;
+    const igLimit = workspaceTier?.limits?.instagramAccounts;
+    const igUsed = workspaceTier?.usage?.instagramAccounts || 0;
+    if (typeof igLimit === 'number' && igUsed >= igLimit) {
+      alert('Instagram account limit reached for your plan.');
+      return;
+    }
     try {
       setLoading(true);
       const { authUrl } = await instagramAPI.getAuthUrl(currentWorkspace._id);
@@ -364,6 +375,9 @@ const Inbox: React.FC = () => {
 
   // Render Connect State
   if (instagramAccounts.length === 0) {
+    const igLimit = workspaceTier?.limits?.instagramAccounts;
+    const igUsed = workspaceTier?.usage?.instagramAccounts || 0;
+    const igLimitReached = typeof igLimit === 'number' ? igUsed >= igLimit : false;
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center max-w-md glass-panel p-8 rounded-2xl animate-fade-in">
@@ -374,14 +388,19 @@ const Inbox: React.FC = () => {
           <p className="text-slate-400 mb-8">
             Connect your Instagram Business account to start managing DMs with AI superpowers.
           </p>
+          {igLimitReached && (
+            <div className="mb-4 text-sm text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+              Instagram account limit reached ({igUsed}/{igLimit}). Upgrade the owner&apos;s tier to connect another account.
+            </div>
+          )}
           <Button
             onClick={handleConnectInstagram}
-            disabled={loading}
+            disabled={loading || igLimitReached}
             className="w-full"
             size="lg"
             leftIcon={<Instagram className="w-5 h-5" />}
           >
-            {loading ? 'Connecting...' : 'Connect Instagram Account'}
+            {igLimitReached ? 'Limit reached' : loading ? 'Connecting...' : 'Connect Instagram Account'}
           </Button>
         </div>
       </div>

@@ -10,6 +10,7 @@ import { sendMessage as sendInstagramMessage } from '../utils/instagram-api';
 import { generateAIReply } from '../services/aiReplyService';
 import { getActiveTicket, createTicket, addTicketUpdate } from '../services/escalationService';
 import { addCountIncrement, trackDailyMetric } from '../services/reportingService';
+import { assertUsageLimit } from '../services/tierService';
 
 const router = express.Router();
 
@@ -204,6 +205,15 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
       return res.status(404).json({ error: 'Instagram account not found or not connected' });
     }
 
+    const usageCheck = await assertUsageLimit(req.userId!, 'aiMessages', 1, conversation.workspaceId, { increment: false });
+    if (!usageCheck.allowed) {
+      return res.status(429).json({
+        error: 'AI message limit reached for your tier',
+        limit: usageCheck.limit,
+        used: usageCheck.current,
+      });
+    }
+
     const aiResponse = await generateAIReply({
       conversation,
       workspaceId: conversation.workspaceId,
@@ -346,6 +356,7 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
     Object.assign(increments, responseMetrics);
 
     await trackDailyMetric(conversation.workspaceId, new Date(sentAt), increments);
+    await assertUsageLimit(req.userId!, 'aiMessages', 1, conversation.workspaceId);
 
     res.status(201).json({
       ...message.toObject(),

@@ -4,6 +4,7 @@ import Workspace from '../models/Workspace';
 import WorkspaceMember from '../models/WorkspaceMember';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { seedConversations } from '../utils/seed';
+import { assertWorkspaceLimit } from '../services/tierService';
 
 const router = express.Router();
 
@@ -34,6 +35,12 @@ router.post('/connect', authenticate, async (req: AuthRequest, res: Response) =>
 
     if (!isOwner && !isMember) {
       return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+
+    const currentCount = await InstagramAccount.countDocuments({ workspaceId });
+    const limitCheck = await assertWorkspaceLimit(workspaceId, 'instagramAccounts', currentCount + 1);
+    if (!limitCheck.allowed) {
+      return res.status(403).json({ error: `Instagram account limit reached (limit: ${limitCheck.limit})` });
     }
 
     // Create Instagram account
