@@ -383,11 +383,11 @@ const Layout: React.FC = () => {
                 ))}
               </div>
 
-            <div className="space-y-1 pt-3 border-t border-border/50">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">AI</p>
-              {aiLinks.map((link) => (
-                <Link
-                  key={link.to}
+              <div className="space-y-1 pt-3 border-t border-border/50">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">AI</p>
+                {aiLinks.map((link) => (
+                  <Link
+                    key={link.to}
                     to={link.to}
                     onClick={() => setShowMobileMenu(false)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${isActive(link.to)
@@ -401,28 +401,40 @@ const Layout: React.FC = () => {
                 ))}
               </div>
 
-              <div className="flex items-center gap-2 px-4 py-3">
-                <span className="text-sm text-muted-foreground">Theme</span>
-                <button
-                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                  className="p-2 rounded-lg border border-border w-10 h-10 flex items-center justify-center text-muted-foreground hover:border-primary/60 transition"
-                  aria-label="Toggle theme"
-                >
-                  {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                </button>
-              </div>
+              <div className="space-y-3 pt-3 border-t border-border/50">
+                <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-border bg-card shadow-sm">
+                  <div className="flex items-center gap-3">
+                    {theme === 'dark' ? <Moon className="w-5 h-5 text-primary" /> : <Sun className="w-5 h-5 text-primary" />}
+                    <div className="flex flex-col">
+                      <span className="text-sm font-semibold text-foreground">Appearance</span>
+                      <span className="text-xs text-muted-foreground">{theme === 'dark' ? 'Dark theme enabled' : 'Light theme enabled'}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full border border-border transition ${theme === 'dark' ? 'bg-primary/80' : 'bg-muted'}`}
+                    aria-label="Toggle theme"
+                    aria-pressed={theme === 'dark'}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-background shadow transition ${theme === 'dark' ? 'translate-x-5' : 'translate-x-1'}`}
+                    />
+                  </button>
+                </div>
 
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setShowMobileMenu(false);
-                  handleLogout();
-                }}
-                className="w-full justify-start px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted font-medium h-auto"
-                leftIcon={<LogOut className="w-5 h-5" />}
-              >
-                Logout
-              </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setShowMobileMenu(false);
+                    handleLogout();
+                  }}
+                  className="w-full justify-start px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted font-medium h-auto"
+                  leftIcon={<LogOut className="w-5 h-5" />}
+                >
+                  Logout
+                </Button>
+              </div>
             </nav>
           </div>
         </>
@@ -435,10 +447,10 @@ const Layout: React.FC = () => {
             className="fixed inset-0 z-10 md:hidden"
             onClick={() => setShowUserMenu(false)}
           />
-            <div className="absolute top-16 right-4 w-56 bg-background border border-border rounded-lg shadow-xl py-1 z-20 md:hidden animate-fade-in">
-              <div className="px-4 py-3 border-b border-border/50">
-                <p className="text-sm font-medium truncate">{user?.email || user?.instagramUsername || 'User'}</p>
-                {currentWorkspace && (
+          <div className="absolute top-16 right-4 w-56 bg-background border border-border rounded-lg shadow-xl py-1 z-20 md:hidden animate-fade-in">
+            <div className="px-4 py-3 border-b border-border/50">
+              <p className="text-sm font-medium truncate">{user?.email || user?.instagramUsername || 'User'}</p>
+              {currentWorkspace && (
                 <p className="text-xs text-muted-foreground mt-0.5">{currentWorkspace.name}</p>
               )}
             </div>

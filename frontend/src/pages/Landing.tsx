@@ -11,7 +11,6 @@ import {
   Lock,
   Sun,
   Moon,
-  Send,
   ShieldCheck,
   Workflow,
   CreditCard,
@@ -157,8 +156,8 @@ const Landing: React.FC = () => {
       <header className="p-6 relative z-10">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-primary to-indigo-500 rounded-xl shadow-glow">
-              <Send className="w-6 h-6 text-white" />
+            <div className="p-2 rounded-xl bg-card border border-border shadow-glow">
+              <img src="/icon.svg" alt="SendFx logo" className="w-7 h-7" />
             </div>
             <div className="flex flex-col">
               <span className="text-xl font-extrabold text-foreground tracking-tight">SendFx</span>
