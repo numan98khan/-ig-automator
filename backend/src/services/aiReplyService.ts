@@ -7,6 +7,7 @@ import CategoryKnowledge from '../models/CategoryKnowledge';
 import MessageCategory from '../models/MessageCategory';
 import WorkspaceSettings, { IWorkspaceSettings } from '../models/WorkspaceSettings';
 import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
+import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -96,7 +97,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
   const allowEmojis = workspaceSettings?.allowEmojis ?? true;
   const maxReplySentences = workspaceSettings?.maxReplySentences || 3;
   const replyLanguage = workspaceSettings?.defaultReplyLanguage || workspaceSettings?.defaultLanguage || categorization?.detectedLanguage || 'en';
-  const knowledgeItemsUsed = knowledgeItems.slice(0, 5).map(item => ({
+  let knowledgeItemsUsed = knowledgeItems.slice(0, 5).map(item => ({
     id: item._id.toString(),
     title: item.title,
   }));
@@ -145,11 +146,41 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     return `Lead capture fields: ${leadFields || 'none'} | Booking link: ${configs.booking.bookingLink || 'n/a'}; fields: ${bookingFields || 'none'} | Order catalog: ${configs.order.catalogUrl || 'n/a'}; fields: ${orderFields || 'none'} | Support asks: ${supportFields || 'none'} | Drive target: ${configs.drive.targetType || 'website'} ${configs.drive.targetLink || ''}`;
   };
 
-  // Build knowledge context
+  // Build knowledge context (Mongo + optional vector RAG)
   let knowledgeContext = '';
+  let vectorContexts: RetrievedContext[] = [];
+
+  const recentCustomerMessage = [...messages].reverse().find((msg: any) => msg.from === 'customer');
+  const recentCustomerText =
+    latestCustomerMessage ||
+    recentCustomerMessage?.text ||
+    '';
+
+  // Semantic RAG if available
+  if (recentCustomerText) {
+    try {
+      vectorContexts = await searchWorkspaceKnowledge(String(workspaceId), recentCustomerText, 5);
+    } catch (error) {
+      console.error('Vector search failed in aiReplyService:', error);
+    }
+  }
+
   if (knowledgeItems.length > 0) {
     knowledgeContext += '\nGeneral Knowledge Base:\n';
     knowledgeContext += knowledgeItems.map((item: any) => `- ${item.title}: ${item.content}`).join('\n');
+  }
+
+  if (vectorContexts.length > 0) {
+    knowledgeContext += '\n\nVector RAG Matches:\n';
+    knowledgeContext += vectorContexts
+      .map((ctx) => `- ${ctx.title}: ${ctx.content}`)
+      .join('\n');
+
+    const ragUsed = vectorContexts.slice(0, 5).map((ctx) => ({
+      id: ctx.id,
+      title: `${ctx.title} (RAG)`,
+    }));
+    knowledgeItemsUsed = [...ragUsed, ...knowledgeItemsUsed];
   }
 
   if (categoryKnowledge?.content) {
@@ -190,12 +221,6 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
 
     return text;
   }).join('\n');
-
-  const recentCustomerMessage = [...messages].reverse().find((msg: any) => msg.from === 'customer');
-  const recentCustomerText =
-    latestCustomerMessage ||
-    recentCustomerMessage?.text ||
-    '';
 
   // Extract attachments from the latest customer message
   const recentCustomerAttachments = recentCustomerMessage?.attachments || [];
