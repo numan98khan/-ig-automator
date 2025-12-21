@@ -7,6 +7,7 @@ import {
   RefreshCw,
   FileText,
   Settings,
+  Database,
 } from 'lucide-react'
 
 export default function AIAssistantConfig() {
