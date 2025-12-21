@@ -9,11 +9,11 @@ import {
   Settings,
   Database,
   Sparkles,
-  Globe,
 } from 'lucide-react'
 
 export default function AIAssistantConfig() {
   const queryClient = useQueryClient()
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['system-prompt'])
   )
@@ -24,10 +24,31 @@ export default function AIAssistantConfig() {
   )
   const [isSaving, setIsSaving] = useState(false)
 
-  // Fetch global assistant config
+  // Fetch workspaces to target assistant configuration
+  const { data: workspaceData, isLoading: loadingWorkspaces } = useQuery({
+    queryKey: ['assistant-workspaces'],
+    queryFn: () => adminApi.getWorkspaces({ limit: 200 }),
+  })
+
+  const workspaces = (() => {
+    const payload = unwrapData<any>(workspaceData)
+    if (Array.isArray(payload)) return payload
+    if (Array.isArray(payload?.workspaces)) return payload.workspaces
+    return []
+  })()
+
+  // Default workspace to first available
+  useEffect(() => {
+    if (!selectedWorkspaceId && workspaces.length > 0) {
+      setSelectedWorkspaceId(workspaces[0]._id)
+    }
+  }, [selectedWorkspaceId, workspaces])
+
+  // Fetch assistant config for selected workspace
   const { data: configData } = useQuery({
-    queryKey: ['global-assistant-config'],
-    queryFn: () => adminApi.getGlobalAssistantConfig(),
+    queryKey: ['assistant-config', selectedWorkspaceId],
+    queryFn: () => adminApi.getAssistantConfig(selectedWorkspaceId!),
+    enabled: !!selectedWorkspaceId,
   })
 
   // Update state when config data changes
@@ -42,10 +63,11 @@ export default function AIAssistantConfig() {
     }
   }, [configData])
 
-  // Fetch global knowledge items
+  // Fetch workspace knowledge items
   const { data: knowledgeData, isLoading: loadingKnowledge } = useQuery({
-    queryKey: ['global-knowledge-items'],
-    queryFn: () => adminApi.getGlobalKnowledgeItems(),
+    queryKey: ['workspace-knowledge', selectedWorkspaceId],
+    queryFn: () => adminApi.getWorkspaceKnowledgeItems(selectedWorkspaceId!),
+    enabled: !!selectedWorkspaceId,
   })
 
   const knowledgePayload = unwrapData<any>(knowledgeData)
@@ -58,9 +80,9 @@ export default function AIAssistantConfig() {
   // Mutation for updating config
   const updateConfigMutation = useMutation({
     mutationFn: (config: any) =>
-      adminApi.updateGlobalAssistantConfig(config),
+      adminApi.updateAssistantConfig(selectedWorkspaceId!, config),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['global-assistant-config'] })
+      queryClient.invalidateQueries({ queryKey: ['assistant-config', selectedWorkspaceId] })
       setIsSaving(false)
     },
     onError: () => {
@@ -70,9 +92,9 @@ export default function AIAssistantConfig() {
 
   // Mutation for reindexing knowledge
   const reindexMutation = useMutation({
-    mutationFn: () => adminApi.reindexGlobalKnowledge(),
+    mutationFn: () => adminApi.reindexKnowledge(selectedWorkspaceId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['global-knowledge-items'] })
+      queryClient.invalidateQueries({ queryKey: ['workspace-knowledge', selectedWorkspaceId] })
     },
   })
 
@@ -87,6 +109,7 @@ export default function AIAssistantConfig() {
   }
 
   const handleSaveConfig = () => {
+    if (!selectedWorkspaceId) return
     setIsSaving(true)
     updateConfigMutation.mutate({
       systemPrompt,
@@ -96,6 +119,7 @@ export default function AIAssistantConfig() {
   }
 
   const handleReindexKnowledge = () => {
+    if (!selectedWorkspaceId) return
     if (
       confirm(
         'This will re-embed all vector-based knowledge items. Continue?'
@@ -125,24 +149,33 @@ export default function AIAssistantConfig() {
               SendFx Assistant
             </h1>
             <p className="text-sm sm:text-base text-muted-foreground">
-              Configure the global public assistant accessible to everyone
+              Configure the workspace assistant and knowledge used for automated replies
             </p>
           </div>
         </div>
       </div>
 
-      {/* Public Assistant Notice */}
-      <div className="card bg-blue-500/10 border-2 border-blue-500/30">
-        <div className="flex items-start gap-3">
-          <Globe className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
-          <div>
-            <h3 className="font-semibold text-foreground mb-1">Public Assistant</h3>
-            <p className="text-sm text-muted-foreground">
-              This assistant is publicly accessible to all users and does not have access to
-              workspace-specific or user-specific data. It provides general information about
-              SendFx products, pricing, and features.
-            </p>
-          </div>
+      {/* Workspace Selector */}
+      <div className="card">
+        <div className="flex flex-col gap-3">
+          <label className="text-sm font-medium text-foreground">Workspace</label>
+          {loadingWorkspaces ? (
+            <p className="text-muted-foreground text-sm">Loading workspaces...</p>
+          ) : workspaces.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No workspaces available.</p>
+          ) : (
+            <select
+              value={selectedWorkspaceId ?? ''}
+              onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+              className="input max-w-md"
+            >
+              {workspaces.map((w: any) => (
+                <option key={w._id} value={w._id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
