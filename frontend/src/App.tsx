@@ -17,7 +17,6 @@ import Sandbox from './pages/Sandbox';
 import Dashboard from './pages/Dashboard';
 import { AccountProvider } from './context/AccountContext';
 import Support from './pages/Support';
-import AdminConsole from './pages/AdminConsole';
 import Automations from './pages/Automations';
 
 function App() {
@@ -53,18 +52,6 @@ function App() {
             <Route path="alerts" element={<Escalations />} />
             <Route path="escalations" element={<Navigate to="/alerts" replace />} />
             <Route path="team" element={<Navigate to="/settings?tab=team" replace />} />
-          </Route>
-          <Route
-            path="/admin"
-            element={
-              <PrivateRoute requireWorkspace requireInstagram requireAdmin>
-                <AccountProvider>
-                  <Layout />
-                </AccountProvider>
-              </PrivateRoute>
-            }
-          >
-            <Route index element={<AdminConsole />} />
           </Route>
           <Route path="*" element={<Navigate to="/landing" />} />
         </Routes>
