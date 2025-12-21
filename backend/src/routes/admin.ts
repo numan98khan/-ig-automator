@@ -10,7 +10,7 @@ import MessageCategory from '../models/MessageCategory';
 import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
-import GlobalAssistantConfig from '../models/GlobalAssistantConfig';
+import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
 
 const router = express.Router();
 
@@ -435,7 +435,7 @@ router.put('/assistant/config/:workspaceId', authenticate, requireAdmin, async (
 // Global assistant config (god-eye)
 router.get('/assistant/config', authenticate, requireAdmin, async (_req, res) => {
   try {
-    const config = (await GlobalAssistantConfig.findOne().lean()) || {};
+    const config = (await GlobalAssistantConfig.findOne().lean<IGlobalAssistantConfig>()) || ({} as Partial<IGlobalAssistantConfig>);
     res.json({
       data: {
         assistantName: config.assistantName || 'SendFx Assistant',
