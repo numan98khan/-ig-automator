@@ -340,7 +340,7 @@ const Landing: React.FC = () => {
                   </div>
                   <div className="text-xs text-muted-foreground px-2 py-1 rounded-full border border-border/60">Live</div>
                 </div>
-                <div className="grid grid-cols-3 gap-3 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                   <div className="p-3 rounded-2xl border border-border/60 bg-background/60">
                     <p className="text-xs text-muted-foreground">Inbox</p>
                     <div className="space-y-2 mt-2">
