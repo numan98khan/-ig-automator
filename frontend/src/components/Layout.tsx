@@ -121,6 +121,13 @@ const Layout: React.FC = () => {
       <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0 h-16">
         <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full grid grid-cols-[auto,1fr,auto] items-center gap-4">
           <div className="flex items-center gap-2 min-w-0">
+            <Link to="/" className="flex items-center gap-2 rounded-full px-2 py-1 hover:bg-muted transition">
+              <img src="/icon.svg" alt="SendFx logo" className="w-8 h-8" />
+              <div className="hidden sm:flex flex-col leading-tight">
+                <span className="text-sm font-semibold text-foreground">SendFx</span>
+                <span className="text-[11px] text-muted-foreground">DM AI Automator</span>
+              </div>
+            </Link>
             <div className="relative" ref={accountMenuRef}>
               <button
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
@@ -376,11 +383,11 @@ const Layout: React.FC = () => {
                 ))}
               </div>
 
-              <div className="space-y-1 pt-3 border-t border-border/50">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">AI</p>
-                {aiLinks.map((link) => (
-                  <Link
-                    key={link.to}
+            <div className="space-y-1 pt-3 border-t border-border/50">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">AI</p>
+              {aiLinks.map((link) => (
+                <Link
+                  key={link.to}
                     to={link.to}
                     onClick={() => setShowMobileMenu(false)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${isActive(link.to)
@@ -392,6 +399,17 @@ const Layout: React.FC = () => {
                     {link.label}
                   </Link>
                 ))}
+              </div>
+
+              <div className="flex items-center gap-2 px-4 py-3">
+                <span className="text-sm text-muted-foreground">Theme</span>
+                <button
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="p-2 rounded-lg border border-border w-10 h-10 flex items-center justify-center text-muted-foreground hover:border-primary/60 transition"
+                  aria-label="Toggle theme"
+                >
+                  {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </button>
               </div>
 
               <Button
