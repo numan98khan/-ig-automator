@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { User, Mail, Calendar, Building2, ChevronDown, ChevronUp } from 'lucide-react'
-import { adminApi } from '../services/api'
+import { adminApi, unwrapData } from '../services/api'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -15,7 +15,7 @@ export default function Users() {
     queryFn: () => adminApi.getUsers({ page, limit: 20, search }),
   })
 
-  const payload = data?.data?.data || data?.data
+  const payload = unwrapData<any>(data)
   const users = payload?.users || []
   const pagination = payload?.pagination || {}
 

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Building2, Users, MessageSquare, Activity } from 'lucide-react'
-import { adminApi } from '../services/api'
+import { adminApi, unwrapData } from '../services/api'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -16,20 +16,14 @@ export default function Workspaces() {
 
   // Parse workspaces - handle both array and object responses
   const getWorkspaces = () => {
-    const body = data?.data
-    if (!body) return []
-
-    // Support plain arrays returned directly
-    if (Array.isArray(body)) return body
-
-    const payload = body.data || body
+    const payload = unwrapData<any>(data)
     if (Array.isArray(payload)) return payload
-    if (Array.isArray(payload.workspaces)) return payload.workspaces
+    if (Array.isArray(payload?.workspaces)) return payload.workspaces
     return []
   }
 
   const workspaces = getWorkspaces()
-  const pagination = (data?.data?.data || data?.data)?.pagination || {}
+  const pagination = unwrapData<any>(data)?.pagination || {}
 
   return (
     <div className="space-y-6">

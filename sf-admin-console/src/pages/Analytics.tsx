@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3, TrendingUp, Users, MessageSquare } from 'lucide-react'
-import { adminApi } from '../services/api'
+import { adminApi, unwrapData } from '../services/api'
 import { useState } from 'react'
 
 export default function Analytics() {
@@ -11,7 +11,7 @@ export default function Analytics() {
     queryFn: () => adminApi.getAnalytics({ range }),
   })
 
-  const analytics = data?.data?.data || data?.data || {}
+  const analytics = unwrapData<any>(data) || {}
 
   return (
     <div className="space-y-6">

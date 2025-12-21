@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { adminApi } from '../services/api'
+import { adminApi, unwrapData } from '../services/api'
 import { AlertCircle, CheckCircle, XCircle, Database, Users as UsersIcon, LayoutDashboard } from 'lucide-react'
 
 export default function AdminDebug() {
@@ -22,25 +22,17 @@ export default function AdminDebug() {
 
   // Parse workspace count - handle both array and object responses
   const getWorkspaceCount = () => {
-    const body = workspaces?.data
-    if (!body) return 0
-    if (Array.isArray(body)) return body.length
-
-    const payload = body.data || body
+    const payload = unwrapData<any>(workspaces)
     if (Array.isArray(payload)) return payload.length
-    if (Array.isArray(payload.workspaces)) return payload.workspaces.length
+    if (Array.isArray(payload?.workspaces)) return payload.workspaces.length
     return 0
   }
 
   // Parse users count - handle both array and object responses
   const getUserCount = () => {
-    const body = users?.data
-    if (!body) return 0
-    if (Array.isArray(body)) return body.length
-
-    const payload = body.data || body
+    const payload = unwrapData<any>(users)
     if (Array.isArray(payload)) return payload.length
-    if (Array.isArray(payload.users)) return payload.users.length
+    if (Array.isArray(payload?.users)) return payload.users.length
     return 0
   }
 
@@ -64,7 +56,7 @@ export default function AdminDebug() {
         : workspaceCount > 0
         ? `✅ Success: ${workspaceCount} workspace${workspaceCount !== 1 ? 's' : ''} found`
         : '⚠️ API works but returned 0 workspaces - check backend permissions',
-      data: workspaces?.data?.data || workspaces?.data,
+      data: unwrapData<any>(workspaces),
       color: workspacesError ? 'text-red-500' : workspaceCount > 0 ? 'text-green-500' : 'text-yellow-500',
     },
     {
@@ -76,7 +68,7 @@ export default function AdminDebug() {
         : userCount > 0
         ? `✅ Success: ${userCount} user${userCount !== 1 ? 's' : ''} found`
         : '⚠️ API works but returned 0 users - check backend permissions',
-      data: users?.data?.data || users?.data,
+      data: unwrapData<any>(users),
       color: usersError ? 'text-red-500' : userCount > 0 ? 'text-green-500' : 'text-yellow-500',
     },
     {

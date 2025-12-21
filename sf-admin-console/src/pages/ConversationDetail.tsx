@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { adminApi } from '../services/api'
+import { adminApi, unwrapData } from '../services/api'
 import {
   ArrowLeft,
   MessageSquare,
@@ -23,7 +23,7 @@ export default function ConversationDetail() {
     queryFn: () => adminApi.getConversationById(id!),
   })
 
-  const payload = conversationData?.data?.data || conversationData?.data
+  const payload = unwrapData<any>(conversationData)
   const conversation = payload?.conversation
   const messages = payload?.messages || []
   const workspace = conversation?.workspaceId

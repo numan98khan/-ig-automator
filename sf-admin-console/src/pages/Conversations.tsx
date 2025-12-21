@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { MessageSquare, User, Clock, AlertCircle } from 'lucide-react'
-import { adminApi } from '../services/api'
+import { adminApi, unwrapData } from '../services/api'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -19,7 +19,7 @@ export default function Conversations() {
       }),
   })
 
-  const payload = data?.data?.data || data?.data
+  const payload = unwrapData<any>(data)
   const conversations = payload?.conversations || []
   const pagination = payload?.pagination || {}
 

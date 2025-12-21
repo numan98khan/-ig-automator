@@ -9,6 +9,15 @@ export const api = axios.create({
   },
 })
 
+// Unwrap nested Axios responses that may wrap payloads under .data
+export const unwrapData = <T = any>(response: any): T => {
+  let payload = response?.data ?? response
+  while (payload && typeof payload === 'object' && 'data' in payload && (payload as any).data !== payload) {
+    payload = (payload as any).data
+  }
+  return payload as T
+}
+
 // Add auth token to all requests
 api.interceptors.request.use(
   (config) => {

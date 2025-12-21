@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { adminApi } from '../services/api'
+import { adminApi, unwrapData } from '../services/api'
 import { useState } from 'react'
 import {
   ArrowLeft,
@@ -42,10 +42,10 @@ export default function WorkspaceDetail() {
     queryFn: () => adminApi.getWorkspaceCategories(id!),
   })
 
-  const workspacePayload = workspaceData?.data?.data || workspaceData?.data
-  const conversationsPayload = conversationsData?.data?.data || conversationsData?.data
-  const membersPayload = membersData?.data?.data || membersData?.data
-  const categoriesPayload = categoriesData?.data?.data || categoriesData?.data
+  const workspacePayload = unwrapData<any>(workspaceData)
+  const conversationsPayload = unwrapData<any>(conversationsData)
+  const membersPayload = unwrapData<any>(membersData)
+  const categoriesPayload = unwrapData<any>(categoriesData)
 
   const workspace = workspacePayload
   const conversations = conversationsPayload?.conversations || []

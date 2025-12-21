@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { adminApi } from '../services/api'
+import { adminApi, unwrapData } from '../services/api'
 import {
   Bot,
   Save,
@@ -32,7 +32,7 @@ export default function AIAssistantConfig() {
 
   // Update state when config data changes
   useEffect(() => {
-    const config = configData?.data?.data || configData?.data
+    const config = unwrapData<any>(configData)
     if (config) {
       setSystemPrompt(config.systemPrompt || '')
       setAssistantName(config.assistantName || 'SendFx Assistant')
@@ -48,7 +48,7 @@ export default function AIAssistantConfig() {
     queryFn: () => adminApi.getGlobalKnowledgeItems(),
   })
 
-  const knowledgeItems = knowledgeData?.data?.data || knowledgeData?.data || []
+  const knowledgeItems = unwrapData<any>(knowledgeData) || []
 
   // Mutation for updating config
   const updateConfigMutation = useMutation({

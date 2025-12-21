@@ -10,7 +10,7 @@ import {
   Clock,
 } from 'lucide-react'
 import StatCard from '../components/StatCard'
-import { adminApi } from '../services/api'
+import { adminApi, unwrapData } from '../services/api'
 
 export default function Dashboard() {
   const { data: stats, isLoading } = useQuery({
@@ -33,8 +33,8 @@ export default function Dashboard() {
     )
   }
 
-  const dashboardStats = stats?.data?.data || stats?.data || {}
-  const metrics = systemMetrics?.data?.data || systemMetrics?.data || {}
+  const dashboardStats = unwrapData<any>(stats) || {}
+  const metrics = unwrapData<any>(systemMetrics) || {}
 
   return (
     <div className="space-y-6">

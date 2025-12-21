@@ -7,7 +7,7 @@ import {
   CheckCircle,
   AlertCircle,
 } from 'lucide-react'
-import { adminApi } from '../services/api'
+import { adminApi, unwrapData } from '../services/api'
 
 export default function SystemHealth() {
   const { data: health } = useQuery({
@@ -28,9 +28,9 @@ export default function SystemHealth() {
     refetchInterval: 10000,
   })
 
-  const healthPayload = health?.data?.data || health?.data
-  const dbPayload = dbStats?.data?.data || dbStats?.data
-  const connectionPayload = connections?.data?.data || connections?.data
+  const healthPayload = unwrapData<any>(health)
+  const dbPayload = unwrapData<any>(dbStats)
+  const connectionPayload = unwrapData<any>(connections)
 
   const isHealthy = healthPayload?.status === 'ok'
   const database = dbPayload || {}
