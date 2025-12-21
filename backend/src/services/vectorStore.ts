@@ -23,10 +23,12 @@ const getPool = (): Pool | null => {
     return null;
   }
 
+  const sslEnabled = process.env.PGSSL === 'true';
+
   if (!pool) {
     pool = new Pool({
       connectionString,
-      ssl: process.env.PGSSL === 'false' ? undefined : { rejectUnauthorized: false },
+      ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
     });
   }
 
