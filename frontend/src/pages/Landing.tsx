@@ -125,7 +125,7 @@ const Landing: React.FC = () => {
   };
 
   return (
-    <div className={`min-h-screen relative overflow-hidden flex flex-col selection:bg-primary/30 ${isLight ? 'bg-[#f7f8fb]' : 'bg-background'}`}>
+    <div className={`min-h-screen relative overflow-x-hidden flex flex-col selection:bg-primary/30 ${isLight ? 'bg-[#f7f8fb]' : 'bg-background'}`}>
 
       {/* Background Ambience */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -324,7 +324,7 @@ const Landing: React.FC = () => {
                 )}
               </div>
 
-              <div className="text-sm text-muted-foreground border border-border/70 rounded-2xl px-4 py-3 inline-flex items-center gap-2 bg-background/60 backdrop-blur-md">
+              <div className="text-sm text-muted-foreground border border-border/70 rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 bg-background/60 backdrop-blur-md w-full max-w-full text-left sm:inline-flex sm:w-auto">
                 <Sparkles className="w-4 h-4 text-primary" />
                 <span>Used by teams in: E-commerce • Clinics • Restaurants • Creators • Local services</span>
               </div>
