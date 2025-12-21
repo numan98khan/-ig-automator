@@ -5,7 +5,6 @@ import {
   Loader2,
   Sparkles,
   MessageSquare,
-  Zap,
   AlertCircle,
   ArrowRight,
   Mail,
@@ -15,10 +14,8 @@ import {
   Send,
   ShieldCheck,
   Workflow,
-  Compass,
   CreditCard,
   LockKeyhole,
-  LineChart,
   PlayCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
