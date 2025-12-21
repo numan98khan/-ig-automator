@@ -175,6 +175,12 @@ src/
 ### Frontend
 - `VITE_API_URL` - Backend API URL
 
+## Railway deployment path
+
+- The Railway service for this repo was configured to look for a `sf-admin-console` source directory.
+- A root-level `sf-admin-console` symlink points back to the repository root so the build driver can locate the app and avoid `directory .../sf-admin-console does not exist` errors.
+- If you update the Railway service path to `.`, you can remove the symlink; otherwise, keep it to prevent future build failures.
+
 ## Next Steps (Future Versions)
 
 - Real Instagram Graph API integration
