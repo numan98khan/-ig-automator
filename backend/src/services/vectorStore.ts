@@ -167,7 +167,10 @@ export const searchWorkspaceKnowledge = async (workspaceId: string, query: strin
 };
 
 export const reindexWorkspaceKnowledge = async (workspaceId: string) => {
-  const items = await KnowledgeItem.find({ workspaceId });
+  const items = await KnowledgeItem.find({
+    workspaceId,
+    $or: [{ storageMode: { $exists: false } }, { storageMode: 'vector' }],
+  });
   for (const item of items) {
     await upsertKnowledgeEmbedding({
       id: item._id.toString(),

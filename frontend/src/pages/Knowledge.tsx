@@ -10,7 +10,9 @@ import {
   Search,
   AlertCircle,
   FileText,
-  Calendar
+  Calendar,
+  Sparkles,
+  Database
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -23,6 +25,7 @@ const Knowledge: React.FC = () => {
   const [editingItem, setEditingItem] = useState<KnowledgeItem | null>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [storageMode, setStorageMode] = useState<'vector' | 'text'>('vector');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,9 +61,9 @@ const Knowledge: React.FC = () => {
     setError(null);
     try {
       if (editingItem) {
-        await knowledgeAPI.update(editingItem._id, title, content);
+        await knowledgeAPI.update(editingItem._id, title, content, storageMode);
       } else {
-        await knowledgeAPI.create(title, content, currentWorkspace._id);
+        await knowledgeAPI.create(title, content, currentWorkspace._id, storageMode);
       }
 
       handleCloseModal();
@@ -78,10 +81,12 @@ const Knowledge: React.FC = () => {
       setEditingItem(item);
       setTitle(item.title);
       setContent(item.content);
+      setStorageMode(item.storageMode || 'vector');
     } else {
       setEditingItem(null);
       setTitle('');
       setContent('');
+      setStorageMode('vector');
     }
     setIsModalOpen(true);
     setError(null);
@@ -92,6 +97,7 @@ const Knowledge: React.FC = () => {
     setEditingItem(null);
     setTitle('');
     setContent('');
+    setStorageMode('vector');
     setError(null);
   };
 
@@ -210,6 +216,23 @@ const Knowledge: React.FC = () => {
                   </h3>
                 </div>
 
+                <div className="flex items-center gap-2 mb-3">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold ${
+                      (item.storageMode || 'vector') === 'vector'
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {(item.storageMode || 'vector') === 'vector' ? (
+                      <Sparkles className="w-3 h-3" />
+                    ) : (
+                      <Database className="w-3 h-3" />
+                    )}
+                    {(item.storageMode || 'vector') === 'vector' ? 'RAG (pgvector)' : 'Text only'}
+                  </span>
+                </div>
+
                 <p className="text-muted-foreground text-sm line-clamp-3 mb-4 h-[60px]">
                   {item.content}
                 </p>
@@ -265,6 +288,47 @@ const Knowledge: React.FC = () => {
             <p className="text-xs text-muted-foreground mt-1.5">
               The AI uses this content to answer questions. Be clear and concise.
             </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">Storage target</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setStorageMode('vector')}
+                className={`w-full text-left border rounded-lg p-3 flex items-start gap-3 transition ${
+                  storageMode === 'vector' ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/50'
+                }`}
+              >
+                <div className="p-2 rounded-md bg-primary/10 text-primary">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">RAG (pgvector)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Store embeddings in Postgres (env.POSTGRES_URL) for semantic search with the assistant.
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStorageMode('text')}
+                className={`w-full text-left border rounded-lg p-3 flex items-start gap-3 transition ${
+                  storageMode === 'text' ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/50'
+                }`}
+              >
+                <div className="p-2 rounded-md bg-muted text-muted-foreground">
+                  <Database className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Text only (MongoDB)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Keep the article in Mongo without pgvector; still usable for scripted replies.
+                  </p>
+                </div>
+              </button>
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
