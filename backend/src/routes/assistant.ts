@@ -1,10 +1,10 @@
-import express from 'express';
+import express, { Request } from 'express';
 import { askAssistant } from '../services/assistantService';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
-router.post('/ask', async (req: AuthRequest, res) => {
+router.post('/ask', async (req: Request, res) => {
   try {
     const { question, workspaceName, locationHint } = req.body || {};
 
@@ -16,12 +16,9 @@ router.post('/ask', async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Question is too long (max 800 characters)' });
     }
 
-    const userEmail = req.user?.email;
-
     const response = await askAssistant({
       question: question.trim(),
       workspaceName,
-      userEmail,
       locationHint,
     });
 
@@ -44,8 +41,7 @@ router.post('/ask/authed', authenticate, async (req: AuthRequest, res) => {
 
     const response = await askAssistant({
       question: question.trim(),
-      workspaceName: workspaceName || req.currentWorkspaceId,
-      userEmail: req.user?.email,
+      workspaceName,
       locationHint,
     });
 
