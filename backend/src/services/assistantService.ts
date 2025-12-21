@@ -27,7 +27,9 @@ export interface AssistantResponse {
 
 export async function askAssistant(request: AssistantRequest): Promise<AssistantResponse> {
   if (!process.env.OPENAI_API_KEY) {
-    throw new Error('Assistant unavailable: missing OpenAI API key');
+    return {
+      answer: 'SendFx Assistant is temporarily unavailable (missing OpenAI API key). Please try again after setup.',
+    };
   }
 
   const { question, workspaceName, userEmail, locationHint } = request;

@@ -13,7 +13,7 @@ export interface AssistantResponse {
 
 export async function askAssistant(payload: AssistantMessagePayload): Promise<AssistantResponse> {
   const { question, workspaceName, locationHint } = payload;
-  const response = await api.post('/assistant/ask', {
+  const response = await api.post('/api/assistant/ask', {
     question,
     workspaceName,
     locationHint,
