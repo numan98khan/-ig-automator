@@ -8,6 +8,7 @@ import {
   FileText,
   Settings,
   Database,
+  Trash2,
 } from 'lucide-react'
 
 export default function AIAssistantConfig() {
@@ -83,6 +84,13 @@ export default function AIAssistantConfig() {
       setNewKnowledgeTitle('')
       setNewKnowledgeContent('')
       setNewKnowledgeStorageMode('vector')
+    },
+  })
+
+  const deleteKnowledgeMutation = useMutation({
+    mutationFn: (id: string) => adminApi.deleteGlobalKnowledgeItem(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['global-knowledge-items'] })
     },
   })
 
@@ -426,6 +434,19 @@ export default function AIAssistantConfig() {
                           <span className="text-xs text-muted-foreground">
                             {new Date(item.createdAt).toLocaleDateString()}
                           </span>
+                          <button
+                            className="ml-auto text-xs text-destructive hover:text-destructive/80 flex items-center gap-1 transition disabled:opacity-50"
+                            disabled={deleteKnowledgeMutation.isPending}
+                            onClick={() => {
+                              if (deleteKnowledgeMutation.isPending) return
+                              const confirmed = confirm('Delete this knowledge item? This cannot be undone.')
+                              if (!confirmed) return
+                              deleteKnowledgeMutation.mutate(item._id)
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
                         </div>
                       </div>
                     </div>
