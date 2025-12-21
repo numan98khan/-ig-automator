@@ -1,11 +1,11 @@
 {
-  "name": "Document AI Assistant",
-  "short_name": "Doc AI",
-  "description": "Intelligent document retrieval powered by AI",
+  "name": "SendFx",
+  "short_name": "SendFx",
+  "description": "AI-powered Instagram DM automation with guardrails, approvals, and smart routing.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#2563eb",
+  "theme_color": "#0ea5e9",
   "orientation": "portrait-primary",
   "icons": [
     {

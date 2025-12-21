@@ -35,6 +35,16 @@ const Landing: React.FC = () => {
   const navigate = useNavigate();
 
   const location = useLocation();
+  const isLight = theme === 'light';
+  const surfaceMain = isLight
+    ? 'bg-white/90 border border-black/5 shadow-[0_22px_70px_-40px_rgba(0,0,0,0.35)]'
+    : 'bg-card/70 border border-border/60 backdrop-blur-xl shadow-2xl';
+  const surfaceSoft = isLight
+    ? 'bg-white/85 border border-black/5 shadow-[0_18px_60px_-38px_rgba(0,0,0,0.35)]'
+    : 'bg-background/60 border border-border/60 backdrop-blur-md';
+  const surfacePill = isLight
+    ? 'bg-white/80 border border-black/5 shadow-[0_12px_40px_-30px_rgba(0,0,0,0.28)]'
+    : 'bg-background/70 border border-border/70 backdrop-blur-md';
 
   useEffect(() => {
     // Check for errors in URL params
@@ -116,26 +126,28 @@ const Landing: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden flex flex-col selection:bg-primary/30">
+    <div className={`min-h-screen relative overflow-hidden flex flex-col selection:bg-primary/30 ${isLight ? 'bg-[#f7f8fb]' : 'bg-background'}`}>
 
       {/* Background Ambience */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Mesh gradient blobs */}
-        <div className="absolute top-[-10%] left-[-10%] w-[45%] h-[45%] rounded-full bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.2),_transparent_60%)] blur-3xl" />
-        <div className="absolute top-[10%] right-[-12%] w-[50%] h-[50%] rounded-full bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.18),_transparent_60%)] blur-3xl" />
-        <div className="absolute bottom-[-12%] left-[5%] w-[60%] h-[60%] rounded-full bg-[radial-gradient(circle_at_center,_rgba(94,234,212,0.16),_transparent_65%)] blur-3xl" />
+        <div className={`absolute top-[-10%] left-[-10%] w-[45%] h-[45%] rounded-full ${isLight ? 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.14),_transparent_55%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.2),_transparent_60%)] blur-3xl'}`} />
+        <div className={`absolute top-[10%] right-[-12%] w-[50%] h-[50%] rounded-full ${isLight ? 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.1),_transparent_55%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.18),_transparent_60%)] blur-3xl'}`} />
+        <div className={`absolute bottom-[-12%] left-[5%] w-[60%] h-[60%] rounded-full ${isLight ? 'bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.08),_transparent_65%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(94,234,212,0.16),_transparent_65%)] blur-3xl'}`} />
 
         {/* Grid overlay */}
         <div
-          className="absolute inset-0 opacity-[0.07] mix-blend-soft-light"
+          className="absolute inset-0 mix-blend-soft-light"
           style={{
-            backgroundImage: `linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)`,
-            backgroundSize: '48px 48px',
+            backgroundImage: isLight
+              ? `linear-gradient(to right, rgba(15,23,42,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.05) 1px, transparent 1px)`
+              : `linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)`,
+            backgroundSize: '44px 44px',
           }}
         />
 
         {/* Vignette */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(0,0,0,0)_0%,_rgba(0,0,0,0.25)_70%,_rgba(0,0,0,0.5)_100%)]" />
+        <div className={`absolute inset-0 ${isLight ? 'bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0)_0%,_rgba(15,23,42,0.06)_70%,_rgba(15,23,42,0.12)_100%)]' : 'bg-[radial-gradient(circle_at_center,_rgba(0,0,0,0)_0%,_rgba(0,0,0,0.25)_70%,_rgba(0,0,0,0.5)_100%)]'}`} />
 
         {/* Subtle Grain Overlay */}
         <div className="absolute inset-0 opacity-[0.05] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noiseFilter\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.65\' numOctaves=\'3\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noiseFilter)\'/%3E%3C/svg%3E")' }} />
@@ -321,7 +333,7 @@ const Landing: React.FC = () => {
 
             {/* Mock Panel */}
             <div className="relative">
-              <div className="glass-panel rounded-3xl border border-border/60 bg-card/70 backdrop-blur-xl shadow-2xl p-4 md:p-6 space-y-4">
+              <div className={`glass-panel rounded-3xl p-4 md:p-6 space-y-4 ${surfaceMain}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -369,7 +381,7 @@ const Landing: React.FC = () => {
               { label: 'Fewer missed DMs', value: '95%+', detail: 'Routing + alerts prevent inbox drops' },
               { label: 'More correct handoffs', value: '3x', detail: 'Approvals and clear summaries for humans' },
             ].map((item) => (
-              <div key={item.label} className="glass-panel p-4 rounded-2xl border border-border/60 bg-background/60 backdrop-blur-md">
+              <div key={item.label} className={`glass-panel p-4 rounded-2xl ${surfaceSoft}`}>
                 <p className="text-sm text-muted-foreground">Typical outcomes</p>
                 <p className="text-2xl font-extrabold text-foreground mt-1">{item.value}</p>
                 <p className="text-sm text-muted-foreground">{item.label}</p>
@@ -395,7 +407,7 @@ const Landing: React.FC = () => {
                 { title: 'Import brand voice + FAQs', body: 'Drop policies, offers, and examples to stay on-brand.' },
                 { title: 'Build flows + go live', body: 'Safe defaults with approvals and escalation baked in.' },
               ].map((step) => (
-                <div key={step.title} className="glass-panel p-5 rounded-2xl border border-border/60 bg-background/60">
+                <div key={step.title} className={`glass-panel p-5 rounded-2xl ${surfaceSoft}`}>
                   <p className="text-base font-semibold text-foreground">{step.title}</p>
                   <p className="text-sm text-muted-foreground mt-1.5">{step.body}</p>
                 </div>
@@ -425,7 +437,7 @@ const Landing: React.FC = () => {
                   icon: Workflow,
                 },
               ].map(({ title, body, icon: Icon }) => (
-                <div key={title} className="glass-panel p-6 rounded-2xl text-left border border-border/60 bg-background/60 hover:bg-muted/40 transition-colors">
+                <div key={title} className={`glass-panel p-6 rounded-2xl text-left hover:bg-muted/40 transition-colors ${surfaceSoft}`}>
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 text-primary">
                     <Icon className="w-6 h-6" />
                   </div>
@@ -458,7 +470,7 @@ const Landing: React.FC = () => {
                 'Location / hours',
                 'Angry customer escalation',
               ].map((template) => (
-                <div key={template} className="glass-panel p-5 rounded-2xl border border-border/60 bg-background/60 flex flex-col gap-3">
+                <div key={template} className={`glass-panel p-5 rounded-2xl flex flex-col gap-3 ${surfaceSoft}`}>
                   <p className="font-semibold text-foreground">{template}</p>
                   <p className="text-sm text-muted-foreground flex-1">Preview flow steps and suggested replies.</p>
                   <Button variant="outline" className="w-full" onClick={() => setPreviewTemplate(template)}>Preview flow</Button>
@@ -479,7 +491,7 @@ const Landing: React.FC = () => {
               </div>
             </div>
             <div className="grid md:grid-cols-[1.2fr,0.8fr] gap-6">
-              <div className="glass-panel p-6 md:p-8 rounded-2xl border border-border/60 bg-card/60 backdrop-blur-md space-y-3">
+              <div className={`glass-panel p-6 md:p-8 rounded-2xl space-y-3 ${surfaceSoft}`}>
                 {[
                   'Role permissions (who can publish flows)',
                   'Approval stops (manual review before send)',
@@ -492,8 +504,8 @@ const Landing: React.FC = () => {
                   </div>
                 ))}
               </div>
-              <div className="glass-panel rounded-2xl border border-border/60 bg-background/60 backdrop-blur-md p-4 shadow-lg">
-                <div className="h-full rounded-xl border border-border/60 bg-gradient-to-br from-background/90 to-muted/60 p-4 text-sm text-muted-foreground">
+              <div className={`glass-panel rounded-2xl p-4 shadow-lg ${surfaceSoft}`}>
+                <div className={`h-full rounded-xl border ${isLight ? 'border-black/5 bg-white/85' : 'border-border/60 bg-gradient-to-br from-background/90 to-muted/60'} p-4 text-sm text-muted-foreground`}>
                   <p className="text-foreground font-semibold mb-2">Control Center</p>
                   <p>Preview flows, approvals, and audit history in one place. (Add live screenshot here for launch.)</p>
                 </div>
@@ -522,7 +534,7 @@ const Landing: React.FC = () => {
               ].map((plan) => (
                 <div
                   key={plan.name}
-                  className={`glass-panel p-6 md:p-8 rounded-2xl border ${plan.highlight ? 'border-primary/60 bg-primary/5' : 'border-border/60 bg-background/60'} backdrop-blur-md space-y-4`}
+                  className={`glass-panel p-6 md:p-8 rounded-2xl space-y-4 ${plan.highlight ? (isLight ? 'bg-white border border-primary/40 shadow-[0_24px_80px_-40px_rgba(0,0,0,0.35)]' : 'border-primary/60 bg-primary/5 backdrop-blur-md') : surfaceSoft}`}
                 >
                   <div className="flex items-start justify-between">
                     <div>
@@ -562,7 +574,7 @@ const Landing: React.FC = () => {
                 { q: 'Does it work with multiple accounts?', a: 'Starter supports one workspace; Pro/Business add multiple workspaces and roles.' },
                 { q: 'Do I have to code flows?', a: 'No. Start with templates; power users can build flows like functions later.' },
               ].map(({ q, a }) => (
-                <div key={q} className="glass-panel p-5 rounded-2xl border border-border/60 bg-background/60">
+                <div key={q} className={`glass-panel p-5 rounded-2xl ${surfaceSoft}`}>
                   <p className="font-semibold text-foreground">{q}</p>
                   <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{a}</p>
                 </div>
@@ -574,7 +586,7 @@ const Landing: React.FC = () => {
 
       {/* Mobile sticky CTA */}
       <div className="md:hidden fixed bottom-4 left-4 right-4 z-20">
-        <div className="rounded-2xl bg-background/90 border border-border/80 shadow-xl backdrop-blur-md p-3 flex items-center justify-between gap-3">
+        <div className={`rounded-2xl shadow-xl p-3 flex items-center justify-between gap-3 ${surfacePill}`}>
           <div className="text-sm text-foreground">
             <p className="font-semibold">Ready to automate?</p>
             <p className="text-muted-foreground text-xs">Connect Instagram in minutes.</p>
