@@ -11,6 +11,13 @@ import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
+import {
+  GLOBAL_WORKSPACE_KEY,
+  deleteKnowledgeEmbedding,
+  reindexGlobalKnowledge,
+  reindexWorkspaceKnowledge,
+  upsertKnowledgeEmbedding,
+} from '../services/vectorStore';
 
 const router = express.Router();
 
@@ -18,6 +25,7 @@ const toInt = (value: any, fallback: number) => {
   const n = parseInt(String(value), 10);
   return Number.isNaN(n) ? fallback : n;
 };
+const STORAGE_MODES = ['vector', 'text'];
 
 // Admin god-eye: list all workspaces
 router.get('/workspaces', authenticate, requireAdmin, async (req, res) => {
@@ -516,7 +524,22 @@ router.post('/knowledge', authenticate, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'title and content are required' });
     }
     const normalizedWorkspaceId = workspaceId || null;
-    const item = await KnowledgeItem.create({ title, content, workspaceId: normalizedWorkspaceId, storageMode });
+    const normalizedStorageMode = STORAGE_MODES.includes(storageMode) ? storageMode : 'vector';
+    const item = await KnowledgeItem.create({
+      title,
+      content,
+      workspaceId: normalizedWorkspaceId,
+      storageMode: normalizedStorageMode,
+    });
+
+    if (normalizedStorageMode === 'vector') {
+      await upsertKnowledgeEmbedding({
+        id: item._id.toString(),
+        workspaceId: normalizedWorkspaceId || GLOBAL_WORKSPACE_KEY,
+        title,
+        content,
+      });
+    }
     res.status(201).json({ data: item });
   } catch (error) {
     console.error('Admin knowledge create error:', error);
@@ -527,12 +550,29 @@ router.post('/knowledge', authenticate, requireAdmin, async (req, res) => {
 router.put('/knowledge/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const { title, content, storageMode } = req.body || {};
-    const item = await KnowledgeItem.findByIdAndUpdate(
-      req.params.id,
-      { $set: { title, content, storageMode } },
-      { new: true },
-    );
+    const item = await KnowledgeItem.findById(req.params.id);
     if (!item) return res.status(404).json({ error: 'Knowledge item not found' });
+
+    const nextStorageMode = storageMode && STORAGE_MODES.includes(storageMode)
+      ? storageMode
+      : (item.storageMode || 'vector');
+
+    item.title = title || item.title;
+    item.content = content || item.content;
+    item.storageMode = nextStorageMode;
+    await item.save();
+
+    const workspaceKey = item.workspaceId ? item.workspaceId.toString() : GLOBAL_WORKSPACE_KEY;
+    if (nextStorageMode === 'vector') {
+      await upsertKnowledgeEmbedding({
+        id: item._id.toString(),
+        workspaceId: workspaceKey,
+        title: item.title,
+        content: item.content,
+      });
+    } else {
+      await deleteKnowledgeEmbedding(item._id.toString());
+    }
     res.json({ data: item });
   } catch (error) {
     console.error('Admin knowledge update error:', error);
@@ -543,6 +583,7 @@ router.put('/knowledge/:id', authenticate, requireAdmin, async (req, res) => {
 router.delete('/knowledge/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     await KnowledgeItem.findByIdAndDelete(req.params.id);
+    await deleteKnowledgeEmbedding(req.params.id);
     res.json({ data: { success: true } });
   } catch (error) {
     console.error('Admin knowledge delete error:', error);
@@ -552,8 +593,8 @@ router.delete('/knowledge/:id', authenticate, requireAdmin, async (req, res) => 
 
 router.post('/knowledge/workspace/:workspaceId/reindex-vector', authenticate, requireAdmin, async (req, res) => {
   try {
-    // reuse existing route logic via vectorStore
-    res.redirect(307, `/api/knowledge/workspace/${req.params.workspaceId}/reindex-vector`);
+    await reindexWorkspaceKnowledge(req.params.workspaceId);
+    res.json({ data: { success: true } });
   } catch (error) {
     console.error('Admin knowledge reindex error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -562,7 +603,8 @@ router.post('/knowledge/workspace/:workspaceId/reindex-vector', authenticate, re
 
 router.post('/knowledge/reindex-vector', authenticate, requireAdmin, async (_req, res) => {
   try {
-    res.json({ data: { success: true, message: 'Global knowledge reindex request accepted (no-op placeholder)' } });
+    await reindexGlobalKnowledge();
+    res.json({ data: { success: true, message: 'Global knowledge reindexed' } });
   } catch (error) {
     console.error('Admin knowledge global reindex error:', error);
     res.status(500).json({ error: 'Server error' });
