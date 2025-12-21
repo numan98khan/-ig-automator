@@ -13,15 +13,16 @@ import {
 
 export default function AIAssistantConfig() {
   const queryClient = useQueryClient()
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(['system-prompt'])
-  )
+  const [selectedSection, setSelectedSection] = useState<'system-prompt' | 'knowledge-base'>('system-prompt')
   const [systemPrompt, setSystemPrompt] = useState('')
   const [assistantName, setAssistantName] = useState('SendFx Assistant')
   const [assistantDescription, setAssistantDescription] = useState(
     'Ask about product, pricing, or guardrails'
   )
   const [isSaving, setIsSaving] = useState(false)
+  const [newKnowledgeTitle, setNewKnowledgeTitle] = useState('')
+  const [newKnowledgeContent, setNewKnowledgeContent] = useState('')
+  const [newKnowledgeStorageMode, setNewKnowledgeStorageMode] = useState<'vector' | 'text'>('vector')
 
   // Fetch global assistant config
   const { data: configData } = useQuery({
@@ -75,14 +76,19 @@ export default function AIAssistantConfig() {
     },
   })
 
+  const createKnowledgeMutation = useMutation({
+    mutationFn: (data: { title: string; content: string; storageMode: 'vector' | 'text' }) =>
+      adminApi.createGlobalKnowledgeItem(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['global-knowledge-items'] })
+      setNewKnowledgeTitle('')
+      setNewKnowledgeContent('')
+      setNewKnowledgeStorageMode('vector')
+    },
+  })
+
   const toggleSection = (section: string) => {
-    const newExpanded = new Set(expandedSections)
-    if (newExpanded.has(section)) {
-      newExpanded.delete(section)
-    } else {
-      newExpanded.add(section)
-    }
-    setExpandedSections(newExpanded)
+    setSelectedSection(section as 'system-prompt' | 'knowledge-base')
   }
 
   const handleSaveConfig = () => {
@@ -184,7 +190,7 @@ export default function AIAssistantConfig() {
             <button
               onClick={() => toggleSection('system-prompt')}
               className={`w-full flex items-start gap-2 p-3 rounded-lg text-left transition-colors ${
-                expandedSections.has('system-prompt')
+                selectedSection === 'system-prompt'
                   ? 'bg-primary/10 border border-primary/20'
                   : 'hover:bg-muted'
               }`}
@@ -203,7 +209,7 @@ export default function AIAssistantConfig() {
             <button
               onClick={() => toggleSection('knowledge-base')}
               className={`w-full flex items-start gap-2 p-3 rounded-lg text-left transition-colors ${
-                expandedSections.has('knowledge-base')
+                selectedSection === 'knowledge-base'
                   ? 'bg-primary/10 border border-primary/20'
                   : 'hover:bg-muted'
               }`}
@@ -239,7 +245,7 @@ export default function AIAssistantConfig() {
         {/* Main Content */}
         <div className="lg:col-span-3 space-y-6">
           {/* System Prompt Section */}
-          {expandedSections.has('system-prompt') && (
+          {selectedSection === 'system-prompt' && (
             <div className="card">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <div>
@@ -311,7 +317,7 @@ export default function AIAssistantConfig() {
           )}
 
           {/* Knowledge Base Section */}
-          {expandedSections.has('knowledge-base') && (
+          {selectedSection === 'knowledge-base' && (
             <div className="card">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <div>
@@ -336,6 +342,89 @@ export default function AIAssistantConfig() {
                     />
                     Re-embed All
                   </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+                <div className="lg:col-span-2">
+                  <div className="card bg-muted/60 border border-border">
+                    <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      Add Knowledge Item
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1">Title</label>
+                        <input
+                          className="input w-full"
+                          value={newKnowledgeTitle}
+                          onChange={(e) => setNewKnowledgeTitle(e.target.value)}
+                          placeholder="e.g. Pricing tiers"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1">Content</label>
+                        <textarea
+                          className="input w-full h-28"
+                          value={newKnowledgeContent}
+                          onChange={(e) => setNewKnowledgeContent(e.target.value)}
+                          placeholder="Provide clear, factual details the assistant can quote."
+                        />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="text-xs font-medium text-foreground">Storage</label>
+                        <select
+                          className="input w-40"
+                          value={newKnowledgeStorageMode}
+                          onChange={(e) => setNewKnowledgeStorageMode(e.target.value as 'vector' | 'text')}
+                        >
+                          <option value="vector">Vector (embeddings)</option>
+                          <option value="text">Text only</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">
+                          Good sections focus on one topic and stay under a few paragraphs.
+                        </p>
+                        <button
+                          onClick={() =>
+                            createKnowledgeMutation.mutate({
+                              title: newKnowledgeTitle.trim(),
+                              content: newKnowledgeContent.trim(),
+                              storageMode: newKnowledgeStorageMode,
+                            })
+                          }
+                          disabled={
+                            createKnowledgeMutation.isPending ||
+                            !newKnowledgeTitle.trim() ||
+                            !newKnowledgeContent.trim()
+                          }
+                          className="btn btn-primary flex items-center gap-2"
+                        >
+                          {createKnowledgeMutation.isPending ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4" />
+                              Save
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="card bg-muted/60 border border-border">
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Tips for embeddings</h3>
+                  <ul className="text-xs text-muted-foreground space-y-1">
+                    <li>• Use clear, descriptive section titles</li>
+                    <li>• Keep sections focused on one topic</li>
+                    <li>• Include keywords users might search</li>
+                    <li>• Avoid very short sections (&lt;50 chars)</li>
+                  </ul>
                 </div>
               </div>
 
