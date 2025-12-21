@@ -435,12 +435,23 @@ router.put('/assistant/config/:workspaceId', authenticate, requireAdmin, async (
 // Global assistant config (god-eye)
 router.get('/assistant/config', authenticate, requireAdmin, async (_req, res) => {
   try {
-    const config = (await GlobalAssistantConfig.findOne().lean<IGlobalAssistantConfig>()) || ({} as Partial<IGlobalAssistantConfig>);
+    const config = await GlobalAssistantConfig.findOneAndUpdate(
+      {},
+      {
+        $setOnInsert: {
+          assistantName: 'SendFx Assistant',
+          assistantDescription: 'Ask about product, pricing, or guardrails',
+          systemPrompt: '',
+        },
+      },
+      { new: true, upsert: true },
+    ).lean<IGlobalAssistantConfig>();
+
     res.json({
       data: {
-        assistantName: config.assistantName || 'SendFx Assistant',
-        assistantDescription: config.assistantDescription || 'Ask about product, pricing, or guardrails',
-        systemPrompt: config.systemPrompt || '',
+        assistantName: config?.assistantName || 'SendFx Assistant',
+        assistantDescription: config?.assistantDescription || 'Ask about product, pricing, or guardrails',
+        systemPrompt: config?.systemPrompt || '',
       },
     });
   } catch (error) {
@@ -457,7 +468,17 @@ router.put('/assistant/config', authenticate, requireAdmin, async (req, res) => 
       { $set: { assistantName, assistantDescription, systemPrompt } },
       { new: true, upsert: true },
     );
-    res.json({ data: { success: true, message: 'Configuration updated', settings: config } });
+    res.json({
+      data: {
+        success: true,
+        message: 'Configuration updated',
+        settings: {
+          assistantName: config?.assistantName || 'SendFx Assistant',
+          assistantDescription: config?.assistantDescription || 'Ask about product, pricing, or guardrails',
+          systemPrompt: config?.systemPrompt || '',
+        },
+      },
+    });
   } catch (error) {
     console.error('Admin global assistant config update error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -494,7 +515,8 @@ router.post('/knowledge', authenticate, requireAdmin, async (req, res) => {
     if (!title || !content) {
       return res.status(400).json({ error: 'title and content are required' });
     }
-    const item = await KnowledgeItem.create({ title, content, workspaceId, storageMode });
+    const normalizedWorkspaceId = workspaceId || null;
+    const item = await KnowledgeItem.create({ title, content, workspaceId: normalizedWorkspaceId, storageMode });
     res.status(201).json({ data: item });
   } catch (error) {
     console.error('Admin knowledge create error:', error);
