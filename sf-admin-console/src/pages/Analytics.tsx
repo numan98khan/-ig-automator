@@ -11,7 +11,7 @@ export default function Analytics() {
     queryFn: () => adminApi.getAnalytics({ range }),
   })
 
-  const analytics = data?.data || {}
+  const analytics = data?.data?.data || data?.data || {}
 
   return (
     <div className="space-y-6">

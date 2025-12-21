@@ -23,7 +23,10 @@ export default function ConversationDetail() {
     queryFn: () => adminApi.getConversationById(id!),
   })
 
-  const conversation = conversationData?.data
+  const payload = conversationData?.data?.data || conversationData?.data
+  const conversation = payload?.conversation
+  const messages = payload?.messages || []
+  const workspace = conversation?.workspaceId
 
   if (isLoading) {
     return (
@@ -41,9 +44,6 @@ export default function ConversationDetail() {
       </div>
     )
   }
-
-  const messages = conversation.messages || []
-  const workspace = conversation.workspaceId
 
   const getStatusColor = (status: string) => {
     switch (status) {

@@ -19,8 +19,9 @@ export default function Conversations() {
       }),
   })
 
-  const conversations = data?.data?.conversations || []
-  const pagination = data?.data?.pagination || {}
+  const payload = data?.data?.data || data?.data
+  const conversations = payload?.conversations || []
+  const pagination = payload?.pagination || {}
 
   return (
     <div className="space-y-6">

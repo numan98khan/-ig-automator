@@ -32,7 +32,7 @@ export default function AIAssistantConfig() {
 
   // Update state when config data changes
   useEffect(() => {
-    const config = configData?.data
+    const config = configData?.data?.data || configData?.data
     if (config) {
       setSystemPrompt(config.systemPrompt || '')
       setAssistantName(config.assistantName || 'SendFx Assistant')
@@ -48,7 +48,7 @@ export default function AIAssistantConfig() {
     queryFn: () => adminApi.getGlobalKnowledgeItems(),
   })
 
-  const knowledgeItems = knowledgeData?.data || []
+  const knowledgeItems = knowledgeData?.data?.data || knowledgeData?.data || []
 
   // Mutation for updating config
   const updateConfigMutation = useMutation({

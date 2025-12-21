@@ -22,21 +22,25 @@ export default function AdminDebug() {
 
   // Parse workspace count - handle both array and object responses
   const getWorkspaceCount = () => {
-    if (!workspaces?.data) return 0
-    // If data is an array
-    if (Array.isArray(workspaces.data)) return workspaces.data.length
-    // If data.workspaces is an array
-    if (Array.isArray(workspaces.data.workspaces)) return workspaces.data.workspaces.length
+    const body = workspaces?.data
+    if (!body) return 0
+    if (Array.isArray(body)) return body.length
+
+    const payload = body.data || body
+    if (Array.isArray(payload)) return payload.length
+    if (Array.isArray(payload.workspaces)) return payload.workspaces.length
     return 0
   }
 
   // Parse users count - handle both array and object responses
   const getUserCount = () => {
-    if (!users?.data) return 0
-    // If data is an array
-    if (Array.isArray(users.data)) return users.data.length
-    // If data.users is an array
-    if (Array.isArray(users.data.users)) return users.data.users.length
+    const body = users?.data
+    if (!body) return 0
+    if (Array.isArray(body)) return body.length
+
+    const payload = body.data || body
+    if (Array.isArray(payload)) return payload.length
+    if (Array.isArray(payload.users)) return payload.users.length
     return 0
   }
 
@@ -60,7 +64,7 @@ export default function AdminDebug() {
         : workspaceCount > 0
         ? `✅ Success: ${workspaceCount} workspace${workspaceCount !== 1 ? 's' : ''} found`
         : '⚠️ API works but returned 0 workspaces - check backend permissions',
-      data: workspaces?.data,
+      data: workspaces?.data?.data || workspaces?.data,
       color: workspacesError ? 'text-red-500' : workspaceCount > 0 ? 'text-green-500' : 'text-yellow-500',
     },
     {
@@ -72,7 +76,7 @@ export default function AdminDebug() {
         : userCount > 0
         ? `✅ Success: ${userCount} user${userCount !== 1 ? 's' : ''} found`
         : '⚠️ API works but returned 0 users - check backend permissions',
-      data: users?.data,
+      data: users?.data?.data || users?.data,
       color: usersError ? 'text-red-500' : userCount > 0 ? 'text-green-500' : 'text-yellow-500',
     },
     {

@@ -15,8 +15,9 @@ export default function Users() {
     queryFn: () => adminApi.getUsers({ page, limit: 20, search }),
   })
 
-  const users = data?.data?.users || []
-  const pagination = data?.data?.pagination || {}
+  const payload = data?.data?.data || data?.data
+  const users = payload?.users || []
+  const pagination = payload?.pagination || {}
 
   const toggleUserExpansion = (userId: string) => {
     const newExpanded = new Set(expandedUsers)

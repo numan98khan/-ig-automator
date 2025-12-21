@@ -16,16 +16,20 @@ export default function Workspaces() {
 
   // Parse workspaces - handle both array and object responses
   const getWorkspaces = () => {
-    if (!data?.data) return []
-    // If data is an array
-    if (Array.isArray(data.data)) return data.data
-    // If data.workspaces is an array
-    if (Array.isArray(data.data.workspaces)) return data.data.workspaces
+    const body = data?.data
+    if (!body) return []
+
+    // Support plain arrays returned directly
+    if (Array.isArray(body)) return body
+
+    const payload = body.data || body
+    if (Array.isArray(payload)) return payload
+    if (Array.isArray(payload.workspaces)) return payload.workspaces
     return []
   }
 
   const workspaces = getWorkspaces()
-  const pagination = data?.data?.pagination || {}
+  const pagination = (data?.data?.data || data?.data)?.pagination || {}
 
   return (
     <div className="space-y-6">

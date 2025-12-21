@@ -42,10 +42,15 @@ export default function WorkspaceDetail() {
     queryFn: () => adminApi.getWorkspaceCategories(id!),
   })
 
-  const workspace = workspaceData?.data
-  const conversations = conversationsData?.data?.conversations || []
-  const members = membersData?.data?.members || []
-  const categories = categoriesData?.data?.categories || []
+  const workspacePayload = workspaceData?.data?.data || workspaceData?.data
+  const conversationsPayload = conversationsData?.data?.data || conversationsData?.data
+  const membersPayload = membersData?.data?.data || membersData?.data
+  const categoriesPayload = categoriesData?.data?.data || categoriesData?.data
+
+  const workspace = workspacePayload
+  const conversations = conversationsPayload?.conversations || []
+  const members = membersPayload?.members || []
+  const categories = categoriesPayload?.categories || []
 
   if (loadingWorkspace) {
     return (

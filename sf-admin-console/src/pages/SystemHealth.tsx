@@ -28,9 +28,13 @@ export default function SystemHealth() {
     refetchInterval: 10000,
   })
 
-  const isHealthy = health?.data?.status === 'ok'
-  const database = dbStats?.data || {}
-  const activeConnections = connections?.data || []
+  const healthPayload = health?.data?.data || health?.data
+  const dbPayload = dbStats?.data?.data || dbStats?.data
+  const connectionPayload = connections?.data?.data || connections?.data
+
+  const isHealthy = healthPayload?.status === 'ok'
+  const database = dbPayload || {}
+  const activeConnections = connectionPayload?.connections || connectionPayload || []
 
   return (
     <div className="space-y-6">

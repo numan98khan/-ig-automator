@@ -33,8 +33,8 @@ export default function Dashboard() {
     )
   }
 
-  const dashboardStats = stats?.data || {}
-  const metrics = systemMetrics?.data || {}
+  const dashboardStats = stats?.data?.data || stats?.data || {}
+  const metrics = systemMetrics?.data?.data || systemMetrics?.data || {}
 
   return (
     <div className="space-y-6">
