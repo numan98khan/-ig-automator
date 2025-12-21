@@ -136,48 +136,6 @@ export default function AIAssistantConfig() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-        <div className="card">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <Database className="w-4 h-4" />
-            <span className="text-sm">Vector Knowledge</span>
-          </div>
-          <p className="text-3xl font-bold text-foreground">
-            {vectorItems.length}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            RAG-enabled items
-          </p>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <FileText className="w-4 h-4" />
-            <span className="text-sm">Text Knowledge</span>
-          </div>
-          <p className="text-3xl font-bold text-foreground">
-            {textItems.length}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Text-only items
-          </p>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center gap-3 text-muted-foreground mb-2">
-            <Sparkles className="w-4 h-4" />
-            <span className="text-sm">Total Sections</span>
-          </div>
-          <p className="text-3xl font-bold text-foreground">
-            {knowledgeItems.length}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            All knowledge items
-          </p>
-        </div>
-      </div>
-
       {/* Documents Section */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Sidebar */}
