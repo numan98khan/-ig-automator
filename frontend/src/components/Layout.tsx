@@ -502,7 +502,11 @@ const Layout: React.FC = () => {
         </div>
       </main>
 
-      <AssistantWidget locationHint={location.pathname} workspaceName={currentWorkspace?.name} />
+      <AssistantWidget
+        locationHint={location.pathname}
+        workspaceName={currentWorkspace?.name}
+        workspaceId={currentWorkspace?._id}
+      />
 
       <SupportTicketModal open={supportOpen} onClose={() => setSupportOpen(false)} />
       <GlobalSearchModal

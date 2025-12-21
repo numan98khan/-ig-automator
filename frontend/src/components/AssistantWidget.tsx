@@ -13,9 +13,10 @@ interface AssistantMessage {
 interface AssistantWidgetProps {
   locationHint?: string;
   workspaceName?: string;
+  workspaceId?: string;
 }
 
-const AssistantWidget: React.FC<AssistantWidgetProps> = ({ locationHint, workspaceName }) => {
+const AssistantWidget: React.FC<AssistantWidgetProps> = ({ locationHint, workspaceName, workspaceId }) => {
   const { theme } = useTheme();
   const { currentWorkspace } = useAuth();
   const [open, setOpen] = useState(false);
@@ -40,6 +41,7 @@ const AssistantWidget: React.FC<AssistantWidgetProps> = ({ locationHint, workspa
       const response = await askAssistant({
         question,
         workspaceName: workspaceName || currentWorkspace?.name,
+        workspaceId: workspaceId || currentWorkspace?._id,
         locationHint,
       });
       setMessages((prev) => [...prev, { role: 'assistant', content: response.answer }]);

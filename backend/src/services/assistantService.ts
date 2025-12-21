@@ -16,8 +16,15 @@ const SYSTEM_PROMPT = `You are SendFx Assistant, a concise in-app guide for Send
 export interface AssistantRequest {
   question: string;
   workspaceName?: string;
+  workspaceId?: string;
   userEmail?: string;
   locationHint?: string;
+  contexts?: {
+    id: string;
+    title: string;
+    content: string;
+    score?: number;
+  }[];
 }
 
 export interface AssistantResponse {
@@ -32,7 +39,7 @@ export async function askAssistant(request: AssistantRequest): Promise<Assistant
     };
   }
 
-  const { question, workspaceName, userEmail, locationHint } = request;
+  const { question, workspaceName, userEmail, locationHint, contexts } = request;
 
   const userContext: string[] = [];
   if (workspaceName) userContext.push(`Workspace: ${workspaceName}`);
@@ -41,13 +48,22 @@ export async function askAssistant(request: AssistantRequest): Promise<Assistant
 
   const contextBlock = userContext.length ? `Context: ${userContext.join(' • ')}` : 'Context: anonymous visitor';
 
+  const knowledgeSection = contexts?.length
+    ? `Use the following workspace knowledge when relevant:\n${contexts
+      .map((ctx) => {
+        const preview = ctx.content.length > 800 ? `${ctx.content.slice(0, 800)}...` : ctx.content;
+        return `- ${ctx.title}: ${preview}`;
+      })
+      .join('\n')}`
+    : 'No workspace knowledge available.';
+
   const completion = await openai.chat.completions.create({
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
-        content: `${contextBlock}\nQuestion: ${question}`,
+        content: `${contextBlock}\n${knowledgeSection}\nQuestion: ${question}`,
       },
     ],
     temperature: 0.4,
