@@ -1,23 +1,25 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { authAPI } from '../services/api';
-import { Shield, Eye, EyeOff, Mail, CheckCircle, AlertCircle, Users } from 'lucide-react';
+import { authAPI, tierAPI, TierSummaryResponse } from '../services/api';
+import { Shield, Eye, EyeOff, Mail, CheckCircle, AlertCircle, Users, Zap, Gauge, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
 import Team from './Team';
 
-type TabType = 'account' | 'team';
+type TabType = 'account' | 'plan' | 'team';
 
 export default function Settings() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, currentWorkspace } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('account');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [tierSummary, setTierSummary] = useState<TierSummaryResponse | null>(null);
+  const [tierLoading, setTierLoading] = useState(false);
 
   const [accountForm, setAccountForm] = useState({
     email: '',
@@ -43,10 +45,28 @@ export default function Settings() {
 
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'account' || tabParam === 'team') {
+    if (tabParam === 'account' || tabParam === 'plan' || tabParam === 'team') {
       setActiveTab(tabParam as TabType);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    const loadTier = async () => {
+      if (!user?.id) return;
+      const workspaceId = currentWorkspace?._id || user.defaultWorkspaceId;
+      setTierLoading(true);
+      try {
+        const data = await tierAPI.getMine(workspaceId || undefined);
+        setTierSummary(data);
+      } catch (err) {
+        console.error('Failed to load tier info', err);
+      } finally {
+        setTierLoading(false);
+      }
+    };
+
+    loadTier();
+  }, [user, currentWorkspace]);
 
   const handleSecureAccount = async () => {
     setError(null);
@@ -105,6 +125,11 @@ export default function Settings() {
       badge: user?.isProvisional || !user?.emailVerified,
     },
     {
+      id: 'plan' as TabType,
+      label: 'Plan & Limits',
+      icon: Zap,
+    },
+    {
       id: 'team' as TabType,
       label: 'Team & Access',
       icon: Users,
@@ -114,13 +139,33 @@ export default function Settings() {
   const infoTileClass = 'flex items-center justify-between p-4 rounded-xl border border-border/70 dark:border-white/10 bg-muted/60 dark:bg-white/5 backdrop-blur-sm';
   const infoLabelClass = 'text-sm font-medium text-foreground';
   const infoValueClass = 'text-sm text-muted-foreground';
+  const limitValue = (value?: number) => (typeof value === 'number' ? value : '∞');
+  const usagePill = (used?: number, limit?: number) => `${used ?? 0} / ${limitValue(limit)}`;
+
+  const workspaceUsage = tierSummary?.workspace?.usage || {};
+  const workspaceLimits = tierSummary?.workspace?.limits || {};
+  const workspaceTierLimits = tierSummary?.workspace?.tier?.limits || {};
+  const baseLimits = tierSummary?.limits || {};
+  const combinedLimits = {
+    ...workspaceTierLimits,
+    ...baseLimits,
+    ...workspaceLimits,
+  };
+  const aiUsage = tierSummary?.usage?.aiMessages;
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Settings</h1>
-          <p className="text-muted-foreground">Manage your workspace security and team access.</p>
+          <p className="text-muted-foreground">Manage your workspace security, plan, and team access.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Badge variant="secondary" className="flex items-center gap-2 px-3 py-1">
+            <Zap className="w-4 h-4 text-primary" />
+            {tierSummary?.tier?.name ? `${tierSummary.tier.name} plan` : 'Plan'}
+            {tierLoading && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />}
+          </Badge>
         </div>
       </div>
 
@@ -158,12 +203,12 @@ export default function Settings() {
             </div>
           )}
 
-          {success && (
-            <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-3 text-green-400 animate-fade-in">
-              <CheckCircle className="w-5 h-5" />
-              <span className="flex-1 font-medium text-sm">{success}</span>
-            </div>
-          )}
+        {success && (
+          <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-3 text-green-400 animate-fade-in">
+            <CheckCircle className="w-5 h-5" />
+            <span className="flex-1 font-medium text-sm">{success}</span>
+          </div>
+        )}
 
           {activeTab === 'account' && (
             <div className="space-y-6 animate-fade-in">
@@ -273,6 +318,51 @@ export default function Settings() {
             </div>
           )}
 
+          {activeTab === 'plan' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="col-span-1">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Zap className="w-4 h-4 text-primary" />
+                      Plan & Limits
+                    </CardTitle>
+                    <Badge variant="secondary">{tierSummary?.tier?.status || 'active'}</Badge>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">Plan</div>
+                      <div className="text-sm font-semibold text-foreground">
+                        {tierSummary?.tier?.name || 'Not assigned'}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">Custom categories</div>
+                      <Badge variant={tierSummary?.tier?.allowCustomCategories === false ? 'secondary' : 'success'}>
+                        {tierSummary?.tier?.allowCustomCategories === false ? 'Disabled' : 'Allowed'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">AI messages</div>
+                      <div className="text-sm font-semibold">{usagePill(aiUsage?.used, aiUsage?.limit ?? combinedLimits.aiMessages)}</div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <UsageStat label="Instagram" value={usagePill(workspaceUsage.instagramAccounts, combinedLimits.instagramAccounts)} />
+                      <UsageStat label="Team" value={usagePill(workspaceUsage.teamMembers, combinedLimits.teamMembers)} />
+                      <UsageStat label="Knowledge" value={usagePill(workspaceUsage.knowledgeItems, combinedLimits.knowledgeItems)} />
+                      <UsageStat label="Categories" value={usagePill(workspaceUsage.messageCategories, combinedLimits.messageCategories)} />
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Gauge className="w-4 h-4" />
+                      Limits refresh every billing period; upgrade the owner’s tier to increase caps.
+                      {tierLoading && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'team' && (
             <div className="space-y-6 animate-fade-in">
               <Team />
@@ -280,6 +370,15 @@ export default function Settings() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function UsageStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 px-3 py-2">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm font-semibold text-foreground">{value}</span>
     </div>
   );
 }

@@ -3,6 +3,8 @@ import Workspace from '../models/Workspace';
 import WorkspaceMember from '../models/WorkspaceMember';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { getWorkspaceMembers, updateMemberRole, removeMember, hasPermission } from '../services/workspaceService';
+import { ensureUserTier } from '../services/tierService';
+import { ensureBillingAccountForUser } from '../services/billingService';
 
 const router = express.Router();
 
@@ -20,10 +22,13 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(200).json(existing);
     }
 
+    const billingAccount = await ensureBillingAccountForUser(req.userId!);
     const workspace = await Workspace.create({
       name,
       userId: req.userId,
+      billingAccountId: billingAccount?._id,
     });
+    await ensureUserTier(req.userId!);
 
     // Create WorkspaceMember entry for the owner
     await WorkspaceMember.create({

@@ -55,6 +55,8 @@ export interface User {
   emailVerified: boolean;
   defaultWorkspaceId?: string;
   createdAt: string;
+  tier?: Tier;
+  tierLimits?: TierLimits;
 }
 
 export interface Workspace {
@@ -147,6 +149,55 @@ export type GoalType =
   | 'start_order'
   | 'handle_support'
   | 'drive_to_channel';
+
+export interface TierLimits {
+  aiMessages?: number;
+  instagramAccounts?: number;
+  teamMembers?: number;
+  automations?: number;
+  knowledgeItems?: number;
+  messageCategories?: number;
+}
+
+export interface Tier {
+  _id: string;
+  name: string;
+  description?: string;
+  allowCustomCategories: boolean;
+  isDefault: boolean;
+  isCustom: boolean;
+  status: 'active' | 'inactive' | 'deprecated';
+  limits: TierLimits;
+}
+
+export interface ResourceUsage {
+  used: number;
+  limit?: number;
+  periodStart?: string;
+  periodEnd?: string;
+}
+
+export interface WorkspaceTierUsage {
+  instagramAccounts?: number;
+  teamMembers?: number;
+  knowledgeItems?: number;
+  messageCategories?: number;
+}
+
+export interface TierSummaryResponse {
+  tier?: Tier;
+  limits?: TierLimits;
+  usage?: {
+    aiMessages?: ResourceUsage;
+  };
+  workspace?: {
+    workspaceId: string;
+    ownerId?: string;
+    tier?: Tier;
+    limits?: TierLimits;
+    usage?: WorkspaceTierUsage;
+  };
+}
 
 export interface GoalConfigs {
   leadCapture: {
@@ -569,6 +620,18 @@ export const settingsAPI = {
 
   getStats: async (workspaceId: string): Promise<AutomationStats> => {
     const { data } = await api.get(`/api/settings/workspace/${workspaceId}/stats`);
+    return data;
+  },
+};
+
+// Tiers API
+export const tierAPI = {
+  getMine: async (workspaceId?: string) => {
+    const { data } = await api.get('/api/tiers/me', { params: workspaceId ? { workspaceId } : undefined });
+    return data;
+  },
+  getWorkspace: async (workspaceId: string) => {
+    const { data } = await api.get(`/api/tiers/workspace/${workspaceId}`);
     return data;
   },
 };

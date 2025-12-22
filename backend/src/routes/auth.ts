@@ -6,6 +6,8 @@ import { generateToken } from '../utils/jwt';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/emailService';
 import { generateToken as generateEmailToken, verifyToken } from '../services/tokenService';
+import { ensureUserTier } from '../services/tierService';
+import { ensureBillingAccountForUser } from '../services/billingService';
 
 const router = express.Router();
 
@@ -26,6 +28,8 @@ router.post('/signup', async (req: Request, res: Response) => {
 
     // Create user
     const user = await User.create({ email, password });
+    await ensureBillingAccountForUser(user._id);
+    await ensureUserTier(user._id);
 
     // Generate token
     const token = generateToken(user._id.toString());
@@ -67,6 +71,8 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Generate token
     const token = generateToken(user._id.toString());
+    await ensureBillingAccountForUser(user._id);
+    await ensureUserTier(user._id);
 
     res.json({
       token,
@@ -90,6 +96,9 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    const { getTierForUser } = await import('../services/tierService');
+    const tierSummary = await getTierForUser(user._id);
+
     // Get user's workspaces via WorkspaceMember
     const memberships = await WorkspaceMember.find({ userId: user._id })
       .populate('workspaceId')
@@ -108,6 +117,8 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
         defaultWorkspaceId: user.defaultWorkspaceId,
         createdAt: user.createdAt,
         role: user.role,
+        tier: tierSummary.tier,
+        tierLimits: tierSummary.limits,
       },
       workspaces,
     });

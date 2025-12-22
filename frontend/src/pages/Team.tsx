@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Users, UserPlus, ShieldCheck, Mail, Loader2, Trash2, RotateCcw } from 'lucide-react';
+import { Users, UserPlus, ShieldCheck, Mail, Loader2, Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { WorkspaceInvite, WorkspaceMember, workspaceAPI, workspaceInviteAPI } from '../services/api';
+import { WorkspaceInvite, WorkspaceMember, workspaceAPI, workspaceInviteAPI, tierAPI, TierSummaryResponse } from '../services/api';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 
@@ -23,6 +23,9 @@ const Team: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [inviteForm, setInviteForm] = useState<{ email: string; role: Role }>({ email: '', role: 'agent' });
+  const [tierSummary, setTierSummary] = useState<TierSummaryResponse['workspace']>();
+  const [tierLoading, setTierLoading] = useState(false);
+  const displayLimit = (value?: number | null) => (typeof value === 'number' ? value : '∞');
 
   const sortedMembers = useMemo(
     () => [...members].sort((a, b) => a.role.localeCompare(b.role)),
@@ -49,13 +52,31 @@ const Team: React.FC = () => {
     }
   };
 
+  const loadTierLimits = async () => {
+    if (!currentWorkspace) return;
+    setTierLoading(true);
+    try {
+      const data = await tierAPI.getWorkspace(currentWorkspace._id);
+      setTierSummary(data);
+    } catch (err: any) {
+      console.error('Failed to load tier limits', err);
+    } finally {
+      setTierLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadTeam();
+    loadTierLimits();
   }, [currentWorkspace]);
 
   const handleInvite = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!currentWorkspace || !inviteForm.email.trim()) return;
+    if (isTeamLimitReached) {
+      setError('Team member limit reached for your workspace tier.');
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -71,6 +92,23 @@ const Team: React.FC = () => {
       setSaving(false);
     }
   };
+
+  const firstNumber = (...values: Array<number | undefined | null>) => {
+    for (const val of values) {
+      if (typeof val === 'number') return val;
+    }
+    return undefined;
+  };
+
+  const teamLimit = firstNumber(
+    tierSummary?.workspace?.limits?.teamMembers,
+    tierSummary?.workspace?.tier?.limits?.teamMembers,
+    tierSummary?.limits?.teamMembers,
+    tierSummary?.tier?.limits?.teamMembers,
+  );
+  const effectiveTeamLimit = teamLimit;
+  const teamUsed = tierSummary?.usage?.teamMembers ?? tierSummary?.workspace?.usage?.teamMembers ?? 0;
+  const isTeamLimitReached = typeof effectiveTeamLimit === 'number' ? teamUsed >= effectiveTeamLimit : false;
 
   const handleCancelInvite = async (inviteId: string) => {
     setSaving(true);
@@ -148,6 +186,13 @@ const Team: React.FC = () => {
             <p className="text-muted-foreground mt-2 text-sm max-w-2xl">
               Invite teammates, set their permissions, and keep human escalations routed to the right people.
             </p>
+            {tierSummary?.tier?.name && (
+              <div className="mt-3 inline-flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-border bg-muted/50">
+                <span className="font-semibold text-foreground">{tierSummary.tier.name}</span>
+                <span className="text-muted-foreground">plan • Team limit {displayLimit(effectiveTeamLimit)}</span>
+                {tierLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+              </div>
+            )}
           </div>
           <Button leftIcon={<UserPlus className="w-4 h-4" />} onClick={() => document.getElementById('invite-email')?.focus()}>
             Invite teammate
@@ -234,6 +279,14 @@ const Team: React.FC = () => {
               <Mail className="w-4 h-4" />
               Invite teammates
             </div>
+            {isTeamLimitReached && (
+              <div className="flex items-center gap-2 p-3 rounded-lg border border-amber-400/40 bg-amber-500/10 text-amber-600 text-sm">
+                <AlertTriangle className="w-4 h-4" />
+                <span>
+                  Team member limit reached ({teamUsed}/{displayLimit(effectiveTeamLimit)}). Upgrade the owner&apos;s tier to invite more teammates.
+                </span>
+              </div>
+            )}
             <div className="space-y-3">
               <div>
                 <label className="text-sm text-muted-foreground" htmlFor="invite-email">Email</label>
@@ -245,6 +298,7 @@ const Team: React.FC = () => {
                   className="w-full mt-1 bg-background border border-input rounded-lg px-3 py-2 text-sm"
                   placeholder="teammate@company.com"
                   required
+                  disabled={isTeamLimitReached}
                 />
               </div>
               <div>
@@ -254,6 +308,7 @@ const Team: React.FC = () => {
                   value={inviteForm.role}
                   onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value as Role })}
                   className="w-full mt-1 bg-background border border-input rounded-lg px-3 py-2 text-sm"
+                  disabled={isTeamLimitReached}
                 >
                   {Object.keys(ROLE_LABELS).map((role) => (
                     <option key={role} value={role}>
@@ -262,8 +317,8 @@ const Team: React.FC = () => {
                   ))}
                 </select>
               </div>
-              <Button type="submit" className="w-full" isLoading={saving} leftIcon={<UserPlus className="w-4 h-4" />}>
-                Send invite
+              <Button type="submit" className="w-full" isLoading={saving} leftIcon={<UserPlus className="w-4 h-4" />} disabled={isTeamLimitReached}>
+                {isTeamLimitReached ? 'Limit reached' : 'Send invite'}
               </Button>
             </div>
           </form>

@@ -62,6 +62,7 @@ const Layout: React.FC = () => {
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
       { to: '/alerts', label: 'Alerts', icon: AlertCircle, isActive: isActive('/alerts') },
       { to: '/automations', label: 'Automations', icon: Settings, isActive: isActive('/automations') },
+      { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
     ];
 
     return links;
@@ -298,6 +299,12 @@ const Layout: React.FC = () => {
                 <div className="absolute right-0 mt-2 w-56 bg-background border border-border rounded-lg shadow-xl py-1 z-20 animate-fade-in">
                   <div className="px-4 py-3 border-b border-border/50 mb-1">
                     <p className="text-sm font-medium truncate">{user?.email || user?.instagramUsername || 'User'}</p>
+                    {user?.tier?.name && (
+                      <p className="mt-1 inline-flex items-center gap-2 text-xs text-muted-foreground bg-muted/60 px-2 py-1 rounded-md">
+                        <span className="h-2 w-2 rounded-full bg-primary" />
+                        {user.tier.name} plan
+                      </p>
+                    )}
                   </div>
                   <Button
                     variant="ghost"

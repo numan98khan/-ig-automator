@@ -1,5 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { TierLimits } from './Tier';
 
 export interface IUser extends Document {
   email?: string;
@@ -12,6 +13,9 @@ export interface IUser extends Document {
   isProvisional: boolean; // True if user created via Instagram only (no email/password yet)
   emailVerified: boolean; // True when email has been confirmed
   defaultWorkspaceId?: mongoose.Types.ObjectId; // Default workspace to open after login
+  billingAccountId?: mongoose.Types.ObjectId;
+  tierId?: mongoose.Types.ObjectId;
+  tierLimitOverrides?: TierLimits;
   createdAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
@@ -23,6 +27,10 @@ const userSchema = new Schema<IUser>({
     sparse: true, // Allow null/undefined while maintaining uniqueness
     lowercase: true,
     trim: true,
+  },
+  billingAccountId: {
+    type: Schema.Types.ObjectId,
+    ref: 'BillingAccount',
   },
   password: {
     type: String,
@@ -59,6 +67,14 @@ const userSchema = new Schema<IUser>({
   defaultWorkspaceId: {
     type: Schema.Types.ObjectId,
     ref: 'Workspace',
+  },
+  tierId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Tier',
+  },
+  tierLimitOverrides: {
+    type: Object,
+    default: undefined,
   },
   createdAt: {
     type: Date,

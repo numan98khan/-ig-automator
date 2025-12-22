@@ -11,6 +11,8 @@ import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
+import Tier from '../models/Tier';
+import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import {
   GLOBAL_WORKSPACE_KEY,
   deleteKnowledgeEmbedding,
@@ -26,6 +28,119 @@ const toInt = (value: any, fallback: number) => {
   return Number.isNaN(n) ? fallback : n;
 };
 const STORAGE_MODES = ['vector', 'text'];
+
+// Tiers CRUD
+router.get('/tiers', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const page = Math.max(1, toInt(req.query.page, 1));
+    const limit = Math.min(100, Math.max(1, toInt(req.query.limit, 20)));
+    const search = (req.query.search as string)?.trim();
+    const status = (req.query.status as string)?.trim();
+
+    const filter: any = {};
+    if (search) {
+      filter.name = { $regex: search, $options: 'i' };
+    }
+    if (status) {
+      filter.status = status;
+    }
+
+    const [items, total] = await Promise.all([
+      Tier.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      Tier.countDocuments(filter),
+    ]);
+
+    res.json({
+      data: {
+        tiers: items,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit) || 1,
+          totalItems: total,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Admin list tiers error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/tiers', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const tier = await Tier.create(req.body || {});
+    res.status(201).json({ data: tier });
+  } catch (error: any) {
+    console.error('Admin create tier error:', error);
+    res.status(400).json({ error: error.message || 'Failed to create tier' });
+  }
+});
+
+router.get('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const tier = await Tier.findById(req.params.id).lean();
+    if (!tier) return res.status(404).json({ error: 'Tier not found' });
+    const userCount = await User.countDocuments({ tierId: tier._id });
+    res.json({ data: { ...tier, userCount } });
+  } catch (error) {
+    console.error('Admin get tier error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const tier = await Tier.findByIdAndUpdate(req.params.id, req.body || {}, { new: true });
+    if (!tier) return res.status(404).json({ error: 'Tier not found' });
+    res.json({ data: tier });
+  } catch (error: any) {
+    console.error('Admin update tier error:', error);
+    res.status(400).json({ error: error.message || 'Failed to update tier' });
+  }
+});
+
+router.delete('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const tier = await Tier.findById(req.params.id);
+    if (!tier) return res.status(404).json({ error: 'Tier not found' });
+    const userCount = await User.countDocuments({ tierId: tier._id });
+    if (tier.isDefault || userCount > 0) {
+      return res.status(400).json({ error: 'Cannot delete a default or in-use tier' });
+    }
+    await Tier.deleteOne({ _id: req.params.id });
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin delete tier error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/tiers/:id/assign/:userId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const tier = await Tier.findById(req.params.id);
+    if (!tier) return res.status(404).json({ error: 'Tier not found' });
+
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const billingAccount = await ensureBillingAccountForUser(user._id);
+    if (!billingAccount) return res.status(400).json({ error: 'Failed to load billing account' });
+
+    await upsertActiveSubscription(billingAccount._id, tier._id);
+
+    user.tierId = tier._id;
+    await user.save();
+
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin assign tier error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // Admin god-eye: list all workspaces
 router.get('/workspaces', authenticate, requireAdmin, async (req, res) => {
@@ -108,6 +223,10 @@ router.get('/users', authenticate, requireAdmin, async (_req, res) => {
       User.countDocuments(filter),
     ]);
 
+    const tierIds = items.map((u: any) => u.tierId).filter(Boolean);
+    const tiers = await Tier.find({ _id: { $in: tierIds } }).lean();
+    const tierMap = Object.fromEntries(tiers.map((t: any) => [String(t._id), t]));
+
     const userIds = items.map((u: any) => u._id);
     const memberships = await WorkspaceMember.find({ userId: { $in: userIds } }).lean();
     const workspaceIds = memberships.map((m: any) => m.workspaceId);
@@ -129,6 +248,7 @@ router.get('/users', authenticate, requireAdmin, async (_req, res) => {
       data: {
         users: items.map((u: any) => ({
           ...u,
+          tier: u.tierId ? tierMap[String(u.tierId)] : undefined,
           workspaceCount: (membershipsByUser[String(u._id)] || []).length,
           workspaces: membershipsByUser[String(u._id)] || [],
         })),
@@ -300,12 +420,14 @@ router.get('/users/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id).lean();
     if (!user) return res.status(404).json({ error: 'User not found' });
+    const tier = user.tierId ? await Tier.findById(user.tierId).lean() : undefined;
     const memberships = await WorkspaceMember.find({ userId: req.params.id }).lean();
     const workspaces = await Workspace.find({ _id: { $in: memberships.map((m: any) => m.workspaceId) } }).lean();
     const workspaceMap = Object.fromEntries(workspaces.map((w: any) => [String(w._id), w]));
     res.json({
       data: {
         ...user,
+        tier,
         workspaces: memberships.map((m: any) => ({
           _id: m.workspaceId,
           name: workspaceMap[String(m.workspaceId)]?.name,

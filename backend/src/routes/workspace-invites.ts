@@ -38,6 +38,19 @@ router.post('/send', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
+    // Enforce team member limit (members + pending invites)
+    const existingMembersCount = await (await import('../models/WorkspaceMember')).default.countDocuments({ workspaceId });
+    const pendingInvitesCount = await WorkspaceInvite.countDocuments({
+      workspaceId,
+      accepted: false,
+      expiresAt: { $gt: new Date() },
+    });
+    const { assertWorkspaceLimit } = await import('../services/tierService');
+    const limitCheck = await assertWorkspaceLimit(workspaceId, 'teamMembers', existingMembersCount + pendingInvitesCount + 1);
+    if (!limitCheck.allowed) {
+      return res.status(403).json({ error: `Team member limit reached (limit: ${limitCheck.limit})` });
+    }
+
     // Check if user is already a member
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
@@ -247,8 +260,11 @@ router.post('/accept', async (req, res) => {
       });
     }
 
-    // Add user to workspace
+    const { assignTierFromOwner } = await import('../services/tierService');
+
+    // Add user to workspace (will enforce limit internally)
     await addMember(invite.workspaceId, user._id, invite.role);
+    await assignTierFromOwner(invite.workspaceId, user._id);
 
     // Mark invite as accepted
     invite.accepted = true;
