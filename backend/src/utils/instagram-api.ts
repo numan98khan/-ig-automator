@@ -227,6 +227,18 @@ export async function sendMessage(
     payload.messaging_type = 'RESPONSE';
   }
 
+  console.log('📤 [IG-API] Sending Instagram message:', {
+    endpoint,
+    recipientId,
+    messageLength: messageText.length,
+    messagePreview: messageText.slice(0, 100),
+    messagingType: payload.messaging_type,
+    tag: payload.tag,
+    hasAccessToken: !!accessToken,
+    tokenLength: accessToken?.length || 0,
+    tokenPrefix: accessToken?.slice(0, 20) + '...'
+  });
+
   webhookLogger.logApiCall(endpoint, 'POST', payload);
 
   try {
@@ -236,11 +248,38 @@ export async function sendMessage(
       },
     });
 
+    console.log('✅ [IG-API] Message sent successfully:', {
+      status: response.status,
+      messageId: response.data?.message_id,
+      recipientId: response.data?.recipient_id
+    });
+
     webhookLogger.logApiResponse(endpoint, response.status, response.data);
     return response.data;
   } catch (error: any) {
-    console.error('Error sending Instagram message:', error.response?.data || error.message);
+    console.error('❌ [IG-API] Error sending Instagram message:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      errorMessage: error.message,
+      errorCode: error.response?.data?.error?.code,
+      errorType: error.response?.data?.error?.type,
+      errorSubcode: error.response?.data?.error?.error_subcode,
+      errorDetails: error.response?.data?.error?.message,
+      fullErrorData: error.response?.data,
+      recipientId,
+      messageLength: messageText.length
+    });
+
     webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
+
+    // Provide specific error message for OAuth issues
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      throw new Error(
+        `Instagram OAuth error (${error.response.status}): ${error.response.data?.error?.message || 'Invalid or expired access token'}. ` +
+        `Error code: ${error.response.data?.error?.code}, Type: ${error.response.data?.error?.type}`
+      );
+    }
+
     throw new Error(`Failed to send message: ${error.response?.data?.error?.message || error.message}`);
   }
 }

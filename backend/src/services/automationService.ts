@@ -231,6 +231,16 @@ export async function executeAutomation(params: {
   try {
     const { workspaceId, triggerType, conversationId, participantInstagramId, messageText, instagramAccountId, platform } = params;
 
+    console.log('🤖 [AUTOMATION] Starting automation execution:', {
+      workspaceId,
+      triggerType,
+      conversationId,
+      participantInstagramId,
+      instagramAccountId,
+      messageTextPreview: messageText?.slice(0, 50),
+      platform
+    });
+
     // Find active automations matching this trigger type
     const automations = await Automation.find({
       workspaceId: new mongoose.Types.ObjectId(workspaceId),
@@ -238,48 +248,64 @@ export async function executeAutomation(params: {
       isActive: true,
     }).sort({ createdAt: 1 }); // Execute in order of creation
 
+    console.log(`🔍 [AUTOMATION] Found ${automations.length} active automation(s) for trigger: ${triggerType}`);
+
     if (automations.length === 0) {
+      console.log('⚠️  [AUTOMATION] No active automations found');
       return { success: false, error: 'No active automations found for this trigger' };
     }
 
     // Execute the first matching automation (for now)
     const automation = automations[0];
+    console.log(`✅ [AUTOMATION] Executing automation: "${automation.name}" (ID: ${automation._id})`);
+
     const replyStep = automation.replySteps[0];
 
     if (!replyStep) {
+      console.log('❌ [AUTOMATION] No reply step configured');
       return { success: false, error: 'No reply step configured' };
     }
+
+    console.log(`📝 [AUTOMATION] Reply step type: ${replyStep.type}`);
 
     let replyText = '';
 
     // Generate reply based on step type
     if (replyStep.type === 'constant_reply') {
       replyText = replyStep.constantReply?.message || '';
+      console.log(`💬 [AUTOMATION] Using constant reply (${replyText.length} chars)`);
     } else if (replyStep.type === 'ai_reply') {
       const { goalType, goalDescription, knowledgeItemIds } = replyStep.aiReply || {};
+      console.log(`🧠 [AUTOMATION] Generating AI reply with goal: ${goalType}`);
 
       // Load knowledge items if specified
       let knowledgeContext = '';
       if (knowledgeItemIds && knowledgeItemIds.length > 0) {
+        console.log(`📚 [AUTOMATION] Loading ${knowledgeItemIds.length} knowledge item(s)`);
         const knowledgeItems = await KnowledgeItem.find({
           _id: { $in: knowledgeItemIds.map(id => new mongoose.Types.ObjectId(id)) },
           workspaceId: new mongoose.Types.ObjectId(workspaceId),
         });
 
+        console.log(`📚 [AUTOMATION] Found ${knowledgeItems.length} knowledge item(s)`);
         knowledgeContext = knowledgeItems.map(item => `${item.title}:\n${item.content}`).join('\n\n');
       }
 
       // Get conversation for context
+      console.log(`🔍 [AUTOMATION] Loading conversation: ${conversationId}`);
       const conversation = await Conversation.findById(conversationId);
       if (!conversation) {
+        console.log('❌ [AUTOMATION] Conversation not found');
         return { success: false, error: 'Conversation not found' };
       }
 
       // Get workspace settings
+      console.log(`⚙️  [AUTOMATION] Loading workspace settings`);
       const settings = await getWorkspaceSettings(workspaceId);
       const goalConfigs = getGoalConfigs(settings);
 
       // Generate AI reply with the specified goal
+      console.log(`🤖 [AUTOMATION] Calling generateAIReply service...`);
       const aiReplyResult = await generateAIReply({
         messageText: messageText || '',
         conversationId: conversation._id,
@@ -295,6 +321,7 @@ export async function executeAutomation(params: {
         customKnowledge: knowledgeContext,
       });
 
+      console.log(`✅ [AUTOMATION] AI reply generated (${aiReplyResult.reply.length} chars)`);
       replyText = aiReplyResult.reply;
 
       // Save goal outcomes if AI completed the goal
@@ -319,43 +346,95 @@ export async function executeAutomation(params: {
     }
 
     if (!replyText) {
+      console.log('❌ [AUTOMATION] No reply text generated');
       return { success: false, error: 'No reply text generated' };
     }
 
+    console.log(`📤 [AUTOMATION] Preparing to send message (${replyText.length} chars)`);
+
     // Send the message
+    console.log(`🔍 [AUTOMATION] Loading Instagram account: ${instagramAccountId}`);
     const igAccount = await InstagramAccount.findById(instagramAccountId);
     if (!igAccount) {
+      console.log('❌ [AUTOMATION] Instagram account not found');
       return { success: false, error: 'Instagram account not found' };
     }
 
+    console.log(`✅ [AUTOMATION] Instagram account loaded: @${igAccount.username}`);
+    console.log(`🔑 [AUTOMATION] Access token status:`, {
+      hasToken: !!igAccount.accessToken,
+      tokenLength: igAccount.accessToken?.length || 0,
+      tokenExpiresAt: igAccount.tokenExpiresAt,
+      isExpired: igAccount.tokenExpiresAt ? new Date(igAccount.tokenExpiresAt) < new Date() : 'unknown',
+      lastSyncedAt: igAccount.lastSyncedAt
+    });
+
+    if (!igAccount.accessToken) {
+      console.log('❌ [AUTOMATION] No access token available for Instagram account');
+      return { success: false, error: 'Instagram account has no access token' };
+    }
+
+    if (igAccount.tokenExpiresAt && new Date(igAccount.tokenExpiresAt) < new Date()) {
+      console.log('⚠️  [AUTOMATION] Access token is EXPIRED');
+      console.log(`⚠️  [AUTOMATION] Token expired at: ${igAccount.tokenExpiresAt}`);
+      console.log(`⚠️  [AUTOMATION] Current time: ${new Date()}`);
+    }
+
+    console.log(`⏳ [AUTOMATION] Pausing for typing simulation...`);
     await pauseForTypingIfNeeded(platform);
 
-    const sentMessage = await sendInstagramMessage({
-      recipientInstagramId: participantInstagramId,
-      text: replyText,
-      accessToken: igAccount.accessToken,
-    });
+    console.log(`📨 [AUTOMATION] Sending Instagram message to: ${participantInstagramId}`);
+    console.log(`📨 [AUTOMATION] Message preview: "${replyText.slice(0, 100)}..."`);
 
-    // Save message to database
-    await Message.create({
-      conversationId: new mongoose.Types.ObjectId(conversationId),
-      text: replyText,
-      sender: 'business',
-      platform: platform || 'instagram',
-      instagramMessageId: sentMessage?.id,
-    });
+    try {
+      const sentMessage = await sendInstagramMessage({
+        recipientInstagramId: participantInstagramId,
+        text: replyText,
+        accessToken: igAccount.accessToken,
+      });
 
-    // Update automation stats
-    automation.stats.totalTriggered += 1;
-    automation.stats.totalRepliesSent += 1;
-    automation.stats.lastTriggeredAt = new Date();
-    automation.stats.lastReplySentAt = new Date();
-    await automation.save();
+      console.log(`✅ [AUTOMATION] Message sent successfully:`, {
+        messageId: sentMessage?.id,
+        recipientId: sentMessage?.recipient_id || participantInstagramId
+      });
 
-    return { success: true, automationExecuted: automation.name };
-  } catch (error) {
-    console.error('Error executing automation:', error);
-    return { success: false, error: 'Failed to execute automation' };
+      // Save message to database
+      await Message.create({
+        conversationId: new mongoose.Types.ObjectId(conversationId),
+        text: replyText,
+        sender: 'business',
+        platform: platform || 'instagram',
+        instagramMessageId: sentMessage?.id,
+      });
+
+      console.log(`💾 [AUTOMATION] Message saved to database`);
+
+      // Update automation stats
+      automation.stats.totalTriggered += 1;
+      automation.stats.totalRepliesSent += 1;
+      automation.stats.lastTriggeredAt = new Date();
+      automation.stats.lastReplySentAt = new Date();
+      await automation.save();
+
+      console.log(`📊 [AUTOMATION] Automation stats updated`);
+      console.log(`🎉 [AUTOMATION] Automation execution complete: "${automation.name}"`);
+
+      return { success: true, automationExecuted: automation.name };
+    } catch (sendError: any) {
+      console.error('❌ [AUTOMATION] Failed to send Instagram message:', sendError);
+      console.error('❌ [AUTOMATION] Error details:', {
+        message: sendError.message,
+        status: sendError.response?.status,
+        statusText: sendError.response?.statusText,
+        data: sendError.response?.data,
+        stack: sendError.stack
+      });
+      throw sendError;
+    }
+  } catch (error: any) {
+    console.error('❌ [AUTOMATION] Error executing automation:', error);
+    console.error('❌ [AUTOMATION] Error stack:', error.stack);
+    return { success: false, error: `Failed to execute automation: ${error.message}` };
   }
 }
 
