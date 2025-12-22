@@ -381,7 +381,7 @@ async function transcribeVoiceNotes(message: any): Promise<void> {
 }
 
 /**
- * Process message automations (categorization, auto-reply, follow-up scheduling)
+ * Process message automations (categorization and automation execution)
  */
 async function processMessageAutomations(
   conversation: any,
@@ -409,7 +409,7 @@ async function processMessageAutomations(
     }
     await savedMessage.save();
 
-    // 3. Check for active automations first (new system takes priority)
+    // 3. Check for active automations
     const automationResult = await checkAndExecuteAutomations({
       workspaceId,
       triggerType: 'dm_message',
@@ -428,30 +428,8 @@ async function processMessageAutomations(
       if (followupResult.success) {
         console.log(`⏰ Follow-up scheduled: ${followupResult.message}`);
       }
-      return; // Skip old auto-reply system if automation was executed
-    }
-
-    // 4. Fall back to old auto-reply system if no automations are active
-    console.log(`⏭️ No active automations found, checking workspace auto-reply settings...`);
-    const autoReplyResult = await processAutoReply(
-      conversation._id,
-      savedMessage,
-      messageText,
-      workspaceId
-    );
-
-    if (autoReplyResult.success) {
-      console.log(`✅ Auto-reply sent`);
     } else {
-      console.log(`⏭️ Auto-reply skipped: ${autoReplyResult.message}`);
-    }
-
-    // 5. Schedule follow-up if auto-reply was sent
-    if (autoReplyResult.success) {
-      const followupResult = await scheduleFollowup(conversation._id, workspaceId);
-      if (followupResult.success) {
-        console.log(`⏰ Follow-up scheduled: ${followupResult.message}`);
-      }
+      console.log(`ℹ️ No active automations found for this trigger`);
     }
 
   } catch (error) {
