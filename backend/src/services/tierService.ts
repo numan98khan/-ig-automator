@@ -172,16 +172,37 @@ export const assignTierFromOwner = async (
   const workspace = await Workspace.findById(workspaceId);
   if (!workspace) return;
 
-  const owner = await User.findById(workspace.userId);
-  if (!owner?.tierId) {
-    await ensureUserTier(workspace.userId);
-  }
+  const [owner, member, workspaceTier] = await Promise.all([
+    User.findById(workspace.userId),
+    User.findById(userId),
+    getWorkspaceOwnerTier(workspaceId),
+  ]);
 
-  const member = await User.findById(userId);
   if (!member) return;
 
-  if (owner?.tierId && (!member.tierId || member.tierId.toString() !== owner.tierId.toString())) {
-    member.tierId = owner.tierId;
+  // Persist the workspace's billing tier on the owner if it's not already set
+  if (
+    workspaceTier.tier?._id &&
+    owner &&
+    (!owner.tierId || owner.tierId.toString() !== workspaceTier.tier._id.toString())
+  ) {
+    owner.tierId = workspaceTier.tier._id;
+    await owner.save();
+  }
+
+  let fallbackTierId = owner?.tierId;
+  if (!workspaceTier.tier?._id && !fallbackTierId) {
+    const ensuredTier = await ensureUserTier(workspace.userId);
+    if (ensuredTier?._id && owner) {
+      owner.tierId = ensuredTier._id;
+      await owner.save();
+    }
+    fallbackTierId = ensuredTier?._id || owner?.tierId;
+  }
+
+  const tierIdToAssign = workspaceTier.tier?._id || fallbackTierId;
+  if (tierIdToAssign && (!member.tierId || member.tierId.toString() !== tierIdToAssign.toString())) {
+    member.tierId = tierIdToAssign;
     await member.save();
   }
 };
