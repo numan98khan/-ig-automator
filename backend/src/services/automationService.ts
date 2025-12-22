@@ -387,11 +387,11 @@ export async function executeAutomation(params: {
     console.log(`📨 [AUTOMATION] Message preview: "${replyText.slice(0, 100)}..."`);
 
     try {
-      const sentMessage = await sendInstagramMessage({
-        recipientInstagramId: participantInstagramId,
-        text: replyText,
-        accessToken: igAccount.accessToken,
-      });
+      const sentMessage = await sendInstagramMessage(
+        participantInstagramId,
+        replyText,
+        igAccount.accessToken
+      );
 
       console.log(`✅ [AUTOMATION] Message sent successfully:`, {
         messageId: sentMessage?.id,
