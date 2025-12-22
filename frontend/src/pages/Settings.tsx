@@ -139,6 +139,8 @@ export default function Settings() {
 
   const workspaceUsage = tierSummary?.workspace?.usage || {};
   const workspaceLimits = tierSummary?.workspace?.limits || {};
+  const baseLimits = tierSummary?.limits || {};
+  const combinedLimits = { ...baseLimits, ...workspaceLimits };
   const aiUsage = tierSummary?.usage?.aiMessages;
 
   return (
@@ -222,13 +224,13 @@ export default function Settings() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">AI messages</div>
-                  <div className="text-sm font-semibold">{usagePill(aiUsage?.used, aiUsage?.limit)}</div>
+                  <div className="text-sm font-semibold">{usagePill(aiUsage?.used, aiUsage?.limit ?? combinedLimits.aiMessages)}</div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <UsageStat label="Instagram" value={usagePill(workspaceUsage.instagramAccounts, workspaceLimits.instagramAccounts)} />
-                  <UsageStat label="Team" value={usagePill(workspaceUsage.teamMembers, workspaceLimits.teamMembers)} />
-                  <UsageStat label="Knowledge" value={usagePill(workspaceUsage.knowledgeItems, workspaceLimits.knowledgeItems)} />
-                  <UsageStat label="Categories" value={usagePill(workspaceUsage.messageCategories, workspaceLimits.messageCategories)} />
+                  <UsageStat label="Instagram" value={usagePill(workspaceUsage.instagramAccounts, combinedLimits.instagramAccounts)} />
+                  <UsageStat label="Team" value={usagePill(workspaceUsage.teamMembers, combinedLimits.teamMembers)} />
+                  <UsageStat label="Knowledge" value={usagePill(workspaceUsage.knowledgeItems, combinedLimits.knowledgeItems)} />
+                  <UsageStat label="Categories" value={usagePill(workspaceUsage.messageCategories, combinedLimits.messageCategories)} />
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Gauge className="w-4 h-4" />
