@@ -12,6 +12,7 @@ import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
 import Tier from '../models/Tier';
+import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import {
   GLOBAL_WORKSPACE_KEY,
   deleteKnowledgeEmbedding,
@@ -125,6 +126,11 @@ router.post('/tiers/:id/assign/:userId', authenticate, requireAdmin, async (req,
 
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const billingAccount = await ensureBillingAccountForUser(user._id);
+    if (!billingAccount) return res.status(400).json({ error: 'Failed to load billing account' });
+
+    await upsertActiveSubscription(billingAccount._id, tier._id);
 
     user.tierId = tier._id;
     await user.save();

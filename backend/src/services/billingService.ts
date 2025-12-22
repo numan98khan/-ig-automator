@@ -4,6 +4,23 @@ import Subscription from '../models/Subscription';
 import User from '../models/User';
 import { getDefaultTier } from './tierService';
 
+export const upsertActiveSubscription = async (billingAccountId: mongoose.Types.ObjectId | string, tierId: mongoose.Types.ObjectId | string) => {
+  // Cancel any existing active subscription
+  await Subscription.updateMany(
+    { billingAccountId, status: 'active' },
+    { $set: { status: 'canceled', canceledAt: new Date() } }
+  );
+
+  const subscription = await Subscription.create({
+    billingAccountId,
+    tierId,
+    status: 'active',
+    startedAt: new Date(),
+  });
+
+  return subscription;
+};
+
 export const ensureBillingAccountForUser = async (userId: mongoose.Types.ObjectId | string) => {
   const user = await User.findById(userId);
   if (!user) return null;
@@ -19,12 +36,7 @@ export const ensureBillingAccountForUser = async (userId: mongoose.Types.ObjectI
 
   const defaultTier = await getDefaultTier();
   if (defaultTier) {
-    await Subscription.create({
-      billingAccountId: billingAccount._id,
-      tierId: defaultTier._id,
-      status: 'active',
-      startedAt: new Date(),
-    });
+    await upsertActiveSubscription(billingAccount._id, defaultTier._id);
     user.tierId = user.tierId || defaultTier._id;
   }
 
