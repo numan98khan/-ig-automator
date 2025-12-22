@@ -21,6 +21,7 @@ import {
   Moon,
   Sun,
   LifeBuoy,
+  Atom,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
@@ -61,7 +62,7 @@ const Layout: React.FC = () => {
       { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
       { to: '/alerts', label: 'Alerts', icon: AlertCircle, isActive: isActive('/alerts') },
-      { to: '/automations', label: 'Automations', icon: Settings, isActive: isActive('/automations') },
+      { to: '/automations', label: 'Automations', icon: Atom, isActive: isActive('/automations') },
       { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
     ];
 
