@@ -217,6 +217,10 @@ router.get('/users', authenticate, requireAdmin, async (_req, res) => {
       User.countDocuments(filter),
     ]);
 
+    const tierIds = items.map((u: any) => u.tierId).filter(Boolean);
+    const tiers = await Tier.find({ _id: { $in: tierIds } }).lean();
+    const tierMap = Object.fromEntries(tiers.map((t: any) => [String(t._id), t]));
+
     const userIds = items.map((u: any) => u._id);
     const memberships = await WorkspaceMember.find({ userId: { $in: userIds } }).lean();
     const workspaceIds = memberships.map((m: any) => m.workspaceId);
@@ -238,6 +242,7 @@ router.get('/users', authenticate, requireAdmin, async (_req, res) => {
       data: {
         users: items.map((u: any) => ({
           ...u,
+          tier: u.tierId ? tierMap[String(u.tierId)] : undefined,
           workspaceCount: (membershipsByUser[String(u._id)] || []).length,
           workspaces: membershipsByUser[String(u._id)] || [],
         })),
@@ -409,12 +414,14 @@ router.get('/users/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id).lean();
     if (!user) return res.status(404).json({ error: 'User not found' });
+    const tier = user.tierId ? await Tier.findById(user.tierId).lean() : undefined;
     const memberships = await WorkspaceMember.find({ userId: req.params.id }).lean();
     const workspaces = await Workspace.find({ _id: { $in: memberships.map((m: any) => m.workspaceId) } }).lean();
     const workspaceMap = Object.fromEntries(workspaces.map((w: any) => [String(w._id), w]));
     res.json({
       data: {
         ...user,
+        tier,
         workspaces: memberships.map((m: any) => ({
           _id: m.workspaceId,
           name: workspaceMap[String(m.workspaceId)]?.name,

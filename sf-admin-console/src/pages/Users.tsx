@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { User, Mail, Calendar, Building2, ChevronDown, ChevronUp } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { User, Mail, Calendar, Building2, ChevronDown, ChevronUp, Tags, Check, Loader2 } from 'lucide-react'
 import { adminApi, unwrapData } from '../services/api'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -9,15 +9,29 @@ export default function Users() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set())
+  const [selectedTierByUser, setSelectedTierByUser] = useState<Record<string, string>>({})
+  const queryClient = useQueryClient()
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', page, search],
     queryFn: () => adminApi.getUsers({ page, limit: 20, search }),
   })
+  const { data: tiersData, isLoading: tiersLoading } = useQuery({
+    queryKey: ['tiers'],
+    queryFn: () => adminApi.getTiers({ limit: 100 }),
+  })
+
+  const assignTier = useMutation({
+    mutationFn: ({ tierId, userId }: { tierId: string; userId: string }) => adminApi.assignTierToUser(tierId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+    },
+  })
 
   const payload = unwrapData<any>(data)
   const users = payload?.users || []
   const pagination = payload?.pagination || {}
+  const tiers = unwrapData<any>(tiersData)?.tiers || []
 
   const toggleUserExpansion = (userId: string) => {
     const newExpanded = new Set(expandedUsers)
@@ -74,6 +88,9 @@ export default function Users() {
                     Workspaces
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
+                    Tier
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
                     Joined
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground/70 uppercase tracking-wider">
@@ -128,6 +145,40 @@ export default function Users() {
                         </button>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col gap-2 min-w-[200px]">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Tags className="w-4 h-4 text-primary" />
+                            <span className="text-foreground font-medium">
+                              {user.tier?.name || 'Unassigned'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={selectedTierByUser[user._id] || user.tier?._id || ''}
+                              onChange={(e) => setSelectedTierByUser((prev) => ({ ...prev, [user._id]: e.target.value }))}
+                              className="bg-background border border-border rounded-lg text-sm px-2 py-1 flex-1"
+                            >
+                              <option value="">Select tier</option>
+                              {tiers.map((tier: any) => (
+                                <option key={tier._id} value={tier._id}>{tier.name}</option>
+                              ))}
+                            </select>
+                            <button
+                              className="btn btn-secondary btn-sm flex items-center gap-1"
+                              onClick={() => {
+                                const tierId = selectedTierByUser[user._id] || user.tier?._id
+                                if (!tierId) return
+                                assignTier.mutate({ tierId, userId: user._id })
+                              }}
+                              disabled={assignTier.isLoading}
+                            >
+                              {assignTier.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                              <span>Assign</span>
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Calendar className="w-4 h-4" />
                           <span className="text-sm">
@@ -140,10 +191,10 @@ export default function Users() {
                       </td>
                     </tr>
                     {/* Expanded Workspace Details */}
-                    {expandedUsers.has(user._id) && user.workspaces && user.workspaces.length > 0 && (
-                      <tr key={`${user._id}-details`} className="bg-muted/30">
-                        <td colSpan={5} className="px-6 py-4">
-                          <div className="ml-14">
+                {expandedUsers.has(user._id) && user.workspaces && user.workspaces.length > 0 && (
+                  <tr key={`${user._id}-details`} className="bg-muted/30">
+                    <td colSpan={6} className="px-6 py-4">
+                      <div className="ml-14">
                             <h4 className="text-sm font-semibold text-foreground mb-3">
                               Workspace Memberships
                             </h4>
@@ -266,6 +317,37 @@ export default function Users() {
                     <p className="text-sm font-semibold text-foreground">
                       {new Date(user.createdAt).toLocaleDateString()}
                     </p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 mb-4">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Tags className="w-4 h-4 text-primary" />
+                    <span className="text-muted-foreground">Tier</span>
+                    <span className="badge badge-secondary">{user.tier?.name || 'Unassigned'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={selectedTierByUser[user._id] || user.tier?._id || ''}
+                      onChange={(e) => setSelectedTierByUser((prev) => ({ ...prev, [user._id]: e.target.value }))}
+                      className="bg-background border border-border rounded-lg text-sm px-3 py-2 flex-1"
+                    >
+                      <option value="">Select tier</option>
+                      {tiers.map((tier: any) => (
+                        <option key={tier._id} value={tier._id}>{tier.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="btn btn-secondary btn-sm flex items-center gap-1"
+                      onClick={() => {
+                        const tierId = selectedTierByUser[user._id] || user.tier?._id
+                        if (!tierId) return
+                        assignTier.mutate({ tierId, userId: user._id })
+                      }}
+                      disabled={assignTier.isLoading}
+                    >
+                      {assignTier.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      <span>Assign</span>
+                    </button>
                   </div>
                 </div>
 

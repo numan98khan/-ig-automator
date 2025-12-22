@@ -91,4 +91,10 @@ export const adminApi = {
   }) => api.put(`/knowledge/${id}`, data),
   deleteGlobalKnowledgeItem: (id: string) => api.delete(`/knowledge/${id}`),
   reindexGlobalKnowledge: () => api.post('/knowledge/reindex-vector'),
+
+  // Tiers
+  getTiers: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>
+    api.get('/tiers', { params }),
+  assignTierToUser: (tierId: string, userId: string) =>
+    api.post(`/tiers/${tierId}/assign/${userId}`),
 }
