@@ -93,10 +93,21 @@ const Team: React.FC = () => {
     }
   };
 
-  const teamLimit = tierSummary?.limits?.teamMembers;
-  const fallbackTeamLimit = tierSummary?.tier?.limits?.teamMembers;
-  const effectiveTeamLimit = teamLimit ?? fallbackTeamLimit;
-  const teamUsed = tierSummary?.usage?.teamMembers || 0;
+  const firstNumber = (...values: Array<number | undefined | null>) => {
+    for (const val of values) {
+      if (typeof val === 'number') return val;
+    }
+    return undefined;
+  };
+
+  const teamLimit = firstNumber(
+    tierSummary?.workspace?.limits?.teamMembers,
+    tierSummary?.workspace?.tier?.limits?.teamMembers,
+    tierSummary?.limits?.teamMembers,
+    tierSummary?.tier?.limits?.teamMembers,
+  );
+  const effectiveTeamLimit = teamLimit;
+  const teamUsed = tierSummary?.usage?.teamMembers ?? tierSummary?.workspace?.usage?.teamMembers ?? 0;
   const isTeamLimitReached = typeof effectiveTeamLimit === 'number' ? teamUsed >= effectiveTeamLimit : false;
 
   const handleCancelInvite = async (inviteId: string) => {
@@ -272,7 +283,7 @@ const Team: React.FC = () => {
               <div className="flex items-center gap-2 p-3 rounded-lg border border-amber-400/40 bg-amber-500/10 text-amber-600 text-sm">
                 <AlertTriangle className="w-4 h-4" />
                 <span>
-                  Team member limit reached ({teamUsed}/{teamLimit}). Upgrade the owner&apos;s tier to invite more teammates.
+                  Team member limit reached ({teamUsed}/{displayLimit(effectiveTeamLimit)}). Upgrade the owner&apos;s tier to invite more teammates.
                 </span>
               </div>
             )}
