@@ -28,6 +28,7 @@ import { requestIdMiddleware } from './middleware/requestId';
 import assistantRoutes from './routes/assistant';
 import adminRoutes from './routes/admin';
 import tierRoutes from './routes/tiers';
+import automationRoutes from './routes/automations';
 import { ensureDefaultAdmin } from './utils/defaultAdmin';
 
 // Load environment variables
@@ -68,6 +69,7 @@ app.use('/api/support-tickets', supportTicketRoutes);
 app.use('/api/assistant', assistantRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/tiers', tierRoutes);
+app.use('/api/automations', automationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

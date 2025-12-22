@@ -142,6 +142,54 @@ export interface KnowledgeItem {
   createdAt: string;
 }
 
+// Automation types
+export type TriggerType =
+  | 'post_comment'      // Post or Reel Comments
+  | 'story_reply'       // Story Reply
+  | 'dm_message'        // Instagram Message
+  | 'story_share'       // User shares your Post or Reel as a Story (NEW)
+  | 'instagram_ads'     // Instagram Ads (PRO)
+  | 'live_comment'      // Live Comments
+  | 'ref_url';          // Instagram Ref URL
+
+export interface ReplyStep {
+  type: 'constant_reply' | 'ai_reply';
+  constantReply?: {
+    message: string;
+  };
+  aiReply?: {
+    goalType: GoalType;
+    goalDescription?: string;
+    knowledgeItemIds: string[];
+  };
+}
+
+export interface TriggerConfig {
+  keywords?: string[];
+  excludeKeywords?: string[];
+}
+
+export interface AutomationStats {
+  totalTriggered: number;
+  totalRepliesSent: number;
+  lastTriggeredAt?: string;
+  lastReplySentAt?: string;
+}
+
+export interface Automation {
+  _id: string;
+  name: string;
+  description?: string;
+  workspaceId: string;
+  triggerType: TriggerType;
+  triggerConfig?: TriggerConfig;
+  replySteps: ReplyStep[];
+  isActive: boolean;
+  stats: AutomationStats;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type GoalType =
   | 'none'
   | 'capture_lead'
@@ -561,6 +609,38 @@ export const knowledgeAPI = {
 
   delete: async (id: string): Promise<void> => {
     await api.delete(`/api/knowledge/${id}`);
+  },
+};
+
+// Automation API
+export const automationAPI = {
+  getByWorkspace: async (workspaceId: string): Promise<Automation[]> => {
+    const { data } = await api.get(`/api/automations/workspace/${workspaceId}`);
+    return data;
+  },
+
+  getById: async (id: string): Promise<Automation> => {
+    const { data } = await api.get(`/api/automations/${id}`);
+    return data;
+  },
+
+  create: async (automation: Omit<Automation, '_id' | 'stats' | 'createdAt' | 'updatedAt'>): Promise<Automation> => {
+    const { data } = await api.post('/api/automations', automation);
+    return data;
+  },
+
+  update: async (id: string, updates: Partial<Omit<Automation, '_id' | 'workspaceId' | 'stats' | 'createdAt' | 'updatedAt'>>): Promise<Automation> => {
+    const { data } = await api.put(`/api/automations/${id}`, updates);
+    return data;
+  },
+
+  toggle: async (id: string): Promise<Automation> => {
+    const { data } = await api.patch(`/api/automations/${id}/toggle`);
+    return data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/api/automations/${id}`);
   },
 };
 

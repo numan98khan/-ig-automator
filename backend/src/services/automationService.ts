@@ -6,6 +6,8 @@ import Conversation from '../models/Conversation';
 import InstagramAccount from '../models/InstagramAccount';
 import CommentDMLog from '../models/CommentDMLog';
 import FollowupTask from '../models/FollowupTask';
+import Automation from '../models/Automation';
+import KnowledgeItem from '../models/KnowledgeItem';
 import {
   sendMessage as sendInstagramMessage,
   sendCommentReply,
@@ -19,6 +21,7 @@ import { generateAIReply } from './aiReplyService';
 import { getActiveTicket, createTicket, addTicketUpdate } from './escalationService';
 import { addCountIncrement, mapGoalKey, trackDailyMetric } from './reportingService';
 import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
+import { TriggerType } from '../types/automation';
 import LeadCapture from '../models/LeadCapture';
 import BookingRequest from '../models/BookingRequest';
 import OrderIntent from '../models/OrderIntent';
@@ -211,6 +214,169 @@ async function saveGoalOutcome(
   const completionIncrement: Record<string, number> = {};
   addCountIncrement(completionIncrement, 'goalCompletions', mapGoalKey(goalType));
   await trackDailyMetric(conversation.workspaceId, new Date(), completionIncrement);
+}
+
+/**
+ * Execute an automation based on trigger type
+ */
+export async function executeAutomation(params: {
+  workspaceId: string;
+  triggerType: TriggerType;
+  conversationId: string;
+  participantInstagramId: string;
+  messageText?: string;
+  instagramAccountId: string;
+  platform?: string;
+}): Promise<{ success: boolean; automationExecuted?: string; error?: string }> {
+  try {
+    const { workspaceId, triggerType, conversationId, participantInstagramId, messageText, instagramAccountId, platform } = params;
+
+    // Find active automations matching this trigger type
+    const automations = await Automation.find({
+      workspaceId: new mongoose.Types.ObjectId(workspaceId),
+      triggerType,
+      isActive: true,
+    }).sort({ createdAt: 1 }); // Execute in order of creation
+
+    if (automations.length === 0) {
+      return { success: false, error: 'No active automations found for this trigger' };
+    }
+
+    // Execute the first matching automation (for now)
+    const automation = automations[0];
+    const replyStep = automation.replySteps[0];
+
+    if (!replyStep) {
+      return { success: false, error: 'No reply step configured' };
+    }
+
+    let replyText = '';
+
+    // Generate reply based on step type
+    if (replyStep.type === 'constant_reply') {
+      replyText = replyStep.constantReply?.message || '';
+    } else if (replyStep.type === 'ai_reply') {
+      const { goalType, goalDescription, knowledgeItemIds } = replyStep.aiReply || {};
+
+      // Load knowledge items if specified
+      let knowledgeContext = '';
+      if (knowledgeItemIds && knowledgeItemIds.length > 0) {
+        const knowledgeItems = await KnowledgeItem.find({
+          _id: { $in: knowledgeItemIds.map(id => new mongoose.Types.ObjectId(id)) },
+          workspaceId: new mongoose.Types.ObjectId(workspaceId),
+        });
+
+        knowledgeContext = knowledgeItems.map(item => `${item.title}:\n${item.content}`).join('\n\n');
+      }
+
+      // Get conversation for context
+      const conversation = await Conversation.findById(conversationId);
+      if (!conversation) {
+        return { success: false, error: 'Conversation not found' };
+      }
+
+      // Get workspace settings
+      const settings = await getWorkspaceSettings(workspaceId);
+      const goalConfigs = getGoalConfigs(settings);
+
+      // Generate AI reply with the specified goal
+      const aiReplyResult = await generateAIReply({
+        messageText: messageText || '',
+        conversationId: conversation._id,
+        workspaceId: conversation.workspaceId,
+        primaryGoal: goalType,
+        secondaryGoal: 'none',
+        conversationGoal: conversation.activeGoalType,
+        conversationGoalState: conversation.goalState,
+        conversationCollectedFields: conversation.goalCollectedFields,
+        settings,
+        goalConfigs,
+        customGoalDescription: goalDescription,
+        customKnowledge: knowledgeContext,
+      });
+
+      replyText = aiReplyResult.reply;
+
+      // Save goal outcomes if AI completed the goal
+      if (aiReplyResult.goalProgress?.shouldCreateRecord && aiReplyResult.goalProgress.goalType) {
+        await saveGoalOutcome(
+          aiReplyResult.goalProgress.goalType,
+          conversation,
+          aiReplyResult.goalProgress.collectedFields || {},
+          goalConfigs,
+          aiReplyResult.goalProgress.summary,
+          aiReplyResult.goalProgress.targetLink
+        );
+
+        // Update conversation goal tracking
+        conversation.activeGoalType = aiReplyResult.goalProgress.goalType;
+        conversation.goalState = aiReplyResult.goalProgress.status || 'completed';
+        conversation.goalCollectedFields = aiReplyResult.goalProgress.collectedFields;
+        conversation.goalSummary = aiReplyResult.goalProgress.summary;
+        conversation.goalLastInteractionAt = new Date();
+        await conversation.save();
+      }
+    }
+
+    if (!replyText) {
+      return { success: false, error: 'No reply text generated' };
+    }
+
+    // Send the message
+    const igAccount = await InstagramAccount.findById(instagramAccountId);
+    if (!igAccount) {
+      return { success: false, error: 'Instagram account not found' };
+    }
+
+    await pauseForTypingIfNeeded(platform);
+
+    const sentMessage = await sendInstagramMessage({
+      recipientInstagramId: participantInstagramId,
+      text: replyText,
+      accessToken: igAccount.accessToken,
+    });
+
+    // Save message to database
+    await Message.create({
+      conversationId: new mongoose.Types.ObjectId(conversationId),
+      text: replyText,
+      sender: 'business',
+      platform: platform || 'instagram',
+      instagramMessageId: sentMessage?.id,
+    });
+
+    // Update automation stats
+    automation.stats.totalTriggered += 1;
+    automation.stats.totalRepliesSent += 1;
+    automation.stats.lastTriggeredAt = new Date();
+    automation.stats.lastReplySentAt = new Date();
+    await automation.save();
+
+    return { success: true, automationExecuted: automation.name };
+  } catch (error) {
+    console.error('Error executing automation:', error);
+    return { success: false, error: 'Failed to execute automation' };
+  }
+}
+
+/**
+ * Check and execute automations for a specific trigger type
+ * This is a helper function that can be called from webhook handlers
+ */
+export async function checkAndExecuteAutomations(params: {
+  workspaceId: string;
+  triggerType: TriggerType;
+  conversationId: string;
+  participantInstagramId: string;
+  messageText?: string;
+  instagramAccountId: string;
+  platform?: string;
+}): Promise<{ executed: boolean; automationName?: string }> {
+  const result = await executeAutomation(params);
+  return {
+    executed: result.success,
+    automationName: result.automationExecuted,
+  };
 }
 
 /**
