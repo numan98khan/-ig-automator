@@ -28,6 +28,7 @@ import { requestIdMiddleware } from './middleware/requestId';
 import assistantRoutes from './routes/assistant';
 import adminRoutes from './routes/admin';
 import tierRoutes from './routes/tiers';
+import { ensureDefaultAdmin } from './utils/defaultAdmin';
 
 // Load environment variables
 dotenv.config();
@@ -43,6 +44,7 @@ app.use(requestIdMiddleware);
 
 // Connect to database
 connectDB();
+ensureDefaultAdmin();
 
 // API Routes
 app.use('/api/auth', authRoutes);
