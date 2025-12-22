@@ -72,6 +72,8 @@ export interface InstagramAccount {
   workspaceId: string;
   status: 'connected' | 'mock';
   profilePictureUrl?: string;
+  tokenExpiresAt?: string;
+  lastSyncedAt?: string;
   createdAt: string;
 }
 

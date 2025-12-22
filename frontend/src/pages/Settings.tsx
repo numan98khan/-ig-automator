@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { authAPI, tierAPI, TierSummaryResponse } from '../services/api';
-import { Shield, Eye, EyeOff, Mail, CheckCircle, AlertCircle, Users, Zap, Gauge, RefreshCw } from 'lucide-react';
+import { authAPI, tierAPI, TierSummaryResponse, instagramAPI, InstagramAccount } from '../services/api';
+import { Shield, Eye, EyeOff, Mail, CheckCircle, AlertCircle, Users, Zap, Gauge, RefreshCw, Instagram } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -20,6 +20,9 @@ export default function Settings() {
   const [success, setSuccess] = useState<string | null>(null);
   const [tierSummary, setTierSummary] = useState<TierSummaryResponse | null>(null);
   const [tierLoading, setTierLoading] = useState(false);
+  const [instagramAccounts, setInstagramAccounts] = useState<InstagramAccount[]>([]);
+  const [igLoading, setIgLoading] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
 
   const [accountForm, setAccountForm] = useState({
     email: '',
@@ -68,6 +71,23 @@ export default function Settings() {
     loadTier();
   }, [user, currentWorkspace]);
 
+  useEffect(() => {
+    const loadInstagramAccounts = async () => {
+      if (!currentWorkspace?._id) return;
+      setIgLoading(true);
+      try {
+        const accounts = await instagramAPI.getByWorkspace(currentWorkspace._id);
+        setInstagramAccounts(accounts);
+      } catch (err) {
+        console.error('Failed to load Instagram accounts', err);
+      } finally {
+        setIgLoading(false);
+      }
+    };
+
+    loadInstagramAccounts();
+  }, [currentWorkspace]);
+
   const handleSecureAccount = async () => {
     setError(null);
     setSuccess(null);
@@ -114,6 +134,21 @@ export default function Settings() {
       setError(err.response?.data?.error || 'Failed to send verification email');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReconnectInstagram = async () => {
+    if (!currentWorkspace?._id) return;
+
+    setReconnecting(true);
+    setError(null);
+
+    try {
+      const { authUrl } = await instagramAPI.getAuthUrl(currentWorkspace._id);
+      window.location.href = authUrl;
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to initiate Instagram reconnection');
+      setReconnecting(false);
     }
   };
 
@@ -315,6 +350,105 @@ export default function Settings() {
                   </CardContent>
                 </Card>
               )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Instagram className="w-5 h-5 text-primary" /> Connected Accounts
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {igLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : instagramAccounts.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Instagram className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                      <p className="text-sm text-muted-foreground mb-4">No Instagram accounts connected</p>
+                      <Button
+                        onClick={handleReconnectInstagram}
+                        isLoading={reconnecting}
+                        variant="secondary"
+                        size="sm"
+                      >
+                        Connect Instagram
+                      </Button>
+                    </div>
+                  ) : (
+                    instagramAccounts.map((account) => {
+                      const isExpired = account.tokenExpiresAt
+                        ? new Date(account.tokenExpiresAt) < new Date()
+                        : false;
+                      const expiresIn = account.tokenExpiresAt
+                        ? Math.floor((new Date(account.tokenExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                        : null;
+
+                      return (
+                        <div key={account._id} className={infoTileClass}>
+                          <div className="flex items-center gap-3 flex-1">
+                            {account.profilePictureUrl ? (
+                              <img
+                                src={account.profilePictureUrl}
+                                alt={account.username}
+                                className="w-10 h-10 rounded-full"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                <Instagram className="w-5 h-5 text-primary" />
+                              </div>
+                            )}
+                            <div className="flex-1">
+                              <div className="font-medium text-foreground">@{account.username}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {account.status === 'connected' ? (
+                                  isExpired ? (
+                                    <span className="text-red-400">Token expired</span>
+                                  ) : expiresIn !== null ? (
+                                    expiresIn < 7 ? (
+                                      <span className="text-amber-400">Expires in {expiresIn} days</span>
+                                    ) : (
+                                      <span className="text-green-400">Connected • Expires in {expiresIn} days</span>
+                                    )
+                                  ) : (
+                                    <span className="text-green-400">Connected</span>
+                                  )
+                                ) : (
+                                  <span className="text-muted-foreground">Mock account</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          {account.status === 'connected' && (isExpired || (expiresIn !== null && expiresIn < 7)) && (
+                            <Button
+                              onClick={handleReconnectInstagram}
+                              isLoading={reconnecting}
+                              variant={isExpired ? 'default' : 'secondary'}
+                              size="sm"
+                            >
+                              {isExpired ? 'Reconnect' : 'Refresh Token'}
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                  {instagramAccounts.length > 0 && (
+                    <div className="pt-2 border-t border-border/50">
+                      <Button
+                        onClick={handleReconnectInstagram}
+                        isLoading={reconnecting}
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                      >
+                        <Instagram className="w-4 h-4 mr-2" />
+                        Add Another Account
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           )}
 
