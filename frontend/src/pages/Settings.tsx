@@ -9,7 +9,7 @@ import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
 import Team from './Team';
 
-type TabType = 'account' | 'team';
+type TabType = 'account' | 'plan' | 'team';
 
 export default function Settings() {
   const { user, refreshUser, currentWorkspace } = useAuth();
@@ -45,7 +45,7 @@ export default function Settings() {
 
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'account' || tabParam === 'team') {
+    if (tabParam === 'account' || tabParam === 'plan' || tabParam === 'team') {
       setActiveTab(tabParam as TabType);
     }
   }, [searchParams]);
@@ -123,6 +123,11 @@ export default function Settings() {
       label: 'Account Security',
       icon: Shield,
       badge: user?.isProvisional || !user?.emailVerified,
+    },
+    {
+      id: 'plan' as TabType,
+      label: 'Plan & Limits',
+      icon: Zap,
     },
     {
       id: 'team' as TabType,
@@ -204,47 +209,6 @@ export default function Settings() {
             <span className="flex-1 font-medium text-sm">{success}</span>
           </div>
         )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="col-span-1">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Zap className="w-4 h-4 text-primary" />
-                  Plan & Limits
-                </CardTitle>
-                <Badge variant="secondary">{tierSummary?.tier?.status || 'active'}</Badge>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">Plan</div>
-                  <div className="text-sm font-semibold text-foreground">
-                    {tierSummary?.tier?.name || 'Not assigned'}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">Custom categories</div>
-                  <Badge variant={tierSummary?.tier?.allowCustomCategories === false ? 'secondary' : 'success'}>
-                    {tierSummary?.tier?.allowCustomCategories === false ? 'Disabled' : 'Allowed'}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">AI messages</div>
-                  <div className="text-sm font-semibold">{usagePill(aiUsage?.used, aiUsage?.limit ?? combinedLimits.aiMessages)}</div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <UsageStat label="Instagram" value={usagePill(workspaceUsage.instagramAccounts, combinedLimits.instagramAccounts)} />
-                  <UsageStat label="Team" value={usagePill(workspaceUsage.teamMembers, combinedLimits.teamMembers)} />
-                  <UsageStat label="Knowledge" value={usagePill(workspaceUsage.knowledgeItems, combinedLimits.knowledgeItems)} />
-                  <UsageStat label="Categories" value={usagePill(workspaceUsage.messageCategories, combinedLimits.messageCategories)} />
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Gauge className="w-4 h-4" />
-                  Limits refresh every billing period; upgrade the owner’s tier to increase caps.
-                  {tierLoading && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
 
           {activeTab === 'account' && (
             <div className="space-y-6 animate-fade-in">
@@ -351,6 +315,51 @@ export default function Settings() {
                   </CardContent>
                 </Card>
               )}
+            </div>
+          )}
+
+          {activeTab === 'plan' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="col-span-1">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Zap className="w-4 h-4 text-primary" />
+                      Plan & Limits
+                    </CardTitle>
+                    <Badge variant="secondary">{tierSummary?.tier?.status || 'active'}</Badge>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">Plan</div>
+                      <div className="text-sm font-semibold text-foreground">
+                        {tierSummary?.tier?.name || 'Not assigned'}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">Custom categories</div>
+                      <Badge variant={tierSummary?.tier?.allowCustomCategories === false ? 'secondary' : 'success'}>
+                        {tierSummary?.tier?.allowCustomCategories === false ? 'Disabled' : 'Allowed'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">AI messages</div>
+                      <div className="text-sm font-semibold">{usagePill(aiUsage?.used, aiUsage?.limit ?? combinedLimits.aiMessages)}</div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <UsageStat label="Instagram" value={usagePill(workspaceUsage.instagramAccounts, combinedLimits.instagramAccounts)} />
+                      <UsageStat label="Team" value={usagePill(workspaceUsage.teamMembers, combinedLimits.teamMembers)} />
+                      <UsageStat label="Knowledge" value={usagePill(workspaceUsage.knowledgeItems, combinedLimits.knowledgeItems)} />
+                      <UsageStat label="Categories" value={usagePill(workspaceUsage.messageCategories, combinedLimits.messageCategories)} />
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Gauge className="w-4 h-4" />
+                      Limits refresh every billing period; upgrade the owner’s tier to increase caps.
+                      {tierLoading && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
 
