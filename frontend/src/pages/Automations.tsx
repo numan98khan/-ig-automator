@@ -244,85 +244,81 @@ const Automations: React.FC = () => {
   if (!currentWorkspace) return null;
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8">
+    <div className="max-w-6xl mx-auto p-4 md:p-8">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Zap className="w-6 h-6 text-primary" />
-          </div>
-          <h1 className="text-3xl font-bold">Automation Control Center</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Automation Control Center</h1>
+          <p className="text-muted-foreground">
+            Configure playbooks, triggers, routing rules, and AI policies to automate your customer conversations safely and effectively.
+          </p>
         </div>
-        <p className="text-muted-foreground">
-          Configure playbooks, triggers, routing rules, and AI policies to automate your customer conversations safely and effectively.
-        </p>
       </div>
 
-      {/* Error Alert */}
-      {error && (
-        <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-3 text-destructive">
-          <AlertTriangle className="w-5 h-5" />
-          <span>{error}</span>
-        </div>
-      )}
-
       {/* Main Content - Side Nav + Content Area */}
-      <div className="flex gap-6">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Left Side Navigation */}
-        <div className="w-64 flex-shrink-0">
-          <nav className="glass-panel border border-border rounded-xl p-2 sticky top-4">
+        <aside className="lg:w-64 flex-shrink-0">
+          <div className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-2 space-y-1 shadow-sm backdrop-blur-sm">
             <button
               onClick={() => setActiveSection('automations')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+              className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
                 activeSection === 'automations'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ? 'bg-primary/12 text-foreground border border-primary/30 shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-white/5 border border-transparent'
               }`}
             >
-              <Target className="w-5 h-5" />
-              <span>Automations</span>
+              <Target className="w-4 h-4" />
+              <span className="flex-1 text-sm font-medium">Automations</span>
             </button>
             <button
               onClick={() => setActiveSection('routing')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+              className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
                 activeSection === 'routing'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ? 'bg-primary/12 text-foreground border border-primary/30 shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-white/5 border border-transparent'
               }`}
             >
-              <PlayCircle className="w-5 h-5" />
-              <span>Routing & Handoffs</span>
+              <PlayCircle className="w-4 h-4" />
+              <span className="flex-1 text-sm font-medium">Routing & Handoffs</span>
             </button>
             <button
               onClick={() => setActiveSection('followups')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+              className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
                 activeSection === 'followups'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ? 'bg-primary/12 text-foreground border border-primary/30 shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-white/5 border border-transparent'
               }`}
             >
-              <Clock className="w-5 h-5" />
-              <span>Follow-ups</span>
+              <Clock className="w-4 h-4" />
+              <span className="flex-1 text-sm font-medium">Follow-ups</span>
             </button>
             <button
               onClick={() => setActiveSection('integrations')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+              className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
                 activeSection === 'integrations'
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ? 'bg-primary/12 text-foreground border border-primary/30 shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-white/5 border border-transparent'
               }`}
             >
-              <LinkIcon className="w-5 h-5" />
-              <span>Integrations</span>
+              <LinkIcon className="w-4 h-4" />
+              <span className="flex-1 text-sm font-medium">Integrations</span>
             </button>
-          </nav>
-        </div>
+          </div>
+        </aside>
 
         {/* Right Content Area */}
-        <div className="flex-1">
+        <div className="flex-1 space-y-6">
+          {/* Error Alert */}
+          {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 animate-fade-in">
+              <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+              <span className="flex-1 font-medium text-sm">{error}</span>
+            </div>
+          )}
           {activeSection === 'automations' && (
-            <div>
-              <div className="flex items-center justify-between mb-6">
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold">Available Automations</h2>
                 <Button onClick={handleOpenCreateModal} leftIcon={<Plus className="w-4 h-4" />}>
                   Create Automation
@@ -334,7 +330,7 @@ const Automations: React.FC = () => {
                   <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 </div>
               ) : automations.length === 0 ? (
-                <div className="text-center py-12 border-2 border-dashed border-border rounded-xl bg-muted/5">
+                <div className="text-center py-12 border-2 border-dashed border-border/70 dark:border-white/10 rounded-xl bg-muted/40 dark:bg-white/5">
                   <Target className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                   <h3 className="text-lg font-semibold mb-2">No automations yet</h3>
                   <p className="text-muted-foreground mb-6">
@@ -353,7 +349,7 @@ const Automations: React.FC = () => {
                     return (
                       <div
                         key={automation._id}
-                        className="glass-panel border border-border rounded-xl p-6 hover:shadow-lg transition-all relative group"
+                        className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-6 shadow-sm backdrop-blur-sm hover:shadow-lg transition-all relative group"
                       >
                         {/* Badge for trigger */}
                         {trigger.badge && (
@@ -444,35 +440,41 @@ const Automations: React.FC = () => {
           )}
 
           {activeSection === 'routing' && (
-            <div className="text-center py-16 border-2 border-dashed border-border rounded-xl bg-muted/5">
-              <PlayCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-2xl font-semibold mb-2">Routing & Handoffs</h3>
-              <p className="text-muted-foreground text-lg mb-4">Coming Soon</p>
-              <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                Advanced routing rules and handoff configurations will be available here.
-              </p>
+            <div className="space-y-6 animate-fade-in">
+              <div className="text-center py-16 border-2 border-dashed border-border/70 dark:border-white/10 rounded-xl bg-muted/40 dark:bg-white/5">
+                <PlayCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-2xl font-semibold mb-2">Routing & Handoffs</h3>
+                <p className="text-muted-foreground text-lg mb-4">Coming Soon</p>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                  Advanced routing rules and handoff configurations will be available here.
+                </p>
+              </div>
             </div>
           )}
 
           {activeSection === 'followups' && (
-            <div className="text-center py-16 border-2 border-dashed border-border rounded-xl bg-muted/5">
-              <Clock className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-2xl font-semibold mb-2">Follow-ups</h3>
-              <p className="text-muted-foreground text-lg mb-4">Configure automated follow-up messages</p>
-              <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                Set up automated follow-up messages to re-engage customers at the right time.
-              </p>
+            <div className="space-y-6 animate-fade-in">
+              <div className="text-center py-16 border-2 border-dashed border-border/70 dark:border-white/10 rounded-xl bg-muted/40 dark:bg-white/5">
+                <Clock className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-2xl font-semibold mb-2">Follow-ups</h3>
+                <p className="text-muted-foreground text-lg mb-4">Configure automated follow-up messages</p>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                  Set up automated follow-up messages to re-engage customers at the right time.
+                </p>
+              </div>
             </div>
           )}
 
           {activeSection === 'integrations' && (
-            <div className="text-center py-16 border-2 border-dashed border-border rounded-xl bg-muted/5">
-              <LinkIcon className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-2xl font-semibold mb-2">Integrations</h3>
-              <p className="text-muted-foreground text-lg mb-4">Coming Soon</p>
-              <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                Connect to external services like Sheets, Calendly, and more.
-              </p>
+            <div className="space-y-6 animate-fade-in">
+              <div className="text-center py-16 border-2 border-dashed border-border/70 dark:border-white/10 rounded-xl bg-muted/40 dark:bg-white/5">
+                <LinkIcon className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-2xl font-semibold mb-2">Integrations</h3>
+                <p className="text-muted-foreground text-lg mb-4">Coming Soon</p>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                  Connect to external services like Sheets, Calendly, and more.
+                </p>
+              </div>
             </div>
           )}
         </div>
