@@ -25,6 +25,7 @@ const Team: React.FC = () => {
   const [inviteForm, setInviteForm] = useState<{ email: string; role: Role }>({ email: '', role: 'agent' });
   const [tierSummary, setTierSummary] = useState<TierSummaryResponse['workspace']>();
   const [tierLoading, setTierLoading] = useState(false);
+  const displayLimit = (value?: number | null) => (typeof value === 'number' ? value : '∞');
 
   const sortedMembers = useMemo(
     () => [...members].sort((a, b) => a.role.localeCompare(b.role)),
@@ -93,8 +94,10 @@ const Team: React.FC = () => {
   };
 
   const teamLimit = tierSummary?.limits?.teamMembers;
+  const fallbackTeamLimit = tierSummary?.tier?.limits?.teamMembers;
+  const effectiveTeamLimit = teamLimit ?? fallbackTeamLimit;
   const teamUsed = tierSummary?.usage?.teamMembers || 0;
-  const isTeamLimitReached = typeof teamLimit === 'number' ? teamUsed >= teamLimit : false;
+  const isTeamLimitReached = typeof effectiveTeamLimit === 'number' ? teamUsed >= effectiveTeamLimit : false;
 
   const handleCancelInvite = async (inviteId: string) => {
     setSaving(true);
@@ -175,7 +178,7 @@ const Team: React.FC = () => {
             {tierSummary?.tier?.name && (
               <div className="mt-3 inline-flex items-center gap-2 text-xs px-3 py-2 rounded-lg border border-border bg-muted/50">
                 <span className="font-semibold text-foreground">{tierSummary.tier.name}</span>
-                <span className="text-muted-foreground">plan • Team limit {teamLimit ?? '∞'}</span>
+                <span className="text-muted-foreground">plan • Team limit {displayLimit(effectiveTeamLimit)}</span>
                 {tierLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
               </div>
             )}
