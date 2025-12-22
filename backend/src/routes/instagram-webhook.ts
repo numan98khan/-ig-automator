@@ -9,6 +9,7 @@ import {
   processAutoReply,
   scheduleFollowup,
   cancelFollowupOnCustomerReply,
+  checkAndExecuteAutomations,
 } from '../services/automationService';
 import {
   categorizeMessage,
@@ -408,7 +409,30 @@ async function processMessageAutomations(
     }
     await savedMessage.save();
 
-    // 3. Process auto-reply if enabled
+    // 3. Check for active automations first (new system takes priority)
+    const automationResult = await checkAndExecuteAutomations({
+      workspaceId,
+      triggerType: 'dm_message',
+      conversationId: conversation._id.toString(),
+      participantInstagramId: conversation.participantInstagramId,
+      messageText,
+      instagramAccountId: conversation.instagramAccountId.toString(),
+      platform: conversation.platform || 'instagram',
+    });
+
+    if (automationResult.executed) {
+      console.log(`✅ Automation executed: ${automationResult.automationName}`);
+
+      // Schedule follow-up after automation
+      const followupResult = await scheduleFollowup(conversation._id, workspaceId);
+      if (followupResult.success) {
+        console.log(`⏰ Follow-up scheduled: ${followupResult.message}`);
+      }
+      return; // Skip old auto-reply system if automation was executed
+    }
+
+    // 4. Fall back to old auto-reply system if no automations are active
+    console.log(`⏭️ No active automations found, checking workspace auto-reply settings...`);
     const autoReplyResult = await processAutoReply(
       conversation._id,
       savedMessage,
@@ -422,7 +446,7 @@ async function processMessageAutomations(
       console.log(`⏭️ Auto-reply skipped: ${autoReplyResult.message}`);
     }
 
-    // 4. Schedule follow-up if auto-reply was sent
+    // 5. Schedule follow-up if auto-reply was sent
     if (autoReplyResult.success) {
       const followupResult = await scheduleFollowup(conversation._id, workspaceId);
       if (followupResult.success) {
