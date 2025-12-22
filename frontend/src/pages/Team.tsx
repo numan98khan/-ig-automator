@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Users, UserPlus, ShieldCheck, Mail, Loader2, Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { WorkspaceInvite, WorkspaceMember, workspaceAPI, workspaceInviteAPI, tierAPI, TierSummaryResponse } from '../services/api';
+import { WorkspaceInvite, WorkspaceMember, workspaceAPI, workspaceInviteAPI, tierAPI, WorkspaceTierResponse } from '../services/api';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 
@@ -23,7 +23,7 @@ const Team: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [inviteForm, setInviteForm] = useState<{ email: string; role: Role }>({ email: '', role: 'agent' });
-  const [tierSummary, setTierSummary] = useState<TierSummaryResponse['workspace']>();
+  const [tierSummary, setTierSummary] = useState<WorkspaceTierResponse | null>(null);
   const [tierLoading, setTierLoading] = useState(false);
   const displayLimit = (value?: number | null) => (typeof value === 'number' ? value : '∞');
 
@@ -101,13 +101,11 @@ const Team: React.FC = () => {
   };
 
   const teamLimit = firstNumber(
-    tierSummary?.workspace?.limits?.teamMembers,
-    tierSummary?.workspace?.tier?.limits?.teamMembers,
     tierSummary?.limits?.teamMembers,
     tierSummary?.tier?.limits?.teamMembers,
   );
   const effectiveTeamLimit = teamLimit;
-  const teamUsed = tierSummary?.usage?.teamMembers ?? tierSummary?.workspace?.usage?.teamMembers ?? 0;
+  const teamUsed = tierSummary?.usage?.teamMembers ?? 0;
   const isTeamLimitReached = typeof effectiveTeamLimit === 'number' ? teamUsed >= effectiveTeamLimit : false;
 
   const handleCancelInvite = async (inviteId: string) => {

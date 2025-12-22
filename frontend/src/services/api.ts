@@ -199,6 +199,13 @@ export interface TierSummaryResponse {
   };
 }
 
+export interface WorkspaceTierResponse {
+  tier?: Tier;
+  limits?: TierLimits;
+  ownerId?: string;
+  usage?: WorkspaceTierUsage;
+}
+
 export interface GoalConfigs {
   leadCapture: {
     collectName: boolean;
