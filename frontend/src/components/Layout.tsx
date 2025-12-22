@@ -21,6 +21,7 @@ import {
   Moon,
   Sun,
   LifeBuoy,
+  Atom,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
@@ -61,7 +62,7 @@ const Layout: React.FC = () => {
       { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
       { to: '/alerts', label: 'Alerts', icon: AlertCircle, isActive: isActive('/alerts') },
-      { to: '/automations', label: 'Automations', icon: Settings, isActive: isActive('/automations') },
+      { to: '/automations', label: 'Automations', icon: Atom, isActive: isActive('/automations') },
       { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
     ];
 
@@ -123,12 +124,15 @@ const Layout: React.FC = () => {
       <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0 h-16">
         <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full grid grid-cols-[auto,1fr,auto] items-center gap-4">
           <div className="flex items-center gap-2 min-w-0">
-            <Link to="/" className="flex items-center gap-2 rounded-full px-2 py-1 hover:bg-muted transition">
-              <img src="/icon.svg" alt="SendFx logo" className="w-8 h-8" />
-              <div className="hidden sm:flex flex-col leading-tight">
-                <span className="text-sm font-semibold text-foreground">SendFx</span>
-                <span className="text-[11px] text-muted-foreground">DM AI Automator</span>
-              </div>
+            <Link
+              to="/"
+              className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted transition dark:bg-white/90 dark:border-white/10"
+            >
+              <img
+                src="/sendfx.png"
+                alt="SendFx logo"
+                className="h-8 w-auto shrink-0 object-contain"
+              />
             </Link>
             <div className="relative" ref={accountMenuRef}>
               <button

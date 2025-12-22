@@ -154,14 +154,23 @@ const Landing: React.FC = () => {
       <header className="p-6 relative z-10">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-card border border-border shadow-glow">
-              <img src="/icon.svg" alt="SendFx logo" className="w-7 h-7" />
+ 
+          <div 
+
+            // className="p-2 rounded-xl bg-card border border-border shadow-glow"
+            className="p-2 rounded-xl bg-card border border-border dark:bg-white/90 dark:border-white/10 "
+            
+            >
+              <img src="/sendfx.png" alt="SendFx logo" 
+              
+              // className="w-7 h-7"
+              
+              className="h-8 w-auto shrink-0 object-contain"/>
             </div>
-            <div className="flex flex-col">
-              <span className="text-xl font-extrabold text-foreground tracking-tight">SendFx</span>
-              <span className="text-xs text-muted-foreground">Insta DM AI Automator</span>
-            </div>
+
           </div>
+
+          
           <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
             <a href="#overview" className="hover:text-foreground transition-colors">Overview</a>
             <a href="#product" className="hover:text-foreground transition-colors">Product</a>
@@ -581,19 +590,7 @@ const Landing: React.FC = () => {
         </div>
       </main>
 
-      {/* Mobile sticky CTA */}
-      <div className="md:hidden fixed bottom-4 left-4 right-4 z-20">
-        <div className={`rounded-2xl shadow-xl p-3 flex items-center justify-between gap-3 ${surfacePill}`}>
-          <div className="text-sm text-foreground">
-            <p className="font-semibold">Ready to automate?</p>
-            <p className="text-muted-foreground text-xs">Connect Instagram in minutes.</p>
-          </div>
-          <Button size="sm" onClick={handleInstagramLogin} disabled={loading} className="shrink-0">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Connect'}
-          </Button>
-        </div>
-      </div>
-
+      
       {/* Floating Assistant */}
       <AssistantWidget locationHint="landing" />
 
