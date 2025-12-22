@@ -7,6 +7,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/emailService';
 import { generateToken as generateEmailToken, verifyToken } from '../services/tokenService';
 import { ensureUserTier } from '../services/tierService';
+import { ensureBillingAccountForUser } from '../services/billingService';
 
 const router = express.Router();
 
@@ -27,6 +28,7 @@ router.post('/signup', async (req: Request, res: Response) => {
 
     // Create user
     const user = await User.create({ email, password });
+    await ensureBillingAccountForUser(user._id);
     await ensureUserTier(user._id);
 
     // Generate token
@@ -69,6 +71,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Generate token
     const token = generateToken(user._id.toString());
+    await ensureBillingAccountForUser(user._id);
     await ensureUserTier(user._id);
 
     res.json({
