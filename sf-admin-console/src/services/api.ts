@@ -95,6 +95,10 @@ export const adminApi = {
   // Tiers
   getTiers: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>
     api.get('/tiers', { params }),
+  getTierById: (id: string) => api.get(`/tiers/${id}`),
+  createTier: (payload: any) => api.post('/tiers', payload),
+  updateTier: (id: string, payload: any) => api.put(`/tiers/${id}`, payload),
+  deleteTier: (id: string) => api.delete(`/tiers/${id}`),
   assignTierToUser: (tierId: string, userId: string) =>
     api.post(`/tiers/${tierId}/assign/${userId}`),
 }
