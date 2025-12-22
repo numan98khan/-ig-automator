@@ -354,7 +354,7 @@ export async function executeAutomation(params: {
 
     // Send the message
     console.log(`🔍 [AUTOMATION] Loading Instagram account: ${instagramAccountId}`);
-    const igAccount = await InstagramAccount.findById(instagramAccountId);
+    const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
     if (!igAccount) {
       console.log('❌ [AUTOMATION] Instagram account not found');
       return { success: false, error: 'Instagram account not found' };
