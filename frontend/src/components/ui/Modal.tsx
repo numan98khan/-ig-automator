@@ -47,7 +47,7 @@ export const Modal: React.FC<ModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 duration-300 animate-in fade-in">
+    <div className="fixed inset-0 z-50 overflow-y-auto duration-300 animate-in fade-in">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-all"
@@ -55,12 +55,14 @@ export const Modal: React.FC<ModalProps> = ({
         aria-hidden="true"
       />
 
-      {/* Content */}
-      <div
-        className={`relative w-full ${sizes[size]} bg-background border border-border rounded-xl shadow-2xl flex flex-col max-h-[90vh] duration-300 animate-in zoom-in-95 slide-in-from-bottom-2 ${className}`}
-        role="dialog"
-        aria-modal="true"
-      >
+      {/* Modal Container with proper centering */}
+      <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+        {/* Content */}
+        <div
+          className={`relative w-full ${sizes[size]} bg-background border border-border rounded-xl shadow-2xl flex flex-col max-h-[calc(100vh-3rem)] my-8 duration-300 animate-in zoom-in-95 slide-in-from-bottom-2 ${className}`}
+          role="dialog"
+          aria-modal="true"
+        >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:px-6 border-b border-border/50">
           <div className="text-lg font-semibold tracking-tight text-foreground">
@@ -85,6 +87,7 @@ export const Modal: React.FC<ModalProps> = ({
             {footer}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

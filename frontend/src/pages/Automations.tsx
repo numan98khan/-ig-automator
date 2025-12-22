@@ -84,7 +84,7 @@ const GOAL_OPTIONS: { value: GoalType; label: string; description: string }[] = 
 
 const Automations: React.FC = () => {
   const { currentWorkspace } = useAuth();
-  const [activeTab, setActiveTab] = useState<'automations' | 'routing' | 'followups' | 'integrations'>('automations');
+  const [activeSection, setActiveSection] = useState<'automations' | 'routing' | 'followups' | 'integrations'>('automations');
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -266,220 +266,217 @@ const Automations: React.FC = () => {
         </div>
       )}
 
-      {/* Navigation Tabs */}
-      <div className="mb-8 border-b border-border">
-        <div className="flex gap-2 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('automations')}
-            className={`px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors ${
-              activeTab === 'automations'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <Target className="w-4 h-4" />
-              Automations
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveTab('routing')}
-            className={`px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors ${
-              activeTab === 'routing'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <PlayCircle className="w-4 h-4" />
-              Routing & Handoffs
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveTab('followups')}
-            className={`px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors ${
-              activeTab === 'followups'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              Follow-ups
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveTab('integrations')}
-            className={`px-4 py-3 font-medium text-sm whitespace-nowrap border-b-2 transition-colors ${
-              activeTab === 'integrations'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <LinkIcon className="w-4 h-4" />
-              Integrations
-            </div>
-          </button>
+      {/* Main Content - Side Nav + Content Area */}
+      <div className="flex gap-6">
+        {/* Left Side Navigation */}
+        <div className="w-64 flex-shrink-0">
+          <nav className="glass-panel border border-border rounded-xl p-2 sticky top-4">
+            <button
+              onClick={() => setActiveSection('automations')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeSection === 'automations'
+                  ? 'bg-primary/10 text-primary font-medium'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <Target className="w-5 h-5" />
+              <span>Automations</span>
+            </button>
+            <button
+              onClick={() => setActiveSection('routing')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeSection === 'routing'
+                  ? 'bg-primary/10 text-primary font-medium'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <PlayCircle className="w-5 h-5" />
+              <span>Routing & Handoffs</span>
+            </button>
+            <button
+              onClick={() => setActiveSection('followups')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeSection === 'followups'
+                  ? 'bg-primary/10 text-primary font-medium'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <Clock className="w-5 h-5" />
+              <span>Follow-ups</span>
+            </button>
+            <button
+              onClick={() => setActiveSection('integrations')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeSection === 'integrations'
+                  ? 'bg-primary/10 text-primary font-medium'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <LinkIcon className="w-5 h-5" />
+              <span>Integrations</span>
+            </button>
+          </nav>
         </div>
-      </div>
 
-      {/* Content Area */}
-      {activeTab === 'automations' && (
-        <div>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold">Available Automations</h2>
-            <Button onClick={handleOpenCreateModal} leftIcon={<Plus className="w-4 h-4" />}>
-              Create Automation
-            </Button>
-          </div>
+        {/* Right Content Area */}
+        <div className="flex-1">
+          {activeSection === 'automations' && (
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold">Available Automations</h2>
+                <Button onClick={handleOpenCreateModal} leftIcon={<Plus className="w-4 h-4" />}>
+                  Create Automation
+                </Button>
+              </div>
 
-          {loading ? (
-            <div className="flex justify-center items-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-          ) : automations.length === 0 ? (
-            <div className="text-center py-12 border-2 border-dashed border-border rounded-xl bg-muted/5">
-              <Target className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-lg font-semibold mb-2">No automations yet</h3>
-              <p className="text-muted-foreground mb-6">
-                Create your first automation to start automating your Instagram conversations.
-              </p>
-              <Button onClick={handleOpenCreateModal} leftIcon={<Plus className="w-4 h-4" />}>
-                Create Automation
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {automations.map((automation) => {
-                const trigger = TRIGGER_METADATA[automation.triggerType];
-                const replyStep = automation.replySteps[0];
+              {loading ? (
+                <div className="flex justify-center items-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              ) : automations.length === 0 ? (
+                <div className="text-center py-12 border-2 border-dashed border-border rounded-xl bg-muted/5">
+                  <Target className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-lg font-semibold mb-2">No automations yet</h3>
+                  <p className="text-muted-foreground mb-6">
+                    Create your first automation to start automating your Instagram conversations.
+                  </p>
+                  <Button onClick={handleOpenCreateModal} leftIcon={<Plus className="w-4 h-4" />}>
+                    Create Automation
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {automations.map((automation) => {
+                    const trigger = TRIGGER_METADATA[automation.triggerType];
+                    const replyStep = automation.replySteps[0];
 
-                return (
-                  <div
-                    key={automation._id}
-                    className="glass-panel border border-border rounded-xl p-6 hover:shadow-lg transition-all relative group"
-                  >
-                    {/* Badge for trigger */}
-                    {trigger.badge && (
-                      <div className="absolute top-4 right-4">
-                        <span className={`px-2 py-1 rounded-md text-xs font-bold ${
-                          trigger.badge === 'PRO' ? 'bg-amber-500/20 text-amber-500' : 'bg-blue-500/20 text-blue-500'
-                        }`}>
-                          {trigger.badge}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Icon and Title */}
-                    <div className="flex items-start gap-3 mb-4">
-                      <div className="p-2 bg-primary/10 text-primary rounded-lg">
-                        {trigger.icon}
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-lg mb-1">{automation.name}</h3>
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {automation.description || trigger.description}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Trigger Info */}
-                    <div className="mb-4 p-3 bg-muted/30 rounded-lg">
-                      <div className="text-xs font-medium text-muted-foreground mb-1">TRIGGER</div>
-                      <div className="text-sm font-medium">{trigger.label}</div>
-                    </div>
-
-                    {/* Reply Info */}
-                    <div className="mb-4 p-3 bg-muted/30 rounded-lg">
-                      <div className="text-xs font-medium text-muted-foreground mb-1">REPLY</div>
-                      <div className="text-sm font-medium">
-                        {replyStep.type === 'constant_reply' ? (
-                          <span>Constant Reply</span>
-                        ) : (
-                          <span>AI Reply - {GOAL_OPTIONS.find(g => g.value === replyStep.aiReply?.goalType)?.label}</span>
+                    return (
+                      <div
+                        key={automation._id}
+                        className="glass-panel border border-border rounded-xl p-6 hover:shadow-lg transition-all relative group"
+                      >
+                        {/* Badge for trigger */}
+                        {trigger.badge && (
+                          <div className="absolute top-4 right-4">
+                            <span className={`px-2 py-1 rounded-md text-xs font-bold ${
+                              trigger.badge === 'PRO' ? 'bg-amber-500/20 text-amber-500' : 'bg-blue-500/20 text-blue-500'
+                            }`}>
+                              {trigger.badge}
+                            </span>
+                          </div>
                         )}
-                      </div>
-                    </div>
 
-                    {/* Stats */}
-                    <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
-                      <div>
-                        <div className="text-muted-foreground text-xs">Triggered</div>
-                        <div className="font-semibold">{automation.stats.totalTriggered}</div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground text-xs">Replies Sent</div>
-                        <div className="font-semibold">{automation.stats.totalRepliesSent}</div>
-                      </div>
-                    </div>
+                        {/* Icon and Title */}
+                        <div className="flex items-start gap-3 mb-4">
+                          <div className="p-2 bg-primary/10 text-primary rounded-lg">
+                            {trigger.icon}
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-lg mb-1">{automation.name}</h3>
+                            <p className="text-sm text-muted-foreground line-clamp-2">
+                              {automation.description || trigger.description}
+                            </p>
+                          </div>
+                        </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-2">
-                      <Button
-                        onClick={() => handleToggle(automation)}
-                        variant={automation.isActive ? 'default' : 'outline'}
-                        className="flex-1"
-                        size="sm"
-                        leftIcon={automation.isActive ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
-                      >
-                        {automation.isActive ? 'Active' : 'Inactive'}
-                      </Button>
-                      <button
-                        onClick={() => handleOpenEditModal(automation)}
-                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(automation)}
-                        className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                        {/* Trigger Info */}
+                        <div className="mb-4 p-3 bg-muted/30 rounded-lg">
+                          <div className="text-xs font-medium text-muted-foreground mb-1">TRIGGER</div>
+                          <div className="text-sm font-medium">{trigger.label}</div>
+                        </div>
+
+                        {/* Reply Info */}
+                        <div className="mb-4 p-3 bg-muted/30 rounded-lg">
+                          <div className="text-xs font-medium text-muted-foreground mb-1">REPLY</div>
+                          <div className="text-sm font-medium">
+                            {replyStep.type === 'constant_reply' ? (
+                              <span>Constant Reply</span>
+                            ) : (
+                              <span>AI Reply - {GOAL_OPTIONS.find(g => g.value === replyStep.aiReply?.goalType)?.label}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Stats */}
+                        <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                          <div>
+                            <div className="text-muted-foreground text-xs">Triggered</div>
+                            <div className="font-semibold">{automation.stats.totalTriggered}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground text-xs">Replies Sent</div>
+                            <div className="font-semibold">{automation.stats.totalRepliesSent}</div>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2">
+                          <Button
+                            onClick={() => handleToggle(automation)}
+                            variant={automation.isActive ? 'default' : 'outline'}
+                            className="flex-1"
+                            size="sm"
+                            leftIcon={automation.isActive ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
+                          >
+                            {automation.isActive ? 'Active' : 'Inactive'}
+                          </Button>
+                          <button
+                            onClick={() => handleOpenEditModal(automation)}
+                            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(automation)}
+                            className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeSection === 'routing' && (
+            <div className="text-center py-16 border-2 border-dashed border-border rounded-xl bg-muted/5">
+              <PlayCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-2xl font-semibold mb-2">Routing & Handoffs</h3>
+              <p className="text-muted-foreground text-lg mb-4">Coming Soon</p>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Advanced routing rules and handoff configurations will be available here.
+              </p>
+            </div>
+          )}
+
+          {activeSection === 'followups' && (
+            <div className="text-center py-16 border-2 border-dashed border-border rounded-xl bg-muted/5">
+              <Clock className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-2xl font-semibold mb-2">Follow-ups</h3>
+              <p className="text-muted-foreground text-lg mb-4">Configure automated follow-up messages</p>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Set up automated follow-up messages to re-engage customers at the right time.
+              </p>
+            </div>
+          )}
+
+          {activeSection === 'integrations' && (
+            <div className="text-center py-16 border-2 border-dashed border-border rounded-xl bg-muted/5">
+              <LinkIcon className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-2xl font-semibold mb-2">Integrations</h3>
+              <p className="text-muted-foreground text-lg mb-4">Coming Soon</p>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Connect to external services like Sheets, Calendly, and more.
+              </p>
             </div>
           )}
         </div>
-      )}
-
-      {activeTab === 'routing' && (
-        <div className="text-center py-16 border-2 border-dashed border-border rounded-xl bg-muted/5">
-          <PlayCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-2xl font-semibold mb-2">Routing & Handoffs</h3>
-          <p className="text-muted-foreground text-lg mb-4">Coming Soon</p>
-          <p className="text-sm text-muted-foreground max-w-md mx-auto">
-            Advanced routing rules and handoff configurations will be available here.
-          </p>
-        </div>
-      )}
-
-      {activeTab === 'followups' && (
-        <div className="text-center py-16 border-2 border-dashed border-border rounded-xl bg-muted/5">
-          <Clock className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-2xl font-semibold mb-2">Follow-ups</h3>
-          <p className="text-muted-foreground text-lg mb-4">Configure automated follow-up messages</p>
-          <p className="text-sm text-muted-foreground max-w-md mx-auto">
-            Set up automated follow-up messages to re-engage customers at the right time.
-          </p>
-        </div>
-      )}
-
-      {activeTab === 'integrations' && (
-        <div className="text-center py-16 border-2 border-dashed border-border rounded-xl bg-muted/5">
-          <LinkIcon className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-2xl font-semibold mb-2">Integrations</h3>
-          <p className="text-muted-foreground text-lg mb-4">Coming Soon</p>
-          <p className="text-sm text-muted-foreground max-w-md mx-auto">
-            Connect to external services like Sheets, Calendly, and more.
-          </p>
-        </div>
-      )}
+      </div>
 
       {/* Create/Edit Modal */}
       <Modal
@@ -515,7 +512,7 @@ const Automations: React.FC = () => {
           {/* Trigger Type */}
           <div>
             <label className="block text-sm font-medium mb-2">Trigger</label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto">
               {Object.entries(TRIGGER_METADATA).map(([type, meta]) => (
                 <button
                   key={type}
