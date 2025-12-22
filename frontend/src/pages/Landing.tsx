@@ -42,9 +42,6 @@ const Landing: React.FC = () => {
   const surfaceSoft = isLight
     ? 'bg-white/85 border border-black/5 shadow-[0_18px_60px_-38px_rgba(0,0,0,0.35)]'
     : 'bg-background/60 border border-border/60 backdrop-blur-md';
-  const surfacePill = isLight
-    ? 'bg-white/80 border border-black/5 shadow-[0_12px_40px_-30px_rgba(0,0,0,0.28)]'
-    : 'bg-background/70 border border-border/70 backdrop-blur-md';
 
   useEffect(() => {
     // Check for errors in URL params
