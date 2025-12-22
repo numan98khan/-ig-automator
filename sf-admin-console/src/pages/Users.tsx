@@ -16,7 +16,7 @@ export default function Users() {
     queryKey: ['users', page, search],
     queryFn: () => adminApi.getUsers({ page, limit: 20, search }),
   })
-  const { data: tiersData, isLoading: tiersLoading } = useQuery({
+  const { data: tiersData } = useQuery({
     queryKey: ['tiers'],
     queryFn: () => adminApi.getTiers({ limit: 100 }),
   })
@@ -170,9 +170,9 @@ export default function Users() {
                                 if (!tierId) return
                                 assignTier.mutate({ tierId, userId: user._id })
                               }}
-                              disabled={assignTier.isLoading}
+                              disabled={assignTier.isPending}
                             >
-                              {assignTier.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                              {assignTier.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                               <span>Assign</span>
                             </button>
                           </div>
@@ -343,9 +343,9 @@ export default function Users() {
                         if (!tierId) return
                         assignTier.mutate({ tierId, userId: user._id })
                       }}
-                      disabled={assignTier.isLoading}
+                      disabled={assignTier.isPending}
                     >
-                      {assignTier.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      {assignTier.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                       <span>Assign</span>
                     </button>
                   </div>

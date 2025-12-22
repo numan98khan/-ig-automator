@@ -256,17 +256,17 @@ export default function Tiers() {
               <button className="btn btn-ghost" onClick={() => setModalOpen(false)}>
                 Cancel
               </button>
-              <button
-                className="btn btn-primary flex items-center gap-2"
-                onClick={() => upsertMutation.mutate(formState)}
-                disabled={upsertMutation.isLoading}
-              >
-                {upsertMutation.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Save
-              </button>
+                <button
+                  className="btn btn-primary flex items-center gap-2"
+                  onClick={() => upsertMutation.mutate(formState)}
+                  disabled={upsertMutation.isPending}
+                >
+                  {upsertMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Save
+                </button>
+              </div>
             </div>
           </div>
-        </div>
       )}
 
       {deleteId && (
@@ -282,9 +282,9 @@ export default function Tiers() {
                 <button
                   className="btn btn-destructive flex items-center gap-2"
                   onClick={() => deleteMutation.mutate(deleteId)}
-                  disabled={deleteMutation.isLoading}
+                  disabled={deleteMutation.isPending}
                 >
-                  {deleteMutation.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                   Delete
                 </button>
               </div>
