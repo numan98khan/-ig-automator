@@ -394,17 +394,18 @@ export async function executeAutomation(params: {
       );
 
       console.log(`✅ [AUTOMATION] Message sent successfully:`, {
-        messageId: sentMessage?.id,
+        messageId: sentMessage?.message_id,
         recipientId: sentMessage?.recipient_id || participantInstagramId
       });
 
       // Save message to database
       await Message.create({
         conversationId: new mongoose.Types.ObjectId(conversationId),
+        workspaceId: new mongoose.Types.ObjectId(workspaceId),
         text: replyText,
-        sender: 'business',
+        from: 'ai',
         platform: platform || 'instagram',
-        instagramMessageId: sentMessage?.id,
+        instagramMessageId: sentMessage?.message_id,
       });
 
       console.log(`💾 [AUTOMATION] Message saved to database`);
