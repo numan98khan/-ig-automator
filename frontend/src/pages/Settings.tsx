@@ -139,8 +139,13 @@ export default function Settings() {
 
   const workspaceUsage = tierSummary?.workspace?.usage || {};
   const workspaceLimits = tierSummary?.workspace?.limits || {};
+  const workspaceTierLimits = tierSummary?.workspace?.tier?.limits || {};
   const baseLimits = tierSummary?.limits || {};
-  const combinedLimits = { ...baseLimits, ...workspaceLimits };
+  const combinedLimits = {
+    ...workspaceTierLimits,
+    ...baseLimits,
+    ...workspaceLimits,
+  };
   const aiUsage = tierSummary?.usage?.aiMessages;
 
   return (
