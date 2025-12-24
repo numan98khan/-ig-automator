@@ -27,12 +27,20 @@ export interface IAutomation extends Document {
 const triggerConfigSchema = new Schema<TriggerConfig>({
   keywords: [{ type: String }],
   excludeKeywords: [{ type: String }],
+  keywordMatch: { type: String, enum: ['any', 'all'] },
+  outsideBusinessHours: { type: Boolean },
+  businessHours: {
+    startTime: { type: String },
+    endTime: { type: String },
+    timezone: { type: String },
+    daysOfWeek: [{ type: Number }],
+  },
 }, { _id: false });
 
 const replyStepSchema = new Schema<ReplyStep>({
   type: {
     type: String,
-    enum: ['constant_reply', 'ai_reply'],
+    enum: ['constant_reply', 'ai_reply', 'template_flow'],
     required: true,
   },
   constantReply: {
@@ -45,6 +53,10 @@ const replyStepSchema = new Schema<ReplyStep>({
     },
     goalDescription: { type: String },
     knowledgeItemIds: [{ type: String }],
+  },
+  templateFlow: {
+    templateId: { type: String },
+    config: { type: Schema.Types.Mixed },
   },
 }, { _id: false });
 

@@ -78,6 +78,9 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       if (step.type === 'ai_reply' && !step.aiReply?.goalType) {
         return res.status(400).json({ error: 'AI reply must have a goalType' });
       }
+      if (step.type === 'template_flow' && !step.templateFlow?.templateId) {
+        return res.status(400).json({ error: 'Template flow must include a templateId' });
+      }
     }
 
     const automation = await Automation.create({
@@ -134,6 +137,9 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
         }
         if (step.type === 'ai_reply' && !step.aiReply?.goalType) {
           return res.status(400).json({ error: 'AI reply must have a goalType' });
+        }
+        if (step.type === 'template_flow' && !step.templateFlow?.templateId) {
+          return res.status(400).json({ error: 'Template flow must include a templateId' });
         }
       }
     }

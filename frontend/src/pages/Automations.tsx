@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { automationAPI, knowledgeAPI, Automation, KnowledgeItem, TriggerType, GoalType } from '../services/api';
+import {
+  automationAPI,
+  knowledgeAPI,
+  Automation,
+  KnowledgeItem,
+  TriggerType,
+  GoalType,
+  TriggerConfig,
+  AutomationTemplateId,
+  TemplateFlowConfig,
+} from '../services/api';
 import {
   Plus,
   MessageSquare,
@@ -20,6 +30,12 @@ import {
   Power,
   PowerOff,
   Send,
+  Search,
+  Calendar,
+  ArrowRight,
+  ArrowLeft,
+  CheckCircle,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -75,6 +91,96 @@ const GOAL_OPTIONS: { value: GoalType; label: string; description: string }[] = 
   { value: 'drive_to_channel', label: 'Drive to Channel', description: 'Direct to external link' },
 ];
 
+// Template types
+interface AutomationTemplate {
+  id: AutomationTemplateId;
+  name: string;
+  outcome: string;
+  goal: 'Bookings' | 'Sales' | 'Leads' | 'Support';
+  industry: 'Clinics' | 'Salons' | 'Retail' | 'Restaurants' | 'Real Estate' | 'General';
+  triggers: TriggerType[];
+  setupTime: string;
+  collects: string[];
+  icon: React.ReactNode;
+  triggerType: TriggerType;
+  triggerConfig?: TriggerConfig;
+  replyType: 'constant_reply' | 'ai_reply' | 'template_flow';
+  aiGoalType?: GoalType;
+  previewConversation: { from: 'bot' | 'customer'; message: string }[];
+  setupFields: {
+    serviceList?: boolean;
+    priceRanges?: boolean;
+    locationLink?: boolean;
+    locationHours?: boolean;
+    phoneMinLength?: boolean;
+    businessHoursTime?: boolean;
+    businessTimezone?: boolean;
+    afterHoursMessage?: boolean;
+    followupMessage?: boolean;
+  };
+}
+
+const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
+  {
+    id: 'booking_concierge',
+    name: 'Instant Booking Concierge',
+    outcome: 'Capture booking leads in under 60 seconds',
+    goal: 'Bookings',
+    industry: 'Clinics',
+    triggers: ['dm_message'],
+    setupTime: '~2 min',
+    collects: ['lead name', 'phone', 'service', 'preferred day/time'],
+    icon: <Calendar className="w-5 h-5" />,
+    triggerType: 'dm_message',
+    triggerConfig: {
+      keywordMatch: 'any',
+      keywords: ['book', 'booking', 'appointment', 'slot', 'available', 'availability', 'حجز', 'موعد', 'سعر', 'price'],
+    },
+    replyType: 'template_flow',
+    previewConversation: [
+      { from: 'customer', message: 'Do you have availability this week?' },
+      { from: 'bot', message: 'Hi! I can help with bookings. Choose: Book appointment, Prices, Location, Talk to staff.' },
+      { from: 'customer', message: 'Book appointment' },
+      { from: 'bot', message: "Great! What's your name?" },
+    ],
+    setupFields: {
+      serviceList: true,
+      priceRanges: true,
+      locationLink: true,
+      locationHours: true,
+      phoneMinLength: true,
+    },
+  },
+  {
+    id: 'after_hours_capture',
+    name: 'After-Hours Lead Capture',
+    outcome: "Capture leads when you're closed and follow up next open",
+    goal: 'Leads',
+    industry: 'General',
+    triggers: ['dm_message'],
+    setupTime: '~2 min',
+    collects: ['phone', 'intent', 'preferred time'],
+    icon: <Clock className="w-5 h-5" />,
+    triggerType: 'dm_message',
+    triggerConfig: {
+      outsideBusinessHours: true,
+    },
+    replyType: 'template_flow',
+    previewConversation: [
+      { from: 'customer', message: 'Are you open now?' },
+      { from: 'bot', message: "We're closed - leave details, we'll contact you at 9:00 AM." },
+      { from: 'bot', message: 'What can we help with? Booking, Prices, Order, Other.' },
+      { from: 'customer', message: 'Booking' },
+    ],
+    setupFields: {
+      businessHoursTime: true,
+      businessTimezone: true,
+      afterHoursMessage: true,
+      followupMessage: true,
+    },
+  },
+];
+
 const Automations: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const [activeSection, setActiveSection] = useState<'automations' | 'routing' | 'followups' | 'integrations'>('automations');
@@ -86,17 +192,38 @@ const Automations: React.FC = () => {
   // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
+  const [isTemplateEditing, setIsTemplateEditing] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     triggerType: 'post_comment' as TriggerType,
-    replyType: 'constant_reply' as 'constant_reply' | 'ai_reply',
+    replyType: 'constant_reply' as 'constant_reply' | 'ai_reply' | 'template_flow',
     constantMessage: '',
     aiGoalType: 'none' as GoalType,
     aiGoalDescription: '',
     aiKnowledgeIds: [] as string[],
   });
   const [saving, setSaving] = useState(false);
+
+  // Template mode states
+  const [creationMode, setCreationMode] = useState<'templates' | 'custom'>('templates');
+  const [currentStep, setCurrentStep] = useState<'gallery' | 'setup' | 'review'>('gallery');
+  const [selectedTemplate, setSelectedTemplate] = useState<AutomationTemplate | null>(null);
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [goalFilter, setGoalFilter] = useState<'all' | 'Bookings' | 'Sales' | 'Leads' | 'Support'>('all');
+  const [industryFilter, setIndustryFilter] = useState<'all' | 'Clinics' | 'Salons' | 'Retail' | 'Restaurants' | 'Real Estate' | 'General'>('all');
+  const [setupData, setSetupData] = useState({
+    serviceList: '',
+    priceRanges: '',
+    locationLink: '',
+    locationHours: '',
+    phoneMinLength: '8',
+    businessHoursStart: '09:00',
+    businessHoursEnd: '17:00',
+    businessTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    afterHoursMessage: "We're closed - leave details, we'll contact you at {next_open_time}.",
+    followupMessage: "We're open now if you'd like to continue. Reply anytime.",
+  });
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -126,6 +253,7 @@ const Automations: React.FC = () => {
 
   const handleOpenCreateModal = () => {
     setEditingAutomation(null);
+    setIsTemplateEditing(false);
     setFormData({
       name: '',
       description: '',
@@ -135,6 +263,25 @@ const Automations: React.FC = () => {
       aiGoalType: 'none',
       aiGoalDescription: '',
       aiKnowledgeIds: [],
+    });
+    // Reset template mode states
+    setCreationMode('templates');
+    setCurrentStep('gallery');
+    setSelectedTemplate(null);
+    setTemplateSearch('');
+    setGoalFilter('all');
+    setIndustryFilter('all');
+    setSetupData({
+      serviceList: '',
+      priceRanges: '',
+      locationLink: '',
+      locationHours: '',
+      phoneMinLength: '8',
+      businessHoursStart: '09:00',
+      businessHoursEnd: '17:00',
+      businessTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+      afterHoursMessage: "We're closed - leave details, we'll contact you at {next_open_time}.",
+      followupMessage: "We're open now if you'd like to continue. Reply anytime.",
     });
     setIsCreateModalOpen(true);
   };
@@ -152,7 +299,125 @@ const Automations: React.FC = () => {
       aiGoalDescription: replyStep.aiReply?.goalDescription || '',
       aiKnowledgeIds: replyStep.aiReply?.knowledgeItemIds || [],
     });
+
+    if (replyStep.type === 'template_flow' && replyStep.templateFlow) {
+      const template = AUTOMATION_TEMPLATES.find((item) => item.id === replyStep.templateFlow?.templateId);
+      setCreationMode('templates');
+      setCurrentStep('setup');
+      setSelectedTemplate(template || null);
+      setTemplateSearch('');
+      setGoalFilter('all');
+      setIndustryFilter('all');
+      setIsTemplateEditing(!!template);
+
+      if (!template) {
+        setIsCreateModalOpen(true);
+        return;
+      }
+
+      if (replyStep.templateFlow.templateId === 'booking_concierge') {
+        const config = replyStep.templateFlow.config as any;
+        setSetupData({
+          serviceList: (config.serviceOptions || []).join(', '),
+          priceRanges: config.priceRanges || '',
+          locationLink: config.locationLink || '',
+          locationHours: config.locationHours || '',
+          phoneMinLength: String(config.minPhoneLength || '8'),
+          businessHoursStart: '',
+          businessHoursEnd: '',
+          businessTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          afterHoursMessage: "We're closed - leave details, we'll contact you at {next_open_time}.",
+          followupMessage: "We're open now if you'd like to continue. Reply anytime.",
+        });
+      }
+
+      if (replyStep.templateFlow.templateId === 'after_hours_capture') {
+        const config = replyStep.templateFlow.config as any;
+        setSetupData({
+          serviceList: '',
+          priceRanges: '',
+          locationLink: '',
+          locationHours: '',
+          phoneMinLength: '8',
+          businessHoursStart: config.businessHours?.startTime || '',
+          businessHoursEnd: config.businessHours?.endTime || '',
+          businessTimezone: config.businessHours?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          afterHoursMessage: config.closedMessageTemplate || "We're closed - leave details, we'll contact you at {next_open_time}.",
+          followupMessage: config.followupMessage || "We're open now if you'd like to continue. Reply anytime.",
+        });
+      }
+    } else {
+      setIsTemplateEditing(false);
+    }
     setIsCreateModalOpen(true);
+  };
+
+  const buildTemplateFlow = (template: AutomationTemplate): TemplateFlowConfig | null => {
+    if (template.id === 'booking_concierge') {
+      const services = setupData.serviceList
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      return {
+        templateId: 'booking_concierge',
+        config: {
+          quickReplies: ['Book appointment', 'Prices', 'Location', 'Talk to staff'],
+          serviceOptions: services,
+          priceRanges: setupData.priceRanges.trim() || undefined,
+          locationLink: setupData.locationLink.trim() || undefined,
+          locationHours: setupData.locationHours.trim() || undefined,
+          minPhoneLength: Number.parseInt(setupData.phoneMinLength, 10) || 8,
+          maxQuestions: 5,
+          rateLimit: { maxMessages: 5, perMinutes: 1 },
+          handoffTeam: 'reception',
+          tags: ['intent_booking', 'template_booking_concierge'],
+          outputs: {
+            sheetRow: 'Leads',
+            notify: ['owner', 'reception'],
+            createContact: true,
+          },
+        },
+      };
+    }
+
+    if (template.id === 'after_hours_capture') {
+      return {
+        templateId: 'after_hours_capture',
+        config: {
+          businessHours: {
+            startTime: setupData.businessHoursStart,
+            endTime: setupData.businessHoursEnd,
+            timezone: setupData.businessTimezone,
+          },
+          closedMessageTemplate: setupData.afterHoursMessage.trim() || "We're closed - leave details, we'll contact you at {next_open_time}.",
+          intentOptions: ['Booking', 'Prices', 'Order', 'Other'],
+          followupMessage: setupData.followupMessage.trim() || "We're open now if you'd like to continue. Reply anytime.",
+          maxQuestions: 4,
+          rateLimit: { maxMessages: 4, perMinutes: 1 },
+          tags: ['after_hours_lead', 'template_after_hours_capture'],
+          outputs: {
+            sheetRow: 'AfterHoursLeads',
+            notify: ['owner', 'staff'],
+            digestInclude: true,
+          },
+        },
+      };
+    }
+
+    return null;
+  };
+
+  const buildTemplateTriggerConfig = (template: AutomationTemplate, flow: TemplateFlowConfig): TriggerConfig | undefined => {
+    const baseConfig = template.triggerConfig || {};
+    if (flow.templateId === 'after_hours_capture') {
+      const afterHoursConfig = flow.config as any;
+      return {
+        ...baseConfig,
+        outsideBusinessHours: true,
+        businessHours: afterHoursConfig.businessHours,
+      };
+    }
+    return baseConfig;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -161,25 +426,41 @@ const Automations: React.FC = () => {
 
     setSaving(true);
     try {
-      const replyStep = formData.replyType === 'constant_reply'
+      const isTemplateFlow = selectedTemplate?.replyType === 'template_flow';
+      const templateFlow = isTemplateFlow && selectedTemplate ? buildTemplateFlow(selectedTemplate) : null;
+      if (isTemplateFlow && !templateFlow) {
+        setError('Template configuration is incomplete.');
+        return;
+      }
+      const replyStep = isTemplateFlow && templateFlow
         ? {
-            type: 'constant_reply' as const,
-            constantReply: { message: formData.constantMessage },
+            type: 'template_flow' as const,
+            templateFlow,
           }
-        : {
-            type: 'ai_reply' as const,
-            aiReply: {
-              goalType: formData.aiGoalType,
-              goalDescription: formData.aiGoalDescription,
-              knowledgeItemIds: formData.aiKnowledgeIds,
-            },
-          };
+        : formData.replyType === 'constant_reply'
+          ? {
+              type: 'constant_reply' as const,
+              constantReply: { message: formData.constantMessage },
+            }
+          : {
+              type: 'ai_reply' as const,
+              aiReply: {
+                goalType: formData.aiGoalType,
+                goalDescription: formData.aiGoalDescription,
+                knowledgeItemIds: formData.aiKnowledgeIds,
+              },
+            };
+
+      const triggerConfig = isTemplateFlow && templateFlow && selectedTemplate
+        ? buildTemplateTriggerConfig(selectedTemplate, templateFlow)
+        : undefined;
 
       if (editingAutomation) {
         await automationAPI.update(editingAutomation._id, {
           name: formData.name,
           description: formData.description,
           triggerType: formData.triggerType,
+          ...(triggerConfig ? { triggerConfig } : {}),
           replySteps: [replyStep],
         });
       } else {
@@ -187,7 +468,8 @@ const Automations: React.FC = () => {
           name: formData.name,
           description: formData.description,
           workspaceId: currentWorkspace._id,
-          triggerType: formData.triggerType,
+          triggerType: isTemplateFlow && selectedTemplate ? selectedTemplate.triggerType : formData.triggerType,
+          ...(triggerConfig ? { triggerConfig } : {}),
           replySteps: [replyStep],
           isActive: true,
         });
@@ -380,8 +662,12 @@ const Automations: React.FC = () => {
                           <div className="text-sm font-medium">
                             {replyStep.type === 'constant_reply' ? (
                               <span>Constant Reply</span>
-                            ) : (
+                            ) : replyStep.type === 'ai_reply' ? (
                               <span>AI Reply - {GOAL_OPTIONS.find(g => g.value === replyStep.aiReply?.goalType)?.label}</span>
+                            ) : (
+                              <span>
+                                Template - {AUTOMATION_TEMPLATES.find(t => t.id === replyStep.templateFlow?.templateId)?.name || 'Template'}
+                              </span>
                             )}
                           </div>
                         </div>
@@ -477,10 +763,20 @@ const Automations: React.FC = () => {
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        title={editingAutomation ? 'Edit Automation' : 'Create Automation'}
-        size="lg"
+        title={
+          editingAutomation
+            ? 'Edit Automation'
+            : currentStep === 'gallery'
+            ? 'Create Automation'
+            : currentStep === 'setup'
+            ? `Setup: ${selectedTemplate?.name}`
+            : 'Review & Activate'
+        }
+        size="xl"
       >
-        <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Editing mode: show old form */}
+        {editingAutomation && !isTemplateEditing ? (
+          <form onSubmit={handleSubmit} className="space-y-6">
           {/* Name */}
           <div>
             <label className="block text-sm font-medium mb-1.5">Name</label>
@@ -651,6 +947,446 @@ const Automations: React.FC = () => {
             </Button>
           </div>
         </form>
+        ) : (
+          /* New template-based creation flow */
+          <div className="space-y-6">
+            {/* Step 1: Segmented Control - Templates vs Custom */}
+            {currentStep === 'gallery' && (
+              <>
+                <div className="flex items-center gap-3 p-1 bg-muted/40 rounded-lg w-fit">
+                  <button
+                    onClick={() => setCreationMode('templates')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      creationMode === 'templates'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Templates <span className="text-xs text-primary">(Recommended)</span>
+                  </button>
+                  <button
+                    onClick={() => setCreationMode('custom')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      creationMode === 'custom'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Custom
+                  </button>
+                </div>
+
+                {/* Template Gallery */}
+                {creationMode === 'templates' ? (
+                  <div className="space-y-4">
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        value={templateSearch}
+                        onChange={(e) => setTemplateSearch(e.target.value)}
+                        placeholder="Search templates..."
+                        className="pl-10"
+                      />
+                    </div>
+
+                    {/* Filters */}
+                    <div className="flex flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">Goal:</span>
+                        {(['all', 'Bookings', 'Sales', 'Leads', 'Support'] as const).map((goal) => (
+                          <button
+                            key={goal}
+                            onClick={() => setGoalFilter(goal)}
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                              goalFilter === goal
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                            }`}
+                          >
+                            {goal === 'all' ? 'All' : goal}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Template Cards Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2">
+                      {AUTOMATION_TEMPLATES
+                        .filter((template) => {
+                          const matchesSearch =
+                            templateSearch === '' ||
+                            template.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+                            template.outcome.toLowerCase().includes(templateSearch.toLowerCase());
+                          const matchesGoal = goalFilter === 'all' || template.goal === goalFilter;
+                          const matchesIndustry = industryFilter === 'all' || template.industry === industryFilter;
+                          return matchesSearch && matchesGoal && matchesIndustry;
+                        })
+                        .map((template) => (
+                          <button
+                            key={template.id}
+                            onClick={() => {
+                              setSelectedTemplate(template);
+                              setCurrentStep('setup');
+                              // Pre-fill form data from template
+                              setFormData({
+                                name: template.name,
+                                description: template.outcome,
+                                triggerType: template.triggerType,
+                                replyType: template.replyType,
+                                constantMessage: '',
+                                aiGoalType: template.aiGoalType || 'none',
+                                aiGoalDescription: '',
+                                aiKnowledgeIds: [],
+                              });
+                            }}
+                            className="text-left border border-border rounded-lg p-4 hover:border-primary/50 hover:bg-muted/30 transition-all group"
+                          >
+                            <div className="flex items-start gap-3 mb-3">
+                              <div className="p-2 bg-primary/10 text-primary rounded-lg group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                                {template.icon}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold text-sm mb-1">{template.name}</h3>
+                                <p className="text-xs text-muted-foreground line-clamp-2">{template.outcome}</p>
+                              </div>
+                            </div>
+
+                            {/* Trigger chips */}
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {template.triggers.slice(0, 3).map((trigger) => (
+                                <span
+                                  key={trigger}
+                                  className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs"
+                                >
+                                  {TRIGGER_METADATA[trigger]?.label.split(' ')[0]}
+                                </span>
+                              ))}
+                            </div>
+
+                            {/* Meta info */}
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>{template.setupTime}</span>
+                              <span>Collects: {template.collects.slice(0, 2).join(', ')}</span>
+                            </div>
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                ) : (
+                  /* Custom mode - show traditional form */
+                  <div className="text-center py-8 text-muted-foreground">
+                    Custom automation builder coming soon. For now, please use Templates.
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Step 2: Setup */}
+            {currentStep === 'setup' && selectedTemplate && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left: Setup Form */}
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Configure Your Automation</h3>
+
+                    {/* Name */}
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-1.5">Automation Name</label>
+                      <Input
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        placeholder="e.g., Book Appointments"
+                      />
+                    </div>
+
+                    {/* Description */}
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-1.5">Description</label>
+                      <textarea
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        placeholder="What does this automation do?"
+                        rows={2}
+                        className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                      />
+                    </div>
+
+                    {/* Dynamic setup fields based on template */}
+                    {selectedTemplate.setupFields.serviceList && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1.5">Services</label>
+                        <Input
+                          value={setupData.serviceList}
+                          onChange={(e) => setSetupData({ ...setupData, serviceList: e.target.value })}
+                          placeholder="e.g., Facial, Botox, Makeup"
+                        />
+                      </div>
+                    )}
+
+                    {selectedTemplate.setupFields.priceRanges && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1.5">Price Ranges</label>
+                        <textarea
+                          value={setupData.priceRanges}
+                          onChange={(e) => setSetupData({ ...setupData, priceRanges: e.target.value })}
+                          placeholder="e.g., Facial: $80-$120\nMakeup: $120-$200"
+                          rows={3}
+                          className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                        />
+                      </div>
+                    )}
+
+                    {selectedTemplate.setupFields.locationLink && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1.5">Location Link</label>
+                        <Input
+                          value={setupData.locationLink}
+                          onChange={(e) => setSetupData({ ...setupData, locationLink: e.target.value })}
+                          placeholder="https://maps.google.com/?q=your-business"
+                        />
+                      </div>
+                    )}
+
+                    {selectedTemplate.setupFields.locationHours && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1.5">Location Hours</label>
+                        <Input
+                          value={setupData.locationHours}
+                          onChange={(e) => setSetupData({ ...setupData, locationHours: e.target.value })}
+                          placeholder="Mon-Fri 9AM-6PM, Sat 10AM-4PM"
+                        />
+                      </div>
+                    )}
+
+                    {selectedTemplate.setupFields.phoneMinLength && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1.5">Min Phone Digits</label>
+                        <Input
+                          type="number"
+                          value={setupData.phoneMinLength}
+                          onChange={(e) => setSetupData({ ...setupData, phoneMinLength: e.target.value })}
+                          placeholder="8"
+                        />
+                      </div>
+                    )}
+
+                    {selectedTemplate.setupFields.businessHoursTime && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-1.5">Open Time</label>
+                          <Input
+                            type="time"
+                            value={setupData.businessHoursStart}
+                            onChange={(e) => setSetupData({ ...setupData, businessHoursStart: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1.5">Close Time</label>
+                          <Input
+                            type="time"
+                            value={setupData.businessHoursEnd}
+                            onChange={(e) => setSetupData({ ...setupData, businessHoursEnd: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedTemplate.setupFields.businessTimezone && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1.5">Timezone</label>
+                        <Input
+                          value={setupData.businessTimezone}
+                          onChange={(e) => setSetupData({ ...setupData, businessTimezone: e.target.value })}
+                          placeholder="America/New_York"
+                        />
+                      </div>
+                    )}
+
+                    {selectedTemplate.setupFields.afterHoursMessage && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1.5">Closed Message</label>
+                        <textarea
+                          value={setupData.afterHoursMessage}
+                          onChange={(e) => setSetupData({ ...setupData, afterHoursMessage: e.target.value })}
+                          placeholder="We're closed - leave details, we'll contact you at {next_open_time}."
+                          rows={3}
+                          className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                        />
+                      </div>
+                    )}
+
+                    {selectedTemplate.setupFields.followupMessage && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-1.5">Next-Open Follow-up</label>
+                        <textarea
+                          value={setupData.followupMessage}
+                          onChange={(e) => setSetupData({ ...setupData, followupMessage: e.target.value })}
+                          placeholder="We're open now if you'd like to continue. Reply anytime."
+                          rows={2}
+                          className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right: Conversation Preview */}
+                <div className="bg-muted/30 border border-border rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <h4 className="font-semibold text-sm">Conversation Preview</h4>
+                  </div>
+                  <div className="space-y-3">
+                    {selectedTemplate.previewConversation.map((msg, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex ${msg.from === 'customer' ? 'justify-start' : 'justify-end'}`}
+                      >
+                        <div
+                          className={`max-w-[80%] px-3 py-2 rounded-lg text-sm ${
+                            msg.from === 'customer'
+                              ? 'bg-background border border-border'
+                              : 'bg-primary text-primary-foreground'
+                          }`}
+                        >
+                          {msg.message}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-4">
+                    This is how your AI will interact with customers
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Review & Activate */}
+            {currentStep === 'review' && selectedTemplate && (
+              <div className="space-y-6">
+                <div className="bg-muted/30 border border-border rounded-lg p-4">
+                  <h3 className="font-semibold mb-4 flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-primary" />
+                    Ready to Activate
+                  </h3>
+
+                  <div className="space-y-4">
+                    {/* Summary */}
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground uppercase">Automation</label>
+                      <p className="font-semibold">{formData.name}</p>
+                      <p className="text-sm text-muted-foreground">{formData.description}</p>
+                    </div>
+
+                    {/* Triggers enabled */}
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground uppercase">Triggers Enabled</label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {selectedTemplate.triggers.map((trigger) => (
+                          <div
+                            key={trigger}
+                            className="flex items-center gap-2 px-3 py-2 bg-primary/10 text-primary rounded-lg text-sm"
+                          >
+                            {TRIGGER_METADATA[trigger]?.icon}
+                            {TRIGGER_METADATA[trigger]?.label}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Reply behavior */}
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground uppercase">Reply Behavior</label>
+                      <p className="text-sm mt-1">
+                        {selectedTemplate.replyType === 'ai_reply' ? (
+                          <span className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-primary" />
+                            AI-powered responses with goal: {GOAL_OPTIONS.find((g) => g.value === selectedTemplate.aiGoalType)?.label}
+                          </span>
+                        ) : selectedTemplate.replyType === 'template_flow' ? (
+                          <span className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-primary" />
+                            Template flow: {selectedTemplate.name}
+                          </span>
+                        ) : (
+                          'Constant reply'
+                        )}
+                      </p>
+                    </div>
+
+                    {/* Safety toggles */}
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground uppercase mb-2 block">
+                        Safety Settings
+                      </label>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-3 text-sm">
+                          <input type="checkbox" defaultChecked className="rounded" />
+                          <span>Pause on human takeover</span>
+                        </label>
+                        <label className="flex items-center gap-3 text-sm">
+                          <input type="checkbox" defaultChecked className="rounded" />
+                          <span>Respect after-hours settings</span>
+                        </label>
+                        <label className="flex items-center gap-3 text-sm">
+                          <input type="checkbox" defaultChecked className="rounded" />
+                          <span>Rate limit (max 50 messages/hour)</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="flex justify-between items-center pt-4 border-t border-border">
+              <div>
+                {currentStep !== 'gallery' && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      if (currentStep === 'setup') {
+                        setCurrentStep('gallery');
+                        setSelectedTemplate(null);
+                      } else if (currentStep === 'review') {
+                        setCurrentStep('setup');
+                      }
+                    }}
+                    leftIcon={<ArrowLeft className="w-4 h-4" />}
+                  >
+                    Back
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>
+                  Cancel
+                </Button>
+                {currentStep === 'gallery' && creationMode === 'templates' && (
+                  <Button disabled className="opacity-50">
+                    Select a template to continue
+                  </Button>
+                )}
+                {currentStep === 'setup' && (
+                  <Button
+                    onClick={() => setCurrentStep('review')}
+                    rightIcon={<ArrowRight className="w-4 h-4" />}
+                  >
+                    Continue to Review
+                  </Button>
+                )}
+                {currentStep === 'review' && (
+                  <Button onClick={handleSubmit} isLoading={saving} leftIcon={<CheckCircle className="w-4 h-4" />}>
+                    Activate Automation
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

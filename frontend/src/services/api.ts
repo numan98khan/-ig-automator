@@ -155,7 +155,7 @@ export type TriggerType =
   | 'ref_url';          // Instagram Ref URL
 
 export interface ReplyStep {
-  type: 'constant_reply' | 'ai_reply';
+  type: 'constant_reply' | 'ai_reply' | 'template_flow';
   constantReply?: {
     message: string;
   };
@@ -164,11 +164,15 @@ export interface ReplyStep {
     goalDescription?: string;
     knowledgeItemIds: string[];
   };
+  templateFlow?: TemplateFlowConfig;
 }
 
 export interface TriggerConfig {
   keywords?: string[];
   excludeKeywords?: string[];
+  keywordMatch?: 'any' | 'all';
+  outsideBusinessHours?: boolean;
+  businessHours?: BusinessHoursConfig;
 }
 
 export interface AutomationStats {
@@ -199,6 +203,60 @@ export type GoalType =
   | 'start_order'
   | 'handle_support'
   | 'drive_to_channel';
+
+export type AutomationTemplateId =
+  | 'booking_concierge'
+  | 'after_hours_capture';
+
+export interface BusinessHoursConfig {
+  startTime: string;
+  endTime: string;
+  timezone?: string;
+  daysOfWeek?: number[];
+}
+
+export interface AutomationRateLimit {
+  maxMessages: number;
+  perMinutes: number;
+}
+
+export interface BookingConciergeConfig {
+  quickReplies: string[];
+  serviceOptions: string[];
+  priceRanges?: string;
+  locationLink?: string;
+  locationHours?: string;
+  minPhoneLength?: number;
+  maxQuestions?: number;
+  rateLimit?: AutomationRateLimit;
+  handoffTeam?: string;
+  tags?: string[];
+  outputs?: {
+    sheetRow?: string;
+    notify?: string[];
+    createContact?: boolean;
+  };
+}
+
+export interface AfterHoursCaptureConfig {
+  businessHours: BusinessHoursConfig;
+  closedMessageTemplate: string;
+  intentOptions: string[];
+  followupMessage?: string;
+  maxQuestions?: number;
+  rateLimit?: AutomationRateLimit;
+  tags?: string[];
+  outputs?: {
+    sheetRow?: string;
+    notify?: string[];
+    digestInclude?: boolean;
+  };
+}
+
+export interface TemplateFlowConfig {
+  templateId: AutomationTemplateId;
+  config: BookingConciergeConfig | AfterHoursCaptureConfig;
+}
 
 export interface TierLimits {
   aiMessages?: number;

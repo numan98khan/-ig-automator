@@ -40,7 +40,7 @@ export interface IMessage extends Document {
   aiEscalationReason?: string;           // Short reason for escalation
 
   // Automation source tracking
-  automationSource?: 'comment_dm' | 'auto_reply' | 'followup';  // Source of automated message
+  automationSource?: 'comment_dm' | 'auto_reply' | 'followup' | 'template_flow';  // Source of automated message
 
   kbItemIdsUsed?: string[];
 
@@ -140,7 +140,7 @@ const messageSchema = new Schema<IMessage>({
   // Automation source tracking
   automationSource: {
     type: String,
-    enum: ['comment_dm', 'auto_reply', 'followup'],
+    enum: ['comment_dm', 'auto_reply', 'followup', 'template_flow'],
     sparse: true,
   },
 

@@ -2,6 +2,7 @@ import express, { Response } from 'express';
 import InstagramAccount from '../models/InstagramAccount';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
+import AutomationSession from '../models/AutomationSession';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import {
   fetchConversations,
@@ -497,6 +498,11 @@ router.post('/send-message', authenticate, async (req: AuthRequest, res: Respons
 
       await trackDailyMetric(workspaceId as string, sentAt, { outboundMessages: 1, humanReplies: 1 });
 
+      await AutomationSession.updateMany(
+        { conversationId: conversation._id, status: 'active' },
+        { status: 'paused', pausedAt: sentAt, pauseReason: 'human_reply' }
+      );
+
       console.log('✅ Message saved to database');
     } catch (dbError: any) {
       // Message was sent to Instagram but failed to save to DB
@@ -614,4 +620,3 @@ router.get('/message/:messageId', authenticate, async (req: AuthRequest, res: Re
 });
 
 export default router;
-

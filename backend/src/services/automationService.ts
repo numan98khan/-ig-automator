@@ -7,10 +7,12 @@ import InstagramAccount from '../models/InstagramAccount';
 import CommentDMLog from '../models/CommentDMLog';
 import FollowupTask from '../models/FollowupTask';
 import Automation from '../models/Automation';
+import AutomationSession from '../models/AutomationSession';
 import KnowledgeItem from '../models/KnowledgeItem';
 import {
   sendMessage as sendInstagramMessage,
   sendCommentReply,
+  sendButtonMessage,
 } from '../utils/instagram-api';
 import {
   categorizeMessage,
@@ -21,7 +23,16 @@ import { generateAIReply } from './aiReplyService';
 import { getActiveTicket, createTicket, addTicketUpdate } from './escalationService';
 import { addCountIncrement, mapGoalKey, trackDailyMetric } from './reportingService';
 import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
-import { TriggerType } from '../types/automation';
+import {
+  AfterHoursCaptureConfig,
+  AutomationRateLimit,
+  AutomationTemplateId,
+  BookingConciergeConfig,
+  BusinessHoursConfig,
+  TemplateFlowConfig,
+  TriggerConfig,
+  TriggerType,
+} from '../types/automation';
 import LeadCapture from '../models/LeadCapture';
 import BookingRequest from '../models/BookingRequest';
 import OrderIntent from '../models/OrderIntent';
@@ -92,6 +103,159 @@ export function getGoalConfigs(settings: any): GoalConfigurations {
     support: { ...DEFAULT_GOAL_CONFIGS.support, ...(settings?.goalConfigs?.support || {}) },
     drive: { ...DEFAULT_GOAL_CONFIGS.drive, ...(settings?.goalConfigs?.drive || {}) },
   };
+}
+
+const DEFAULT_RATE_LIMIT: AutomationRateLimit = {
+  maxMessages: 5,
+  perMinutes: 1,
+};
+
+function normalizeText(text: string): string {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function matchesKeywords(text: string, keywords: string[] = [], match: 'any' | 'all' = 'any'): boolean {
+  if (!keywords.length) return true;
+  const normalized = normalizeText(text);
+  const checks = keywords.map(keyword => normalized.includes(normalizeText(keyword)));
+  return match === 'all' ? checks.every(Boolean) : checks.some(Boolean);
+}
+
+function parseTimeToMinutes(value: string): number | null {
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function getTimezoneParts(timezone?: string, date: Date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone || 'UTC',
+    hour12: false,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const parts = formatter.formatToParts(date);
+  const partMap: Record<string, string> = {};
+  parts.forEach(part => {
+    partMap[part.type] = part.value;
+  });
+  return {
+    weekday: partMap.weekday,
+    hour: Number(partMap.hour),
+    minute: Number(partMap.minute),
+  };
+}
+
+function getWeekdayIndex(weekday: string | undefined): number {
+  const map: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  return weekday && map[weekday] !== undefined ? map[weekday] : 0;
+}
+
+function isOutsideBusinessHours(config?: BusinessHoursConfig, referenceDate: Date = new Date()): boolean {
+  if (!config?.startTime || !config?.endTime) {
+    return false;
+  }
+  const start = parseTimeToMinutes(config.startTime);
+  const end = parseTimeToMinutes(config.endTime);
+  if (start === null || end === null) {
+    return false;
+  }
+  const parts = getTimezoneParts(config.timezone, referenceDate);
+  const weekdayIndex = getWeekdayIndex(parts.weekday);
+  const activeDays = config.daysOfWeek && config.daysOfWeek.length > 0 ? config.daysOfWeek : [0, 1, 2, 3, 4, 5, 6];
+  if (!activeDays.includes(weekdayIndex)) {
+    return true;
+  }
+  const nowMinutes = parts.hour * 60 + parts.minute;
+  if (start === end) {
+    return false;
+  }
+  if (start < end) {
+    return nowMinutes < start || nowMinutes >= end;
+  }
+  return nowMinutes >= end && nowMinutes < start;
+}
+
+function getNextOpenTime(config: BusinessHoursConfig, referenceDate: Date = new Date()): Date {
+  const startMinutes = parseTimeToMinutes(config.startTime) || 0;
+  const endMinutes = parseTimeToMinutes(config.endTime) || 0;
+  const activeDays = config.daysOfWeek && config.daysOfWeek.length > 0 ? config.daysOfWeek : [0, 1, 2, 3, 4, 5, 6];
+
+  const now = new Date(referenceDate);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  let candidate = new Date(now);
+  for (let i = 0; i < 8; i += 1) {
+    const weekdayIndex = candidate.getDay();
+    const isActiveDay = activeDays.includes(weekdayIndex);
+
+    if (isActiveDay) {
+      const withinWindow = startMinutes < endMinutes
+        ? nowMinutes >= startMinutes && nowMinutes < endMinutes
+        : nowMinutes >= startMinutes || nowMinutes < endMinutes;
+
+      if (withinWindow && i === 0) {
+        return candidate;
+      }
+
+      candidate.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
+      if (i === 0 && nowMinutes < startMinutes && startMinutes < endMinutes) {
+        return candidate;
+      }
+      if (i > 0) {
+        return candidate;
+      }
+    }
+
+    candidate = new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  return new Date(referenceDate);
+}
+
+function formatNextOpenTime(config: BusinessHoursConfig, referenceDate: Date = new Date()): string {
+  const nextOpen = getNextOpenTime(config, referenceDate);
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: config.timezone || 'UTC',
+      weekday: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(nextOpen);
+  } catch (error) {
+    return nextOpen.toLocaleString('en-US', {
+      weekday: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+}
+
+function matchesTriggerConfig(messageText: string, triggerConfig?: TriggerConfig): boolean {
+  if (!triggerConfig) return true;
+  const keywordMatch = triggerConfig.keywordMatch || 'any';
+  if (triggerConfig.keywords && !matchesKeywords(messageText, triggerConfig.keywords, keywordMatch)) {
+    return false;
+  }
+  if (triggerConfig.excludeKeywords && matchesKeywords(messageText, triggerConfig.excludeKeywords, 'any')) {
+    return false;
+  }
+  if (triggerConfig.outsideBusinessHours && !isOutsideBusinessHours(triggerConfig.businessHours)) {
+    return false;
+  }
+  return true;
 }
 
 export function detectGoalIntent(text: string): GoalType {
@@ -254,9 +418,35 @@ export async function executeAutomation(params: {
       console.log('⚠️  [AUTOMATION] No active automations found');
       return { success: false, error: 'No active automations found for this trigger' };
     }
+    const normalizedMessage = messageText || '';
+    const matchingAutomations: typeof automations = [];
+
+    for (const candidate of automations) {
+      const replyStep = candidate.replySteps[0];
+      if (replyStep?.type === 'template_flow') {
+        const activeSession = await AutomationSession.findOne({
+          automationId: candidate._id,
+          conversationId: new mongoose.Types.ObjectId(conversationId),
+          status: 'active',
+        });
+        if (activeSession) {
+          matchingAutomations.push(candidate);
+          continue;
+        }
+      }
+
+      if (matchesTriggerConfig(normalizedMessage, candidate.triggerConfig)) {
+        matchingAutomations.push(candidate);
+      }
+    }
+
+    if (matchingAutomations.length === 0) {
+      console.log('⚠️  [AUTOMATION] No automations matched trigger filters');
+      return { success: false, error: 'No automations matched trigger filters' };
+    }
 
     // Execute the first matching automation (for now)
-    const automation = automations[0];
+    const automation = matchingAutomations[0];
     console.log(`✅ [AUTOMATION] Executing automation: "${automation.name}" (ID: ${automation._id})`);
 
     const replyStep = automation.replySteps[0];
@@ -271,6 +461,23 @@ export async function executeAutomation(params: {
     let replyText = '';
 
     // Generate reply based on step type
+    if (replyStep.type === 'template_flow') {
+      const templateResult = await executeTemplateFlow({
+        automation,
+        replyStep,
+        conversationId,
+        workspaceId,
+        instagramAccountId,
+        participantInstagramId,
+        messageText: normalizedMessage,
+        platform,
+      });
+      if (templateResult.success) {
+        return { success: true, automationExecuted: automation.name };
+      }
+      return { success: false, error: templateResult.error || 'Template flow not executed' };
+    }
+
     if (replyStep.type === 'constant_reply') {
       replyText = replyStep.constantReply?.message || '';
       console.log(`💬 [AUTOMATION] Using constant reply (${replyText.length} chars)`);
@@ -437,6 +644,768 @@ export async function executeAutomation(params: {
     console.error('❌ [AUTOMATION] Error stack:', error.stack);
     return { success: false, error: `Failed to execute automation: ${error.message}` };
   }
+}
+
+async function getTemplateSession(params: {
+  automationId: mongoose.Types.ObjectId;
+  conversationId: mongoose.Types.ObjectId;
+  workspaceId: mongoose.Types.ObjectId;
+  templateId: AutomationTemplateId;
+}): Promise<any | null> {
+  const latest = await AutomationSession.findOne({
+    automationId: params.automationId,
+    conversationId: params.conversationId,
+  }).sort({ createdAt: -1 });
+
+  if (latest && latest.status === 'paused') {
+    return null;
+  }
+
+  if (latest && latest.status === 'active') {
+    return latest;
+  }
+
+  return AutomationSession.create({
+    workspaceId: params.workspaceId,
+    conversationId: params.conversationId,
+    automationId: params.automationId,
+    templateId: params.templateId,
+    status: 'active',
+    questionCount: 0,
+    collectedFields: {},
+  });
+}
+
+function updateRateLimit(session: any, rateLimit: AutomationRateLimit): boolean {
+  const now = new Date();
+  const windowMs = rateLimit.perMinutes * 60 * 1000;
+  const windowStart = session.rateLimit?.windowStart ? new Date(session.rateLimit.windowStart) : null;
+  const elapsed = windowStart ? now.getTime() - windowStart.getTime() : windowMs + 1;
+
+  if (!windowStart || elapsed > windowMs) {
+    session.rateLimit = { windowStart: now, count: 1 };
+    return true;
+  }
+
+  if (session.rateLimit.count >= rateLimit.maxMessages) {
+    return false;
+  }
+
+  session.rateLimit.count += 1;
+  return true;
+}
+
+async function sendTemplateMessage(params: {
+  conversation: any;
+  automation: any;
+  igAccount: any;
+  recipientId: string;
+  text: string;
+  buttons?: Array<{ title: string; actionType?: 'postback'; payload?: string }>;
+  platform?: string;
+  tags?: string[];
+}): Promise<void> {
+  const { conversation, automation, igAccount, recipientId, text, buttons, platform, tags } = params;
+
+  await pauseForTypingIfNeeded(platform);
+
+  let result;
+  if (buttons && buttons.length > 0 && igAccount.instagramAccountId) {
+    result = await sendButtonMessage(
+      igAccount.instagramAccountId,
+      recipientId,
+      text,
+      buttons.map((button) => ({
+        type: 'postback',
+        title: button.title,
+        payload: button.payload || `button_${button.title}`,
+      })),
+      igAccount.accessToken
+    );
+  } else {
+    result = await sendInstagramMessage(recipientId, text, igAccount.accessToken);
+  }
+
+  if (!result || (!result.message_id && !result.recipient_id)) {
+    throw new Error('Instagram API did not return a valid response.');
+  }
+
+  const sentAt = new Date();
+  await Message.create({
+    conversationId: conversation._id,
+    workspaceId: conversation.workspaceId,
+    text,
+    from: 'ai',
+    platform: platform || 'instagram',
+    instagramMessageId: result.message_id,
+    automationSource: 'template_flow',
+    aiTags: tags,
+    metadata: buttons ? { buttons } : undefined,
+    createdAt: sentAt,
+  });
+
+  conversation.lastMessage = text;
+  conversation.lastMessageAt = sentAt;
+  conversation.lastBusinessMessageAt = sentAt;
+  await conversation.save();
+
+  automation.stats.totalTriggered += 1;
+  automation.stats.totalRepliesSent += 1;
+  automation.stats.lastTriggeredAt = sentAt;
+  automation.stats.lastReplySentAt = sentAt;
+  await automation.save();
+
+  const increments: Record<string, number> = {
+    outboundMessages: 1,
+    aiReplies: 1,
+  };
+
+  if (tags && tags.length > 0) {
+    tags.forEach(tag => addCountIncrement(increments, 'tagCounts', tag));
+  }
+
+  const responseMetrics = calculateResponseTime(conversation, sentAt);
+  Object.assign(increments, responseMetrics);
+
+  await trackDailyMetric(conversation.workspaceId, sentAt, increments);
+}
+
+function detectBookingMenuChoice(text: string): 'book' | 'prices' | 'location' | 'talk' | null {
+  const normalized = normalizeText(text);
+  if (/(book|booking|appointment|slot|available|availability|حجز|موعد)/.test(normalized)) return 'book';
+  if (/(price|prices|cost|سعر)/.test(normalized)) return 'prices';
+  if (/(location|address|where|hours|map|directions)/.test(normalized)) return 'location';
+  if (/(talk|staff|human|agent|reception|team)/.test(normalized)) return 'talk';
+  return null;
+}
+
+function detectAfterHoursIntent(text: string): string {
+  const normalized = normalizeText(text);
+  if (/(book|booking|appointment|reserve)/.test(normalized)) return 'Booking';
+  if (/(price|prices|cost|سعر)/.test(normalized)) return 'Prices';
+  if (/(order|purchase|buy)/.test(normalized)) return 'Order';
+  return 'Other';
+}
+
+async function handoffToTeam(params: {
+  conversation: any;
+  reason: string;
+  customerMessage?: string;
+}): Promise<void> {
+  const { conversation, reason, customerMessage } = params;
+  const ticket = await createTicket({
+    conversationId: conversation._id,
+    topicSummary: reason.slice(0, 140),
+    reason,
+    createdBy: 'system',
+    customerMessage,
+  });
+
+  conversation.humanRequired = true;
+  conversation.humanRequiredReason = reason;
+  conversation.humanTriggeredAt = ticket.createdAt;
+  conversation.humanTriggeredByMessageId = undefined;
+  conversation.humanHoldUntil = new Date(Date.now() + 60 * 60 * 1000);
+  await conversation.save();
+}
+
+async function handleBookingConciergeFlow(params: {
+  automation: any;
+  replyStep: { templateFlow: TemplateFlowConfig };
+  session: any;
+  conversation: any;
+  igAccount: any;
+  messageText: string;
+  platform?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const { automation, replyStep, session, conversation, igAccount, messageText, platform } = params;
+  const config = replyStep.templateFlow.config as BookingConciergeConfig;
+  const quickReplies = config.quickReplies || ['Book appointment', 'Prices', 'Location', 'Talk to staff'];
+  const maxQuestions = config.maxQuestions ?? 5;
+  const minPhoneLength = config.minPhoneLength ?? 8;
+  const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
+  const tags = config.tags || ['intent_booking', 'template_booking_concierge'];
+
+  if (!updateRateLimit(session, rateLimit)) {
+    return { success: false, error: 'Rate limit exceeded' };
+  }
+  session.lastCustomerMessageAt = new Date();
+
+  if (!session.step) {
+    const greeting = `Hi! I can help with bookings. Choose an option: ${quickReplies.join(', ')}.`;
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: greeting,
+      platform,
+      tags,
+    });
+    session.step = 'menu';
+    session.questionCount += 1;
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.questionCount >= maxQuestions) {
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: "Thanks for the details. I'm handing this to our reception team to finish up.",
+      platform,
+      tags,
+    });
+    await handoffToTeam({ conversation, reason: 'Booking handoff (max questions reached)', customerMessage: messageText });
+    session.status = 'handoff';
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.step === 'menu') {
+    const choice = detectBookingMenuChoice(messageText);
+    if (choice === 'prices') {
+      const priceMessage = config.priceRanges
+        ? `Here are our price ranges:\n${config.priceRanges}\n\nReply “Book appointment” to grab a slot.`
+        : "Our pricing depends on the service. Reply with the service you're interested in and I can help you book.";
+      await sendTemplateMessage({
+        conversation,
+        automation,
+        igAccount,
+        recipientId: conversation.participantInstagramId,
+        text: priceMessage,
+        platform,
+        tags,
+      });
+      session.lastAutomationMessageAt = new Date();
+      await session.save();
+      return { success: true };
+    }
+    if (choice === 'location') {
+      const locationParts = [
+        config.locationLink ? `Map: ${config.locationLink}` : null,
+        config.locationHours ? `Hours: ${config.locationHours}` : null,
+      ].filter(Boolean);
+      const locationMessage = locationParts.length
+        ? locationParts.join('\n')
+        : "We can share location details - reply with your preferred branch and we'll send directions.";
+      await sendTemplateMessage({
+        conversation,
+        automation,
+        igAccount,
+        recipientId: conversation.participantInstagramId,
+        text: locationMessage,
+        platform,
+        tags,
+      });
+      session.lastAutomationMessageAt = new Date();
+      await session.save();
+      return { success: true };
+    }
+    if (choice === 'talk') {
+      await sendTemplateMessage({
+        conversation,
+        automation,
+        igAccount,
+        recipientId: conversation.participantInstagramId,
+        text: 'Connecting you to our reception team now.',
+        platform,
+        tags,
+      });
+      await handoffToTeam({ conversation, reason: 'Booking handoff requested', customerMessage: messageText });
+      session.status = 'handoff';
+      await session.save();
+      return { success: true };
+    }
+
+    session.step = 'collect_name';
+    session.questionCount += 1;
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: "Great! What's your name?",
+      platform,
+      tags,
+    });
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.step === 'collect_name') {
+    session.collectedFields = { ...(session.collectedFields || {}), leadName: messageText.trim() };
+    session.step = 'collect_phone';
+    session.questionCount += 1;
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: "Thanks! What's the best phone number to reach you?",
+      platform,
+      tags,
+    });
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.step === 'collect_phone') {
+    const digits = messageText.replace(/\D/g, '');
+    if (digits.length < minPhoneLength) {
+      session.questionCount += 1;
+      await sendTemplateMessage({
+        conversation,
+        automation,
+        igAccount,
+        recipientId: conversation.participantInstagramId,
+        text: `Could you share a valid phone number (at least ${minPhoneLength} digits)?`,
+        platform,
+        tags,
+      });
+      session.lastAutomationMessageAt = new Date();
+      await session.save();
+      return { success: true };
+    }
+    session.collectedFields = { ...(session.collectedFields || {}), phone: digits };
+    session.step = 'collect_service';
+    session.questionCount += 1;
+    const serviceOptions = config.serviceOptions || [];
+    const buttons = serviceOptions.slice(0, 2).map((option) => ({ title: option }));
+    buttons.push({ title: 'Other' });
+    const servicePrompt = serviceOptions.length
+      ? `Which service would you like? ${serviceOptions.join(', ')}`
+      : 'Which service would you like to book?';
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: servicePrompt,
+      buttons: buttons.length <= 3 ? buttons : undefined,
+      platform,
+      tags,
+    });
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.step === 'collect_service') {
+    const normalized = normalizeText(messageText);
+    if (normalized === 'other') {
+      if (session.questionCount + 1 > maxQuestions) {
+        await sendTemplateMessage({
+          conversation,
+          automation,
+          igAccount,
+          recipientId: conversation.participantInstagramId,
+          text: "Thanks! I'm handing this to our reception team to finish up.",
+          platform,
+          tags,
+        });
+        await handoffToTeam({ conversation, reason: 'Booking handoff (max questions reached)', customerMessage: messageText });
+        session.status = 'handoff';
+        await session.save();
+        return { success: true };
+      }
+      session.step = 'collect_service_other';
+      session.questionCount += 1;
+      await sendTemplateMessage({
+        conversation,
+        automation,
+        igAccount,
+        recipientId: conversation.participantInstagramId,
+        text: 'Sure - what service are you interested in?',
+        platform,
+        tags,
+      });
+      session.lastAutomationMessageAt = new Date();
+      await session.save();
+      return { success: true };
+    }
+
+    session.collectedFields = { ...(session.collectedFields || {}), service: messageText.trim() };
+    session.step = 'collect_preferred_time';
+    session.questionCount += 1;
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: 'Any preferred day or time? (Optional)',
+      platform,
+      tags,
+    });
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.step === 'collect_service_other') {
+    session.collectedFields = { ...(session.collectedFields || {}), service: messageText.trim() };
+    session.step = 'collect_preferred_time';
+    session.questionCount += 1;
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: 'Any preferred day or time? (Optional)',
+      platform,
+      tags,
+    });
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.step === 'collect_preferred_time') {
+    session.collectedFields = {
+      ...(session.collectedFields || {}),
+      preferredDayTime: messageText.trim(),
+      language: conversation.detectedLanguage,
+    };
+    session.step = 'confirm';
+    const fields = session.collectedFields || {};
+    const summary = [
+      `Name: ${fields.leadName || 'n/a'}`,
+      `Phone: ${fields.phone || 'n/a'}`,
+      `Service: ${fields.service || 'n/a'}`,
+      fields.preferredDayTime ? `Preferred: ${fields.preferredDayTime}` : null,
+    ].filter(Boolean).join('\n');
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: `Got it! Here's a quick summary:\n${summary}\n\nWe'll have our reception team follow up shortly.`,
+      platform,
+      tags,
+    });
+
+    const existingLead = await LeadCapture.findOne({ conversationId: conversation._id, goalType: 'capture_lead' });
+    if (!existingLead) {
+      await LeadCapture.create({
+        workspaceId: conversation.workspaceId,
+        conversationId: conversation._id,
+        goalType: 'capture_lead',
+        participantName: conversation.participantName,
+        participantHandle: conversation.participantHandle,
+        name: fields.leadName,
+        phone: fields.phone,
+        customNote: fields.service ? `Service: ${fields.service}. ${fields.preferredDayTime || ''}`.trim() : undefined,
+      });
+    }
+
+    const existingBooking = await BookingRequest.findOne({ conversationId: conversation._id });
+    if (!existingBooking) {
+      await BookingRequest.create({
+        workspaceId: conversation.workspaceId,
+        conversationId: conversation._id,
+        serviceType: fields.service,
+        summary,
+      });
+    }
+
+    await handoffToTeam({ conversation, reason: 'Booking lead handoff', customerMessage: messageText });
+    session.status = 'handoff';
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  return { success: false, error: 'Unhandled booking flow step' };
+}
+
+async function handleAfterHoursCaptureFlow(params: {
+  automation: any;
+  replyStep: { templateFlow: TemplateFlowConfig };
+  session: any;
+  conversation: any;
+  igAccount: any;
+  messageText: string;
+  platform?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const { automation, replyStep, session, conversation, igAccount, messageText, platform } = params;
+  const config = replyStep.templateFlow.config as AfterHoursCaptureConfig;
+  const maxQuestions = config.maxQuestions ?? 4;
+  const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
+  const tags = config.tags || ['after_hours_lead', 'template_after_hours_capture'];
+
+  if (!updateRateLimit(session, rateLimit)) {
+    return { success: false, error: 'Rate limit exceeded' };
+  }
+  session.lastCustomerMessageAt = new Date();
+
+  if (!session.step) {
+    const nextOpen = formatNextOpenTime(config.businessHours);
+    const closedTemplate = config.closedMessageTemplate || "We're closed - leave details, we'll contact you at {next_open_time}.";
+    const closedMessage = closedTemplate.replace('{next_open_time}', nextOpen);
+    session.collectedFields = { ...(session.collectedFields || {}), message: messageText.trim() };
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: closedMessage,
+      platform,
+      tags,
+    });
+    if (!updateRateLimit(session, rateLimit)) {
+      await session.save();
+      return { success: true };
+    }
+
+    session.step = 'collect_intent';
+    session.questionCount += 1;
+    const intentOptions = config.intentOptions && config.intentOptions.length > 0
+      ? config.intentOptions
+      : ['Booking', 'Prices', 'Order', 'Other'];
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: `What can we help with? ${intentOptions.join(', ')}.`,
+      buttons: intentOptions.map((option) => ({ title: option })).slice(0, 3),
+      platform,
+      tags,
+    });
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.questionCount >= maxQuestions) {
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: "Thanks for the details. You're in the queue and a teammate will follow up.",
+      platform,
+      tags,
+    });
+    session.status = 'completed';
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.step === 'collect_intent') {
+    session.collectedFields = { ...(session.collectedFields || {}), intent: detectAfterHoursIntent(messageText) };
+    session.step = 'collect_name';
+    session.questionCount += 1;
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: 'May I have your name? (Optional)',
+      platform,
+      tags,
+    });
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.step === 'collect_name') {
+    const trimmed = messageText.trim();
+    const leadName = /^(skip|no|n\/a|na|none)$/i.test(trimmed) ? undefined : trimmed;
+    session.collectedFields = { ...(session.collectedFields || {}), leadName };
+    session.step = 'collect_phone';
+    session.questionCount += 1;
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: "What's the best phone number to reach you?",
+      platform,
+      tags,
+    });
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.step === 'collect_phone') {
+    const digits = messageText.replace(/\D/g, '');
+    session.collectedFields = { ...(session.collectedFields || {}), phone: digits || messageText.trim() };
+    session.step = 'collect_preferred_time';
+    session.questionCount += 1;
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: 'Any preferred time for a callback? (Optional)',
+      platform,
+      tags,
+    });
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  if (session.step === 'collect_preferred_time') {
+    const trimmed = messageText.trim();
+    const preferredTime = /^(skip|no|n\/a|na|none)$/i.test(trimmed) ? undefined : trimmed;
+    session.collectedFields = { ...(session.collectedFields || {}), preferredTime };
+    session.step = 'confirm';
+    const fields = session.collectedFields || {};
+    const summary = [
+      fields.intent ? `Intent: ${fields.intent}` : null,
+      fields.leadName ? `Name: ${fields.leadName}` : null,
+      fields.phone ? `Phone: ${fields.phone}` : null,
+      fields.preferredTime ? `Preferred time: ${fields.preferredTime}` : null,
+    ].filter(Boolean).join('\n');
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: `You're in the queue. Here's what I captured:\n${summary}`,
+      platform,
+      tags,
+    });
+
+    const existingLead = await LeadCapture.findOne({ conversationId: conversation._id, goalType: 'capture_lead' });
+    if (!existingLead) {
+      const noteParts = [
+        fields.intent ? `Intent: ${fields.intent}` : null,
+        fields.preferredTime ? `Preferred time: ${fields.preferredTime}` : null,
+        fields.message ? `Message: ${fields.message}` : null,
+      ].filter(Boolean);
+      await LeadCapture.create({
+        workspaceId: conversation.workspaceId,
+        conversationId: conversation._id,
+        goalType: 'capture_lead',
+        participantName: conversation.participantName,
+        participantHandle: conversation.participantHandle,
+        name: fields.leadName,
+        phone: fields.phone,
+        customNote: noteParts.length ? noteParts.join(' | ') : undefined,
+      });
+    }
+
+    await handoffToTeam({ conversation, reason: 'After-hours lead capture', customerMessage: messageText });
+
+    const nextOpen = getNextOpenTime(config.businessHours);
+    const lastCustomerMessageAt = conversation.lastCustomerMessageAt || new Date();
+    const windowExpiresAt = new Date(lastCustomerMessageAt.getTime() + 24 * 60 * 60 * 1000);
+    if (nextOpen > new Date() && nextOpen <= windowExpiresAt) {
+      const task = await FollowupTask.create({
+        workspaceId: conversation.workspaceId,
+        conversationId: conversation._id,
+        instagramAccountId: conversation.instagramAccountId,
+        participantInstagramId: conversation.participantInstagramId,
+        lastCustomerMessageAt,
+        lastBusinessMessageAt: conversation.lastBusinessMessageAt,
+        windowExpiresAt,
+        scheduledFollowupAt: nextOpen,
+        status: 'scheduled',
+        followupType: 'after_hours',
+        customMessage: config.followupMessage || "We're open now if you'd like to continue. Reply anytime.",
+      });
+      session.followupTaskId = task._id;
+    }
+
+    session.status = 'completed';
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  return { success: false, error: 'Unhandled after-hours flow step' };
+}
+
+async function executeTemplateFlow(params: {
+  automation: any;
+  replyStep: any;
+  conversationId: string;
+  workspaceId: string;
+  instagramAccountId: string;
+  participantInstagramId: string;
+  messageText: string;
+  platform?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const {
+    automation,
+    replyStep,
+    conversationId,
+    workspaceId,
+    instagramAccountId,
+    participantInstagramId,
+    messageText,
+    platform,
+  } = params;
+
+  const templateFlow = replyStep.templateFlow as TemplateFlowConfig | undefined;
+  if (!templateFlow) {
+    return { success: false, error: 'Template flow configuration missing' };
+  }
+
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) {
+    return { success: false, error: 'Conversation not found' };
+  }
+
+  if (conversation.humanHoldUntil && new Date(conversation.humanHoldUntil) > new Date()) {
+    return { success: false, error: 'Conversation is on human hold' };
+  }
+
+  const session = await getTemplateSession({
+    automationId: automation._id,
+    conversationId: conversation._id,
+    workspaceId: new mongoose.Types.ObjectId(workspaceId),
+    templateId: templateFlow.templateId,
+  });
+
+  if (!session) {
+    return { success: false, error: 'Automation paused for human response' };
+  }
+
+  const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
+  if (!igAccount || !igAccount.accessToken) {
+    return { success: false, error: 'Instagram account not found or not connected' };
+  }
+
+  if (!participantInstagramId) {
+    return { success: false, error: 'Missing participant Instagram ID' };
+  }
+
+  if (templateFlow.templateId === 'booking_concierge') {
+    return handleBookingConciergeFlow({
+      automation,
+      replyStep,
+      session,
+      conversation,
+      igAccount,
+      messageText,
+      platform,
+    });
+  }
+
+  if (templateFlow.templateId === 'after_hours_capture') {
+    return handleAfterHoursCaptureFlow({
+      automation,
+      replyStep,
+      session,
+      conversation,
+      igAccount,
+      messageText,
+      platform,
+    });
+  }
+
+  return { success: false, error: 'Unknown template flow' };
 }
 
 /**
@@ -1037,6 +2006,22 @@ export async function processDueFollowups(): Promise<{
           continue;
         }
 
+        if (task.followupType === 'after_hours') {
+          const businessMessageSince = await Message.findOne({
+            conversationId: task.conversationId,
+            from: 'user',
+            createdAt: { $gt: task.lastBusinessMessageAt || task.createdAt },
+          });
+
+          if (businessMessageSince) {
+            task.status = 'cancelled';
+            task.errorMessage = 'Staff replied';
+            await task.save();
+            stats.cancelled++;
+            continue;
+          }
+        }
+
         // Check if window expired
         if (new Date() > task.windowExpiresAt) {
           task.status = 'expired';
@@ -1058,10 +2043,12 @@ export async function processDueFollowups(): Promise<{
           continue;
         }
 
+        const followupText = task.customMessage || settings.followupTemplate;
+
         // Send follow-up message
         const result = await sendInstagramMessage(
           task.participantInstagramId,
-          settings.followupTemplate,
+          followupText,
           igAccount.accessToken
         );
 
@@ -1078,7 +2065,7 @@ export async function processDueFollowups(): Promise<{
         await Message.create({
           conversationId: conversation._id,
           workspaceId: conversation.workspaceId,
-          text: settings.followupTemplate,
+          text: followupText,
           from: 'ai',
           platform: 'instagram',
           instagramMessageId: result.message_id,
@@ -1088,14 +2075,14 @@ export async function processDueFollowups(): Promise<{
 
         // Update conversation
         conversation.lastMessageAt = new Date();
-        conversation.lastMessage = settings.followupTemplate;
+        conversation.lastMessage = followupText;
         conversation.lastBusinessMessageAt = new Date();
         await conversation.save();
 
         // Update task
         task.status = 'sent';
         task.followupMessageId = result.message_id;
-        task.followupText = settings.followupTemplate;
+        task.followupText = followupText;
         task.sentAt = new Date();
         await task.save();
 
