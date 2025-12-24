@@ -189,8 +189,8 @@ export default function Settings() {
   const aiUsage = tierSummary?.usage?.aiMessages;
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="h-full flex flex-col">
+      <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Settings</h1>
           <p className="text-muted-foreground">Manage your workspace security, plan, and team access.</p>
@@ -423,7 +423,7 @@ export default function Settings() {
                             <Button
                               onClick={handleReconnectInstagram}
                               isLoading={reconnecting}
-                              variant={isExpired ? 'default' : 'secondary'}
+                              variant={isExpired ? 'primary' : 'secondary'}
                               size="sm"
                             >
                               {isExpired ? 'Reconnect' : 'Refresh Token'}

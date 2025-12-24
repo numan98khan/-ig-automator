@@ -508,7 +508,7 @@ const Layout: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto min-h-0 relative z-0 p-4 md:p-6" style={{ background: 'transparent' }}>
-        <div className="max-w-7xl mx-auto h-full">
+        <div className="max-w-[1400px] mx-auto h-full">
           <Outlet />
         </div>
       </main>

@@ -2,13 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { automationAPI, knowledgeAPI, Automation, KnowledgeItem, TriggerType, GoalType } from '../services/api';
 import {
-  Zap,
   Plus,
   MessageSquare,
-  Calendar,
-  Package,
   AlertTriangle,
-  Moon,
   Link as LinkIcon,
   PlayCircle,
   Clock,
@@ -23,10 +19,7 @@ import {
   Trash2,
   Power,
   PowerOff,
-  TrendingUp,
   Send,
-  CheckCircle,
-  Info,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -244,9 +237,9 @@ const Automations: React.FC = () => {
   if (!currentWorkspace) return null;
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Automation Control Center</h1>
           <p className="text-muted-foreground">
@@ -409,7 +402,7 @@ const Automations: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <Button
                             onClick={() => handleToggle(automation)}
-                            variant={automation.isActive ? 'default' : 'outline'}
+                            variant={automation.isActive ? 'primary' : 'outline'}
                             className="flex-1"
                             size="sm"
                             leftIcon={automation.isActive ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}

@@ -66,7 +66,7 @@ export default function Escalations() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
+    <div className="h-full flex flex-col space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground flex items-center gap-2 mb-2">
           <AlertTriangle className="w-6 h-6 text-amber-500" />

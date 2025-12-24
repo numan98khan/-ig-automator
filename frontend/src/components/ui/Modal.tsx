@@ -56,10 +56,10 @@ export const Modal: React.FC<ModalProps> = ({
       />
 
       {/* Modal Container with proper centering */}
-      <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+      <div className="flex min-h-screen items-center justify-center px-4 sm:px-6 pt-12 sm:pt-16 pb-8 sm:pb-12">
         {/* Content */}
         <div
-          className={`relative w-full ${sizes[size]} bg-background border border-border rounded-xl shadow-2xl flex flex-col max-h-[calc(100vh-3rem)] my-8 duration-300 animate-in zoom-in-95 slide-in-from-bottom-2 ${className}`}
+          className={`relative w-full ${sizes[size]} bg-background border border-border rounded-xl shadow-2xl flex flex-col max-h-[calc(100vh-6rem)] sm:max-h-[calc(100vh-8rem)] duration-300 animate-in zoom-in-95 slide-in-from-bottom-2 ${className}`}
           role="dialog"
           aria-modal="true"
         >
