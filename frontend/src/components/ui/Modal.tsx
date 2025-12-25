@@ -56,37 +56,37 @@ export const Modal: React.FC<ModalProps> = ({
       />
 
       {/* Modal Container with proper centering */}
-      <div className="flex min-h-screen items-center justify-center px-4 sm:px-6 pt-12 sm:pt-16 pb-8 sm:pb-12">
+      <div className="flex min-h-screen items-center justify-center px-4 sm:px-6 pt-8 sm:pt-10 pb-4 sm:pb-6">
         {/* Content */}
         <div
-          className={`relative w-full ${sizes[size]} bg-background border border-border rounded-xl shadow-2xl flex flex-col max-h-[calc(100vh-6rem)] sm:max-h-[calc(100vh-8rem)] duration-300 animate-in zoom-in-95 slide-in-from-bottom-2 ${className}`}
+          className={`relative w-full ${sizes[size]} bg-background border border-border rounded-xl shadow-2xl flex flex-col max-h-[calc(100vh-6rem)] sm:max-h-[calc(100vh-7rem)] duration-300 animate-in zoom-in-95 slide-in-from-bottom-2 ${className}`}
           role="dialog"
           aria-modal="true"
         >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:px-6 border-b border-border/50">
-          <div className="text-lg font-semibold tracking-tight text-foreground">
-            {title}
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 sm:px-6 border-b border-border/50">
+            <div className="text-lg font-semibold tracking-tight text-foreground">
+              {title}
+            </div>
+            <button
+              onClick={onClose}
+              className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
 
-        {/* Body */}
-        <div className="p-4 sm:px-6 overflow-y-auto flex-1 custom-scrollbar">
-          {children}
-        </div>
-
-        {/* Footer */}
-        {footer && (
-          <div className="p-4 sm:px-6 border-t border-border/50 bg-muted/20 rounded-b-xl flex items-center justify-end gap-3">
-            {footer}
+          {/* Body */}
+          <div className="p-4 sm:px-6 overflow-y-auto flex-1 custom-scrollbar">
+            {children}
           </div>
-        )}
+
+          {/* Footer */}
+          {footer && (
+            <div className="p-4 sm:px-6 border-t border-border/50 bg-muted/20 rounded-b-xl flex items-center justify-end gap-3">
+              {footer}
+            </div>
+          )}
         </div>
       </div>
     </div>

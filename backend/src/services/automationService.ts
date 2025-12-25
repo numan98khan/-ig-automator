@@ -243,7 +243,15 @@ function formatNextOpenTime(config: BusinessHoursConfig, referenceDate: Date = n
   }
 }
 
-function matchesTriggerConfig(messageText: string, triggerConfig?: TriggerConfig): boolean {
+type AutomationTestContext = {
+  forceOutsideBusinessHours?: boolean;
+};
+
+function matchesTriggerConfig(
+  messageText: string,
+  triggerConfig?: TriggerConfig,
+  context?: AutomationTestContext,
+): boolean {
   if (!triggerConfig) return true;
   const keywordMatch = triggerConfig.keywordMatch || 'any';
   if (triggerConfig.keywords && !matchesKeywords(messageText, triggerConfig.keywords, keywordMatch)) {
@@ -252,7 +260,11 @@ function matchesTriggerConfig(messageText: string, triggerConfig?: TriggerConfig
   if (triggerConfig.excludeKeywords && matchesKeywords(messageText, triggerConfig.excludeKeywords, 'any')) {
     return false;
   }
-  if (triggerConfig.outsideBusinessHours && !isOutsideBusinessHours(triggerConfig.businessHours)) {
+  if (
+    triggerConfig.outsideBusinessHours &&
+    !context?.forceOutsideBusinessHours &&
+    !isOutsideBusinessHours(triggerConfig.businessHours)
+  ) {
     return false;
   }
   return true;
@@ -1406,6 +1418,557 @@ async function executeTemplateFlow(params: {
   }
 
   return { success: false, error: 'Unknown template flow' };
+}
+
+type AutomationTestHistoryItem = {
+  from: 'customer' | 'ai';
+  text: string;
+  createdAt?: string;
+};
+
+type AutomationTestState = {
+  history?: AutomationTestHistoryItem[];
+  template?: {
+    templateId: AutomationTemplateId;
+    step?: string;
+    status?: 'active' | 'completed' | 'handoff';
+    questionCount: number;
+    collectedFields?: Record<string, any>;
+    followup?: {
+      status: 'scheduled' | 'sent' | 'cancelled';
+      scheduledAt?: string;
+      message?: string;
+    };
+    lastCustomerMessageAt?: string;
+    lastBusinessMessageAt?: string;
+  };
+  ai?: {
+    activeGoalType?: GoalType;
+    goalState?: 'idle' | 'collecting' | 'completed';
+    collectedFields?: Record<string, any>;
+  };
+};
+
+function appendTestHistory(history: AutomationTestHistoryItem[], from: 'customer' | 'ai', text: string) {
+  history.push({
+    from,
+    text,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+function buildTestConversation(workspaceId: string) {
+  return {
+    _id: new mongoose.Types.ObjectId(),
+    workspaceId: new mongoose.Types.ObjectId(workspaceId),
+    participantName: 'Test User',
+    participantHandle: 'test_user',
+    instagramAccountId: new mongoose.Types.ObjectId(),
+    lastMessageAt: new Date(),
+    platform: 'mock',
+    goalState: 'idle',
+  } as any;
+}
+
+function createTemplateState(templateId: AutomationTemplateId): NonNullable<AutomationTestState['template']> {
+  return {
+    templateId,
+    step: undefined,
+    questionCount: 0,
+    collectedFields: {},
+    status: 'active',
+    followup: undefined,
+    lastCustomerMessageAt: undefined,
+    lastBusinessMessageAt: undefined,
+  };
+}
+
+function ensureTemplateState(templateId: AutomationTemplateId, state?: AutomationTestState): AutomationTestState['template'] {
+  if (state?.template && state.template.templateId === templateId) {
+    const status = state.template.status || 'active';
+    if (status === 'active') {
+      return {
+        ...state.template,
+        questionCount: state.template.questionCount ?? 0,
+        collectedFields: state.template.collectedFields || {},
+        status,
+        followup: state.template.followup,
+        lastCustomerMessageAt: state.template.lastCustomerMessageAt,
+        lastBusinessMessageAt: state.template.lastBusinessMessageAt,
+      };
+    }
+  }
+  return createTemplateState(templateId);
+}
+
+function scheduleAfterHoursFollowup(
+  templateState: NonNullable<AutomationTestState['template']>,
+  config: AfterHoursCaptureConfig,
+  now: Date
+) {
+  const lastCustomerMessageAt = templateState.lastCustomerMessageAt
+    ? new Date(templateState.lastCustomerMessageAt)
+    : now;
+  const windowExpiresAt = new Date(lastCustomerMessageAt.getTime() + 24 * 60 * 60 * 1000);
+  const nextOpen = getNextOpenTime(config.businessHours, now);
+  if (nextOpen > now && nextOpen <= windowExpiresAt) {
+    templateState.followup = {
+      status: 'scheduled',
+      scheduledAt: nextOpen.toISOString(),
+      message: config.followupMessage || "We're open now if you'd like to continue. Reply anytime.",
+    };
+  }
+}
+
+function simulateBookingConciergeTest(
+  messageText: string,
+  templateState: NonNullable<AutomationTestState['template']>,
+  config: BookingConciergeConfig
+): { replies: string[]; templateState: NonNullable<AutomationTestState['template']> } {
+  const quickReplies = config.quickReplies || ['Book appointment', 'Prices', 'Location', 'Talk to staff'];
+  const maxQuestions = config.maxQuestions ?? 5;
+  const minPhoneLength = config.minPhoneLength ?? 8;
+  const replies: string[] = [];
+
+  if (templateState.status && templateState.status !== 'active') {
+    replies.push('This flow is complete. Reset to start again.');
+    return { replies, templateState };
+  }
+
+  if (!templateState.step) {
+    replies.push(`Hi! I can help with bookings. Choose an option: ${quickReplies.join(', ')}.`);
+    templateState.step = 'menu';
+    templateState.questionCount += 1;
+    return { replies, templateState };
+  }
+
+  if (templateState.questionCount >= maxQuestions) {
+    replies.push("Thanks for the details. I'm handing this to our reception team to finish up.");
+    templateState.status = 'handoff';
+    return { replies, templateState };
+  }
+
+  if (templateState.step === 'menu') {
+    const choice = detectBookingMenuChoice(messageText);
+    if (choice === 'prices') {
+      const priceMessage = config.priceRanges
+        ? `Here are our price ranges:\n${config.priceRanges}\n\nReply \"Book appointment\" to grab a slot.`
+        : "Our pricing depends on the service. Reply with the service you're interested in and I can help you book.";
+      replies.push(priceMessage);
+      return { replies, templateState };
+    }
+    if (choice === 'location') {
+      const locationParts = [
+        config.locationLink ? `Map: ${config.locationLink}` : null,
+        config.locationHours ? `Hours: ${config.locationHours}` : null,
+      ].filter(Boolean);
+      replies.push(locationParts.length ? locationParts.join('\n') : "We can share location details - reply with your preferred branch and we'll send directions.");
+      return { replies, templateState };
+    }
+    if (choice === 'talk') {
+      replies.push('Connecting you to our reception team now.');
+      templateState.status = 'handoff';
+      return { replies, templateState };
+    }
+
+    templateState.step = 'collect_name';
+    templateState.questionCount += 1;
+    replies.push("Great! What's your name?");
+    return { replies, templateState };
+  }
+
+  if (templateState.step === 'collect_name') {
+    templateState.collectedFields = { ...(templateState.collectedFields || {}), leadName: messageText.trim() };
+    templateState.step = 'collect_phone';
+    templateState.questionCount += 1;
+    replies.push("Thanks! What's the best phone number to reach you?");
+    return { replies, templateState };
+  }
+
+  if (templateState.step === 'collect_phone') {
+    const digits = messageText.replace(/\D/g, '');
+    if (digits.length < minPhoneLength) {
+      templateState.questionCount += 1;
+      replies.push(`Could you share a valid phone number (at least ${minPhoneLength} digits)?`);
+      return { replies, templateState };
+    }
+    templateState.collectedFields = { ...(templateState.collectedFields || {}), phone: digits };
+    templateState.step = 'collect_service';
+    templateState.questionCount += 1;
+    const serviceOptions = config.serviceOptions || [];
+    const servicePrompt = serviceOptions.length
+      ? `Which service would you like? ${serviceOptions.join(', ')}`
+      : 'Which service would you like to book?';
+    replies.push(servicePrompt);
+    return { replies, templateState };
+  }
+
+  if (templateState.step === 'collect_service') {
+    const normalized = normalizeText(messageText);
+    if (normalized === 'other') {
+      if (templateState.questionCount + 1 > maxQuestions) {
+        replies.push("Thanks! I'm handing this to our reception team to finish up.");
+        templateState.status = 'handoff';
+        return { replies, templateState };
+      }
+      templateState.step = 'collect_service_other';
+      templateState.questionCount += 1;
+      replies.push('Sure - what service are you interested in?');
+      return { replies, templateState };
+    }
+
+    templateState.collectedFields = { ...(templateState.collectedFields || {}), service: messageText.trim() };
+    templateState.step = 'collect_preferred_time';
+    templateState.questionCount += 1;
+    replies.push('Any preferred day or time? (Optional)');
+    return { replies, templateState };
+  }
+
+  if (templateState.step === 'collect_service_other') {
+    templateState.collectedFields = { ...(templateState.collectedFields || {}), service: messageText.trim() };
+    templateState.step = 'collect_preferred_time';
+    templateState.questionCount += 1;
+    replies.push('Any preferred day or time? (Optional)');
+    return { replies, templateState };
+  }
+
+  if (templateState.step === 'collect_preferred_time') {
+    templateState.collectedFields = {
+      ...(templateState.collectedFields || {}),
+      preferredDayTime: messageText.trim(),
+    };
+    templateState.step = 'confirm';
+    const fields = templateState.collectedFields || {};
+    const summary = [
+      `Name: ${fields.leadName || 'n/a'}`,
+      `Phone: ${fields.phone || 'n/a'}`,
+      `Service: ${fields.service || 'n/a'}`,
+      fields.preferredDayTime ? `Preferred: ${fields.preferredDayTime}` : null,
+    ].filter(Boolean).join('\n');
+    replies.push(`Got it! Here's a quick summary:\n${summary}\n\nWe'll have our reception team follow up shortly.`);
+    templateState.status = 'handoff';
+    return { replies, templateState };
+  }
+
+  replies.push("I'm not sure how to continue this flow. Reset to try again.");
+  return { replies, templateState };
+}
+
+function simulateAfterHoursCaptureTest(
+  messageText: string,
+  templateState: NonNullable<AutomationTestState['template']>,
+  config: AfterHoursCaptureConfig
+): { replies: string[]; templateState: NonNullable<AutomationTestState['template']> } {
+  const maxQuestions = config.maxQuestions ?? 4;
+  const replies: string[] = [];
+
+  if (templateState.status && templateState.status !== 'active') {
+    replies.push('This flow is complete. Reset to start again.');
+    return { replies, templateState };
+  }
+
+  if (!templateState.step) {
+    const closedTemplate = config.closedMessageTemplate || "We're closed - leave details, we'll contact you at {next_open_time}.";
+    const nextOpen = formatNextOpenTime(config.businessHours);
+    replies.push(closedTemplate.replace('{next_open_time}', nextOpen));
+    const intentOptions = config.intentOptions && config.intentOptions.length > 0
+      ? config.intentOptions
+      : ['Booking', 'Prices', 'Order', 'Other'];
+    replies.push(`What can we help with? ${intentOptions.join(', ')}.`);
+    templateState.step = 'collect_intent';
+    templateState.questionCount += 1;
+    templateState.collectedFields = { ...(templateState.collectedFields || {}), message: messageText.trim() };
+    return { replies, templateState };
+  }
+
+  if (templateState.questionCount >= maxQuestions) {
+    replies.push("Thanks for the details. You're in the queue and a teammate will follow up.");
+    templateState.status = 'completed';
+    return { replies, templateState };
+  }
+
+  if (templateState.step === 'collect_intent') {
+    templateState.collectedFields = { ...(templateState.collectedFields || {}), intent: detectAfterHoursIntent(messageText) };
+    templateState.step = 'collect_name';
+    templateState.questionCount += 1;
+    replies.push('May I have your name? (Optional)');
+    return { replies, templateState };
+  }
+
+  if (templateState.step === 'collect_name') {
+    const trimmed = messageText.trim();
+    const leadName = /^(skip|no|n\/a|na|none)$/i.test(trimmed) ? undefined : trimmed;
+    templateState.collectedFields = { ...(templateState.collectedFields || {}), leadName };
+    templateState.step = 'collect_phone';
+    templateState.questionCount += 1;
+    replies.push("What's the best phone number to reach you?");
+    return { replies, templateState };
+  }
+
+  if (templateState.step === 'collect_phone') {
+    const digits = messageText.replace(/\D/g, '');
+    templateState.collectedFields = { ...(templateState.collectedFields || {}), phone: digits || messageText.trim() };
+    templateState.step = 'collect_preferred_time';
+    templateState.questionCount += 1;
+    replies.push('Any preferred time for a callback? (Optional)');
+    return { replies, templateState };
+  }
+
+  if (templateState.step === 'collect_preferred_time') {
+    const trimmed = messageText.trim();
+    const preferredTime = /^(skip|no|n\/a|na|none)$/i.test(trimmed) ? undefined : trimmed;
+    templateState.collectedFields = { ...(templateState.collectedFields || {}), preferredTime };
+    templateState.step = 'confirm';
+    const fields = templateState.collectedFields || {};
+    const summary = [
+      fields.intent ? `Intent: ${fields.intent}` : null,
+      fields.leadName ? `Name: ${fields.leadName}` : null,
+      fields.phone ? `Phone: ${fields.phone}` : null,
+      fields.preferredTime ? `Preferred time: ${fields.preferredTime}` : null,
+    ].filter(Boolean).join('\n');
+    replies.push(`You're in the queue. Here's what I captured:\n${summary}`);
+    templateState.status = 'completed';
+    return { replies, templateState };
+  }
+
+  replies.push("I'm not sure how to continue this flow. Reset to try again.");
+  return { replies, templateState };
+}
+
+export async function runAutomationTest(params: {
+  automationId: string;
+  workspaceId: string;
+  messageText?: string;
+  state?: AutomationTestState;
+  action?: 'simulate_followup';
+  context?: AutomationTestContext;
+}): Promise<{
+  replies: string[];
+  state: AutomationTestState;
+  meta?: Record<string, any>;
+}> {
+  const { automationId, workspaceId, messageText, action, context } = params;
+  const automation = await Automation.findById(automationId);
+  if (!automation) {
+    throw new Error('Automation not found');
+  }
+
+  const replyStep = automation.replySteps[0];
+  if (!replyStep) {
+    throw new Error('No reply step configured');
+  }
+
+  console.log('🧪 [AUTOMATION TEST] Run', {
+    automationId,
+    workspaceId,
+    action,
+    messageTextPreview: messageText?.slice(0, 160),
+    replyType: replyStep.type,
+    templateId: replyStep.templateFlow?.templateId,
+    triggerConfig: automation.triggerConfig,
+    context,
+  });
+
+  const nextState: AutomationTestState = params.state ? { ...params.state } : {};
+  const history = nextState.history ? [...nextState.history] : [];
+  if (action === 'simulate_followup') {
+    if (!nextState.template?.followup || nextState.template.followup.status !== 'scheduled') {
+      return {
+        replies: [],
+        state: {
+          ...nextState,
+          history,
+        },
+        meta: { error: 'No follow-up scheduled' },
+      };
+    }
+
+    const followupMessage = nextState.template.followup.message || "We're open now if you'd like to continue. Reply anytime.";
+    appendTestHistory(history, 'ai', followupMessage);
+    return {
+      replies: [followupMessage],
+      state: {
+        ...nextState,
+        history,
+        template: {
+          ...nextState.template,
+          followup: {
+            ...nextState.template.followup,
+            status: 'sent',
+          },
+          lastBusinessMessageAt: new Date().toISOString(),
+        },
+      },
+      meta: { action: 'simulate_followup' },
+    };
+  }
+
+  if (!messageText) {
+    throw new Error('messageText is required');
+  }
+
+  const triggerMatched = matchesTriggerConfig(messageText, automation.triggerConfig, context);
+  console.log('🧪 [AUTOMATION TEST] Trigger match', {
+    automationId,
+    triggerMatched,
+    context,
+  });
+  appendTestHistory(history, 'customer', messageText);
+
+  if (replyStep.type === 'template_flow' && replyStep.templateFlow) {
+    const templateId = replyStep.templateFlow.templateId;
+    const existingTemplateState = nextState.template?.templateId === templateId
+      ? { ...nextState.template }
+      : undefined;
+    if (existingTemplateState?.followup?.status === 'scheduled') {
+      existingTemplateState.followup = {
+        ...existingTemplateState.followup,
+        status: 'cancelled',
+      };
+    }
+
+    const hasActiveSession = existingTemplateState
+      ? (existingTemplateState.status || 'active') === 'active'
+      : false;
+    const shouldProcess = hasActiveSession || triggerMatched;
+    console.log('🧪 [AUTOMATION TEST] Template routing', {
+      automationId,
+      templateId,
+      hasActiveSession,
+      shouldProcess,
+    });
+
+    if (!shouldProcess) {
+      return {
+        replies: [],
+        state: {
+          ...nextState,
+          history,
+          template: existingTemplateState,
+        },
+        meta: {
+          triggerMatched: false,
+        },
+      };
+    }
+
+    const templateState = ensureTemplateState(templateId, { ...nextState, template: existingTemplateState });
+    if (templateState.followup?.status === 'scheduled') {
+      templateState.followup.status = 'cancelled';
+    }
+    templateState.lastCustomerMessageAt = new Date().toISOString();
+    let result: { replies: string[]; templateState: NonNullable<AutomationTestState['template']> };
+
+    if (templateId === 'booking_concierge') {
+      result = simulateBookingConciergeTest(messageText, templateState, replyStep.templateFlow.config as BookingConciergeConfig);
+    } else {
+      result = simulateAfterHoursCaptureTest(messageText, templateState, replyStep.templateFlow.config as AfterHoursCaptureConfig);
+      if (result.templateState.status === 'completed' && !result.templateState.followup) {
+        scheduleAfterHoursFollowup(result.templateState, replyStep.templateFlow.config as AfterHoursCaptureConfig, new Date());
+      }
+    }
+
+    result.replies.forEach((reply) => appendTestHistory(history, 'ai', reply));
+
+    return {
+      replies: result.replies,
+      state: {
+        ...nextState,
+        history,
+        template: result.templateState,
+      },
+      meta: {
+        triggerMatched: shouldProcess,
+      },
+    };
+  }
+
+  if (!triggerMatched) {
+    return {
+      replies: [],
+      state: {
+        ...nextState,
+        history,
+      },
+      meta: {
+        triggerMatched: false,
+      },
+    };
+  }
+
+  if (replyStep.type === 'constant_reply') {
+    const reply = replyStep.constantReply?.message || '';
+    if (reply) {
+      appendTestHistory(history, 'ai', reply);
+    }
+    return {
+      replies: reply ? [reply] : [],
+      state: {
+        ...nextState,
+        history,
+      },
+      meta: {
+        triggerMatched,
+      },
+    };
+  }
+
+  const settings = await getWorkspaceSettings(workspaceId);
+  const goalConfigs = getGoalConfigs(settings);
+  const conversation = buildTestConversation(workspaceId);
+  const categorization = await categorizeMessage(messageText, workspaceId);
+  const category = await MessageCategory.findOne({ workspaceId, nameEn: categorization.categoryName });
+  const aiState = nextState.ai || {};
+  const goalType = replyStep.aiReply?.goalType || 'none';
+  const aiReply = await generateAIReply({
+    conversation,
+    workspaceId: conversation.workspaceId,
+    latestCustomerMessage: messageText,
+    categoryId: category?._id,
+    categorization,
+    historyLimit: 20,
+    messageHistory: history,
+    goalContext: {
+      workspaceGoals: {
+        primaryGoal: goalType,
+        secondaryGoal: 'none',
+        configs: goalConfigs,
+      },
+      detectedGoal: goalType,
+      activeGoalType: aiState.activeGoalType || goalType,
+      goalState: aiState.goalState || 'collecting',
+      collectedFields: aiState.collectedFields || {},
+    },
+    mode: 'sandbox',
+    workspaceSettingsOverride: settings,
+  });
+
+  appendTestHistory(history, 'ai', aiReply.replyText);
+
+  const mergedFields = aiReply.goalProgress?.collectedFields
+    ? { ...(aiState.collectedFields || {}), ...aiReply.goalProgress.collectedFields }
+    : aiState.collectedFields;
+
+  return {
+    replies: [aiReply.replyText],
+    state: {
+      ...nextState,
+      history,
+      ai: {
+        activeGoalType: aiReply.goalProgress?.goalType || aiState.activeGoalType || goalType,
+        goalState: aiReply.goalProgress?.status || aiState.goalState,
+        collectedFields: mergedFields,
+      },
+    },
+    meta: {
+      triggerMatched,
+      detectedLanguage: categorization.detectedLanguage,
+      categoryName: categorization.categoryName,
+      shouldEscalate: aiReply.shouldEscalate,
+      escalationReason: aiReply.escalationReason,
+      tags: aiReply.tags,
+    },
+  };
 }
 
 /**

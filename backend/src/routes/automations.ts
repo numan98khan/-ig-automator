@@ -2,6 +2,7 @@ import express, { Response } from 'express';
 import Automation from '../models/Automation';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
+import { runAutomationTest } from '../services/automationService';
 
 const router = express.Router();
 
@@ -250,6 +251,50 @@ router.patch('/:id/stats', authenticate, async (req: AuthRequest, res: Response)
     res.json(automation);
   } catch (error) {
     console.error('Update automation stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Test an automation without sending messages
+router.post('/:id/test', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { messageText, state, action, context } = req.body;
+    const isAction = action === 'simulate_followup';
+
+    if (!isAction && (!messageText || typeof messageText !== 'string')) {
+      return res.status(400).json({ error: 'messageText is required' });
+    }
+
+    const automation = await Automation.findById(id);
+    if (!automation) {
+      return res.status(404).json({ error: 'Automation not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(automation.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    console.log('🧪 [AUTOMATION TEST] Request', {
+      automationId: id,
+      action,
+      messageTextPreview: typeof messageText === 'string' ? messageText.slice(0, 160) : undefined,
+      context,
+    });
+
+    const result = await runAutomationTest({
+      automationId: automation._id.toString(),
+      workspaceId: automation.workspaceId.toString(),
+      messageText,
+      state,
+      action,
+      context,
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Test automation error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -71,6 +71,7 @@ export interface InstagramAccount {
   username: string;
   workspaceId: string;
   status: 'connected' | 'mock';
+  name?: string;
   profilePictureUrl?: string;
   tokenExpiresAt?: string;
   lastSyncedAt?: string;
@@ -256,6 +257,52 @@ export interface AfterHoursCaptureConfig {
 export interface TemplateFlowConfig {
   templateId: AutomationTemplateId;
   config: BookingConciergeConfig | AfterHoursCaptureConfig;
+}
+
+export interface AutomationTestHistoryItem {
+  from: 'customer' | 'ai';
+  text: string;
+  createdAt?: string;
+}
+
+export interface AutomationTestContext {
+  forceOutsideBusinessHours?: boolean;
+}
+
+export interface AutomationTestState {
+  history?: AutomationTestHistoryItem[];
+  template?: {
+    templateId: AutomationTemplateId;
+    step?: string;
+    status?: 'active' | 'completed' | 'handoff';
+    questionCount: number;
+    collectedFields?: Record<string, any>;
+    followup?: {
+      status: 'scheduled' | 'sent' | 'cancelled';
+      scheduledAt?: string;
+      message?: string;
+    };
+    lastCustomerMessageAt?: string;
+    lastBusinessMessageAt?: string;
+  };
+  ai?: {
+    activeGoalType?: GoalType;
+    goalState?: 'idle' | 'collecting' | 'completed';
+    collectedFields?: Record<string, any>;
+  };
+}
+
+export interface AutomationTestResponse {
+  replies: string[];
+  state: AutomationTestState;
+  meta?: {
+    triggerMatched?: boolean;
+    detectedLanguage?: string;
+    categoryName?: string;
+    shouldEscalate?: boolean;
+    escalationReason?: string;
+    tags?: string[];
+  };
 }
 
 export interface TierLimits {
@@ -701,6 +748,26 @@ export const automationAPI = {
 
   delete: async (id: string): Promise<void> => {
     await api.delete(`/api/automations/${id}`);
+  },
+
+  test: async (
+    id: string,
+    messageText: string,
+    state?: AutomationTestState,
+    context?: AutomationTestContext
+  ): Promise<AutomationTestResponse> => {
+    const { data } = await api.post(`/api/automations/${id}/test`, { messageText, state, context });
+    return data;
+  },
+
+  testAction: async (
+    id: string,
+    action: 'simulate_followup',
+    state?: AutomationTestState,
+    context?: AutomationTestContext
+  ): Promise<AutomationTestResponse> => {
+    const { data } = await api.post(`/api/automations/${id}/test`, { action, state, context });
+    return data;
   },
 };
 
