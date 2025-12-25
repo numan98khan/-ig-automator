@@ -752,7 +752,7 @@ const Automations: React.FC = () => {
       </div> */}
 
       {/* Main Content - Side Nav + Content Area */}
-      <div className={`flex flex-col lg:flex-row gap-6 ${isTestView ? 'flex-1 min-h-0' : ''}`}>
+      <div className={`flex flex-col lg:flex-row gap-6 ${isTestView || isCreateSetupView ? 'flex-1 min-h-0' : ''}`}>
         {/* Left Side Navigation */}
         <aside className="lg:w-64 flex-shrink-0">
           <div className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-2 space-y-1 shadow-sm backdrop-blur-sm">
@@ -1167,7 +1167,7 @@ const Automations: React.FC = () => {
                 </div>
                 
               ) : isCreateView ? (
-                <div className="space-y-4 flex-1 min-h-0">
+                <div className={`flex-1 min-h-0 ${isCreateSetupView ? 'flex flex-col gap-4 overflow-hidden' : 'space-y-4'}`}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <button
@@ -1180,14 +1180,47 @@ const Automations: React.FC = () => {
                       <span className="text-foreground font-medium">{createViewTitle}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCloseCreateView}
-                        leftIcon={<ArrowLeft className="w-4 h-4" />}
-                      >
-                        Back
-                      </Button>
+                      {currentStep === 'setup' && selectedTemplate ? (
+                        <>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setCurrentStep('gallery');
+                              setSelectedTemplate(null);
+                            }}
+                            leftIcon={<ArrowLeft className="w-4 h-4" />}
+                          >
+                            Back
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCloseCreateView}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => setCurrentStep('review')}
+                            rightIcon={<ArrowRight className="w-4 h-4" />}
+                          >
+                            Continue to Review
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCloseCreateView}
+                          leftIcon={<ArrowLeft className="w-4 h-4" />}
+                        >
+                          Back
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -1413,30 +1446,6 @@ const Automations: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex justify-between items-center pt-4 border-t border-border flex-shrink-0">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => {
-                            setCurrentStep('gallery');
-                            setSelectedTemplate(null);
-                          }}
-                          leftIcon={<ArrowLeft className="w-4 h-4" />}
-                        >
-                          Back
-                        </Button>
-                        <div className="flex gap-3">
-                          <Button type="button" variant="outline" onClick={handleCloseCreateView}>
-                            Cancel
-                          </Button>
-                          <Button
-                            onClick={() => setCurrentStep('review')}
-                            rightIcon={<ArrowRight className="w-4 h-4" />}
-                          >
-                            Continue to Review
-                          </Button>
-                        </div>
-                      </div>
                     </div>
                   ) : (
                     <div className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-2xl p-4 space-y-6">
