@@ -4,13 +4,13 @@ import SandboxRun, { SandboxRunStep } from '../models/SandboxRun';
 import MessageCategory from '../models/MessageCategory';
 import { categorizeMessage } from './aiCategorization';
 import { generateAIReply } from './aiReplyService';
+import { pauseForTypingIfNeeded } from './automationService';
 import {
   getWorkspaceSettings,
   getGoalConfigs,
   detectGoalIntent,
   goalMatchesWorkspace,
-  pauseForTypingIfNeeded,
-} from './automationService';
+} from './workspaceSettingsService';
 import { GoalType } from '../types/automationGoals';
 import { IMessage } from '../models/Message';
 

@@ -71,16 +71,10 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Only workspace owners and admins can create automations' });
     }
 
-    // Validate reply steps
+    // Validate reply steps (templates only)
     for (const step of replySteps) {
-      if (step.type === 'constant_reply' && !step.constantReply?.message) {
-        return res.status(400).json({ error: 'Constant reply must have a message' });
-      }
-      if (step.type === 'ai_reply' && !step.aiReply?.goalType) {
-        return res.status(400).json({ error: 'AI reply must have a goalType' });
-      }
-      if (step.type === 'template_flow' && !step.templateFlow?.templateId) {
-        return res.status(400).json({ error: 'Template flow must include a templateId' });
+      if (step.type !== 'template_flow' || !step.templateFlow?.templateId) {
+        return res.status(400).json({ error: 'Only template_flow automations are supported' });
       }
     }
 
@@ -126,21 +120,15 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Only workspace owners and admins can update automations' });
     }
 
-    // Validate reply steps if provided
+    // Validate reply steps if provided (templates only)
     if (replySteps) {
       if (replySteps.length === 0) {
         return res.status(400).json({ error: 'At least one reply step is required' });
       }
 
       for (const step of replySteps) {
-        if (step.type === 'constant_reply' && !step.constantReply?.message) {
-          return res.status(400).json({ error: 'Constant reply must have a message' });
-        }
-        if (step.type === 'ai_reply' && !step.aiReply?.goalType) {
-          return res.status(400).json({ error: 'AI reply must have a goalType' });
-        }
-        if (step.type === 'template_flow' && !step.templateFlow?.templateId) {
-          return res.status(400).json({ error: 'Template flow must include a templateId' });
+        if (step.type !== 'template_flow' || !step.templateFlow?.templateId) {
+          return res.status(400).json({ error: 'Only template_flow automations are supported' });
         }
       }
     }

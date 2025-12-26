@@ -47,7 +47,7 @@ export const AutomationPreviewPhone: React.FC<AutomationPreviewPhoneProps> = ({
   inputDisabled = false,
   sendDisabled = false,
 }) => (
-  <div className="bg-[#0b0d10] rounded-[34px] border border-[#1f2937] overflow-hidden shadow-sm h-full w-full flex flex-col">
+  <div className="bg-[#0b0d10] rounded-[34px] border border-[#1f2937] overflow-hidden shadow-sm h-full w-full flex flex-col min-h-0">
     <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#0f1215]">
       <div className="flex items-center gap-3">
         <div className="h-10 w-10 rounded-full overflow-hidden bg-[#1f2937] flex items-center justify-center text-xs font-semibold text-white">
@@ -76,7 +76,7 @@ export const AutomationPreviewPhone: React.FC<AutomationPreviewPhoneProps> = ({
         <Info className="w-4 h-4" />
       </div>
     </div>
-    <div className="px-4 py-4 space-y-3 flex-1 overflow-hidden bg-[#0b0d10]">
+    <div className="px-4 py-4 space-y-3 flex-1 min-h-0 overflow-y-auto bg-[#0b0d10]">
       {messages.length === 0 ? (
         <div className="text-xs text-white/50 text-center py-20">
           {emptyStateText}

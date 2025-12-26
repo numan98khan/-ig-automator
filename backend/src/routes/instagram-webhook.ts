@@ -5,9 +5,6 @@ import Message from '../models/Message';
 import { fetchUserDetails } from '../utils/instagram-api';
 import { webhookLogger } from '../utils/webhook-logger';
 import {
-  processCommentDMAutomation,
-  processAutoReply,
-  scheduleFollowup,
   cancelFollowupOnCustomerReply,
   checkAndExecuteAutomations,
 } from '../services/automationService';
@@ -107,10 +104,13 @@ async function processWebhookPayload(payload: any) {
  */
 async function handleMessagingEvent(messaging: any) {
   try {
-    if (!messaging.message) return;
+    const hasMessage = Boolean(messaging.message);
+    const hasPostback = Boolean(messaging.postback);
+
+    if (!hasMessage && !hasPostback) return;
 
     // Check if this is an echo (outbound message)
-    const isEcho = messaging.message.is_echo === true;
+    const isEcho = messaging.message?.is_echo === true;
     if (isEcho) {
       console.log('📤 Skipping outbound message echo');
       return; // Don't process our own sent messages
@@ -118,8 +118,10 @@ async function handleMessagingEvent(messaging: any) {
 
     const senderId = messaging.sender.id;
     const recipientId = messaging.recipient.id; // Your Instagram business account ID
-    const messageText = messaging.message.text || '[Media message]';
-    const messageId = messaging.message.mid;
+    const messageText = messaging.message?.text
+      || messaging.postback?.title
+      || '[Postback]';
+    const messageId = messaging.message?.mid || messaging.postback?.mid;
     const timestamp = new Date(messaging.timestamp);
 
     console.log(`📨 Processing message from ${senderId} to ${recipientId}`);
@@ -138,10 +140,12 @@ async function handleMessagingEvent(messaging: any) {
     console.log(`✅ Found Instagram account: @${igAccount.username}`);
 
     // Check if message already exists (prevent duplicates)
-    const existingMessage = await Message.findOne({ instagramMessageId: messageId });
-    if (existingMessage) {
-      console.log(`⏭️ Message ${messageId} already processed`);
-      return;
+    if (messageId) {
+      const existingMessage = await Message.findOne({ instagramMessageId: messageId });
+      if (existingMessage) {
+        console.log(`⏭️ Message ${messageId} already processed`);
+        return;
+      }
     }
 
     // Get or create conversation
@@ -187,7 +191,7 @@ async function handleMessagingEvent(messaging: any) {
 
     // Handle attachments with rich metadata
     const attachments = [];
-    if (messaging.message.attachments) {
+    if (messaging.message?.attachments) {
       for (const attachment of messaging.message.attachments) {
         if (attachment.payload?.url) {
           const attachmentData: any = {
@@ -248,6 +252,13 @@ async function handleMessagingEvent(messaging: any) {
       instagramMessageId: messageId,
       platform: 'instagram',
       attachments: attachments.length > 0 ? attachments : undefined,
+      metadata: messaging.postback
+        ? {
+            type: 'postback',
+            title: messaging.postback.title,
+            payload: messaging.postback.payload,
+          }
+        : undefined,
       createdAt: timestamp,
     });
 
@@ -312,7 +323,6 @@ async function handleMessagingEvent(messaging: any) {
       savedMessage,
       finalMessageText,
       igAccount.workspaceId.toString(),
-      isNewConversation
     ).catch(error => {
       console.error('❌ Error processing message automations:', error);
       webhookLogger.logWebhookError(error, { eventType: 'automation', conversationId: conversation._id });
@@ -388,7 +398,6 @@ async function processMessageAutomations(
   savedMessage: any,
   messageText: string,
   workspaceId: string,
-  isNewConversation: boolean
 ) {
   try {
     console.log(`🤖 Processing automations for conversation ${conversation._id}`);
@@ -422,12 +431,6 @@ async function processMessageAutomations(
 
     if (automationResult.executed) {
       console.log(`✅ Automation executed: ${automationResult.automationName}`);
-
-      // Schedule follow-up after automation
-      const followupResult = await scheduleFollowup(conversation._id, workspaceId);
-      if (followupResult.success) {
-        console.log(`⏰ Follow-up scheduled: ${followupResult.message}`);
-      }
     } else {
       console.log(`ℹ️ No active automations found for this trigger`);
     }
@@ -529,29 +532,6 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
     await trackDailyMetric(conversation.workspaceId, commentDate, {
       inboundMessages: 1,
       ...(isNewConversation ? { newConversations: 1 } : {}),
-    });
-
-    // === PHASE 2: COMMENT → DM AUTOMATION ===
-    // Process Comment → DM automation asynchronously
-    processCommentDMAutomation(
-      {
-        commentId,
-        commenterId,
-        commenterUsername: comment.from?.username,
-        commentText,
-        mediaId,
-      },
-      igAccount._id,
-      igAccount.workspaceId
-    ).then(result => {
-      if (result.success) {
-        console.log(`✅ Comment DM automation sent: ${result.dmMessageId}`);
-      } else {
-        console.log(`⏭️ Comment DM automation skipped: ${result.message}`);
-      }
-    }).catch(error => {
-      console.error('❌ Error in comment DM automation:', error);
-      webhookLogger.logWebhookError(error, { eventType: 'comment_dm_automation', commentId });
     });
 
   } catch (error) {
