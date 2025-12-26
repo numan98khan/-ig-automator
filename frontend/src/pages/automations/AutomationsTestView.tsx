@@ -148,7 +148,7 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
             )}
             {testTemplate?.id === 'after_hours_capture' && (
               <Button
-                variant={testForceOutsideHours ? 'default' : 'outline'}
+                variant={testForceOutsideHours ? 'primary' : 'outline'}
                 size="sm"
                 onClick={onToggleAfterHours}
               >

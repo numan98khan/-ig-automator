@@ -15,8 +15,6 @@ import {
   AutomationTestContext,
 } from '../services/api';
 import {
-  TRIGGER_METADATA,
-  GOAL_OPTIONS,
   AUTOMATION_TEMPLATES,
   getDefaultSetupData,
   AutomationTemplate,
@@ -205,51 +203,6 @@ const Automations: React.FC = () => {
       };
     }
     return base;
-  };
-
-  const handleOpenEditModal = (automation: Automation) => {
-    setEditingAutomation(automation);
-    const replyStep = automation.replySteps[0];
-    setFormData({
-      name: automation.name,
-      description: automation.description || '',
-      triggerType: automation.triggerType,
-      replyType: replyStep.type,
-      constantMessage: replyStep.constantReply?.message || '',
-      aiGoalType: replyStep.aiReply?.goalType || 'none',
-      aiGoalDescription: replyStep.aiReply?.goalDescription || '',
-      aiKnowledgeIds: replyStep.aiReply?.knowledgeItemIds || [],
-    });
-
-    if (replyStep.type === 'template_flow' && replyStep.templateFlow) {
-      const template = AUTOMATION_TEMPLATES.find((item) => item.id === replyStep.templateFlow?.templateId);
-      setCreationMode('templates');
-      setCurrentStep('setup');
-      setSelectedTemplate(template || null);
-      setTemplateSearch('');
-      setGoalFilter('all');
-      setIndustryFilter('all');
-      setIsTemplateEditing(!!template);
-
-      if (replyStep.templateFlow.templateId === 'booking_concierge') {
-        const config = replyStep.templateFlow.config as any;
-        setSetupData(buildSetupDataFromTemplateConfig('booking_concierge', config, automation.triggerConfig));
-      }
-
-      if (replyStep.templateFlow.templateId === 'after_hours_capture') {
-        const config = replyStep.templateFlow.config as any;
-        setSetupData(buildSetupDataFromTemplateConfig('after_hours_capture', config, automation.triggerConfig));
-      }
-      if (!template) {
-        setCurrentStep('gallery');
-        setSelectedTemplate(null);
-        setIsTemplateEditing(false);
-      }
-    } else {
-      setIsTemplateEditing(false);
-    }
-    setTestingAutomation(null);
-    setAutomationView('edit');
   };
 
   const handleOpenTestModal = (automation: Automation) => {
