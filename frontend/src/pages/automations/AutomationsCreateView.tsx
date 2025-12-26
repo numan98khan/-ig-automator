@@ -133,8 +133,8 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
 
   return (
     <div className={`flex-1 min-h-0 ${isCreateSetupView ? 'flex flex-col gap-4 overflow-hidden' : 'space-y-4'}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <button
             onClick={onClose}
             className="hover:text-foreground transition-colors"
@@ -144,7 +144,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
           <ArrowRight className="w-4 h-4" />
           <span className="text-foreground font-medium">{createViewTitle}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:flex-wrap">
           {currentStep === 'setup' && selectedTemplate ? (
             <>
               <Button
@@ -153,6 +153,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 size="sm"
                 onClick={onBackToGallery}
                 leftIcon={<ArrowLeft className="w-4 h-4" />}
+                className="w-full sm:w-auto"
               >
                 Back
               </Button>
@@ -161,6 +162,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={onClose}
+                className="w-full sm:w-auto"
               >
                 Cancel
               </Button>
@@ -169,6 +171,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 size="sm"
                 onClick={onContinueToReview}
                 rightIcon={<ArrowRight className="w-4 h-4" />}
+                className="w-full sm:w-auto"
               >
                 Continue to Review
               </Button>
@@ -179,6 +182,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
               size="sm"
               onClick={onClose}
               leftIcon={<ArrowLeft className="w-4 h-4" />}
+              className="w-full sm:w-auto"
             >
               Back
             </Button>
@@ -635,11 +639,11 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 </>
               )}
 
-              <div className="flex justify-end gap-3 pt-2">
-                <Button type="button" variant="ghost" onClick={onClose}>
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+                <Button type="button" variant="ghost" onClick={onClose} className="w-full sm:w-auto">
                   Cancel
                 </Button>
-                <Button type="submit" isLoading={saving}>
+                <Button type="submit" isLoading={saving} className="w-full sm:w-auto">
                   {editingAutomation ? 'Save Changes' : 'Create Automation'}
                 </Button>
               </div>
@@ -829,30 +833,36 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 </div>
               )}
 
-              <div className="flex justify-between items-center pt-4 border-t border-border">
-                <div>
+              <div className="flex flex-col gap-4 pt-4 border-t border-border sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex">
                   {currentStep !== 'gallery' && (
                     <Button
                       type="button"
                       variant="ghost"
                       onClick={onBackToSetup}
                       leftIcon={<ArrowLeft className="w-4 h-4" />}
+                      className="w-full sm:w-auto"
                     >
                       Back
                     </Button>
                   )}
                 </div>
-                <div className="flex gap-3">
-                  <Button type="button" variant="outline" onClick={onClose}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
                     Cancel
                   </Button>
                   {currentStep === 'gallery' && creationMode === 'templates' && (
-                    <Button disabled className="opacity-50">
+                    <Button disabled className="w-full opacity-50 sm:w-auto">
                       Select a template to continue
                     </Button>
                   )}
                   {currentStep === 'review' && (
-                    <Button onClick={() => onSubmit()} isLoading={saving} leftIcon={<CheckCircle className="w-4 h-4" />}>
+                    <Button
+                      onClick={() => onSubmit()}
+                      isLoading={saving}
+                      leftIcon={<CheckCircle className="w-4 h-4" />}
+                      className="w-full sm:w-auto"
+                    >
                       Activate Automation
                     </Button>
                   )}
