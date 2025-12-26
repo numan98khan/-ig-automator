@@ -29,6 +29,10 @@ const triggerConfigSchema = new Schema<TriggerConfig>({
   excludeKeywords: [{ type: String }],
   keywordMatch: { type: String, enum: ['any', 'all'] },
   outsideBusinessHours: { type: Boolean },
+  matchOn: {
+    link: { type: Boolean },
+    attachment: { type: Boolean },
+  },
   businessHours: {
     startTime: { type: String },
     endTime: { type: String },

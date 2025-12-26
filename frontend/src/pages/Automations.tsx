@@ -178,6 +178,22 @@ const Automations: React.FC = () => {
         triggerKeywordMatch: triggerConfig?.keywordMatch || base.triggerKeywordMatch,
       };
     }
+    if (templateId === 'sales_concierge') {
+      const triggerKeywords = Array.isArray(triggerConfig?.keywords)
+        ? triggerConfig?.keywords.join(', ')
+        : triggerConfig
+          ? ''
+          : base.salesTriggerKeywords;
+      return {
+        ...base,
+        salesTriggerKeywords: triggerKeywords || base.salesTriggerKeywords,
+        salesTriggerKeywordMatch: triggerConfig?.keywordMatch || base.salesTriggerKeywordMatch,
+        salesPhoneMinLength: String(safeConfig.minPhoneLength || base.salesPhoneMinLength),
+        salesCatalogJson: safeConfig.catalog ? JSON.stringify(safeConfig.catalog, null, 2) : base.salesCatalogJson,
+        salesShippingJson: safeConfig.shippingRules ? JSON.stringify(safeConfig.shippingRules, null, 2) : base.salesShippingJson,
+        salesCityAliasesJson: safeConfig.cityAliases ? JSON.stringify(safeConfig.cityAliases, null, 2) : base.salesCityAliasesJson,
+      };
+    }
     if (templateId === 'after_hours_capture') {
       return {
         ...base,
@@ -450,6 +466,38 @@ const Automations: React.FC = () => {
       };
     }
 
+    if (template.id === 'sales_concierge') {
+      let catalog;
+      let shippingRules;
+      let cityAliases;
+      try {
+        catalog = JSON.parse(data.salesCatalogJson || '[]');
+        shippingRules = JSON.parse(data.salesShippingJson || '[]');
+        cityAliases = data.salesCityAliasesJson ? JSON.parse(data.salesCityAliasesJson) : {};
+      } catch (error) {
+        return null;
+      }
+      if (!Array.isArray(catalog) || !Array.isArray(shippingRules)) {
+        return null;
+      }
+      return {
+        templateId: 'sales_concierge',
+        config: {
+          catalog,
+          shippingRules,
+          cityAliases,
+          minPhoneLength: Number.parseInt(data.salesPhoneMinLength, 10) || 8,
+          maxQuestions: 6,
+          rateLimit: { maxMessages: 6, perMinutes: 1 },
+          tags: ['intent_purchase', 'template_sales_concierge'],
+          outputs: {
+            notify: ['sales', 'owner'],
+            createContact: true,
+          },
+        },
+      };
+    }
+
     if (template.id === 'after_hours_capture') {
       return {
         templateId: 'after_hours_capture',
@@ -492,6 +540,21 @@ const Automations: React.FC = () => {
         ...baseConfig,
         keywordMatch: data.triggerKeywordMatch || baseConfig.keywordMatch || 'any',
         keywords: keywordList,
+      };
+    }
+    if (flow.templateId === 'sales_concierge') {
+      const keywordList = (data.salesTriggerKeywords || '')
+        .split(',')
+        .map((keyword) => keyword.trim())
+        .filter(Boolean);
+      return {
+        ...baseConfig,
+        keywordMatch: data.salesTriggerKeywordMatch || baseConfig.keywordMatch || 'any',
+        keywords: keywordList,
+        matchOn: {
+          link: true,
+          attachment: true,
+        },
       };
     }
     if (flow.templateId === 'after_hours_capture') {

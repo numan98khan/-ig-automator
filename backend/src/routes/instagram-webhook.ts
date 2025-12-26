@@ -418,6 +418,15 @@ async function processMessageAutomations(
     }
     await savedMessage.save();
 
+    const messageContext = {
+      hasLink: Boolean(savedMessage.linkPreview?.url || /https?:\/\/\S+/i.test(messageText)),
+      hasAttachment: Array.isArray(savedMessage.attachments) && savedMessage.attachments.length > 0,
+      linkUrl: savedMessage.linkPreview?.url,
+      attachmentUrls: Array.isArray(savedMessage.attachments)
+        ? savedMessage.attachments.map((attachment: any) => attachment.url).filter(Boolean)
+        : undefined,
+    };
+
     // 3. Check for active automations
     const automationResult = await checkAndExecuteAutomations({
       workspaceId,
@@ -427,6 +436,7 @@ async function processMessageAutomations(
       messageText,
       instagramAccountId: conversation.instagramAccountId.toString(),
       platform: conversation.platform || 'instagram',
+      messageContext,
     });
 
     if (automationResult.executed) {

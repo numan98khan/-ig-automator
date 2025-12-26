@@ -29,7 +29,7 @@ const automationSessionSchema = new Schema<IAutomationSession>({
   automationId: { type: Schema.Types.ObjectId, ref: 'Automation', required: true },
   templateId: {
     type: String,
-    enum: ['booking_concierge', 'after_hours_capture'],
+    enum: ['booking_concierge', 'after_hours_capture', 'sales_concierge'],
     required: true,
   },
   status: {

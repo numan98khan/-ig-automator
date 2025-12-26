@@ -174,6 +174,10 @@ export interface TriggerConfig {
   keywordMatch?: 'any' | 'all';
   outsideBusinessHours?: boolean;
   businessHours?: BusinessHoursConfig;
+  matchOn?: {
+    link?: boolean;
+    attachment?: boolean;
+  };
 }
 
 export interface AutomationStats {
@@ -207,7 +211,8 @@ export type GoalType =
 
 export type AutomationTemplateId =
   | 'booking_concierge'
-  | 'after_hours_capture';
+  | 'after_hours_capture'
+  | 'sales_concierge';
 
 export interface BusinessHoursConfig {
   startTime: string;
@@ -254,9 +259,45 @@ export interface AfterHoursCaptureConfig {
   };
 }
 
+export interface SalesCatalogVariantOptions {
+  size?: string[];
+  color?: string[];
+}
+
+export interface SalesCatalogItem {
+  sku: string;
+  name: string;
+  keywords?: string[];
+  price?: number | { min: number; max: number };
+  currency?: string;
+  stock?: 'in' | 'low' | 'out' | 'unknown';
+  variants?: SalesCatalogVariantOptions;
+}
+
+export interface SalesShippingRule {
+  city: string;
+  fee: number;
+  eta: string;
+  codAllowed: boolean;
+}
+
+export interface SalesConciergeConfig {
+  catalog: SalesCatalogItem[];
+  shippingRules: SalesShippingRule[];
+  cityAliases?: Record<string, string>;
+  minPhoneLength?: number;
+  maxQuestions?: number;
+  rateLimit?: AutomationRateLimit;
+  tags?: string[];
+  outputs?: {
+    notify?: string[];
+    createContact?: boolean;
+  };
+}
+
 export interface TemplateFlowConfig {
   templateId: AutomationTemplateId;
-  config: BookingConciergeConfig | AfterHoursCaptureConfig;
+  config: BookingConciergeConfig | AfterHoursCaptureConfig | SalesConciergeConfig;
 }
 
 export interface AutomationTestHistoryItem {
@@ -267,6 +308,10 @@ export interface AutomationTestHistoryItem {
 
 export interface AutomationTestContext {
   forceOutsideBusinessHours?: boolean;
+  hasLink?: boolean;
+  hasAttachment?: boolean;
+  linkUrl?: string;
+  attachmentUrls?: string[];
 }
 
 export interface AutomationTestState {

@@ -22,6 +22,7 @@ import {
   AUTOMATION_TEMPLATES,
   SetupData,
   BOOKING_TRIGGER_KEYWORDS,
+  SALES_TRIGGER_KEYWORDS,
 } from './constants';
 
 type CreateFormData = {
@@ -116,6 +117,17 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
     const exists = current.some((item) => item.toLowerCase() === keyword.toLowerCase());
     if (!exists) {
       updateSetupData({ triggerKeywords: [...current, keyword].join(', ') });
+    }
+  };
+
+  const addSalesTriggerKeyword = (keyword: string) => {
+    const current = (setupData.salesTriggerKeywords || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const exists = current.some((item) => item.toLowerCase() === keyword.toLowerCase());
+    if (!exists) {
+      updateSetupData({ salesTriggerKeywords: [...current, keyword].join(', ') });
     }
   };
 
@@ -290,6 +302,86 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                     ))}
                   </div>
                 </div>
+              )}
+
+              {selectedTemplate.setupFields.salesTriggerKeywords && (
+                <div className="space-y-3">
+                  <Input
+                    label="Sales Trigger Keywords"
+                    value={setupData.salesTriggerKeywords}
+                    onChange={(event) => updateSetupData({ salesTriggerKeywords: event.target.value })}
+                    placeholder="price, stock, order, delivery"
+                  />
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Match Rule</label>
+                    <select
+                      value={setupData.salesTriggerKeywordMatch}
+                      onChange={(event) => updateSetupData({ salesTriggerKeywordMatch: event.target.value as 'any' | 'all' })}
+                      className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                    >
+                      <option value="any">Match any keyword</option>
+                      <option value="all">Match all keywords</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {SALES_TRIGGER_KEYWORDS.map((keyword) => (
+                      <button
+                        key={keyword}
+                        type="button"
+                        onClick={() => addSalesTriggerKeyword(keyword)}
+                        className="px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                      >
+                        {keyword}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedTemplate.setupFields.salesCatalog && (
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Catalog (JSON)</label>
+                  <textarea
+                    value={setupData.salesCatalogJson}
+                    onChange={(event) => updateSetupData({ salesCatalogJson: event.target.value })}
+                    rows={6}
+                    className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
+                  />
+                </div>
+              )}
+
+              {selectedTemplate.setupFields.salesShipping && (
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Shipping Rules (JSON)</label>
+                  <textarea
+                    value={setupData.salesShippingJson}
+                    onChange={(event) => updateSetupData({ salesShippingJson: event.target.value })}
+                    rows={5}
+                    className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
+                  />
+                </div>
+              )}
+
+              {selectedTemplate.setupFields.salesCityAliases && (
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">City Aliases (JSON)</label>
+                  <textarea
+                    value={setupData.salesCityAliasesJson}
+                    onChange={(event) => updateSetupData({ salesCityAliasesJson: event.target.value })}
+                    rows={4}
+                    className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
+                  />
+                </div>
+              )}
+
+              {selectedTemplate.setupFields.salesPhoneMinLength && (
+                <Input
+                  label="Min Phone Digits"
+                  type="number"
+                  value={setupData.salesPhoneMinLength}
+                  onChange={(event) => updateSetupData({ salesPhoneMinLength: event.target.value })}
+                  placeholder="8"
+                />
               )}
 
               {selectedTemplate.setupFields.businessHoursTime && (

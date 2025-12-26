@@ -88,6 +88,11 @@ export interface AutomationTemplate {
     locationHours?: boolean;
     phoneMinLength?: boolean;
     triggerKeywords?: boolean;
+    salesTriggerKeywords?: boolean;
+    salesCatalog?: boolean;
+    salesShipping?: boolean;
+    salesPhoneMinLength?: boolean;
+    salesCityAliases?: boolean;
     businessHoursTime?: boolean;
     businessTimezone?: boolean;
     afterHoursMessage?: boolean;
@@ -109,6 +114,19 @@ export const BOOKING_TRIGGER_KEYWORDS = [
   'سعر',
 ];
 
+export const SALES_TRIGGER_KEYWORDS = [
+  'price',
+  'pricing',
+  'available',
+  'availability',
+  'stock',
+  'buy',
+  'order',
+  'checkout',
+  'cod',
+  'delivery',
+];
+
 export const getDefaultSetupData = () => ({
   serviceList: '',
   priceRanges: '',
@@ -117,6 +135,37 @@ export const getDefaultSetupData = () => ({
   phoneMinLength: '8',
   triggerKeywords: 'book, booking, appointment, slot, available, availability, price, حجز, موعد, سعر',
   triggerKeywordMatch: 'any' as 'any' | 'all',
+  salesTriggerKeywords: 'price, pricing, stock, available, buy, order, checkout, cod, delivery',
+  salesTriggerKeywordMatch: 'any' as 'any' | 'all',
+  salesPhoneMinLength: '8',
+  salesCatalogJson: JSON.stringify([
+    {
+      sku: 'SKU-1001',
+      name: 'Classic Abaya',
+      keywords: ['abaya', 'classic'],
+      price: 180,
+      currency: 'SAR',
+      stock: 'in',
+      variants: { size: ['S', 'M', 'L'], color: ['black', 'navy'] },
+    },
+    {
+      sku: 'SKU-1002',
+      name: 'Linen Shirt',
+      keywords: ['linen', 'shirt'],
+      price: { min: 120, max: 150 },
+      currency: 'SAR',
+      stock: 'low',
+      variants: { size: ['M', 'L', 'XL'], color: ['white', 'beige'] },
+    },
+  ], null, 2),
+  salesShippingJson: JSON.stringify([
+    { city: 'Riyadh', fee: 15, eta: '1-2 days', codAllowed: true },
+    { city: 'Jeddah', fee: 25, eta: '2-3 days', codAllowed: false },
+  ], null, 2),
+  salesCityAliasesJson: JSON.stringify({
+    'riyadh north': 'Riyadh',
+    'riyadh south': 'Riyadh',
+  }, null, 2),
   businessHoursStart: '09:00',
   businessHoursEnd: '17:00',
   businessTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
@@ -184,6 +233,37 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       businessTimezone: true,
       afterHoursMessage: true,
       followupMessage: true,
+    },
+  },
+  {
+    id: 'sales_concierge',
+    name: 'Sales Concierge',
+    outcome: 'Turn product inquiries into structured checkout drafts',
+    goal: 'Sales',
+    industry: 'Retail',
+    triggers: ['dm_message'],
+    setupTime: '~5 min',
+    collects: ['product', 'variant', 'city', 'payment method'],
+    icon: <MessageSquare className="w-5 h-5" />,
+    triggerType: 'dm_message',
+    triggerConfig: {
+      keywordMatch: 'any',
+      keywords: ['price', 'pricing', 'stock', 'available', 'buy', 'order', 'checkout', 'cod', 'delivery'],
+      matchOn: { link: true, attachment: true },
+    },
+    replyType: 'template_flow',
+    previewConversation: [
+      { from: 'customer', message: 'Price for the linen shirt?' },
+      { from: 'bot', message: 'Sure — checking. Which city for delivery?' },
+      { from: 'customer', message: 'Riyadh' },
+      { from: 'bot', message: 'Price is 120-150 SAR depending on size. COD or online payment?' },
+    ],
+    setupFields: {
+      salesTriggerKeywords: true,
+      salesCatalog: true,
+      salesShipping: true,
+      salesPhoneMinLength: true,
+      salesCityAliases: true,
     },
   },
 ];

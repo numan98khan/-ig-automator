@@ -7,6 +7,7 @@ import Automation from '../models/Automation';
 import AutomationSession from '../models/AutomationSession';
 import LeadCapture from '../models/LeadCapture';
 import BookingRequest from '../models/BookingRequest';
+import OrderDraft from '../models/OrderDraft';
 import {
   sendMessage as sendInstagramMessage,
   sendButtonMessage,
@@ -19,6 +20,8 @@ import {
   AutomationTemplateId,
   BookingConciergeConfig,
   BusinessHoursConfig,
+  SalesConciergeConfig,
+  SalesCatalogItem,
   TemplateFlowConfig,
   TriggerConfig,
   TriggerType,
@@ -191,6 +194,10 @@ function formatNextOpenTime(config: BusinessHoursConfig, referenceDate: Date = n
 
 type AutomationTestContext = {
   forceOutsideBusinessHours?: boolean;
+  hasLink?: boolean;
+  hasAttachment?: boolean;
+  linkUrl?: string;
+  attachmentUrls?: string[];
 };
 
 function matchesTriggerConfig(
@@ -200,9 +207,6 @@ function matchesTriggerConfig(
 ): boolean {
   if (!triggerConfig) return true;
   const keywordMatch = triggerConfig.keywordMatch || 'any';
-  if (triggerConfig.keywords && !matchesKeywords(messageText, triggerConfig.keywords, keywordMatch)) {
-    return false;
-  }
   if (
     triggerConfig.excludeKeywords &&
     triggerConfig.excludeKeywords.length > 0 &&
@@ -215,6 +219,14 @@ function matchesTriggerConfig(
     !context?.forceOutsideBusinessHours &&
     !isOutsideBusinessHours(triggerConfig.businessHours)
   ) {
+    return false;
+  }
+  const linkMatched = !!triggerConfig.matchOn?.link && !!context?.hasLink;
+  const attachmentMatched = !!triggerConfig.matchOn?.attachment && !!context?.hasAttachment;
+  if (linkMatched || attachmentMatched) {
+    return true;
+  }
+  if (triggerConfig.keywords && !matchesKeywords(messageText, triggerConfig.keywords, keywordMatch)) {
     return false;
   }
   return true;
@@ -378,6 +390,12 @@ type TemplateFlowActions = {
   createLead?: boolean;
   createBooking?: boolean;
   scheduleFollowup?: boolean;
+  createDraft?: boolean;
+  draftPayload?: Record<string, any>;
+  paymentLinkRequired?: boolean;
+  handoffSummary?: string;
+  handoffTopic?: string;
+  recommendedNextAction?: string;
 };
 
 function normalizeFlowState(state: Partial<TemplateFlowState>): TemplateFlowState {
@@ -641,6 +659,531 @@ function advanceAfterHoursCaptureState(params: {
   return { replies, state: nextState };
 }
 
+type SalesIntent = 'price' | 'availability' | 'delivery' | 'order' | 'support' | 'other';
+type SalesPaymentMethod = 'online' | 'cod';
+
+const SALES_INTENT_OPTIONS = ['Price', 'Availability', 'Delivery', 'Order', 'Support'];
+const SALES_NEGOTIATION_PATTERNS = /(discount|cheaper|too expensive|drop price|lower price|deal|offer)/i;
+const SALES_ANGER_PATTERNS = /(angry|scam|fraud|bad service|terrible|worst|refund|complain|hate)/i;
+const SALES_SPAM_PATTERNS = /(http.*free money|crypto|click here|earn \$)/i;
+
+function detectSalesIntent(text: string): SalesIntent {
+  const normalized = normalizeText(text);
+  if (/(refund|complain|problem|issue|support|cancel)/.test(normalized)) return 'support';
+  if (/(delivery|ship|shipping|eta|arrive)/.test(normalized)) return 'delivery';
+  if (/(availability|available|in stock|stock)/.test(normalized)) return 'availability';
+  if (/(buy|order|checkout|cod|cash on delivery|payment)/.test(normalized)) return 'order';
+  if (/(price|cost|how much|pricing)/.test(normalized)) return 'price';
+  return 'other';
+}
+
+function detectPaymentMethod(text: string): SalesPaymentMethod | undefined {
+  const normalized = normalizeText(text);
+  if (/(cod|cash on delivery|cash)/.test(normalized)) return 'cod';
+  if (/(online|card|link|pay|payment)/.test(normalized)) return 'online';
+  return undefined;
+}
+
+function extractQuantity(text: string): number | undefined {
+  const digitsOnly = text.replace(/\D/g, '');
+  if (digitsOnly.length >= 6) return undefined;
+  const match = text.match(/\b(\d{1,3})\b/);
+  if (!match) return undefined;
+  const qty = Number(match[1]);
+  if (Number.isNaN(qty) || qty <= 0) return undefined;
+  return qty;
+}
+
+function extractPhone(text: string): string | undefined {
+  const digits = text.replace(/\D/g, '');
+  if (digits.length < 6) return undefined;
+  return digits;
+}
+
+function looksLikeAddress(text: string): boolean {
+  const normalized = normalizeText(text);
+  const hasNumber = /\d/.test(text);
+  const hasKeyword = /(street|st|road|rd|block|area|building|apt|avenue|unit)/.test(normalized);
+  return normalized.length >= 10 && (hasNumber || hasKeyword);
+}
+
+function normalizeCityName(input: string, config: SalesConciergeConfig): string | undefined {
+  if (!input) return undefined;
+  const normalized = normalizeText(input);
+  const aliasMap = {
+    riyadh: 'Riyadh',
+    jeddah: 'Jeddah',
+    dammam: 'Dammam',
+    ...config.cityAliases,
+  } as Record<string, string>;
+
+  if (aliasMap[normalized]) {
+    return aliasMap[normalized];
+  }
+
+  const cityRules = config.shippingRules || [];
+  for (const rule of cityRules) {
+    const cityNormalized = normalizeText(rule.city);
+    if (normalized === cityNormalized || normalized.includes(cityNormalized) || cityNormalized.includes(normalized)) {
+      return rule.city;
+    }
+  }
+
+  return undefined;
+}
+
+function findCatalogCandidates(config: SalesConciergeConfig, query: string): SalesCatalogItem[] {
+  if (!query) return [];
+  const normalizedQuery = normalizeText(query);
+  const scored = config.catalog.map((item) => {
+    let score = 0;
+    const name = normalizeText(item.name);
+    if (name && normalizedQuery.includes(name)) score += 3;
+    if (item.sku && normalizedQuery.includes(normalizeText(item.sku))) score += 4;
+    (item.keywords || []).forEach((keyword) => {
+      if (normalizedQuery.includes(normalizeText(keyword))) score += 2;
+    });
+    return { item, score };
+  }).filter((entry) => entry.score > 0);
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, 3).map((entry) => entry.item);
+}
+
+function selectCatalogCandidate(messageText: string, candidates: SalesCatalogItem[]): SalesCatalogItem | undefined {
+  if (!candidates.length) return undefined;
+  const normalized = normalizeText(messageText);
+  const indexMatch = normalized.match(/\b(1|2|3)\b/);
+  if (indexMatch) {
+    const index = Number(indexMatch[1]) - 1;
+    if (candidates[index]) return candidates[index];
+  }
+  return candidates.find((candidate) => {
+    const name = normalizeText(candidate.name);
+    const sku = normalizeText(candidate.sku || '');
+    return (name && normalized.includes(name)) || (sku && normalized.includes(sku));
+  });
+}
+
+function extractVariant(messageText: string, item?: SalesCatalogItem) {
+  if (!item?.variants) return {};
+  const normalized = normalizeText(messageText);
+  const size = item.variants.size?.find((option) => normalized.includes(normalizeText(option)));
+  const color = item.variants.color?.find((option) => normalized.includes(normalizeText(option)));
+  return { size, color };
+}
+
+function formatPrice(price: SalesCatalogItem['price'], currency: string): string | undefined {
+  if (!price) return undefined;
+  if (typeof price === 'number') {
+    return `${price} ${currency}`;
+  }
+  if (price.min && price.max) {
+    return `${price.min}-${price.max} ${currency}`;
+  }
+  return undefined;
+}
+
+function formatStock(stock?: SalesCatalogItem['stock']): string | undefined {
+  if (!stock) return undefined;
+  if (stock === 'in') return 'In stock';
+  if (stock === 'low') return 'Low stock';
+  if (stock === 'out') return 'Out of stock';
+  return 'Confirming';
+}
+
+function buildSalesQuote(item: SalesCatalogItem, city: string, config: SalesConciergeConfig) {
+  const currency = item.currency || 'SAR';
+  const shippingRule = config.shippingRules.find((rule) => normalizeText(rule.city) === normalizeText(city));
+  return {
+    priceText: formatPrice(item.price, currency),
+    stockText: formatStock(item.stock),
+    shippingFee: shippingRule?.fee,
+    eta: shippingRule?.eta,
+    currency,
+    codAllowed: shippingRule?.codAllowed ?? false,
+  };
+}
+
+function buildSalesSummary(fields: Record<string, any>) {
+  return [
+    fields.sku ? `SKU: ${fields.sku}` : null,
+    fields.productName ? `Product: ${fields.productName}` : null,
+    fields.variant?.size ? `Size: ${fields.variant.size}` : null,
+    fields.variant?.color ? `Color: ${fields.variant.color}` : null,
+    fields.quantity ? `Qty: ${fields.quantity}` : null,
+    fields.city ? `City: ${fields.city}` : null,
+    fields.address ? `Address: ${fields.address}` : null,
+    fields.phone ? `Phone: ${fields.phone}` : null,
+    fields.paymentMethod ? `Payment: ${fields.paymentMethod.toUpperCase()}` : null,
+    fields.quote?.priceText ? `Price: ${fields.quote.priceText}` : null,
+    fields.quote?.stockText ? `Stock: ${fields.quote.stockText}` : null,
+    fields.quote?.shippingFee !== undefined ? `Shipping: ${fields.quote.shippingFee}` : null,
+    fields.quote?.eta ? `ETA: ${fields.quote.eta}` : null,
+  ].filter(Boolean).join('\n');
+}
+
+function incrementAttempt(fields: Record<string, any>, key: string): number {
+  const attempts = fields.attempts || {};
+  attempts[key] = (attempts[key] || 0) + 1;
+  fields.attempts = attempts;
+  return attempts[key];
+}
+
+function extractProductRef(messageText: string, context?: AutomationTestContext) {
+  const linkMatch = messageText.match(/https?:\/\/\S+/i);
+  if (linkMatch) {
+    return { type: 'link', value: linkMatch[0] };
+  }
+  if (context?.linkUrl) {
+    return { type: 'link', value: context.linkUrl };
+  }
+  if (context?.attachmentUrls && context.attachmentUrls.length > 0) {
+    return { type: 'image', value: context.attachmentUrls[0] };
+  }
+  return undefined;
+}
+
+function advanceSalesConciergeState(params: {
+  state: TemplateFlowState;
+  messageText: string;
+  config: SalesConciergeConfig;
+  context?: AutomationTestContext;
+}): { replies: TemplateFlowReply[]; state: TemplateFlowState; actions?: TemplateFlowActions } {
+  const { messageText, config, context } = params;
+  const nextState = normalizeFlowState(params.state);
+  const replies: TemplateFlowReply[] = [];
+  const actions: TemplateFlowActions = {};
+  const maxQuestions = config.maxQuestions ?? 6;
+  const minPhoneLength = config.minPhoneLength ?? 8;
+  const fields = nextState.collectedFields || {};
+
+  if (nextState.status && nextState.status !== 'active') {
+    replies.push({ text: 'This flow is complete. Reset to start again.' });
+    return { replies, state: nextState };
+  }
+
+  const intent = detectSalesIntent(messageText);
+  if (intent && !fields.intent) {
+    fields.intent = intent;
+  }
+  const paymentHint = detectPaymentMethod(messageText);
+  if (paymentHint && !fields.paymentMethod) {
+    fields.paymentMethod = paymentHint;
+  }
+
+  fields.flags = {
+    isAngry: SALES_ANGER_PATTERNS.test(messageText),
+    isNegotiation: SALES_NEGOTIATION_PATTERNS.test(messageText),
+    isSpam: SALES_SPAM_PATTERNS.test(messageText),
+  };
+
+  if (fields.flags.isSpam || fields.flags.isAngry || fields.flags.isNegotiation || intent === 'support') {
+    nextState.status = 'handoff';
+    actions.handoffReason = 'Sales concierge handoff requested';
+    actions.handoffTopic = 'Sales concierge handoff';
+    actions.handoffSummary = buildSalesSummary(fields);
+    actions.recommendedNextAction = 'Review intent and reply manually.';
+    nextState.collectedFields = fields;
+    return { replies: [{ text: "Thanks for the details. We'll have our team follow up shortly." }], state: nextState, actions };
+  }
+
+  if (nextState.questionCount >= maxQuestions) {
+    nextState.status = 'handoff';
+    actions.handoffReason = 'Sales concierge handoff (max questions)';
+    actions.handoffTopic = 'Sales concierge handoff';
+    actions.handoffSummary = buildSalesSummary(fields);
+    actions.recommendedNextAction = 'Follow up with customer details.';
+    replies.push({ text: "Thanks for the details. We'll have our team follow up shortly." });
+    nextState.collectedFields = fields;
+    return { replies, state: nextState, actions };
+  }
+
+  if (!fields.productRef) {
+    const productRef = extractProductRef(messageText, context);
+    if (productRef) {
+      fields.productRef = productRef;
+    }
+  }
+
+  if (!fields.productRef) {
+    if (!fields.intentPrompted && intent === 'other') {
+      fields.intentPrompted = true;
+      nextState.questionCount += 1;
+      replies.push({
+        text: 'What can we help with?',
+        buttons: SALES_INTENT_OPTIONS.map((option) => ({ title: option })),
+      });
+      nextState.step = 'NEED_PRODUCT_REF';
+      nextState.collectedFields = fields;
+      return { replies, state: nextState };
+    }
+
+    nextState.step = 'NEED_PRODUCT_REF';
+    nextState.questionCount += 1;
+    replies.push({ text: 'Got it. Please share the product link or photo so we can check the details.' });
+    nextState.collectedFields = fields;
+    return { replies, state: nextState };
+  }
+
+  if (!fields.sku) {
+    const searchQuery = [fields.productRef?.value, messageText].filter(Boolean).join(' ');
+    const candidates = Array.isArray(fields.skuCandidates) && fields.skuCandidates.length > 0
+      ? fields.skuCandidates
+      : findCatalogCandidates(config, searchQuery);
+    if (!candidates.length) {
+      const attempt = incrementAttempt(fields, 'sku');
+      if (attempt > 2) {
+        nextState.status = 'handoff';
+        actions.handoffReason = 'Sales concierge handoff (product unclear)';
+        actions.handoffTopic = 'Sales concierge handoff';
+        actions.handoffSummary = buildSalesSummary(fields);
+        actions.recommendedNextAction = 'Clarify product reference.';
+        replies.push({ text: "We're not fully sure which item you mean. We'll have our team follow up." });
+        nextState.collectedFields = fields;
+        return { replies, state: nextState, actions };
+      }
+      nextState.questionCount += 1;
+      replies.push({ text: 'Which product are you asking about? A link or exact name helps.' });
+      nextState.step = 'NEED_PRODUCT_REF';
+      nextState.collectedFields = fields;
+      return { replies, state: nextState };
+    }
+
+    if (candidates.length > 1) {
+      const selected = selectCatalogCandidate(messageText, candidates);
+      if (!selected) {
+        const attempt = incrementAttempt(fields, 'sku');
+        if (attempt > 2) {
+          nextState.status = 'handoff';
+          actions.handoffReason = 'Sales concierge handoff (low SKU confidence)';
+          actions.handoffTopic = 'Sales concierge handoff';
+          actions.handoffSummary = buildSalesSummary(fields);
+          actions.recommendedNextAction = 'Confirm SKU with customer.';
+          replies.push({ text: "We're not fully sure which item you mean. We'll have our team follow up." });
+          nextState.collectedFields = fields;
+          return { replies, state: nextState, actions };
+        }
+        nextState.questionCount += 1;
+        replies.push({
+          text: 'Which one do you mean?',
+          buttons: candidates.map((candidate) => ({ title: candidate.name })),
+        });
+        nextState.step = 'NEED_PRODUCT_REF';
+        nextState.collectedFields = { ...fields, skuCandidates: candidates };
+        return { replies, state: nextState };
+      }
+      fields.sku = selected.sku;
+      fields.productName = selected.name;
+      fields.skuCandidates = undefined;
+    } else {
+      fields.sku = candidates[0].sku;
+      fields.productName = candidates[0].name;
+      fields.skuCandidates = undefined;
+    }
+  }
+
+  const item = config.catalog.find((catalogItem) => catalogItem.sku === fields.sku);
+  if (!item) {
+    nextState.status = 'handoff';
+    actions.handoffReason = 'Sales concierge handoff (missing SKU)';
+    actions.handoffTopic = 'Sales concierge handoff';
+    actions.handoffSummary = buildSalesSummary(fields);
+    actions.recommendedNextAction = 'Confirm SKU in catalog.';
+    replies.push({ text: "We're checking the product details and will follow up shortly." });
+    nextState.collectedFields = fields;
+    return { replies, state: nextState, actions };
+  }
+
+  if (item.variants) {
+    const variantUpdate = extractVariant(messageText, item);
+    fields.variant = { ...(fields.variant || {}), ...variantUpdate };
+
+    const needsSize = item.variants.size && !fields.variant?.size;
+    const needsColor = item.variants.color && !fields.variant?.color;
+
+    if (needsSize || needsColor) {
+      const attempt = incrementAttempt(fields, 'variant');
+      if (attempt > 2) {
+        nextState.status = 'handoff';
+        actions.handoffReason = 'Sales concierge handoff (variant unclear)';
+        actions.handoffTopic = 'Sales concierge handoff';
+        actions.handoffSummary = buildSalesSummary(fields);
+        actions.recommendedNextAction = 'Confirm size/color options.';
+        replies.push({ text: "We'll have our team confirm the right variant for you." });
+        nextState.collectedFields = fields;
+        return { replies, state: nextState, actions };
+      }
+      nextState.questionCount += 1;
+      const prompt = needsSize ? 'Which size do you need?' : 'Which color do you prefer?';
+      const options = needsSize ? item.variants.size : item.variants.color;
+      replies.push({
+        text: prompt,
+        buttons: (options || []).slice(0, 3).map((option) => ({ title: option })),
+      });
+      nextState.step = 'NEED_VARIANT';
+      nextState.collectedFields = fields;
+      return { replies, state: nextState };
+    }
+  }
+
+  if (!fields.quantity) {
+    const quantity = extractQuantity(messageText);
+    if (quantity) {
+      fields.quantity = quantity;
+    } else {
+      fields.quantity = 1;
+    }
+  }
+
+  if (!fields.city) {
+    const city = normalizeCityName(messageText, config);
+    if (city) {
+      fields.city = city;
+    } else {
+      const attempt = incrementAttempt(fields, 'city');
+      if (attempt > 2) {
+        nextState.status = 'handoff';
+        actions.handoffReason = 'Sales concierge handoff (city unclear)';
+        actions.handoffTopic = 'Sales concierge handoff';
+        actions.handoffSummary = buildSalesSummary(fields);
+        actions.recommendedNextAction = 'Confirm delivery city.';
+        replies.push({ text: "We'll have our team confirm delivery details with you." });
+        nextState.collectedFields = fields;
+        return { replies, state: nextState, actions };
+      }
+      nextState.questionCount += 1;
+      replies.push({ text: 'Which city for delivery?' });
+      nextState.step = 'NEED_CITY';
+      nextState.collectedFields = fields;
+      return { replies, state: nextState };
+    }
+  }
+
+  fields.quote = buildSalesQuote(item, fields.city, config);
+  if (fields.quote.stockText === 'Out of stock') {
+    nextState.status = 'handoff';
+    actions.handoffReason = 'Sales concierge handoff (out of stock)';
+    actions.handoffTopic = 'Sales concierge out of stock';
+    actions.handoffSummary = buildSalesSummary(fields);
+    actions.recommendedNextAction = 'Offer alternatives or restock timeline.';
+    replies.push({ text: "That item is currently out of stock. We'll have our team share alternatives." });
+    nextState.collectedFields = fields;
+    return { replies, state: nextState, actions };
+  }
+  if (!fields.quote.priceText || fields.quote.shippingFee === undefined || !fields.quote.eta) {
+    nextState.status = 'handoff';
+    actions.handoffReason = 'Sales concierge handoff (quote missing)';
+    actions.handoffTopic = 'Sales concierge handoff';
+    actions.handoffSummary = buildSalesSummary(fields);
+    actions.recommendedNextAction = 'Provide price or shipping details.';
+    replies.push({ text: "We're confirming pricing and delivery details with our team." });
+    nextState.collectedFields = fields;
+    return { replies, state: nextState, actions };
+  }
+
+  if (!fields.paymentMethod) {
+    const paymentMethod = detectPaymentMethod(messageText);
+    if (paymentMethod) {
+      fields.paymentMethod = paymentMethod;
+    } else {
+      nextState.questionCount += 1;
+      const paymentButtons = [{ title: 'Online payment' }];
+      if (fields.quote.codAllowed) {
+        paymentButtons.push({ title: 'Cash on delivery' });
+      }
+      const currency = fields.quote.currency || 'SAR';
+      const quoteLines = [
+        `Price: ${fields.quote.priceText}`,
+        `Availability: ${fields.quote.stockText || 'Confirming'}`,
+        `Delivery: ${fields.quote.shippingFee} ${currency}, ${fields.quote.eta}`,
+      ];
+      replies.push({ text: `${quoteLines.join(' • ')}\n\nDo you want COD or online payment?`, buttons: paymentButtons });
+      nextState.step = 'NEED_PAYMENT_METHOD';
+      nextState.collectedFields = fields;
+      return { replies, state: nextState };
+    }
+  }
+
+  if (fields.paymentMethod === 'cod' && !fields.quote.codAllowed) {
+    nextState.questionCount += 1;
+    replies.push({ text: 'COD is not available for your area. Do you want the payment link instead?', buttons: [{ title: 'Online payment' }] });
+    nextState.step = 'NEED_PAYMENT_METHOD';
+    nextState.collectedFields = fields;
+    return { replies, state: nextState };
+  }
+
+  if (fields.paymentMethod === 'online') {
+    nextState.step = 'DRAFT_CREATED';
+    nextState.status = 'completed';
+    actions.createDraft = true;
+    actions.paymentLinkRequired = true;
+    actions.draftPayload = { ...fields };
+    replies.push({ text: 'Perfect. Here is your payment link: {payment_link}' });
+    nextState.collectedFields = fields;
+    return { replies, state: nextState, actions };
+  }
+
+  if (!fields.phone) {
+    const phone = extractPhone(messageText);
+    if (phone && phone.length >= minPhoneLength) {
+      fields.phone = phone;
+    } else {
+      const attempt = incrementAttempt(fields, 'phone');
+      if (attempt > 2) {
+        nextState.status = 'handoff';
+        actions.handoffReason = 'Sales concierge handoff (phone invalid)';
+        actions.handoffTopic = 'Sales concierge handoff';
+        actions.handoffSummary = buildSalesSummary(fields);
+        actions.recommendedNextAction = 'Collect phone manually.';
+        replies.push({ text: "We'll have our team reach out to confirm details." });
+        nextState.collectedFields = fields;
+        return { replies, state: nextState, actions };
+      }
+      nextState.questionCount += 1;
+      replies.push({ text: `Please share a valid phone number (at least ${minPhoneLength} digits).` });
+      nextState.step = 'NEED_ADDRESS';
+      nextState.collectedFields = fields;
+      return { replies, state: nextState };
+    }
+  }
+
+  if (!fields.address) {
+    if (looksLikeAddress(messageText)) {
+      fields.address = messageText.trim();
+    } else {
+      const attempt = incrementAttempt(fields, 'address');
+      if (attempt > 2) {
+        nextState.status = 'handoff';
+        actions.handoffReason = 'Sales concierge handoff (address invalid)';
+        actions.handoffTopic = 'Sales concierge handoff';
+        actions.handoffSummary = buildSalesSummary(fields);
+        actions.recommendedNextAction = 'Collect address manually.';
+        replies.push({ text: "We'll have our team confirm your address." });
+        nextState.collectedFields = fields;
+        return { replies, state: nextState, actions };
+      }
+      nextState.questionCount += 1;
+      replies.push({ text: 'Please share the delivery address (area + street).', buttons: undefined });
+      nextState.step = 'NEED_ADDRESS';
+      nextState.collectedFields = fields;
+      return { replies, state: nextState };
+    }
+  }
+
+  nextState.step = 'DRAFT_CREATED';
+  nextState.status = 'handoff';
+  actions.createDraft = true;
+  actions.draftPayload = { ...fields };
+  actions.handoffReason = 'Sales concierge handoff (COD confirmation)';
+  actions.handoffTopic = 'Sales concierge draft ready';
+  actions.handoffSummary = buildSalesSummary(fields);
+  actions.recommendedNextAction = 'Confirm COD order and delivery address.';
+  replies.push({ text: "Thanks! You're in the queue — our team will confirm your COD order shortly." });
+  nextState.collectedFields = fields;
+  return { replies, state: nextState, actions };
+}
+
 async function handoffToTeam(params: {
   conversation: any;
   reason: string;
@@ -661,6 +1204,87 @@ async function handoffToTeam(params: {
   conversation.humanTriggeredByMessageId = undefined;
   conversation.humanHoldUntil = new Date(Date.now() + 60 * 60 * 1000);
   await conversation.save();
+}
+
+async function handoffSalesConcierge(params: {
+  conversation: any;
+  topic: string;
+  summary: string;
+  recommendedNextAction?: string;
+  customerMessage?: string;
+}): Promise<void> {
+  const { conversation, topic, summary, recommendedNextAction, customerMessage } = params;
+  const details = [summary, recommendedNextAction ? `Next: ${recommendedNextAction}` : null]
+    .filter(Boolean)
+    .join('\n');
+
+  await createTicket({
+    conversationId: conversation._id,
+    topicSummary: topic.slice(0, 140),
+    reason: details,
+    createdBy: 'system',
+    customerMessage,
+  });
+
+  conversation.humanRequired = true;
+  conversation.humanRequiredReason = topic;
+  conversation.humanTriggeredAt = new Date();
+  conversation.humanTriggeredByMessageId = undefined;
+  conversation.humanHoldUntil = new Date(Date.now() + 60 * 60 * 1000);
+  await conversation.save();
+}
+
+async function createSalesOrderDraft(params: {
+  conversation: any;
+  fields: Record<string, any>;
+}): Promise<any> {
+  const { conversation, fields } = params;
+  const existingDraft = await OrderDraft.findOne({
+    conversationId: conversation._id,
+    status: { $in: ['draft', 'queued', 'payment_sent', 'needs_confirmation'] },
+  }).sort({ createdAt: -1 });
+
+  if (existingDraft) {
+    return existingDraft;
+  }
+
+  return OrderDraft.create({
+    workspaceId: conversation.workspaceId,
+    conversationId: conversation._id,
+    sku: fields.sku,
+    productName: fields.productName,
+    variant: fields.variant,
+    quantity: fields.quantity,
+    city: fields.city,
+    address: fields.address,
+    phone: fields.phone,
+    paymentMethod: fields.paymentMethod,
+    quote: {
+      price: fields.quote?.priceText,
+      stock: fields.quote?.stockText,
+      shippingFee: fields.quote?.shippingFee,
+      eta: fields.quote?.eta,
+      currency: fields.quote?.currency,
+    },
+    status: fields.paymentMethod === 'online' ? 'payment_sent' : 'queued',
+  });
+}
+
+function createPaymentLink(params: { amountText?: string; draftId: string }) {
+  const base = process.env.PAYMENTS_BASE_URL || process.env.APP_BASE_URL || 'https://pay.sendfx.ai';
+  const safeBase = base.replace(/\/$/, '');
+  const amountParam = params.amountText ? `?amount=${encodeURIComponent(params.amountText)}` : '';
+  return `${safeBase}/pay/${params.draftId}${amountParam}`;
+}
+
+function hydratePaymentLink(text: string, paymentLink?: string): string {
+  if (!paymentLink) return text;
+  return text.replace('{payment_link}', paymentLink);
+}
+
+async function trackSalesStep(workspaceId: mongoose.Types.ObjectId, step?: string) {
+  if (!step) return;
+  await trackDailyMetric(workspaceId, new Date(), { [`salesConciergeStepCounts.${step}`]: 1 });
 }
 
 async function handleBookingConciergeFlow(params: {
@@ -870,6 +1494,120 @@ async function handleAfterHoursCaptureFlow(params: {
   return { success: true };
 }
 
+async function handleSalesConciergeFlow(params: {
+  automation: any;
+  replyStep: { templateFlow: TemplateFlowConfig };
+  session: any;
+  conversation: any;
+  igAccount: any;
+  messageText: string;
+  platform?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{ success: boolean; error?: string }> {
+  const {
+    automation,
+    replyStep,
+    session,
+    conversation,
+    igAccount,
+    messageText,
+    platform,
+    messageContext,
+  } = params;
+  const config = replyStep.templateFlow.config as SalesConciergeConfig;
+  const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
+  const tags = config.tags || ['intent_purchase', 'template_sales_concierge'];
+
+  session.lastCustomerMessageAt = new Date();
+
+  const currentState = normalizeFlowState({
+    step: session.step,
+    status: session.status,
+    questionCount: session.questionCount,
+    collectedFields: session.collectedFields || {},
+  });
+
+  const { replies, state: nextState, actions } = advanceSalesConciergeState({
+    state: currentState,
+    messageText,
+    config,
+    context: messageContext,
+  });
+
+  let draftId = nextState.collectedFields?.draftId;
+  let paymentLink: string | undefined;
+
+  if (actions?.createDraft) {
+    const draft = await createSalesOrderDraft({
+      conversation,
+      fields: nextState.collectedFields || {},
+    });
+    draftId = draft?._id?.toString();
+    if (draftId) {
+      nextState.collectedFields = {
+        ...nextState.collectedFields,
+        draftId,
+      };
+    }
+  }
+
+  if (actions?.paymentLinkRequired && draftId) {
+    paymentLink = createPaymentLink({
+      amountText: nextState.collectedFields?.quote?.priceText,
+      draftId,
+    });
+    nextState.collectedFields = {
+      ...nextState.collectedFields,
+      paymentLink,
+    };
+  }
+
+  let sentAny = false;
+  for (const reply of replies) {
+    if (!updateRateLimit(session, rateLimit)) {
+      if (!sentAny) {
+        return { success: false, error: 'Rate limit exceeded' };
+      }
+      break;
+    }
+    const text = hydratePaymentLink(reply.text, paymentLink);
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text,
+      buttons: reply.buttons,
+      platform,
+      tags,
+    });
+    sentAny = true;
+  }
+
+  if (sentAny) {
+    session.lastAutomationMessageAt = new Date();
+  }
+
+  session.step = nextState.step;
+  session.status = nextState.status;
+  session.questionCount = nextState.questionCount;
+  session.collectedFields = nextState.collectedFields;
+
+  if (actions?.handoffReason && actions?.handoffSummary) {
+    await handoffSalesConcierge({
+      conversation,
+      topic: actions.handoffTopic || actions.handoffReason,
+      summary: actions.handoffSummary,
+      recommendedNextAction: actions.recommendedNextAction,
+      customerMessage: messageText,
+    });
+  }
+
+  await trackSalesStep(conversation.workspaceId, nextState.step);
+  await session.save();
+  return { success: true };
+}
+
 async function executeTemplateFlow(params: {
   automation: any;
   replyStep: any;
@@ -878,6 +1616,7 @@ async function executeTemplateFlow(params: {
   instagramAccountId: string;
   messageText: string;
   platform?: string;
+  messageContext?: AutomationTestContext;
 }): Promise<{ success: boolean; error?: string }> {
   const {
     automation,
@@ -887,6 +1626,7 @@ async function executeTemplateFlow(params: {
     instagramAccountId,
     messageText,
     platform,
+    messageContext,
   } = params;
 
   const templateFlow = replyStep.templateFlow as TemplateFlowConfig | undefined;
@@ -947,6 +1687,19 @@ async function executeTemplateFlow(params: {
     });
   }
 
+  if (templateFlow.templateId === 'sales_concierge') {
+    return handleSalesConciergeFlow({
+      automation,
+      replyStep,
+      session,
+      conversation,
+      igAccount,
+      messageText,
+      platform,
+      messageContext,
+    });
+  }
+
   return { success: false, error: 'Unknown template flow' };
 }
 
@@ -961,9 +1714,19 @@ export async function executeAutomation(params: {
   messageText?: string;
   instagramAccountId: string;
   platform?: string;
+  messageContext?: AutomationTestContext;
 }): Promise<{ success: boolean; automationExecuted?: string; error?: string }> {
   try {
-    const { workspaceId, triggerType, conversationId, participantInstagramId, messageText, instagramAccountId, platform } = params;
+    const {
+      workspaceId,
+      triggerType,
+      conversationId,
+      participantInstagramId,
+      messageText,
+      instagramAccountId,
+      platform,
+      messageContext,
+    } = params;
 
     console.log('🤖 [AUTOMATION] Starting automation execution:', {
       workspaceId,
@@ -1005,7 +1768,7 @@ export async function executeAutomation(params: {
         }
       }
 
-      if (matchesTriggerConfig(normalizedMessage, candidate.triggerConfig)) {
+      if (matchesTriggerConfig(normalizedMessage, candidate.triggerConfig, messageContext)) {
         matchingAutomations.push(candidate);
       }
     }
@@ -1033,6 +1796,7 @@ export async function executeAutomation(params: {
       instagramAccountId,
       messageText: normalizedMessage,
       platform,
+      messageContext,
     });
 
     if (templateResult.success) {
@@ -1059,6 +1823,7 @@ export async function checkAndExecuteAutomations(params: {
   messageText?: string;
   instagramAccountId: string;
   platform?: string;
+  messageContext?: AutomationTestContext;
 }): Promise<{ executed: boolean; automationName?: string }> {
   const result = await executeAutomation(params);
   return {
@@ -1195,6 +1960,38 @@ function simulateAfterHoursCaptureTest(
     state: currentState,
     messageText,
     config,
+  });
+
+  return {
+    replies: replies.map((reply) => reply.text),
+    templateState: {
+      ...templateState,
+      step: nextState.step,
+      status: nextState.status,
+      questionCount: nextState.questionCount,
+      collectedFields: nextState.collectedFields,
+    },
+    actions,
+  };
+}
+
+function simulateSalesConciergeTest(
+  messageText: string,
+  templateState: NonNullable<AutomationTestState['template']>,
+  config: SalesConciergeConfig,
+  context?: AutomationTestContext,
+): { replies: string[]; templateState: NonNullable<AutomationTestState['template']>; actions?: TemplateFlowActions } {
+  const currentState = normalizeFlowState({
+    step: templateState.step,
+    status: templateState.status,
+    questionCount: templateState.questionCount,
+    collectedFields: templateState.collectedFields || {},
+  });
+  const { replies, state: nextState, actions } = advanceSalesConciergeState({
+    state: currentState,
+    messageText,
+    config,
+    context,
   });
 
   return {
@@ -1349,7 +2146,7 @@ export async function runAutomationTest(params: {
 
   if (templateId === 'booking_concierge') {
     result = simulateBookingConciergeTest(messageText, templateState, replyStep.templateFlow.config as BookingConciergeConfig);
-  } else {
+  } else if (templateId === 'after_hours_capture') {
     result = simulateAfterHoursCaptureTest(messageText, templateState, replyStep.templateFlow.config as AfterHoursCaptureConfig);
     if (
       (result.actions?.scheduleFollowup || result.templateState.status === 'completed') &&
@@ -1357,6 +2154,44 @@ export async function runAutomationTest(params: {
     ) {
       scheduleAfterHoursFollowup(result.templateState, replyStep.templateFlow.config as AfterHoursCaptureConfig, new Date());
     }
+  } else if (templateId === 'sales_concierge') {
+    result = simulateSalesConciergeTest(
+      messageText,
+      templateState,
+      replyStep.templateFlow.config as SalesConciergeConfig,
+      context,
+    );
+    if (result.actions?.createDraft) {
+      const existingDraftId = result.templateState.collectedFields?.draftId as string | undefined;
+      const draftId = existingDraftId || `draft_${Date.now()}`;
+      result.templateState.collectedFields = {
+        ...result.templateState.collectedFields,
+        draftId,
+      };
+      if (result.actions.paymentLinkRequired) {
+        const paymentLink = createPaymentLink({
+          amountText: result.templateState.collectedFields?.quote?.priceText,
+          draftId,
+        });
+        result.templateState.collectedFields = {
+          ...result.templateState.collectedFields,
+          paymentLink,
+        };
+        result.replies = result.replies.map((reply) => hydratePaymentLink(reply, paymentLink));
+      }
+    }
+  } else {
+    return {
+      replies: [],
+      state: {
+        ...nextState,
+        history,
+      },
+      meta: {
+        triggerMatched: shouldProcess,
+        error: 'Unsupported template flow',
+      },
+    };
   }
 
   result.replies.forEach((reply) => appendTestHistory(history, 'ai', reply));
