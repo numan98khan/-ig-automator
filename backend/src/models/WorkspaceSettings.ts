@@ -45,6 +45,16 @@ export interface IWorkspaceSettings extends Document {
   primaryGoal?: GoalType;
   secondaryGoal?: GoalType;
   goalConfigs?: GoalConfigurations;
+  googleSheets?: {
+    enabled?: boolean;
+    spreadsheetId?: string;
+    sheetName?: string;
+    serviceAccountJson?: string;
+    headerRow?: number;
+    lastTestedAt?: Date;
+    lastTestStatus?: 'success' | 'failed';
+    lastTestMessage?: string;
+  };
 
   createdAt: Date;
   updatedAt: Date;
@@ -79,6 +89,17 @@ const supportGoalConfigSchema = new Schema<SupportGoalConfig>({
 const driveGoalConfigSchema = new Schema<DriveGoalConfig>({
   targetType: { type: String, enum: ['website', 'WhatsApp', 'store', 'app'], default: 'website' },
   targetLink: { type: String, trim: true },
+}, { _id: false });
+
+const googleSheetsConfigSchema = new Schema({
+  enabled: { type: Boolean, default: false },
+  spreadsheetId: { type: String, trim: true },
+  sheetName: { type: String, trim: true },
+  serviceAccountJson: { type: String },
+  headerRow: { type: Number, min: 1, default: 1 },
+  lastTestedAt: { type: Date },
+  lastTestStatus: { type: String, enum: ['success', 'failed'] },
+  lastTestMessage: { type: String, trim: true },
 }, { _id: false });
 
 const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
@@ -210,6 +231,10 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
       support: { type: supportGoalConfigSchema, default: () => ({}) },
       drive: { type: driveGoalConfigSchema, default: () => ({}) },
     }, { _id: false }),
+    default: undefined,
+  },
+  googleSheets: {
+    type: googleSheetsConfigSchema,
     default: undefined,
   },
 }, {

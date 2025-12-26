@@ -4,11 +4,9 @@ import PrivateRoute from './components/PrivateRoute';
 import Layout from './components/Layout';
 import Landing from './pages/Landing';
 import Inbox from './pages/Inbox';
-import Knowledge from './pages/Knowledge';
 import Settings from './pages/Settings';
 import Categories from './pages/Categories';
 import PrivacyPolicy from './pages/PrivacyPolicy';
-import Escalations from './pages/Escalations';
 import VerifyEmail from './pages/VerifyEmail';
 import AcceptInvite from './pages/AcceptInvite';
 import RequestPasswordReset from './pages/RequestPasswordReset';
@@ -43,14 +41,14 @@ function App() {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="inbox" element={<Inbox />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="knowledge" element={<Knowledge />} />
+            <Route path="knowledge" element={<Navigate to="/automations?section=knowledge" replace />} />
             <Route path="sandbox" element={<Sandbox />} />
             <Route path="settings" element={<Settings />} />
             <Route path="automations" element={<Automations />} />
             <Route path="support" element={<Support />} />
             <Route path="categories" element={<Categories />} />
-            <Route path="alerts" element={<Escalations />} />
-            <Route path="escalations" element={<Navigate to="/alerts" replace />} />
+            <Route path="alerts" element={<Navigate to="/automations?section=alerts" replace />} />
+            <Route path="escalations" element={<Navigate to="/automations?section=alerts" replace />} />
             <Route path="team" element={<Navigate to="/settings?tab=team" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/landing" />} />

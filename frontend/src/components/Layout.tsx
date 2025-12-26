@@ -4,14 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import {
   Instagram,
   MessageSquare,
-  BookOpen,
   LogOut,
   ChevronDown,
   Settings,
   Tags,
   Menu,
   X as CloseIcon,
-  AlertCircle,
   TestTube,
   LayoutDashboard,
   Search,
@@ -52,7 +50,6 @@ const Layout: React.FC = () => {
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
 
   const aiLinks = useMemo(() => ([
-    { to: '/knowledge', label: 'Knowledge Base', icon: BookOpen },
     { to: '/categories', label: 'Categories & Policies', icon: Tags },
     { to: '/sandbox', label: 'Sandbox (Test)', icon: TestTube },
   ]), []);
@@ -61,7 +58,6 @@ const Layout: React.FC = () => {
     const links = [
       { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
-      { to: '/alerts', label: 'Alerts', icon: AlertCircle, isActive: isActive('/alerts') },
       { to: '/automations', label: 'Automations', icon: Atom, isActive: isActive('/automations') },
       { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
     ];

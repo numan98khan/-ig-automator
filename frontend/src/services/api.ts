@@ -460,8 +460,20 @@ export interface WorkspaceSettings {
   primaryGoal?: GoalType;
   secondaryGoal?: GoalType;
   goalConfigs?: GoalConfigs;
+  googleSheets?: GoogleSheetsIntegration;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GoogleSheetsIntegration {
+  enabled?: boolean;
+  spreadsheetId?: string;
+  sheetName?: string;
+  serviceAccountJson?: string;
+  headerRow?: number;
+  lastTestedAt?: string;
+  lastTestStatus?: 'success' | 'failed';
+  lastTestMessage?: string;
 }
 
 export interface MessageCategory {
@@ -879,6 +891,17 @@ export const settingsAPI = {
 
   getStats: async (workspaceId: string): Promise<AutomationStats> => {
     const { data } = await api.get(`/api/settings/workspace/${workspaceId}/stats`);
+    return data;
+  },
+};
+
+// Integrations API
+export const integrationsAPI = {
+  testGoogleSheets: async (
+    workspaceId: string,
+    config: GoogleSheetsIntegration,
+  ): Promise<{ success: boolean; preview?: { headers: string[]; rows: string[][]; range: string } }> => {
+    const { data } = await api.post('/api/integrations/google-sheets/test', { workspaceId, config });
     return data;
   },
 };

@@ -1,9 +1,9 @@
 import React from 'react';
-import { Target, PlayCircle, Clock, Link as LinkIcon } from 'lucide-react';
+import { Target, PlayCircle, Clock, Link as LinkIcon, AlertTriangle, BookOpen } from 'lucide-react';
 
 type AutomationsSidebarProps = {
-  activeSection: 'automations' | 'routing' | 'followups' | 'integrations';
-  onChange: (section: 'automations' | 'routing' | 'followups' | 'integrations') => void;
+  activeSection: 'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations';
+  onChange: (section: 'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations') => void;
 };
 
 export const AutomationsSidebar: React.FC<AutomationsSidebarProps> = ({ activeSection, onChange }) => (
@@ -19,6 +19,28 @@ export const AutomationsSidebar: React.FC<AutomationsSidebarProps> = ({ activeSe
       >
         <Target className="w-4 h-4" />
         <span className="flex-1 text-sm font-medium">Automations</span>
+      </button>
+      <button
+        onClick={() => onChange('knowledge')}
+        className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
+          activeSection === 'knowledge'
+            ? 'bg-primary/12 text-foreground border border-primary/30 shadow-sm'
+            : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-white/5 border border-transparent'
+        }`}
+      >
+        <BookOpen className="w-4 h-4" />
+        <span className="flex-1 text-sm font-medium">Knowledge Base</span>
+      </button>
+      <button
+        onClick={() => onChange('alerts')}
+        className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
+          activeSection === 'alerts'
+            ? 'bg-primary/12 text-foreground border border-primary/30 shadow-sm'
+            : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-white/5 border border-transparent'
+        }`}
+      >
+        <AlertTriangle className="w-4 h-4" />
+        <span className="flex-1 text-sm font-medium">Human Alerts</span>
       </button>
       <button
         onClick={() => onChange('routing')}

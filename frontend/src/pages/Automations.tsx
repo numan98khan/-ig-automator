@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
 import {
@@ -24,7 +25,6 @@ import {
 } from './automations/constants';
 import {
   AlertTriangle,
-  Link as LinkIcon,
   PlayCircle,
   Clock,
 } from 'lucide-react';
@@ -33,12 +33,16 @@ import { AutomationsListView } from './automations/AutomationsListView';
 import { AutomationsTestView } from './automations/AutomationsTestView';
 import { AutomationsCreateView } from './automations/AutomationsCreateView';
 import { AutomationPlaceholderSection } from './automations/AutomationPlaceholderSection';
+import { AutomationsHumanAlerts } from './automations/AutomationsHumanAlerts';
+import Knowledge from './Knowledge';
+import { AutomationsIntegrationsView } from './automations/AutomationsIntegrationsView';
 
 
 const Automations: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const { activeAccount } = useAccountContext();
-  const [activeSection, setActiveSection] = useState<'automations' | 'routing' | 'followups' | 'integrations'>('automations');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeSection, setActiveSection] = useState<'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'>('automations');
   const [automationView, setAutomationView] = useState<'list' | 'create' | 'edit' | 'test'>('list');
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeItem[]>([]);
@@ -83,8 +87,9 @@ const Automations: React.FC = () => {
   const accountHandle = activeAccount?.username || 'connected_account';
   const accountAvatarUrl = activeAccount?.profilePictureUrl;
   const accountInitial = accountDisplayName.charAt(0).toUpperCase();
-  const isCreateView = automationView === 'create' || automationView === 'edit';
-  const isTestView = automationView === 'test' && !!testingAutomation;
+  const isAutomationsSection = activeSection === 'automations';
+  const isCreateView = isAutomationsSection && (automationView === 'create' || automationView === 'edit');
+  const isTestView = isAutomationsSection && automationView === 'test' && !!testingAutomation;
 
   // Template mode states
   const [creationMode, setCreationMode] = useState<'templates' | 'custom'>('templates');
@@ -102,6 +107,13 @@ const Automations: React.FC = () => {
     ? `Setup: ${selectedTemplate?.name}`
     : 'Review & Activate';
   const isCreateSetupView = isCreateView && currentStep === 'setup';
+
+  useEffect(() => {
+    const section = searchParams.get('section');
+    if (section === 'knowledge' || section === 'alerts') {
+      setActiveSection(section);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -152,6 +164,15 @@ const Automations: React.FC = () => {
     setSetupData(getDefaultSetupData());
     setTestingAutomation(null);
     setAutomationView('create');
+  };
+
+  const handleSectionChange = (section: 'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations') => {
+    setActiveSection(section);
+    if (section === 'knowledge' || section === 'alerts') {
+      setSearchParams({ section });
+    } else if (searchParams.get('section')) {
+      setSearchParams({});
+    }
   };
 
   const buildSetupDataFromTemplateConfig = (
@@ -717,7 +738,7 @@ const Automations: React.FC = () => {
         {/* Left Side Navigation */}
         <AutomationsSidebar
           activeSection={activeSection}
-          onChange={setActiveSection}
+          onChange={handleSectionChange}
         />
 
         {/* Right Content Area */}
@@ -816,6 +837,14 @@ const Automations: React.FC = () => {
             </div>
           )}
 
+          {activeSection === 'knowledge' && (
+            <Knowledge />
+          )}
+
+          {activeSection === 'alerts' && (
+            <AutomationsHumanAlerts />
+          )}
+
           {activeSection === 'routing' && (
             <AutomationPlaceholderSection
               icon={<PlayCircle className="w-16 h-16" />}
@@ -835,12 +864,7 @@ const Automations: React.FC = () => {
           )}
 
           {activeSection === 'integrations' && (
-            <AutomationPlaceholderSection
-              icon={<LinkIcon className="w-16 h-16" />}
-              title="Integrations"
-              subtitle="Coming Soon"
-              description="Connect to external services like Sheets, Calendly, and more."
-            />
+            <AutomationsIntegrationsView />
           )}
         </div>
       </div>

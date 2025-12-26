@@ -807,6 +807,7 @@ function buildSalesQuote(item: SalesCatalogItem, city: string, config: SalesConc
 
 function buildSalesSummary(fields: Record<string, any>) {
   return [
+    fields.productRef?.value ? `Ref: ${fields.productRef.value}` : null,
     fields.sku ? `SKU: ${fields.sku}` : null,
     fields.productName ? `Product: ${fields.productName}` : null,
     fields.variant?.size ? `Size: ${fields.variant.size}` : null,
@@ -903,6 +904,14 @@ function advanceSalesConciergeState(params: {
     const productRef = extractProductRef(messageText, context);
     if (productRef) {
       fields.productRef = productRef;
+    }
+  }
+
+  if (!fields.productRef) {
+    const candidates = findCatalogCandidates(config, messageText);
+    if (candidates.length > 0) {
+      fields.productRef = { type: 'text', value: messageText };
+      fields.skuCandidates = candidates;
     }
   }
 
@@ -1251,6 +1260,7 @@ async function createSalesOrderDraft(params: {
   return OrderDraft.create({
     workspaceId: conversation.workspaceId,
     conversationId: conversation._id,
+    productRef: fields.productRef,
     sku: fields.sku,
     productName: fields.productName,
     variant: fields.variant,

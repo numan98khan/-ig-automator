@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowRight, MessageSquare, BookOpen, Tags, TestTube, Users, AlertCircle } from 'lucide-react';
+import { Search, ArrowRight, MessageSquare, BookOpen, Tags, TestTube, Users, AlertTriangle } from 'lucide-react';
 
 interface GlobalSearchModalProps {
   open: boolean;
@@ -25,9 +25,9 @@ const searchIndex: SearchItem[] = [
     tags: ['conversation', 'reply', 'follow-up'],
   },
   {
-    title: 'Knowledge Base',
-    description: 'Search saved responses, policies, and playbooks.',
-    path: '/knowledge',
+    title: 'Knowledge Base (Automations)',
+    description: 'Manage AI knowledge articles inside Automations.',
+    path: '/automations?section=knowledge',
     icon: BookOpen,
     tags: ['docs', 'articles', 'collections'],
   },
@@ -46,10 +46,10 @@ const searchIndex: SearchItem[] = [
     tags: ['testing', 'simulation'],
   },
   {
-    title: 'Alerts',
-    description: 'Human escalations and SLA risks ready for triage.',
-    path: '/alerts',
-    icon: AlertCircle,
+    title: 'Human Alerts (Automations)',
+    description: 'Review escalations and resolve with your team.',
+    path: '/automations?section=alerts',
+    icon: AlertTriangle,
     tags: ['escalation', 'sla'],
   },
   {
@@ -120,7 +120,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ open, onClose, on
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search conversations, knowledge, categories, or teammates"
+            placeholder="Search conversations, automations, categories, or teammates"
             className="flex-1 bg-transparent outline-none text-sm"
           />
           <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-md">ESC</span>

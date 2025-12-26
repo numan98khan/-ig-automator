@@ -71,6 +71,7 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       primaryGoal,
       secondaryGoal,
       goalConfigs,
+      googleSheets,
     } = req.body;
 
     // Verify workspace belongs to user
@@ -107,6 +108,7 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     if (primaryGoal !== undefined) updateData.primaryGoal = primaryGoal;
     if (secondaryGoal !== undefined) updateData.secondaryGoal = secondaryGoal;
     if (goalConfigs !== undefined) updateData.goalConfigs = goalConfigs;
+    if (googleSheets !== undefined) updateData.googleSheets = googleSheets;
 
     const settings = await WorkspaceSettings.findOneAndUpdate(
       { workspaceId },
