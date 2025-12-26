@@ -654,7 +654,7 @@ const Automations: React.FC = () => {
   if (!currentWorkspace) return null;
 
   return (
-    <div className={`h-full flex flex-col ${isTestView || isCreateSetupView ? 'overflow-hidden' : ''}`}>
+    <div className={`h-full flex flex-col ${isTestView || isCreateSetupView ? 'sm:overflow-hidden' : ''}`}>
       {/* Header */}
       {/* <div className="mb-6">
         <div>
@@ -676,7 +676,7 @@ const Automations: React.FC = () => {
         {/* Right Content Area */}
         <div
           className={`flex-1 min-h-0 ${
-            isTestView || isCreateSetupView ? 'flex flex-col gap-6 overflow-hidden' : 'space-y-6'
+            isTestView || isCreateSetupView ? 'flex flex-col gap-6 sm:overflow-hidden' : 'space-y-6'
           }`}
         >
           {/* Error Alert */}
@@ -691,7 +691,7 @@ const Automations: React.FC = () => {
             <div
               className={`animate-fade-in ${
                 isTestView || isCreateView
-                  ? `min-h-0 flex-1 flex flex-col gap-6${isTestView || isCreateSetupView ? ' overflow-hidden' : ''}`
+                  ? `min-h-0 flex-1 flex flex-col gap-6${isTestView || isCreateSetupView ? ' sm:overflow-hidden' : ''}`
                   : 'space-y-6'
               }`}
             >
