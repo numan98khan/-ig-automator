@@ -471,6 +471,9 @@ export interface GoogleSheetsIntegration {
   sheetName?: string;
   serviceAccountJson?: string;
   headerRow?: number;
+  oauthConnected?: boolean;
+  oauthConnectedAt?: string;
+  oauthEmail?: string;
   lastTestedAt?: string;
   lastTestStatus?: 'success' | 'failed';
   lastTestMessage?: string;
@@ -902,6 +905,22 @@ export const integrationsAPI = {
     config: GoogleSheetsIntegration,
   ): Promise<{ success: boolean; preview?: { headers: string[]; rows: string[][]; range: string } }> => {
     const { data } = await api.post('/api/integrations/google-sheets/test', { workspaceId, config });
+    return data;
+  },
+  getGoogleSheetsAuthUrl: async (workspaceId: string): Promise<{ url: string }> => {
+    const { data } = await api.get('/api/integrations/google-sheets/oauth/start', { params: { workspaceId } });
+    return data;
+  },
+  disconnectGoogleSheets: async (workspaceId: string): Promise<{ success: boolean }> => {
+    const { data } = await api.post('/api/integrations/google-sheets/oauth/disconnect', { workspaceId });
+    return data;
+  },
+  listGoogleSheetsFiles: async (workspaceId: string): Promise<{ files: Array<{ id: string; name: string }> }> => {
+    const { data } = await api.get('/api/integrations/google-sheets/files', { params: { workspaceId } });
+    return data;
+  },
+  listGoogleSheetsTabs: async (workspaceId: string, spreadsheetId: string): Promise<{ tabs: string[] }> => {
+    const { data } = await api.get('/api/integrations/google-sheets/tabs', { params: { workspaceId, spreadsheetId } });
     return data;
   },
 };

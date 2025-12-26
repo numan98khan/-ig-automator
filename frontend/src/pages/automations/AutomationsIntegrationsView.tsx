@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle, RefreshCw, FileSpreadsheet, ExternalLink } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { AlertTriangle, CheckCircle, RefreshCw, FileSpreadsheet, ExternalLink, Link2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -9,18 +10,27 @@ const DEFAULT_CONFIG: GoogleSheetsIntegration = {
   enabled: false,
   spreadsheetId: '',
   sheetName: 'Sheet1',
-  serviceAccountJson: '',
   headerRow: 1,
 };
 
 export const AutomationsIntegrationsView: React.FC = () => {
   const { currentWorkspace } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [formData, setFormData] = useState<GoogleSheetsIntegration>(DEFAULT_CONFIG);
   const [lastTest, setLastTest] = useState<Pick<GoogleSheetsIntegration, 'lastTestedAt' | 'lastTestStatus' | 'lastTestMessage'>>({});
   const [preview, setPreview] = useState<{ headers: string[]; rows: string[][]; range: string } | null>(null);
+  const [oauthConnected, setOauthConnected] = useState(false);
+  const [oauthEmail, setOauthEmail] = useState<string | null>(null);
+  const [sheetFiles, setSheetFiles] = useState<Array<{ id: string; name: string }>>([]);
+  const [sheetTabs, setSheetTabs] = useState<string[]>([]);
+  const [spreadsheetInput, setSpreadsheetInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [loadingSheets, setLoadingSheets] = useState(false);
+  const [loadingTabs, setLoadingTabs] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -30,10 +40,26 @@ export const AutomationsIntegrationsView: React.FC = () => {
     }
   }, [currentWorkspace]);
 
+  useEffect(() => {
+    const status = searchParams.get('googleSheets');
+    if (status === 'connected') {
+      setSuccess('Google Sheets connected successfully.');
+      setSearchParams({ section: 'integrations' });
+      loadSettings().then(() => handleLoadSheets());
+    }
+    if (status === 'error') {
+      setError('Google Sheets connection failed. Please try again.');
+      setSearchParams({ section: 'integrations' });
+    }
+  }, [searchParams, setSearchParams]);
+
   const loadSettings = async () => {
     if (!currentWorkspace) return;
     setLoading(true);
     setError(null);
+    setSheetFiles([]);
+    setSheetTabs([]);
+    setPreview(null);
     try {
       const settings = await settingsAPI.getByWorkspace(currentWorkspace._id);
       const googleSheets = settings.googleSheets || DEFAULT_CONFIG;
@@ -41,30 +67,22 @@ export const AutomationsIntegrationsView: React.FC = () => {
         enabled: googleSheets.enabled ?? false,
         spreadsheetId: googleSheets.spreadsheetId || '',
         sheetName: googleSheets.sheetName || 'Sheet1',
-        serviceAccountJson: googleSheets.serviceAccountJson || '',
         headerRow: googleSheets.headerRow || 1,
       });
+      setSpreadsheetInput(googleSheets.spreadsheetId || '');
       setLastTest({
         lastTestedAt: googleSheets.lastTestedAt,
         lastTestStatus: googleSheets.lastTestStatus,
         lastTestMessage: googleSheets.lastTestMessage,
       });
+      setOauthConnected(!!googleSheets.oauthConnected);
+      setOauthEmail(googleSheets.oauthEmail || null);
     } catch (err: any) {
       setError(err.message || 'Failed to load integrations');
     } finally {
       setLoading(false);
     }
   };
-
-  const serviceAccountEmail = useMemo(() => {
-    try {
-      if (!formData.serviceAccountJson) return null;
-      const parsed = JSON.parse(formData.serviceAccountJson);
-      return parsed?.client_email || null;
-    } catch {
-      return null;
-    }
-  }, [formData.serviceAccountJson]);
 
   const handleSave = async () => {
     if (!currentWorkspace) return;
@@ -101,13 +119,118 @@ export const AutomationsIntegrationsView: React.FC = () => {
     try {
       const result = await integrationsAPI.testGoogleSheets(currentWorkspace._id, formData);
       setPreview(result.preview || null);
-      await loadSettings();
+      if (result.preview) {
+        setLastTest({
+          lastTestedAt: new Date().toISOString(),
+          lastTestStatus: 'success',
+          lastTestMessage: `Fetched ${result.preview.headers.length} header(s) from ${result.preview.range}`,
+        });
+      }
       setSuccess('Connected and fetched header preview.');
     } catch (err: any) {
       setError(err.message || 'Failed to test Google Sheets');
     } finally {
       setTesting(false);
     }
+  };
+
+  const handleConnect = async () => {
+    if (!currentWorkspace) return;
+    setConnecting(true);
+    setError(null);
+    try {
+      const result = await integrationsAPI.getGoogleSheetsAuthUrl(currentWorkspace._id);
+      window.location.assign(result.url);
+    } catch (err: any) {
+      setError(err.message || 'Failed to start Google OAuth');
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!currentWorkspace) return;
+    setDisconnecting(true);
+    setError(null);
+    try {
+      await integrationsAPI.disconnectGoogleSheets(currentWorkspace._id);
+      setOauthConnected(false);
+      setOauthEmail(null);
+      setSheetFiles([]);
+      setSheetTabs([]);
+      setSuccess('Google Sheets disconnected.');
+      await loadSettings();
+    } catch (err: any) {
+      setError(err.message || 'Failed to disconnect Google Sheets');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  const handleLoadSheets = async () => {
+    if (!currentWorkspace) return;
+    setLoadingSheets(true);
+    setError(null);
+    try {
+      const result = await integrationsAPI.listGoogleSheetsFiles(currentWorkspace._id);
+      setSheetFiles(result.files || []);
+      if (result.files?.length === 0) {
+        setSuccess('No spreadsheets found in this Google account.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load sheets');
+    } finally {
+      setLoadingSheets(false);
+    }
+  };
+
+  const parseSpreadsheetId = (value: string) => {
+    const match = value.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (match?.[1]) return match[1];
+    const trimmed = value.trim();
+    if (/^[a-zA-Z0-9-_]{15,}$/.test(trimmed)) return trimmed;
+    return '';
+  };
+
+  const loadTabsForSpreadsheet = async (spreadsheetId: string) => {
+    if (!currentWorkspace || !spreadsheetId || !oauthConnected) return;
+    setLoadingTabs(true);
+    setError(null);
+    try {
+      const result = await integrationsAPI.listGoogleSheetsTabs(currentWorkspace._id, spreadsheetId);
+      const tabs = result.tabs || [];
+      setSheetTabs(tabs);
+      if (tabs.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          sheetName: tabs.includes(prev.sheetName || '') ? prev.sheetName : tabs[0],
+        }));
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load sheet tabs');
+    } finally {
+      setLoadingTabs(false);
+    }
+  };
+
+  const handleSelectSpreadsheet = async (spreadsheetId: string) => {
+    setSpreadsheetInput(spreadsheetId);
+    setFormData((prev) => ({ ...prev, spreadsheetId }));
+    setSheetTabs([]);
+    await loadTabsForSpreadsheet(spreadsheetId);
+  };
+
+  const handleSpreadsheetInputChange = (value: string) => {
+    setSpreadsheetInput(value);
+    const parsed = parseSpreadsheetId(value);
+    if (!parsed) {
+      setFormData((prev) => ({ ...prev, spreadsheetId: '' }));
+      setSheetTabs([]);
+      return;
+    }
+    if (parsed === formData.spreadsheetId) return;
+    setFormData((prev) => ({ ...prev, spreadsheetId: parsed }));
+    loadTabsForSpreadsheet(parsed);
   };
 
   if (!currentWorkspace) {
@@ -152,11 +275,11 @@ export const AutomationsIntegrationsView: React.FC = () => {
       <div className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-2xl p-6 space-y-5">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Google Sheets</h2>
-            <p className="text-sm text-muted-foreground">
-              Connect a sheet to read inventory and pricing data for Sales Concierge.
-            </p>
-          </div>
+          <h2 className="text-lg font-semibold text-foreground">Google Sheets</h2>
+          <p className="text-sm text-muted-foreground">
+            Connect a sheet to read inventory and pricing data for Sales Concierge (read-only access).
+          </p>
+        </div>
           <label className="flex items-center gap-2 text-sm font-medium">
             <input
               type="checkbox"
@@ -168,45 +291,92 @@ export const AutomationsIntegrationsView: React.FC = () => {
           </label>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Input
-            label="Spreadsheet URL or ID"
-            value={formData.spreadsheetId || ''}
-            onChange={(event) => {
-              const value = event.target.value.trim();
-              const match = value.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-              const fallback = value.match(/^[a-zA-Z0-9-_]{15,}$/) ? value : '';
-              const spreadsheetId = match?.[1] || fallback || value;
-              setFormData((prev) => ({ ...prev, spreadsheetId }));
-            }}
-            placeholder="Paste Google Sheet URL or ID"
-          />
-          <Input
-            label="Sheet Tab Name"
-            value={formData.sheetName || ''}
-            onChange={(event) => setFormData((prev) => ({ ...prev, sheetName: event.target.value }))}
-            placeholder="Sheet1"
-          />
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-muted/30 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Link2 className="w-4 h-4" />
+            {oauthConnected ? 'Connected' : 'Not connected'}
+          </div>
+          {oauthEmail && (
+            <span className="text-xs text-muted-foreground">({oauthEmail})</span>
+          )}
+          <div className="ml-auto flex gap-2">
+            {!oauthConnected ? (
+              <Button variant="outline" onClick={handleConnect} isLoading={connecting}>
+                Connect Google Sheets
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={handleDisconnect} isLoading={disconnecting}>
+                Disconnect
+              </Button>
+            )}
+            <Button variant="outline" onClick={loadSettings} leftIcon={<RefreshCw className="w-4 h-4" />}>
+              Refresh
+            </Button>
+          </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1.5">Service Account JSON</label>
-          <textarea
-            value={formData.serviceAccountJson || ''}
-            onChange={(event) => setFormData((prev) => ({ ...prev, serviceAccountJson: event.target.value }))}
-            rows={6}
-            className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
-            placeholder='{"type":"service_account","client_email":"..."}'
-          />
-          <p className="text-xs text-muted-foreground mt-2">
-            Create a Google service account with Sheets API enabled, then paste the JSON credentials here.
-          </p>
-          {serviceAccountEmail && (
-            <div className="mt-3 text-xs text-muted-foreground flex items-center gap-2">
-              <span className="font-semibold text-foreground">Share sheet with:</span>
-              <span className="px-2 py-1 rounded-md bg-muted">{serviceAccountEmail}</span>
+        <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={handleLoadSheets}
+                isLoading={loadingSheets}
+                disabled={!oauthConnected}
+              >
+                Load Sheets
+              </Button>
+              {sheetFiles.length > 0 && (
+                <select
+                  value={formData.spreadsheetId || ''}
+                  onChange={(event) => handleSelectSpreadsheet(event.target.value)}
+                  className="flex-1 min-w-[240px] px-3 py-2 bg-background border border-input rounded-md text-sm"
+                >
+                  <option value="">Select a spreadsheet</option>
+                  {sheetFiles.map((file) => (
+                    <option key={file.id} value={file.id}>
+                      {file.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
-          )}
+            <Input
+              label="Spreadsheet URL or ID"
+              value={spreadsheetInput}
+              onChange={(event) => handleSpreadsheetInputChange(event.target.value)}
+              placeholder="Paste Google Sheet URL or ID"
+            />
+          </div>
+
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-muted-foreground">Sheet Tab</label>
+            {loadingTabs ? (
+              <div className="text-xs text-muted-foreground flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                Loading tabs...
+              </div>
+            ) : sheetTabs.length > 0 ? (
+              <select
+                value={formData.sheetName || ''}
+                onChange={(event) => setFormData((prev) => ({ ...prev, sheetName: event.target.value }))}
+                className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
+              >
+                {sheetTabs.map((tab) => (
+                  <option key={tab} value={tab}>
+                    {tab}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <Input
+                label="Sheet Tab Name"
+                value={formData.sheetName || ''}
+                onChange={(event) => setFormData((prev) => ({ ...prev, sheetName: event.target.value }))}
+                placeholder="Sheet1"
+              />
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -242,7 +412,7 @@ export const AutomationsIntegrationsView: React.FC = () => {
               onClick={handleTest}
               isLoading={testing}
               leftIcon={<ExternalLink className="w-4 h-4" />}
-              disabled={!formData.spreadsheetId || !formData.serviceAccountJson}
+              disabled={!oauthConnected || !formData.spreadsheetId}
             >
               Test Connection
             </Button>

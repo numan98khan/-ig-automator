@@ -51,6 +51,10 @@ export interface IWorkspaceSettings extends Document {
     sheetName?: string;
     serviceAccountJson?: string;
     headerRow?: number;
+    oauthConnected?: boolean;
+    oauthConnectedAt?: Date;
+    oauthEmail?: string;
+    oauthRefreshToken?: string;
     lastTestedAt?: Date;
     lastTestStatus?: 'success' | 'failed';
     lastTestMessage?: string;
@@ -97,6 +101,10 @@ const googleSheetsConfigSchema = new Schema({
   sheetName: { type: String, trim: true },
   serviceAccountJson: { type: String },
   headerRow: { type: Number, min: 1, default: 1 },
+  oauthConnected: { type: Boolean, default: false },
+  oauthConnectedAt: { type: Date },
+  oauthEmail: { type: String, trim: true },
+  oauthRefreshToken: { type: String },
   lastTestedAt: { type: Date },
   lastTestStatus: { type: String, enum: ['success', 'failed'] },
   lastTestMessage: { type: String, trim: true },
