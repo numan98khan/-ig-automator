@@ -93,6 +93,8 @@ export interface AutomationTemplate {
     salesShipping?: boolean;
     salesPhoneMinLength?: boolean;
     salesCityAliases?: boolean;
+    salesUseGoogleSheets?: boolean;
+    salesKnowledgeItems?: boolean;
     businessHoursTime?: boolean;
     businessTimezone?: boolean;
     afterHoursMessage?: boolean;
@@ -138,6 +140,8 @@ export const getDefaultSetupData = () => ({
   salesTriggerKeywords: 'price, pricing, stock, available, buy, order, checkout, cod, delivery',
   salesTriggerKeywordMatch: 'any' as 'any' | 'all',
   salesPhoneMinLength: '8',
+  salesUseGoogleSheets: false,
+  salesKnowledgeItemIds: [] as string[],
   salesCatalogJson: JSON.stringify([
     {
       sku: 'SKU-1001',
@@ -260,10 +264,9 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     ],
     setupFields: {
       salesTriggerKeywords: true,
-      salesCatalog: true,
-      salesShipping: true,
       salesPhoneMinLength: true,
-      salesCityAliases: true,
+      salesUseGoogleSheets: true,
+      salesKnowledgeItems: true,
     },
   },
 ];

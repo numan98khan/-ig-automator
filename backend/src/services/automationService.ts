@@ -8,12 +8,14 @@ import AutomationSession from '../models/AutomationSession';
 import LeadCapture from '../models/LeadCapture';
 import BookingRequest from '../models/BookingRequest';
 import OrderDraft from '../models/OrderDraft';
+import WorkspaceSettings from '../models/WorkspaceSettings';
 import {
   sendMessage as sendInstagramMessage,
   sendButtonMessage,
 } from '../utils/instagram-api';
 import { createTicket } from './escalationService';
 import { addCountIncrement, trackDailyMetric } from './reportingService';
+import { getGoogleSheetRows, getOAuthAccessToken } from './googleSheetsService';
 import {
   AfterHoursCaptureConfig,
   AutomationRateLimit,
@@ -22,6 +24,7 @@ import {
   BusinessHoursConfig,
   SalesConciergeConfig,
   SalesCatalogItem,
+  SalesShippingRule,
   TemplateFlowConfig,
   TriggerConfig,
   TriggerType,
@@ -748,6 +751,176 @@ function findCatalogCandidates(config: SalesConciergeConfig, query: string): Sal
 
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, 3).map((entry) => entry.item);
+}
+
+function normalizeSheetHeader(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function parseNumber(value?: string): number | undefined {
+  if (!value) return undefined;
+  const cleaned = value.replace(/[^0-9.\-]/g, '');
+  const parsed = Number.parseFloat(cleaned);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function parseBoolean(value?: string): boolean | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (['true', 'yes', 'y', '1'].includes(normalized)) return true;
+  if (['false', 'no', 'n', '0'].includes(normalized)) return false;
+  return undefined;
+}
+
+function parseList(value?: string): string[] | undefined {
+  if (!value) return undefined;
+  const list = value
+    .split(/[,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return list.length ? list : undefined;
+}
+
+function parseStock(value?: string): SalesCatalogItem['stock'] | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (/(out|sold|0|none)/.test(normalized)) return 'out';
+  if (/(low|few|limited)/.test(normalized)) return 'low';
+  if (/(in|yes|available|stock)/.test(normalized)) return 'in';
+  return 'unknown';
+}
+
+function parsePriceRow(values: {
+  priceRaw?: string;
+  priceMinRaw?: string;
+  priceMaxRaw?: string;
+}): SalesCatalogItem['price'] | undefined {
+  const minValue = parseNumber(values.priceMinRaw);
+  const maxValue = parseNumber(values.priceMaxRaw);
+  if (minValue !== undefined && maxValue !== undefined) {
+    return { min: minValue, max: maxValue };
+  }
+  if (values.priceRaw) {
+    const rangeMatch = values.priceRaw.split(/-|to/).map((part) => parseNumber(part));
+    if (rangeMatch.length >= 2 && rangeMatch[0] !== undefined && rangeMatch[1] !== undefined) {
+      return { min: rangeMatch[0], max: rangeMatch[1] };
+    }
+  }
+  const single = parseNumber(values.priceRaw);
+  return single !== undefined ? single : undefined;
+}
+
+function parseSalesSheetData(headers: string[], rows: string[][]): {
+  catalog: SalesCatalogItem[];
+  shippingRules: SalesShippingRule[];
+} {
+  const headerKeys = headers.map(normalizeSheetHeader);
+  const catalog: SalesCatalogItem[] = [];
+  const shippingRules: SalesShippingRule[] = [];
+
+  rows.forEach((row) => {
+    const rowData: Record<string, string> = {};
+    headerKeys.forEach((key, index) => {
+      rowData[key] = (row[index] || '').toString().trim();
+    });
+
+    const getValue = (keys: string[]) => keys.map((key) => rowData[key]).find((value) => value);
+
+    const sku = getValue(['sku', 'product_id', 'id']);
+    const name = getValue(['name', 'product', 'title']);
+    const keywords = parseList(getValue(['keywords', 'tags', 'keywords_list']));
+    const price = parsePriceRow({
+      priceRaw: getValue(['price', 'amount', 'unit_price']),
+      priceMinRaw: getValue(['price_min', 'min_price', 'min']),
+      priceMaxRaw: getValue(['price_max', 'max_price', 'max']),
+    });
+    const currency = getValue(['currency', 'curr']);
+    const stock = parseStock(getValue(['stock', 'availability']));
+    const sizes = parseList(getValue(['size', 'sizes']));
+    const colors = parseList(getValue(['color', 'colors']));
+
+    if (sku || name) {
+      const item: SalesCatalogItem = {
+        sku: sku || name || 'SKU',
+        name: name || sku || 'Item',
+      };
+      if (keywords) item.keywords = keywords;
+      if (price !== undefined) item.price = price;
+      if (currency) item.currency = currency;
+      if (stock) item.stock = stock;
+      if (sizes || colors) {
+        item.variants = {};
+        if (sizes) item.variants.size = sizes;
+        if (colors) item.variants.color = colors;
+      }
+      catalog.push(item);
+    }
+
+    const city = getValue(['city', 'shipping_city', 'delivery_city']);
+    const fee = parseNumber(getValue(['shipping_fee', 'delivery_fee', 'fee', 'shipping']));
+    const eta = getValue(['eta', 'delivery_eta', 'shipping_eta']);
+    const codAllowed = parseBoolean(getValue(['cod_allowed', 'cod', 'cash_on_delivery']));
+
+    if (city && fee !== undefined && eta) {
+      shippingRules.push({
+        city,
+        fee,
+        eta,
+        codAllowed: codAllowed ?? false,
+      });
+    }
+  });
+
+  return { catalog, shippingRules };
+}
+
+async function resolveSalesConciergeConfig(
+  workspaceId: string | mongoose.Types.ObjectId,
+  config: SalesConciergeConfig,
+): Promise<SalesConciergeConfig> {
+  if (!config.useGoogleSheets) return config;
+
+  const settings = await WorkspaceSettings.findOne({ workspaceId });
+  const sheetsConfig = settings?.googleSheets;
+  if (!sheetsConfig?.spreadsheetId) return config;
+
+  try {
+    let auth: { accessToken?: string; serviceAccountJson?: string } = {};
+    if (sheetsConfig.oauthRefreshToken) {
+      const token = await getOAuthAccessToken({ refreshToken: sheetsConfig.oauthRefreshToken });
+      auth = { accessToken: token.accessToken };
+    } else if (sheetsConfig.serviceAccountJson) {
+      auth = { serviceAccountJson: sheetsConfig.serviceAccountJson };
+    } else {
+      return config;
+    }
+
+    const sheetData = await getGoogleSheetRows(
+      {
+        spreadsheetId: sheetsConfig.spreadsheetId,
+        sheetName: sheetsConfig.sheetName || 'Sheet1',
+        ...auth,
+      },
+      { headerRow: sheetsConfig.headerRow || 1 },
+    );
+    const parsed = parseSalesSheetData(sheetData.headers, sheetData.rows);
+    if (!parsed.catalog.length && !parsed.shippingRules.length) {
+      return config;
+    }
+
+    return {
+      ...config,
+      catalog: parsed.catalog.length ? parsed.catalog : config.catalog,
+      shippingRules: parsed.shippingRules.length ? parsed.shippingRules : config.shippingRules,
+    };
+  } catch (error) {
+    console.error('Sales concierge sheet load failed:', error);
+    return config;
+  }
 }
 
 function selectCatalogCandidate(messageText: string, candidates: SalesCatalogItem[]): SalesCatalogItem | undefined {
@@ -1524,7 +1697,8 @@ async function handleSalesConciergeFlow(params: {
     platform,
     messageContext,
   } = params;
-  const config = replyStep.templateFlow.config as SalesConciergeConfig;
+  const baseConfig = replyStep.templateFlow.config as SalesConciergeConfig;
+  const config = await resolveSalesConciergeConfig(conversation.workspaceId, baseConfig);
   const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
   const tags = config.tags || ['intent_purchase', 'template_sales_concierge'];
 
@@ -2165,10 +2339,14 @@ export async function runAutomationTest(params: {
       scheduleAfterHoursFollowup(result.templateState, replyStep.templateFlow.config as AfterHoursCaptureConfig, new Date());
     }
   } else if (templateId === 'sales_concierge') {
+    const resolvedConfig = await resolveSalesConciergeConfig(
+      workspaceId,
+      replyStep.templateFlow.config as SalesConciergeConfig,
+    );
     result = simulateSalesConciergeTest(
       messageText,
       templateState,
-      replyStep.templateFlow.config as SalesConciergeConfig,
+      resolvedConfig,
       context,
     );
     if (result.actions?.createDraft) {

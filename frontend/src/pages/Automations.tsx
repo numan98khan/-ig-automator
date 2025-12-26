@@ -210,6 +210,10 @@ const Automations: React.FC = () => {
         salesTriggerKeywords: triggerKeywords || base.salesTriggerKeywords,
         salesTriggerKeywordMatch: triggerConfig?.keywordMatch || base.salesTriggerKeywordMatch,
         salesPhoneMinLength: String(safeConfig.minPhoneLength || base.salesPhoneMinLength),
+        salesUseGoogleSheets: safeConfig.useGoogleSheets ?? base.salesUseGoogleSheets,
+        salesKnowledgeItemIds: Array.isArray(safeConfig.knowledgeItemIds)
+          ? safeConfig.knowledgeItemIds
+          : base.salesKnowledgeItemIds,
         salesCatalogJson: safeConfig.catalog ? JSON.stringify(safeConfig.catalog, null, 2) : base.salesCatalogJson,
         salesShippingJson: safeConfig.shippingRules ? JSON.stringify(safeConfig.shippingRules, null, 2) : base.salesShippingJson,
         salesCityAliasesJson: safeConfig.cityAliases ? JSON.stringify(safeConfig.cityAliases, null, 2) : base.salesCityAliasesJson,
@@ -508,6 +512,8 @@ const Automations: React.FC = () => {
           shippingRules,
           cityAliases,
           minPhoneLength: Number.parseInt(data.salesPhoneMinLength, 10) || 8,
+          useGoogleSheets: data.salesUseGoogleSheets,
+          knowledgeItemIds: data.salesKnowledgeItemIds,
           maxQuestions: 6,
           rateLimit: { maxMessages: 6, perMinutes: 1 },
           tags: ['intent_purchase', 'template_sales_concierge'],

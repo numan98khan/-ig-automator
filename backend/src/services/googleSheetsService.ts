@@ -163,6 +163,34 @@ export async function getGoogleSheetPreview(
   return { headers, rows, range };
 }
 
+export async function getGoogleSheetRows(
+  config: {
+    spreadsheetId: string;
+    sheetName?: string;
+  } & GoogleSheetsAuth,
+  options?: {
+    headerRow?: number;
+  },
+): Promise<{ headers: string[]; rows: string[][] }> {
+  const accessToken = await resolveAccessToken(config);
+  const sheetName = config.sheetName || 'Sheet1';
+  const headerRow = options?.headerRow && options.headerRow > 0 ? options.headerRow : 1;
+  const range = `${sheetName}!${headerRow}:`;
+  const encodedRange = encodeURIComponent(range);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.spreadsheetId}/values/${encodedRange}`;
+
+  const response = await axios.get(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    params: { majorDimension: 'ROWS' },
+  });
+
+  const values: string[][] = response.data?.values || [];
+  const headers = values.length > 0 ? values[0] : [];
+  const rows = values.length > 1 ? values.slice(1) : [];
+
+  return { headers, rows };
+}
+
 export async function listGoogleSpreadsheets(auth: GoogleSheetsAuth): Promise<Array<{ id: string; name: string }>> {
   const accessToken = await resolveAccessToken(auth);
   const response = await axios.get('https://www.googleapis.com/drive/v3/files', {

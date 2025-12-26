@@ -134,6 +134,8 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   return (
     <div className={`flex-1 min-h-0 ${isCreateSetupView ? 'flex flex-col gap-4 overflow-hidden' : 'space-y-4'}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
+        
+        
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <button
             onClick={onClose}
@@ -144,6 +146,8 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
           <ArrowRight className="w-4 h-4" />
           <span className="text-foreground font-medium">{createViewTitle}</span>
         </div>
+
+
         <div className="flex items-center gap-2">
           {currentStep === 'setup' && selectedTemplate ? (
             <>
@@ -188,19 +192,12 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
 
       {currentStep === 'setup' && selectedTemplate ? (
         <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
-          <div>
-            <h2 className="text-lg font-semibold">{createViewTitle}</h2>
-            <p className="text-sm text-muted-foreground">
-              {editingAutomation ? 'Update your automation settings and save changes.' : 'Configure a new automation flow.'}
-            </p>
-          </div>
-
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] gap-6 flex-1 min-h-0 overflow-hidden">
             <div className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-2xl p-4 space-y-4 h-full min-h-0 overflow-y-auto">
               <div>
-                <h4 className="text-sm font-semibold text-foreground">Automation Settings</h4>
+                <h4 className="text-sm font-semibold text-foreground">{createViewTitle}</h4>
                 <p className="text-xs text-muted-foreground dark:text-slate-400">
-                  Configure the template details before activation.
+                  {editingAutomation ? 'Update your automation settings and save changes.' : 'Configure the template details before activation.'}
                 </p>
               </div>
               <Input
@@ -338,39 +335,20 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 </div>
               )}
 
-              {selectedTemplate.setupFields.salesCatalog && (
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Catalog (JSON)</label>
-                  <textarea
-                    value={setupData.salesCatalogJson}
-                    onChange={(event) => updateSetupData({ salesCatalogJson: event.target.value })}
-                    rows={6}
-                    className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
-                  />
-                </div>
-              )}
-
-              {selectedTemplate.setupFields.salesShipping && (
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Shipping Rules (JSON)</label>
-                  <textarea
-                    value={setupData.salesShippingJson}
-                    onChange={(event) => updateSetupData({ salesShippingJson: event.target.value })}
-                    rows={5}
-                    className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
-                  />
-                </div>
-              )}
-
-              {selectedTemplate.setupFields.salesCityAliases && (
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">City Aliases (JSON)</label>
-                  <textarea
-                    value={setupData.salesCityAliasesJson}
-                    onChange={(event) => updateSetupData({ salesCityAliasesJson: event.target.value })}
-                    rows={4}
-                    className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
-                  />
+              {selectedTemplate.setupFields.salesUseGoogleSheets && (
+                <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      checked={!!setupData.salesUseGoogleSheets}
+                      onChange={(event) => updateSetupData({ salesUseGoogleSheets: event.target.checked })}
+                      className="rounded border-border"
+                    />
+                    Use connected Google Sheet for catalog + stock
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Requires a Google Sheets connection in Integrations. JSON catalog stays as fallback.
+                  </p>
                 </div>
               )}
 
@@ -382,6 +360,45 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                   onChange={(event) => updateSetupData({ salesPhoneMinLength: event.target.value })}
                   placeholder="8"
                 />
+              )}
+
+              {selectedTemplate.setupFields.salesKnowledgeItems && (
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <label className="block text-sm font-medium">Knowledge Items</label>
+                    {knowledgeItems.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => updateSetupData({ salesKnowledgeItemIds: knowledgeItems.map((item) => item._id) })}
+                        className="text-xs text-primary hover:text-primary/80 transition-colors"
+                      >
+                        Select all
+                      </button>
+                    )}
+                  </div>
+                  {knowledgeItems.length === 0 ? (
+                    <div className="text-xs text-muted-foreground">No knowledge items available.</div>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto border border-border rounded-lg p-3">
+                      {knowledgeItems.map((item) => (
+                        <label key={item._id} className="flex items-center gap-3 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={setupData.salesKnowledgeItemIds.includes(item._id)}
+                            onChange={() => {
+                              const next = setupData.salesKnowledgeItemIds.includes(item._id)
+                                ? setupData.salesKnowledgeItemIds.filter((id) => id !== item._id)
+                                : [...setupData.salesKnowledgeItemIds, item._id];
+                              updateSetupData({ salesKnowledgeItemIds: next });
+                            }}
+                            className="rounded border-border"
+                          />
+                          <span className="text-muted-foreground">{item.title}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
 
               {selectedTemplate.setupFields.businessHoursTime && (

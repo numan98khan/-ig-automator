@@ -286,6 +286,8 @@ export interface SalesConciergeConfig {
   shippingRules: SalesShippingRule[];
   cityAliases?: Record<string, string>;
   minPhoneLength?: number;
+  useGoogleSheets?: boolean;
+  knowledgeItemIds?: string[];
   maxQuestions?: number;
   rateLimit?: AutomationRateLimit;
   tags?: string[];

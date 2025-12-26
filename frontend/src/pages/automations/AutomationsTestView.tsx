@@ -295,34 +295,19 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Catalog (JSON)</label>
-                      <textarea
-                        value={testSetupData.salesCatalogJson}
-                        onChange={(event) => updateTestSetupData({ salesCatalogJson: event.target.value })}
-                        rows={6}
-                        className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Shipping Rules (JSON)</label>
-                      <textarea
-                        value={testSetupData.salesShippingJson}
-                        onChange={(event) => updateTestSetupData({ salesShippingJson: event.target.value })}
-                        rows={5}
-                        className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">City Aliases (JSON)</label>
-                      <textarea
-                        value={testSetupData.salesCityAliasesJson}
-                        onChange={(event) => updateTestSetupData({ salesCityAliasesJson: event.target.value })}
-                        rows={4}
-                        className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
-                      />
+                    <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
+                      <label className="flex items-center gap-2 text-sm font-medium">
+                        <input
+                          type="checkbox"
+                          checked={!!testSetupData.salesUseGoogleSheets}
+                          onChange={(event) => updateTestSetupData({ salesUseGoogleSheets: event.target.checked })}
+                          className="rounded border-border"
+                        />
+                        Use connected Google Sheet for catalog + stock
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        Requires a Google Sheets connection in Integrations. JSON catalog stays as fallback.
+                      </p>
                     </div>
 
                     <Input
@@ -332,6 +317,32 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                       onChange={(event) => updateTestSetupData({ salesPhoneMinLength: event.target.value })}
                       placeholder="8"
                     />
+
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5">Knowledge Items</label>
+                      {knowledgeItems.length === 0 ? (
+                        <div className="text-xs text-muted-foreground">No knowledge items available.</div>
+                      ) : (
+                        <div className="space-y-2 max-h-48 overflow-y-auto border border-border rounded-lg p-3">
+                          {knowledgeItems.map((item) => (
+                            <label key={item._id} className="flex items-center gap-3 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={testSetupData.salesKnowledgeItemIds.includes(item._id)}
+                                onChange={() => {
+                                  const next = testSetupData.salesKnowledgeItemIds.includes(item._id)
+                                    ? testSetupData.salesKnowledgeItemIds.filter((id) => id !== item._id)
+                                    : [...testSetupData.salesKnowledgeItemIds, item._id];
+                                  updateTestSetupData({ salesKnowledgeItemIds: next });
+                                }}
+                                className="rounded border-border"
+                              />
+                              <span className="text-muted-foreground">{item.title}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
 
