@@ -1878,7 +1878,10 @@ function createTemplateState(templateId: AutomationTemplateId): NonNullable<Auto
   };
 }
 
-function ensureTemplateState(templateId: AutomationTemplateId, state?: AutomationTestState): AutomationTestState['template'] {
+function ensureTemplateState(
+  templateId: AutomationTemplateId,
+  state?: AutomationTestState,
+): NonNullable<AutomationTestState['template']> {
   if (state?.template && state.template.templateId === templateId) {
     const status = state.template.status || 'active';
     if (status === 'active') {
