@@ -191,7 +191,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
       </div>
 
       {currentStep === 'setup' && selectedTemplate ? (
-        <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-col gap-4 flex-1 overflow-visible sm:min-h-0 sm:overflow-hidden">
           <div>
             <h2 className="text-lg font-semibold">{createViewTitle}</h2>
             <p className="text-sm text-muted-foreground">
@@ -199,8 +199,8 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] gap-6 flex-1 min-h-0 overflow-hidden">
-            <div className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-2xl p-4 space-y-4 h-full min-h-0 overflow-y-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] gap-6 flex-1 sm:min-h-0 sm:overflow-hidden">
+            <div className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-2xl p-4 space-y-4 overflow-visible sm:h-full sm:min-h-0 sm:overflow-y-auto">
               <div>
                 <h4 className="text-sm font-semibold text-foreground">Automation Settings</h4>
                 <p className="text-xs text-muted-foreground dark:text-slate-400">
@@ -441,8 +441,8 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
               )}
             </div>
 
-            <div className="h-full min-h-0 flex flex-col">
-              <div className="border border-border/70 dark:border-white/10 rounded-2xl flex-1 min-h-0 overflow-hidden bg-card/70 dark:bg-white/5 flex flex-col">
+            <div className="flex flex-col sm:h-full sm:min-h-0">
+              <div className="border border-border/70 dark:border-white/10 rounded-2xl flex-1 overflow-hidden bg-card/70 dark:bg-white/5 flex flex-col sm:min-h-0">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 text-sm">
                   <div className="flex items-center gap-4 text-muted-foreground">
                     <span>Insights</span>
