@@ -21,6 +21,7 @@ import {
   TRIGGER_METADATA,
   AUTOMATION_TEMPLATES,
   SetupData,
+  BOOKING_TRIGGER_KEYWORDS,
 } from './constants';
 
 type CreateFormData = {
@@ -105,6 +106,17 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
 
   const updateSetupData = (updates: Partial<SetupData>) => {
     onUpdateSetupData((prev) => ({ ...prev, ...updates }));
+  };
+
+  const addTriggerKeyword = (keyword: string) => {
+    const current = (setupData.triggerKeywords || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const exists = current.some((item) => item.toLowerCase() === keyword.toLowerCase());
+    if (!exists) {
+      updateSetupData({ triggerKeywords: [...current, keyword].join(', ') });
+    }
   };
 
   return (
@@ -244,6 +256,40 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                   onChange={(event) => updateSetupData({ phoneMinLength: event.target.value })}
                   placeholder="8"
                 />
+              )}
+
+              {selectedTemplate.setupFields.triggerKeywords && (
+                <div className="space-y-3">
+                  <Input
+                    label="Trigger Keywords"
+                    value={setupData.triggerKeywords}
+                    onChange={(event) => updateSetupData({ triggerKeywords: event.target.value })}
+                    placeholder="book, booking, appointment"
+                  />
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Match Rule</label>
+                    <select
+                      value={setupData.triggerKeywordMatch}
+                      onChange={(event) => updateSetupData({ triggerKeywordMatch: event.target.value as 'any' | 'all' })}
+                      className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                    >
+                      <option value="any">Match any keyword</option>
+                      <option value="all">Match all keywords</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {BOOKING_TRIGGER_KEYWORDS.map((keyword) => (
+                      <button
+                        key={keyword}
+                        type="button"
+                        onClick={() => addTriggerKeyword(keyword)}
+                        className="px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                      >
+                        {keyword}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {selectedTemplate.setupFields.businessHoursTime && (

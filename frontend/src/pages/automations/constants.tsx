@@ -87,6 +87,7 @@ export interface AutomationTemplate {
     locationLink?: boolean;
     locationHours?: boolean;
     phoneMinLength?: boolean;
+    triggerKeywords?: boolean;
     businessHoursTime?: boolean;
     businessTimezone?: boolean;
     afterHoursMessage?: boolean;
@@ -94,12 +95,28 @@ export interface AutomationTemplate {
   };
 }
 
+export const BOOKING_TRIGGER_KEYWORDS = [
+  'book',
+  'booking',
+  'appointment',
+  'slot',
+  'available',
+  'availability',
+  'price',
+  'pricing',
+  'حجز',
+  'موعد',
+  'سعر',
+];
+
 export const getDefaultSetupData = () => ({
   serviceList: '',
   priceRanges: '',
   locationLink: '',
   locationHours: '',
   phoneMinLength: '8',
+  triggerKeywords: 'book, booking, appointment, slot, available, availability, price, حجز, موعد, سعر',
+  triggerKeywordMatch: 'any' as 'any' | 'all',
   businessHoursStart: '09:00',
   businessHoursEnd: '17:00',
   businessTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
@@ -138,6 +155,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       locationLink: true,
       locationHours: true,
       phoneMinLength: true,
+      triggerKeywords: true,
     },
   },
   {

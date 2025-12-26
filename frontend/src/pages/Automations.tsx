@@ -156,11 +156,17 @@ const Automations: React.FC = () => {
 
   const buildSetupDataFromTemplateConfig = (
     templateId: AutomationTemplateId,
-    config: any
+    config: any,
+    triggerConfig?: TriggerConfig,
   ) => {
     const base = getDefaultSetupData();
     const safeConfig = config || {};
     if (templateId === 'booking_concierge') {
+      const triggerKeywords = Array.isArray(triggerConfig?.keywords)
+        ? triggerConfig?.keywords.join(', ')
+        : triggerConfig
+          ? ''
+          : base.triggerKeywords;
       return {
         ...base,
         serviceList: (safeConfig.serviceOptions || []).join(', '),
@@ -168,6 +174,8 @@ const Automations: React.FC = () => {
         locationLink: safeConfig.locationLink || '',
         locationHours: safeConfig.locationHours || '',
         phoneMinLength: String(safeConfig.minPhoneLength || base.phoneMinLength),
+        triggerKeywords,
+        triggerKeywordMatch: triggerConfig?.keywordMatch || base.triggerKeywordMatch,
       };
     }
     if (templateId === 'after_hours_capture') {
@@ -209,12 +217,12 @@ const Automations: React.FC = () => {
 
       if (replyStep.templateFlow.templateId === 'booking_concierge') {
         const config = replyStep.templateFlow.config as any;
-        setSetupData(buildSetupDataFromTemplateConfig('booking_concierge', config));
+        setSetupData(buildSetupDataFromTemplateConfig('booking_concierge', config, automation.triggerConfig));
       }
 
       if (replyStep.templateFlow.templateId === 'after_hours_capture') {
         const config = replyStep.templateFlow.config as any;
-        setSetupData(buildSetupDataFromTemplateConfig('after_hours_capture', config));
+        setSetupData(buildSetupDataFromTemplateConfig('after_hours_capture', config, automation.triggerConfig));
       }
       if (!template) {
         setCurrentStep('gallery');
@@ -247,7 +255,13 @@ const Automations: React.FC = () => {
     if (replyStep.type === 'template_flow' && replyStep.templateFlow) {
       const template = AUTOMATION_TEMPLATES.find((item) => item.id === replyStep.templateFlow?.templateId) || null;
       setTestTemplate(template);
-      setTestSetupData(buildSetupDataFromTemplateConfig(replyStep.templateFlow.templateId, replyStep.templateFlow.config as any));
+      setTestSetupData(
+        buildSetupDataFromTemplateConfig(
+          replyStep.templateFlow.templateId,
+          replyStep.templateFlow.config as any,
+          automation.triggerConfig,
+        ),
+      );
       setTestForceOutsideHours(replyStep.templateFlow.templateId === 'after_hours_capture');
     } else {
       setTestTemplate(null);
@@ -364,7 +378,7 @@ const Automations: React.FC = () => {
           type: 'template_flow' as const,
           templateFlow,
         };
-        triggerConfig = buildTemplateTriggerConfig(testTemplate, templateFlow);
+        triggerConfig = buildTemplateTriggerConfig(testTemplate, templateFlow, testSetupData);
       } else if (testEditForm.replyType === 'constant_reply') {
         replyStep = {
           type: 'constant_reply' as const,
@@ -463,8 +477,23 @@ const Automations: React.FC = () => {
     return null;
   };
 
-  const buildTemplateTriggerConfig = (template: AutomationTemplate, flow: TemplateFlowConfig): TriggerConfig | undefined => {
+  const buildTemplateTriggerConfig = (
+    template: AutomationTemplate,
+    flow: TemplateFlowConfig,
+    data: SetupData = setupData,
+  ): TriggerConfig | undefined => {
     const baseConfig = template.triggerConfig || {};
+    if (flow.templateId === 'booking_concierge') {
+      const keywordList = (data.triggerKeywords || '')
+        .split(',')
+        .map((keyword) => keyword.trim())
+        .filter(Boolean);
+      return {
+        ...baseConfig,
+        keywordMatch: data.triggerKeywordMatch || baseConfig.keywordMatch || 'any',
+        keywords: keywordList,
+      };
+    }
     if (flow.templateId === 'after_hours_capture') {
       const afterHoursConfig = flow.config as any;
       return {
@@ -508,7 +537,7 @@ const Automations: React.FC = () => {
             };
 
       const triggerConfig = isTemplateFlow && templateFlow && selectedTemplate
-        ? buildTemplateTriggerConfig(selectedTemplate, templateFlow)
+        ? buildTemplateTriggerConfig(selectedTemplate, templateFlow, setupData)
         : undefined;
 
       if (editingAutomation) {
