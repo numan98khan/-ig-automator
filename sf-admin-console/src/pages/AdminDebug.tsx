@@ -7,7 +7,6 @@ import {
   XCircle,
   Database,
   Users as UsersIcon,
-  LayoutDashboard,
   ToggleLeft,
   ToggleRight,
 } from 'lucide-react'
@@ -21,19 +20,14 @@ export default function AdminDebug() {
     openaiApiLogsEnabled: false,
   })
 
-  const { data: workspaces, error: workspacesError } = useQuery({
+  const { data: workspaces } = useQuery({
     queryKey: ['debug-workspaces'],
     queryFn: () => adminApi.getWorkspaces({ limit: 100 }),
   })
 
-  const { data: users, error: usersError } = useQuery({
+  const { data: users } = useQuery({
     queryKey: ['debug-users'],
     queryFn: () => adminApi.getUsers({ limit: 100 }),
-  })
-
-  const { data: stats, error: statsError } = useQuery({
-    queryKey: ['debug-stats'],
-    queryFn: () => adminApi.getDashboardStats(),
   })
 
   const { data: logSettingsData } = useQuery({
@@ -87,49 +81,7 @@ export default function AdminDebug() {
   const workspaceCount = getWorkspaceCount()
   const userCount = getUserCount()
 
-  const checks = [
-    {
-      name: 'Admin Token Present',
-      status: !!adminToken,
-      icon: CheckCircle,
-      details: adminToken ? `Token exists (${adminToken.substring(0, 20)}...)` : 'No token found',
-      color: adminToken ? 'text-green-500' : 'text-red-500',
-    },
-    {
-      name: 'Workspaces API',
-      status: !workspacesError && !!workspaces && workspaceCount > 0,
-      icon: Database,
-      details: workspacesError
-        ? `Error: ${workspacesError.message}`
-        : workspaceCount > 0
-        ? `✅ Success: ${workspaceCount} workspace${workspaceCount !== 1 ? 's' : ''} found`
-        : '⚠️ API works but returned 0 workspaces - check backend permissions',
-      data: unwrapData<any>(workspaces),
-      color: workspacesError ? 'text-red-500' : workspaceCount > 0 ? 'text-green-500' : 'text-yellow-500',
-    },
-    {
-      name: 'Users API',
-      status: !usersError && !!users && userCount > 0,
-      icon: UsersIcon,
-      details: usersError
-        ? `Error: ${usersError.message}`
-        : userCount > 0
-        ? `✅ Success: ${userCount} user${userCount !== 1 ? 's' : ''} found`
-        : '⚠️ API works but returned 0 users - check backend permissions',
-      data: unwrapData<any>(users),
-      color: usersError ? 'text-red-500' : userCount > 0 ? 'text-green-500' : 'text-yellow-500',
-    },
-    {
-      name: 'Dashboard Stats API',
-      status: !statsError && !!stats,
-      icon: LayoutDashboard,
-      details: statsError
-        ? `Error: ${statsError.message}`
-        : `✅ Success: Stats loaded`,
-      data: stats?.data,
-      color: statsError ? 'text-red-500' : 'text-green-500',
-    },
-  ]
+  const isSavingLogSettings = updateLogsMutation.isPending
 
   return (
     <div className="space-y-6">
@@ -190,31 +142,31 @@ export default function AdminDebug() {
             description="Durations for OpenAI calls (ms)."
             enabled={logSettings.aiTimingEnabled}
             onToggle={() => toggleLogSetting('aiTimingEnabled')}
-            disabled={updateLogsMutation.isLoading}
+            disabled={isSavingLogSettings}
           />
           <LogToggleRow
             title="Automation logs"
             description="Automation start/match/execute summaries."
             enabled={logSettings.automationLogsEnabled}
             onToggle={() => toggleLogSetting('automationLogsEnabled')}
-            disabled={updateLogsMutation.isLoading}
+            disabled={isSavingLogSettings}
           />
           <LogToggleRow
             title="Automation step timing"
             description="Step-by-step timing within automations."
             enabled={logSettings.automationStepsEnabled}
             onToggle={() => toggleLogSetting('automationStepsEnabled')}
-            disabled={updateLogsMutation.isLoading}
+            disabled={isSavingLogSettings}
           />
           <LogToggleRow
             title="OpenAI API logs"
             description="Raw OpenAI response summaries for debugging."
             enabled={logSettings.openaiApiLogsEnabled}
             onToggle={() => toggleLogSetting('openaiApiLogsEnabled')}
-            disabled={updateLogsMutation.isLoading}
+            disabled={isSavingLogSettings}
           />
         </div>
-        {updateLogsMutation.isLoading && (
+        {isSavingLogSettings && (
           <p className="text-xs text-muted-foreground mt-3">Saving log settings...</p>
         )}
       </div>
