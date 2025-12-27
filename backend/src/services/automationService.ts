@@ -921,7 +921,11 @@ async function ensureTestConversation(params: {
 
   if (state.testConversationId && state.testMode === testMode) {
     const existing = await Conversation.findById(state.testConversationId);
-    if (existing && existing.workspaceId.toString() === workspaceId) {
+    if (
+      existing
+      && existing.workspaceId.toString() === workspaceId
+      && existing.instagramAccountId.toString() === instagramAccount._id.toString()
+    ) {
       if (!existing.participantInstagramId) {
         existing.participantInstagramId = testMode === 'self_chat'
           ? instagramAccount.instagramAccountId || `test_ig_${workspaceId}`
@@ -1140,14 +1144,7 @@ export async function runAutomationTest(params: {
     throw new Error('messageText is required');
   }
 
-  const triggerMatched = matchesTriggerConfig(messageText, automation.triggerConfig, context);
   appendTestHistory(history, 'customer', messageText);
-
-  console.log('🧪 [AUTOMATION TEST] Trigger match', {
-    automationId,
-    triggerMatched,
-    context,
-  });
 
   await cancelFollowupOnCustomerReply(conversation._id);
   const { message } = await recordTestCustomerMessage(conversation, messageText);
@@ -1166,6 +1163,13 @@ export async function runAutomationTest(params: {
     hasLink: Boolean(linkMatch),
     linkUrl: linkMatch ? linkMatch[0] : undefined,
   };
+  const triggerMatched = matchesTriggerConfig(messageText, automation.triggerConfig, messageContext);
+
+  console.log('🧪 [AUTOMATION TEST] Trigger match', {
+    automationId,
+    triggerMatched,
+    context: messageContext,
+  });
 
   if (!conversation.participantInstagramId) {
     throw new Error('Missing participant Instagram ID for test conversation');
