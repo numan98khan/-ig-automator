@@ -193,7 +193,7 @@ export async function analyzeInventoryMapping(
         confidence: typeof item.confidence === 'number'
           ? Math.max(0, Math.min(1, Number(item.confidence.toFixed(2))))
           : undefined,
-        notes: item.notes || undefined,
+        notes: typeof item.notes === 'string' ? item.notes : undefined,
       };
     }
   }
