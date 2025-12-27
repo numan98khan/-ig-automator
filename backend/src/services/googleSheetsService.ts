@@ -175,7 +175,7 @@ export async function getGoogleSheetRows(
   const accessToken = await resolveAccessToken(config);
   const sheetName = config.sheetName || 'Sheet1';
   const headerRow = options?.headerRow && options.headerRow > 0 ? options.headerRow : 1;
-  const range = `${sheetName}!A${headerRow}:`;
+  const range = `${sheetName}!A${headerRow}:ZZ`;
   const encodedRange = encodeURIComponent(range);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.spreadsheetId}/values/${encodedRange}`;
 
