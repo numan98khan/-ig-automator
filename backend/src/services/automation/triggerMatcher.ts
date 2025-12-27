@@ -9,6 +9,7 @@ export function matchesTriggerConfig(
 ): boolean {
   if (!triggerConfig) return true;
   const keywordMatch = triggerConfig.keywordMatch || 'any';
+  const triggerMode = triggerConfig.triggerMode || 'any';
   if (
     triggerConfig.excludeKeywords &&
     triggerConfig.excludeKeywords.length > 0 &&
@@ -29,13 +30,26 @@ export function matchesTriggerConfig(
     : false;
   const linkMatched = !!triggerConfig.matchOn?.link && !!context?.hasLink;
   const attachmentMatched = !!triggerConfig.matchOn?.attachment && !!context?.hasAttachment;
+  const keywordMatched = triggerConfig.keywords
+    ? matchesKeywords(messageText, triggerConfig.keywords, keywordMatch)
+    : true;
+
+  if (triggerMode === 'categories') {
+    return categoryMatched;
+  }
+
+  if (triggerMode === 'keywords') {
+    if (linkMatched || attachmentMatched) return true;
+    return keywordMatched;
+  }
+
   if (categoryMatched || linkMatched || attachmentMatched) {
     return true;
   }
   if (categoryIds.length > 0 && !categoryMatched) {
     return false;
   }
-  if (triggerConfig.keywords && !matchesKeywords(messageText, triggerConfig.keywords, keywordMatch)) {
+  if (!keywordMatched) {
     return false;
   }
   return true;

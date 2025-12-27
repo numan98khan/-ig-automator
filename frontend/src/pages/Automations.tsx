@@ -204,6 +204,7 @@ const Automations: React.FC = () => {
         triggerCategoryIds: Array.isArray(triggerConfig?.categoryIds)
           ? triggerConfig?.categoryIds
           : base.triggerCategoryIds,
+        triggerMatchMode: triggerConfig?.triggerMode || base.triggerMatchMode,
       };
     }
     if (templateId === 'sales_concierge') {
@@ -219,6 +220,7 @@ const Automations: React.FC = () => {
         salesTriggerCategoryIds: Array.isArray(triggerConfig?.categoryIds)
           ? triggerConfig?.categoryIds
           : base.salesTriggerCategoryIds,
+        salesTriggerMatchMode: triggerConfig?.triggerMode || base.salesTriggerMatchMode,
         salesPhoneMinLength: String(safeConfig.minPhoneLength || base.salesPhoneMinLength),
         salesUseGoogleSheets: safeConfig.useGoogleSheets ?? base.salesUseGoogleSheets,
         salesKnowledgeItemIds: Array.isArray(safeConfig.knowledgeItemIds)
@@ -574,10 +576,12 @@ const Automations: React.FC = () => {
         .map((keyword) => keyword.trim())
         .filter(Boolean);
       const categoryIds = (data.triggerCategoryIds || []).filter(Boolean);
+      const triggerMode = data.triggerMatchMode || 'any';
       return {
         ...baseConfig,
         keywordMatch: data.triggerKeywordMatch || baseConfig.keywordMatch || 'any',
         keywords: keywordList,
+        triggerMode,
         ...(categoryIds.length ? { categoryIds } : {}),
       };
     }
@@ -587,10 +591,12 @@ const Automations: React.FC = () => {
         .map((keyword) => keyword.trim())
         .filter(Boolean);
       const categoryIds = (data.salesTriggerCategoryIds || []).filter(Boolean);
+      const triggerMode = data.salesTriggerMatchMode || 'any';
       return {
         ...baseConfig,
         keywordMatch: data.salesTriggerKeywordMatch || baseConfig.keywordMatch || 'any',
         keywords: keywordList,
+        triggerMode,
         ...(categoryIds.length ? { categoryIds } : {}),
         matchOn: {
           link: true,

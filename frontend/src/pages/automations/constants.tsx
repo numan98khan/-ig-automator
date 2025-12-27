@@ -88,9 +88,11 @@ export interface AutomationTemplate {
     locationHours?: boolean;
     phoneMinLength?: boolean;
     triggerKeywords?: boolean;
-    salesTriggerKeywords?: boolean;
-    triggerCategories?: boolean;
-    salesTriggerCategories?: boolean;
+  salesTriggerKeywords?: boolean;
+  triggerCategories?: boolean;
+  salesTriggerCategories?: boolean;
+  triggerMatchMode?: boolean;
+  salesTriggerMatchMode?: boolean;
     salesCatalog?: boolean;
     salesShipping?: boolean;
     salesPhoneMinLength?: boolean;
@@ -140,9 +142,11 @@ export const getDefaultSetupData = () => ({
   triggerKeywords: 'book, booking, appointment, slot, available, availability, price, حجز, موعد, سعر',
   triggerKeywordMatch: 'any' as 'any' | 'all',
   triggerCategoryIds: [] as string[],
+  triggerMatchMode: 'any' as 'any' | 'keywords' | 'categories',
   salesTriggerKeywords: 'price, pricing, stock, available, buy, order, checkout, cod, delivery',
   salesTriggerKeywordMatch: 'any' as 'any' | 'all',
   salesTriggerCategoryIds: [] as string[],
+  salesTriggerMatchMode: 'any' as 'any' | 'keywords' | 'categories',
   salesPhoneMinLength: '8',
   salesUseGoogleSheets: false,
   salesKnowledgeItemIds: [] as string[],
@@ -214,6 +218,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       phoneMinLength: true,
       triggerKeywords: true,
       triggerCategories: true,
+      triggerMatchMode: true,
     },
   },
   {
@@ -270,6 +275,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     setupFields: {
       salesTriggerKeywords: true,
       salesTriggerCategories: true,
+      salesTriggerMatchMode: true,
       salesPhoneMinLength: true,
       salesUseGoogleSheets: true,
       salesKnowledgeItems: true,

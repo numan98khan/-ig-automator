@@ -349,6 +349,21 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 </div>
               )}
 
+              {selectedTemplate.setupFields.triggerMatchMode && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">Trigger Mode</label>
+                  <select
+                    value={setupData.triggerMatchMode}
+                    onChange={(event) => updateSetupData({ triggerMatchMode: event.target.value as SetupData['triggerMatchMode'] })}
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                  >
+                    <option value="any">Any (keywords, categories, links, attachments)</option>
+                    <option value="keywords">Keywords only</option>
+                    <option value="categories">AI categories only</option>
+                  </select>
+                </div>
+              )}
+
               {selectedTemplate.setupFields.salesTriggerKeywords && (
                 <div className="space-y-3">
                   <Input
@@ -406,6 +421,21 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                   ) : (
                     <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
                   )}
+                </div>
+              )}
+
+              {selectedTemplate.setupFields.salesTriggerMatchMode && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">Trigger Mode</label>
+                  <select
+                    value={setupData.salesTriggerMatchMode}
+                    onChange={(event) => updateSetupData({ salesTriggerMatchMode: event.target.value as SetupData['salesTriggerMatchMode'] })}
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                  >
+                    <option value="any">Any (keywords, categories, links, attachments)</option>
+                    <option value="keywords">Keywords only</option>
+                    <option value="categories">AI categories only</option>
+                  </select>
                 </div>
               )}
 

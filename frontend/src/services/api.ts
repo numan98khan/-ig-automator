@@ -173,6 +173,7 @@ export interface TriggerConfig {
   excludeKeywords?: string[];
   keywordMatch?: 'any' | 'all';
   categoryIds?: string[];
+  triggerMode?: 'keywords' | 'categories' | 'any';
   outsideBusinessHours?: boolean;
   businessHours?: BusinessHoursConfig;
   matchOn?: {

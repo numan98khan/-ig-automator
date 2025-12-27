@@ -769,6 +769,12 @@ export async function executeAutomation(params: {
       }
 
       if (matchesTriggerConfig(normalizedMessage, candidate.triggerConfig, messageContext)) {
+        if (messageContext?.categoryId || messageContext?.categoryName) {
+          console.log('✅ [AUTOMATION] Trigger matched via category:', {
+            categoryId: messageContext?.categoryId,
+            categoryName: messageContext?.categoryName,
+          });
+        }
         matchingAutomations.push(candidate);
       }
     }

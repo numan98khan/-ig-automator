@@ -303,6 +303,18 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                         <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
                       )}
                     </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium">Trigger Mode</label>
+                      <select
+                        value={testSetupData.triggerMatchMode}
+                        onChange={(event) => updateTestSetupData({ triggerMatchMode: event.target.value as SetupData['triggerMatchMode'] })}
+                        className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                      >
+                        <option value="any">Any (keywords, categories, links, attachments)</option>
+                        <option value="keywords">Keywords only</option>
+                        <option value="categories">AI categories only</option>
+                      </select>
+                    </div>
                   </>
                 )}
 
@@ -361,6 +373,18 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                       ) : (
                         <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
                       )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium">Trigger Mode</label>
+                      <select
+                        value={testSetupData.salesTriggerMatchMode}
+                        onChange={(event) => updateTestSetupData({ salesTriggerMatchMode: event.target.value as SetupData['salesTriggerMatchMode'] })}
+                        className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                      >
+                        <option value="any">Any (keywords, categories, links, attachments)</option>
+                        <option value="keywords">Keywords only</option>
+                        <option value="categories">AI categories only</option>
+                      </select>
                     </div>
 
                     <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
