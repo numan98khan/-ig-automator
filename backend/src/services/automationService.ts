@@ -5,235 +5,49 @@ import InstagramAccount from '../models/InstagramAccount';
 import FollowupTask from '../models/FollowupTask';
 import Automation from '../models/Automation';
 import AutomationSession from '../models/AutomationSession';
-import LeadCapture from '../models/LeadCapture';
-import BookingRequest from '../models/BookingRequest';
 import OrderDraft from '../models/OrderDraft';
-import WorkspaceSettings from '../models/WorkspaceSettings';
+import { generateAIReply } from './aiReplyService';
 import {
   sendMessage as sendInstagramMessage,
   sendButtonMessage,
 } from '../utils/instagram-api';
-import { createTicket } from './escalationService';
-import { addCountIncrement, trackDailyMetric } from './reportingService';
-import { getGoogleSheetRows, getOAuthAccessToken } from './googleSheetsService';
 import {
-  AfterHoursCaptureConfig,
+  categorizeMessage,
+  getOrCreateCategory,
+  incrementCategoryCount,
+} from './aiCategorization';
+import { addTicketUpdate, createTicket, getActiveTicket } from './escalationService';
+import { addCountIncrement, trackDailyMetric } from './reportingService';
+import {
+  detectGoalIntent,
+  getGoalConfigs,
+  getWorkspaceSettings,
+  goalMatchesWorkspace,
+} from './workspaceSettingsService';
+import { pauseForTypingIfNeeded } from './automation/typing';
+import { matchesTriggerConfig } from './automation/triggerMatcher';
+import {
+  advanceSalesConciergeState,
+  normalizeFlowState,
+  resolveSalesConciergeConfig,
+} from './automation/templateFlows';
+import {
+  AutomationTestContext,
+  AutomationTestHistoryItem,
+  AutomationTestState,
+} from './automation/types';
+import {
   AutomationRateLimit,
   AutomationTemplateId,
-  BookingConciergeConfig,
-  BusinessHoursConfig,
   SalesConciergeConfig,
-  SalesCatalogItem,
-  SalesShippingRule,
   TemplateFlowConfig,
-  TriggerConfig,
   TriggerType,
 } from '../types/automation';
-
-const HUMAN_TYPING_PAUSE_MS = 3500; // Small pause to mimic human response timing
-const SKIP_TYPING_PAUSE_IN_SANDBOX =
-  process.env.SANDBOX_SKIP_TYPING_PAUSE === 'true' || process.env.SANDBOX_SKIP_TYPING_PAUSE === '1';
-
-function wait(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-export function shouldPauseForTyping(
-  platform?: string,
-  settings?: { skipTypingPauseInSandbox?: boolean },
-): boolean {
-  const isSandboxMock = platform === 'mock';
-  const skipTypingPause = isSandboxMock && (SKIP_TYPING_PAUSE_IN_SANDBOX || settings?.skipTypingPauseInSandbox);
-
-  return HUMAN_TYPING_PAUSE_MS > 0 && !skipTypingPause;
-}
-
-export async function pauseForTypingIfNeeded(
-  platform?: string,
-  settings?: { skipTypingPauseInSandbox?: boolean },
-): Promise<void> {
-  if (shouldPauseForTyping(platform, settings)) {
-    await wait(HUMAN_TYPING_PAUSE_MS);
-  }
-}
 
 const DEFAULT_RATE_LIMIT: AutomationRateLimit = {
   maxMessages: 5,
   perMinutes: 1,
 };
-
-function normalizeText(text: string): string {
-  return text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function matchesKeywords(text: string, keywords: string[] = [], match: 'any' | 'all' = 'any'): boolean {
-  if (!keywords.length) return true;
-  const normalized = normalizeText(text);
-  const checks = keywords.map(keyword => normalized.includes(normalizeText(keyword)));
-  return match === 'all' ? checks.every(Boolean) : checks.some(Boolean);
-}
-
-function parseTimeToMinutes(value: string): number | null {
-  const match = value.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
-  return hours * 60 + minutes;
-}
-
-function getTimezoneParts(timezone?: string, date: Date = new Date()) {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone || 'UTC',
-    hour12: false,
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  const parts = formatter.formatToParts(date);
-  const partMap: Record<string, string> = {};
-  parts.forEach(part => {
-    partMap[part.type] = part.value;
-  });
-  return {
-    weekday: partMap.weekday,
-    hour: Number(partMap.hour),
-    minute: Number(partMap.minute),
-  };
-}
-
-function getWeekdayIndex(weekday: string | undefined): number {
-  const map: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  };
-  return weekday && map[weekday] !== undefined ? map[weekday] : 0;
-}
-
-function isOutsideBusinessHours(config?: BusinessHoursConfig, referenceDate: Date = new Date()): boolean {
-  if (!config?.startTime || !config?.endTime) {
-    return false;
-  }
-  const start = parseTimeToMinutes(config.startTime);
-  const end = parseTimeToMinutes(config.endTime);
-  if (start === null || end === null) {
-    return false;
-  }
-  const parts = getTimezoneParts(config.timezone, referenceDate);
-  const weekdayIndex = getWeekdayIndex(parts.weekday);
-  const activeDays = config.daysOfWeek && config.daysOfWeek.length > 0 ? config.daysOfWeek : [0, 1, 2, 3, 4, 5, 6];
-  if (!activeDays.includes(weekdayIndex)) {
-    return true;
-  }
-  const nowMinutes = parts.hour * 60 + parts.minute;
-  if (start === end) {
-    return false;
-  }
-  if (start < end) {
-    return nowMinutes < start || nowMinutes >= end;
-  }
-  return nowMinutes >= end && nowMinutes < start;
-}
-
-function getNextOpenTime(config: BusinessHoursConfig, referenceDate: Date = new Date()): Date {
-  const startMinutes = parseTimeToMinutes(config.startTime) || 0;
-  const endMinutes = parseTimeToMinutes(config.endTime) || 0;
-  const activeDays = config.daysOfWeek && config.daysOfWeek.length > 0 ? config.daysOfWeek : [0, 1, 2, 3, 4, 5, 6];
-
-  const now = new Date(referenceDate);
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
-  let candidate = new Date(now);
-  for (let i = 0; i < 8; i += 1) {
-    const weekdayIndex = candidate.getDay();
-    const isActiveDay = activeDays.includes(weekdayIndex);
-
-    if (isActiveDay) {
-      const withinWindow = startMinutes < endMinutes
-        ? nowMinutes >= startMinutes && nowMinutes < endMinutes
-        : nowMinutes >= startMinutes || nowMinutes < endMinutes;
-
-      if (withinWindow && i === 0) {
-        return candidate;
-      }
-
-      candidate.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
-      if (i === 0 && nowMinutes < startMinutes && startMinutes < endMinutes) {
-        return candidate;
-      }
-      if (i > 0) {
-        return candidate;
-      }
-    }
-
-    candidate = new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
-  }
-
-  return new Date(referenceDate);
-}
-
-function formatNextOpenTime(config: BusinessHoursConfig, referenceDate: Date = new Date()): string {
-  const nextOpen = getNextOpenTime(config, referenceDate);
-  try {
-    return new Intl.DateTimeFormat('en-US', {
-      timeZone: config.timezone || 'UTC',
-      weekday: 'short',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(nextOpen);
-  } catch (error) {
-    return nextOpen.toLocaleString('en-US', {
-      weekday: 'short',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  }
-}
-
-type AutomationTestContext = {
-  forceOutsideBusinessHours?: boolean;
-  hasLink?: boolean;
-  hasAttachment?: boolean;
-  linkUrl?: string;
-  attachmentUrls?: string[];
-};
-
-function matchesTriggerConfig(
-  messageText: string,
-  triggerConfig?: TriggerConfig,
-  context?: AutomationTestContext,
-): boolean {
-  if (!triggerConfig) return true;
-  const keywordMatch = triggerConfig.keywordMatch || 'any';
-  if (
-    triggerConfig.excludeKeywords &&
-    triggerConfig.excludeKeywords.length > 0 &&
-    matchesKeywords(messageText, triggerConfig.excludeKeywords, 'any')
-  ) {
-    return false;
-  }
-  if (
-    triggerConfig.outsideBusinessHours &&
-    !context?.forceOutsideBusinessHours &&
-    !isOutsideBusinessHours(triggerConfig.businessHours)
-  ) {
-    return false;
-  }
-  const linkMatched = !!triggerConfig.matchOn?.link && !!context?.hasLink;
-  const attachmentMatched = !!triggerConfig.matchOn?.attachment && !!context?.hasAttachment;
-  if (linkMatched || attachmentMatched) {
-    return true;
-  }
-  if (triggerConfig.keywords && !matchesKeywords(messageText, triggerConfig.keywords, keywordMatch)) {
-    return false;
-  }
-  return true;
-}
 
 async function getTemplateSession(params: {
   automationId: mongoose.Types.ObjectId;
@@ -293,8 +107,13 @@ async function sendTemplateMessage(params: {
   buttons?: Array<{ title: string; actionType?: 'postback'; payload?: string }>;
   platform?: string;
   tags?: string[];
+  aiMeta?: {
+    shouldEscalate?: boolean;
+    escalationReason?: string;
+    knowledgeItemIds?: string[];
+  };
 }): Promise<void> {
-  const { conversation, automation, igAccount, recipientId, text, buttons, platform, tags } = params;
+  const { conversation, automation, igAccount, recipientId, text, buttons, platform, tags, aiMeta } = params;
 
   await pauseForTypingIfNeeded(platform);
 
@@ -329,6 +148,9 @@ async function sendTemplateMessage(params: {
     instagramMessageId: result.message_id,
     automationSource: 'template_flow',
     aiTags: tags,
+    aiShouldEscalate: aiMeta?.shouldEscalate,
+    aiEscalationReason: aiMeta?.escalationReason,
+    kbItemIdsUsed: aiMeta?.knowledgeItemIds,
     metadata: buttons ? { buttons } : undefined,
     createdAt: sentAt,
   });
@@ -359,1011 +181,115 @@ async function sendTemplateMessage(params: {
   await trackDailyMetric(conversation.workspaceId, sentAt, increments);
 }
 
-function detectBookingMenuChoice(text: string): 'book' | 'prices' | 'location' | 'talk' | null {
-  const normalized = normalizeText(text);
-  if (/(book|booking|appointment|slot|available|availability|حجز|موعد)/.test(normalized)) return 'book';
-  if (/(price|prices|cost|سعر)/.test(normalized)) return 'prices';
-  if (/(location|address|where|hours|map|directions)/.test(normalized)) return 'location';
-  if (/(talk|staff|human|agent|reception|team)/.test(normalized)) return 'talk';
-  return null;
-}
-
-function detectAfterHoursIntent(text: string): string {
-  const normalized = normalizeText(text);
-  if (/(book|booking|appointment|reserve)/.test(normalized)) return 'Booking';
-  if (/(price|prices|cost|سعر)/.test(normalized)) return 'Prices';
-  if (/(order|purchase|buy)/.test(normalized)) return 'Order';
-  return 'Other';
-}
-
-type TemplateFlowState = {
-  step?: string;
-  status?: 'active' | 'completed' | 'handoff';
-  questionCount: number;
-  collectedFields: Record<string, any>;
-};
-
-type TemplateFlowReply = {
+async function sendAiReplyMessage(params: {
+  conversation: any;
+  automation: any;
+  igAccount: any;
+  recipientId: string;
   text: string;
-  buttons?: Array<{ title: string }>;
-};
-
-type TemplateFlowActions = {
-  handoffReason?: string;
-  createLead?: boolean;
-  createBooking?: boolean;
-  scheduleFollowup?: boolean;
-  createDraft?: boolean;
-  draftPayload?: Record<string, any>;
-  paymentLinkRequired?: boolean;
-  handoffSummary?: string;
-  handoffTopic?: string;
-  recommendedNextAction?: string;
-};
-
-function normalizeFlowState(state: Partial<TemplateFlowState>): TemplateFlowState {
-  return {
-    step: state.step,
-    status: state.status || 'active',
-    questionCount: state.questionCount ?? 0,
-    collectedFields: state.collectedFields ? { ...state.collectedFields } : {},
+  platform?: string;
+  tags?: string[];
+  aiMeta?: {
+    shouldEscalate?: boolean;
+    escalationReason?: string;
+    knowledgeItemIds?: string[];
   };
-}
+}): Promise<any> {
+  const { conversation, automation, igAccount, recipientId, text, platform, tags, aiMeta } = params;
 
-function buildBookingSummary(fields: Record<string, any>): string {
-  return [
-    `Name: ${fields.leadName || 'n/a'}`,
-    `Phone: ${fields.phone || 'n/a'}`,
-    `Service: ${fields.service || 'n/a'}`,
-    fields.preferredDayTime ? `Preferred: ${fields.preferredDayTime}` : null,
-  ].filter(Boolean).join('\n');
-}
+  await pauseForTypingIfNeeded(platform);
 
-function buildAfterHoursSummary(fields: Record<string, any>): string {
-  return [
-    fields.intent ? `Intent: ${fields.intent}` : null,
-    fields.leadName ? `Name: ${fields.leadName}` : null,
-    fields.phone ? `Phone: ${fields.phone}` : null,
-    fields.preferredTime ? `Preferred time: ${fields.preferredTime}` : null,
-  ].filter(Boolean).join('\n');
-}
-
-function advanceBookingConciergeState(params: {
-  state: TemplateFlowState;
-  messageText: string;
-  config: BookingConciergeConfig;
-}): { replies: TemplateFlowReply[]; state: TemplateFlowState; actions?: TemplateFlowActions } {
-  const { messageText, config } = params;
-  const nextState = normalizeFlowState(params.state);
-  const replies: TemplateFlowReply[] = [];
-  const actions: TemplateFlowActions = {};
-  const quickReplies = config.quickReplies || ['Book appointment', 'Prices', 'Location', 'Talk to staff'];
-  const maxQuestions = config.maxQuestions ?? 5;
-  const minPhoneLength = config.minPhoneLength ?? 8;
-
-  if (nextState.status && nextState.status !== 'active') {
-    replies.push({ text: 'This flow is complete. Reset to start again.' });
-    return { replies, state: nextState };
+  const result = await sendInstagramMessage(recipientId, text, igAccount.accessToken);
+  if (!result || (!result.message_id && !result.recipient_id)) {
+    throw new Error('Instagram API did not return a valid response.');
   }
 
-  if (!nextState.step) {
-    replies.push({ text: `Hi! I can help with bookings. Choose an option: ${quickReplies.join(', ')}.` });
-    nextState.step = 'menu';
-    nextState.questionCount += 1;
-    return { replies, state: nextState };
-  }
-
-  if (nextState.questionCount >= maxQuestions) {
-    replies.push({ text: "Thanks for the details. I'm handing this to our reception team to finish up." });
-    nextState.status = 'handoff';
-    actions.handoffReason = 'Booking handoff (max questions reached)';
-    return { replies, state: nextState, actions };
-  }
-
-  if (nextState.step === 'menu') {
-    const choice = detectBookingMenuChoice(messageText);
-    if (choice === 'prices') {
-      const priceMessage = config.priceRanges
-        ? `Here are our price ranges:\n${config.priceRanges}\n\nReply \"Book appointment\" to grab a slot.`
-        : "Our pricing depends on the service. Reply with the service you're interested in and I can help you book.";
-      replies.push({ text: priceMessage });
-      return { replies, state: nextState };
-    }
-    if (choice === 'location') {
-      const locationParts = [
-        config.locationLink ? `Map: ${config.locationLink}` : null,
-        config.locationHours ? `Hours: ${config.locationHours}` : null,
-      ].filter(Boolean);
-      replies.push({ text: locationParts.length ? locationParts.join('\n') : "We can share location details - reply with your preferred branch and we'll send directions." });
-      return { replies, state: nextState };
-    }
-    if (choice === 'talk') {
-      replies.push({ text: 'Connecting you to our reception team now.' });
-      nextState.status = 'handoff';
-      actions.handoffReason = 'Booking handoff requested';
-      return { replies, state: nextState, actions };
-    }
-
-    nextState.step = 'collect_name';
-    nextState.questionCount += 1;
-    replies.push({ text: "Great! What's your name?" });
-    return { replies, state: nextState };
-  }
-
-  if (nextState.step === 'collect_name') {
-    nextState.collectedFields.leadName = messageText.trim();
-    nextState.step = 'collect_phone';
-    nextState.questionCount += 1;
-    replies.push({ text: "Thanks! What's the best phone number to reach you?" });
-    return { replies, state: nextState };
-  }
-
-  if (nextState.step === 'collect_phone') {
-    const digits = messageText.replace(/\D/g, '');
-    if (digits.length < minPhoneLength) {
-      nextState.questionCount += 1;
-      replies.push({ text: `Could you share a valid phone number (at least ${minPhoneLength} digits)?` });
-      return { replies, state: nextState };
-    }
-    nextState.collectedFields.phone = digits;
-    nextState.step = 'collect_service';
-    nextState.questionCount += 1;
-    const serviceOptions = config.serviceOptions || [];
-    const buttons = serviceOptions.slice(0, 2).map((option) => ({ title: option }));
-    if (buttons.length > 0) {
-      buttons.push({ title: 'Other' });
-    }
-    const servicePrompt = serviceOptions.length
-      ? `Which service would you like? ${serviceOptions.join(', ')}`
-      : 'Which service would you like to book?';
-    replies.push({ text: servicePrompt, buttons: buttons.length ? buttons : undefined });
-    return { replies, state: nextState };
-  }
-
-  if (nextState.step === 'collect_service') {
-    const normalized = normalizeText(messageText);
-    if (normalized === 'other') {
-      if (nextState.questionCount + 1 > maxQuestions) {
-        replies.push({ text: "Thanks! I'm handing this to our reception team to finish up." });
-        nextState.status = 'handoff';
-        actions.handoffReason = 'Booking handoff (max questions reached)';
-        return { replies, state: nextState, actions };
-      }
-      nextState.step = 'collect_service_other';
-      nextState.questionCount += 1;
-      replies.push({ text: 'Sure - what service are you interested in?' });
-      return { replies, state: nextState };
-    }
-
-    nextState.collectedFields.service = messageText.trim();
-    nextState.step = 'collect_preferred_time';
-    nextState.questionCount += 1;
-    replies.push({ text: 'Any preferred day or time? (Optional)' });
-    return { replies, state: nextState };
-  }
-
-  if (nextState.step === 'collect_service_other') {
-    nextState.collectedFields.service = messageText.trim();
-    nextState.step = 'collect_preferred_time';
-    nextState.questionCount += 1;
-    replies.push({ text: 'Any preferred day or time? (Optional)' });
-    return { replies, state: nextState };
-  }
-
-  if (nextState.step === 'collect_preferred_time') {
-    nextState.collectedFields.preferredDayTime = messageText.trim();
-    nextState.step = 'confirm';
-    const summary = buildBookingSummary(nextState.collectedFields);
-    replies.push({ text: `Got it! Here's a quick summary:\n${summary}\n\nWe'll have our reception team follow up shortly.` });
-    nextState.status = 'handoff';
-    actions.handoffReason = 'Booking lead handoff';
-    actions.createLead = true;
-    actions.createBooking = true;
-    return { replies, state: nextState, actions };
-  }
-
-  replies.push({ text: "I'm not sure how to continue this flow. Reset to try again." });
-  return { replies, state: nextState };
-}
-
-function advanceAfterHoursCaptureState(params: {
-  state: TemplateFlowState;
-  messageText: string;
-  config: AfterHoursCaptureConfig;
-}): { replies: TemplateFlowReply[]; state: TemplateFlowState; actions?: TemplateFlowActions } {
-  const { messageText, config } = params;
-  const nextState = normalizeFlowState(params.state);
-  const replies: TemplateFlowReply[] = [];
-  const actions: TemplateFlowActions = {};
-  const maxQuestions = config.maxQuestions ?? 4;
-  const intentOptions = config.intentOptions && config.intentOptions.length > 0
-    ? config.intentOptions
-    : ['Booking', 'Prices', 'Order', 'Other'];
-
-  if (nextState.status && nextState.status !== 'active') {
-    replies.push({ text: 'This flow is complete. Reset to start again.' });
-    return { replies, state: nextState };
-  }
-
-  if (!nextState.step) {
-    const closedTemplate = config.closedMessageTemplate || "We're closed - leave details, we'll contact you at {next_open_time}.";
-    const nextOpen = formatNextOpenTime(config.businessHours);
-    replies.push({ text: closedTemplate.replace('{next_open_time}', nextOpen) });
-    nextState.collectedFields.message = messageText.trim();
-
-    const detectedIntent = detectAfterHoursIntent(messageText);
-    const intentMatch = detectedIntent !== 'Other'
-      && intentOptions.map((option) => option.toLowerCase()).includes(detectedIntent.toLowerCase());
-
-    if (intentMatch) {
-      nextState.collectedFields.intent = detectedIntent;
-      nextState.step = 'collect_name';
-      nextState.questionCount += 1;
-      replies.push({ text: 'May I have your name? (Optional)' });
-    } else {
-      nextState.step = 'collect_intent';
-      nextState.questionCount += 1;
-      replies.push({
-        text: `What can we help with? ${intentOptions.join(', ')}.`,
-        buttons: intentOptions.slice(0, 3).map((option) => ({ title: option })),
-      });
-    }
-    return { replies, state: nextState };
-  }
-
-  if (nextState.questionCount >= maxQuestions) {
-    replies.push({ text: "Thanks for the details. You're in the queue and a teammate will follow up." });
-    nextState.status = 'completed';
-    return { replies, state: nextState };
-  }
-
-  if (nextState.step === 'collect_intent') {
-    nextState.collectedFields.intent = detectAfterHoursIntent(messageText);
-    nextState.step = 'collect_name';
-    nextState.questionCount += 1;
-    replies.push({ text: 'May I have your name? (Optional)' });
-    return { replies, state: nextState };
-  }
-
-  if (nextState.step === 'collect_name') {
-    const trimmed = messageText.trim();
-    const leadName = /^(skip|no|n\/a|na|none)$/i.test(trimmed) ? undefined : trimmed;
-    nextState.collectedFields.leadName = leadName;
-    nextState.step = 'collect_phone';
-    nextState.questionCount += 1;
-    replies.push({ text: "What's the best phone number to reach you?" });
-    return { replies, state: nextState };
-  }
-
-  if (nextState.step === 'collect_phone') {
-    const digits = messageText.replace(/\D/g, '');
-    nextState.collectedFields.phone = digits || messageText.trim();
-    nextState.step = 'collect_preferred_time';
-    nextState.questionCount += 1;
-    replies.push({ text: 'Any preferred time for a callback? (Optional)' });
-    return { replies, state: nextState };
-  }
-
-  if (nextState.step === 'collect_preferred_time') {
-    const trimmed = messageText.trim();
-    const preferredTime = /^(skip|no|n\/a|na|none)$/i.test(trimmed) ? undefined : trimmed;
-    nextState.collectedFields.preferredTime = preferredTime;
-    nextState.step = 'confirm';
-    const summary = buildAfterHoursSummary(nextState.collectedFields);
-    replies.push({ text: `You're in the queue. Here's what I captured:\n${summary}` });
-    nextState.status = 'completed';
-    actions.handoffReason = 'After-hours lead capture';
-    actions.createLead = true;
-    actions.scheduleFollowup = true;
-    return { replies, state: nextState, actions };
-  }
-
-  replies.push({ text: "I'm not sure how to continue this flow. Reset to try again." });
-  return { replies, state: nextState };
-}
-
-type SalesIntent = 'price' | 'availability' | 'delivery' | 'order' | 'support' | 'other';
-type SalesPaymentMethod = 'online' | 'cod';
-
-const SALES_INTENT_OPTIONS = ['Price', 'Availability', 'Delivery', 'Order', 'Support'];
-const SALES_NEGOTIATION_PATTERNS = /(discount|cheaper|too expensive|drop price|lower price|deal|offer)/i;
-const SALES_ANGER_PATTERNS = /(angry|scam|fraud|bad service|terrible|worst|refund|complain|hate)/i;
-const SALES_SPAM_PATTERNS = /(http.*free money|crypto|click here|earn \$)/i;
-
-function detectSalesIntent(text: string): SalesIntent {
-  const normalized = normalizeText(text);
-  if (/(refund|complain|problem|issue|support|cancel)/.test(normalized)) return 'support';
-  if (/(delivery|ship|shipping|eta|arrive)/.test(normalized)) return 'delivery';
-  if (/(availability|available|in stock|stock)/.test(normalized)) return 'availability';
-  if (/(buy|order|checkout|cod|cash on delivery|payment)/.test(normalized)) return 'order';
-  if (/(price|cost|how much|pricing)/.test(normalized)) return 'price';
-  return 'other';
-}
-
-function detectPaymentMethod(text: string): SalesPaymentMethod | undefined {
-  const normalized = normalizeText(text);
-  if (/(cod|cash on delivery|cash)/.test(normalized)) return 'cod';
-  if (/(online|card|link|pay|payment)/.test(normalized)) return 'online';
-  return undefined;
-}
-
-function extractQuantity(text: string): number | undefined {
-  const digitsOnly = text.replace(/\D/g, '');
-  if (digitsOnly.length >= 6) return undefined;
-  const match = text.match(/\b(\d{1,3})\b/);
-  if (!match) return undefined;
-  const qty = Number(match[1]);
-  if (Number.isNaN(qty) || qty <= 0) return undefined;
-  return qty;
-}
-
-function extractPhone(text: string): string | undefined {
-  const digits = text.replace(/\D/g, '');
-  if (digits.length < 6) return undefined;
-  return digits;
-}
-
-function looksLikeAddress(text: string): boolean {
-  const normalized = normalizeText(text);
-  const hasNumber = /\d/.test(text);
-  const hasKeyword = /(street|st|road|rd|block|area|building|apt|avenue|unit)/.test(normalized);
-  return normalized.length >= 10 && (hasNumber || hasKeyword);
-}
-
-function normalizeCityName(input: string, config: SalesConciergeConfig): string | undefined {
-  if (!input) return undefined;
-  const normalized = normalizeText(input);
-  const aliasMap = {
-    riyadh: 'Riyadh',
-    jeddah: 'Jeddah',
-    dammam: 'Dammam',
-    ...config.cityAliases,
-  } as Record<string, string>;
-
-  if (aliasMap[normalized]) {
-    return aliasMap[normalized];
-  }
-
-  const cityRules = config.shippingRules || [];
-  for (const rule of cityRules) {
-    const cityNormalized = normalizeText(rule.city);
-    if (normalized === cityNormalized || normalized.includes(cityNormalized) || cityNormalized.includes(normalized)) {
-      return rule.city;
-    }
-  }
-
-  return undefined;
-}
-
-function findCatalogCandidates(config: SalesConciergeConfig, query: string): SalesCatalogItem[] {
-  if (!query) return [];
-  const normalizedQuery = normalizeText(query);
-  const scored = config.catalog.map((item) => {
-    let score = 0;
-    const name = normalizeText(item.name);
-    if (name && normalizedQuery.includes(name)) score += 3;
-    if (item.sku && normalizedQuery.includes(normalizeText(item.sku))) score += 4;
-    (item.keywords || []).forEach((keyword) => {
-      if (normalizedQuery.includes(normalizeText(keyword))) score += 2;
-    });
-    return { item, score };
-  }).filter((entry) => entry.score > 0);
-
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, 3).map((entry) => entry.item);
-}
-
-function normalizeSheetHeader(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
-
-function parseNumber(value?: string): number | undefined {
-  if (!value) return undefined;
-  const cleaned = value.replace(/[^0-9.\-]/g, '');
-  const parsed = Number.parseFloat(cleaned);
-  return Number.isNaN(parsed) ? undefined : parsed;
-}
-
-function parseBoolean(value?: string): boolean | undefined {
-  if (!value) return undefined;
-  const normalized = value.trim().toLowerCase();
-  if (['true', 'yes', 'y', '1'].includes(normalized)) return true;
-  if (['false', 'no', 'n', '0'].includes(normalized)) return false;
-  return undefined;
-}
-
-function parseList(value?: string): string[] | undefined {
-  if (!value) return undefined;
-  const list = value
-    .split(/[,;]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return list.length ? list : undefined;
-}
-
-function parseStock(value?: string): SalesCatalogItem['stock'] | undefined {
-  if (!value) return undefined;
-  const normalized = value.trim().toLowerCase();
-  if (/(out|sold|0|none)/.test(normalized)) return 'out';
-  if (/(low|few|limited)/.test(normalized)) return 'low';
-  if (/(in|yes|available|stock)/.test(normalized)) return 'in';
-  return 'unknown';
-}
-
-function parsePriceRow(values: {
-  priceRaw?: string;
-  priceMinRaw?: string;
-  priceMaxRaw?: string;
-}): SalesCatalogItem['price'] | undefined {
-  const minValue = parseNumber(values.priceMinRaw);
-  const maxValue = parseNumber(values.priceMaxRaw);
-  if (minValue !== undefined && maxValue !== undefined) {
-    return { min: minValue, max: maxValue };
-  }
-  if (values.priceRaw) {
-    const rangeMatch = values.priceRaw.split(/-|to/).map((part) => parseNumber(part));
-    if (rangeMatch.length >= 2 && rangeMatch[0] !== undefined && rangeMatch[1] !== undefined) {
-      return { min: rangeMatch[0], max: rangeMatch[1] };
-    }
-  }
-  const single = parseNumber(values.priceRaw);
-  return single !== undefined ? single : undefined;
-}
-
-function parseSalesSheetData(headers: string[], rows: string[][]): {
-  catalog: SalesCatalogItem[];
-  shippingRules: SalesShippingRule[];
-} {
-  const headerKeys = headers.map(normalizeSheetHeader);
-  const catalog: SalesCatalogItem[] = [];
-  const shippingRules: SalesShippingRule[] = [];
-
-  rows.forEach((row) => {
-    const rowData: Record<string, string> = {};
-    headerKeys.forEach((key, index) => {
-      rowData[key] = (row[index] || '').toString().trim();
-    });
-
-    const getValue = (keys: string[]) => keys.map((key) => rowData[key]).find((value) => value);
-
-    const sku = getValue(['sku', 'product_id', 'id']);
-    const name = getValue(['name', 'product', 'title']);
-    const keywords = parseList(getValue(['keywords', 'tags', 'keywords_list']));
-    const price = parsePriceRow({
-      priceRaw: getValue(['price', 'amount', 'unit_price']),
-      priceMinRaw: getValue(['price_min', 'min_price', 'min']),
-      priceMaxRaw: getValue(['price_max', 'max_price', 'max']),
-    });
-    const currency = getValue(['currency', 'curr']);
-    const stock = parseStock(getValue(['stock', 'availability']));
-    const sizes = parseList(getValue(['size', 'sizes']));
-    const colors = parseList(getValue(['color', 'colors']));
-
-    if (sku || name) {
-      const item: SalesCatalogItem = {
-        sku: sku || name || 'SKU',
-        name: name || sku || 'Item',
-      };
-      if (keywords) item.keywords = keywords;
-      if (price !== undefined) item.price = price;
-      if (currency) item.currency = currency;
-      if (stock) item.stock = stock;
-      if (sizes || colors) {
-        item.variants = {};
-        if (sizes) item.variants.size = sizes;
-        if (colors) item.variants.color = colors;
-      }
-      catalog.push(item);
-    }
-
-    const city = getValue(['city', 'shipping_city', 'delivery_city']);
-    const fee = parseNumber(getValue(['shipping_fee', 'delivery_fee', 'fee', 'shipping']));
-    const eta = getValue(['eta', 'delivery_eta', 'shipping_eta']);
-    const codAllowed = parseBoolean(getValue(['cod_allowed', 'cod', 'cash_on_delivery']));
-
-    if (city && fee !== undefined && eta) {
-      shippingRules.push({
-        city,
-        fee,
-        eta,
-        codAllowed: codAllowed ?? false,
-      });
-    }
+  const sentAt = new Date();
+  const message = await Message.create({
+    conversationId: conversation._id,
+    workspaceId: conversation.workspaceId,
+    text,
+    from: 'ai',
+    platform: platform || 'instagram',
+    instagramMessageId: result.message_id,
+    automationSource: 'ai_reply',
+    aiTags: tags,
+    aiShouldEscalate: aiMeta?.shouldEscalate,
+    aiEscalationReason: aiMeta?.escalationReason,
+    kbItemIdsUsed: aiMeta?.knowledgeItemIds,
+    createdAt: sentAt,
   });
 
-  return { catalog, shippingRules };
+  conversation.lastMessage = text;
+  conversation.lastMessageAt = sentAt;
+  conversation.lastBusinessMessageAt = sentAt;
+  await conversation.save();
+
+  automation.stats.totalTriggered += 1;
+  automation.stats.totalRepliesSent += 1;
+  automation.stats.lastTriggeredAt = sentAt;
+  automation.stats.lastReplySentAt = sentAt;
+  await automation.save();
+
+  const increments: Record<string, number> = {
+    outboundMessages: 1,
+    aiReplies: 1,
+  };
+
+  if (tags && tags.length > 0) {
+    tags.forEach(tag => addCountIncrement(increments, 'tagCounts', tag));
+  }
+
+  const responseMetrics = calculateResponseTime(conversation, sentAt);
+  Object.assign(increments, responseMetrics);
+
+  await trackDailyMetric(conversation.workspaceId, sentAt, increments);
+
+  return message;
 }
 
-async function resolveSalesConciergeConfig(
-  workspaceId: string | mongoose.Types.ObjectId,
-  config: SalesConciergeConfig,
-): Promise<SalesConciergeConfig> {
-  if (!config.useGoogleSheets) return config;
+async function buildAutomationAiReply(params: {
+  conversation: any;
+  messageText: string;
+  messageContext?: AutomationTestContext;
+  aiSettings?: { tone?: string; maxReplySentences?: number };
+}) {
+  const { conversation, messageText, messageContext, aiSettings } = params;
+  const settings = await getWorkspaceSettings(conversation.workspaceId);
+  const goalConfigs = getGoalConfigs(settings);
+  const detectedGoal = detectGoalIntent(messageText || '');
+  const goalMatched = goalMatchesWorkspace(
+    detectedGoal,
+    settings?.primaryGoal,
+    settings?.secondaryGoal,
+  )
+    ? detectedGoal
+    : 'none';
 
-  const settings = await WorkspaceSettings.findOne({ workspaceId });
-  const sheetsConfig = settings?.googleSheets;
-  if (!sheetsConfig?.spreadsheetId) return config;
-
-  try {
-    let auth: { accessToken?: string; serviceAccountJson?: string } = {};
-    if (sheetsConfig.oauthRefreshToken) {
-      const token = await getOAuthAccessToken({ refreshToken: sheetsConfig.oauthRefreshToken });
-      auth = { accessToken: token.accessToken };
-    } else if (sheetsConfig.serviceAccountJson) {
-      auth = { serviceAccountJson: sheetsConfig.serviceAccountJson };
-    } else {
-      return config;
-    }
-
-    const sheetData = await getGoogleSheetRows(
-      {
-        spreadsheetId: sheetsConfig.spreadsheetId,
-        sheetName: sheetsConfig.sheetName || 'Sheet1',
-        ...auth,
+  return generateAIReply({
+    conversation,
+    workspaceId: conversation.workspaceId,
+    latestCustomerMessage: messageText,
+    categoryId: messageContext?.categoryId,
+    categorization: messageContext?.categoryName
+      ? { categoryName: messageContext.categoryName }
+      : undefined,
+    historyLimit: 20,
+    goalContext: {
+      workspaceGoals: {
+        primaryGoal: settings?.primaryGoal,
+        secondaryGoal: settings?.secondaryGoal,
+        configs: goalConfigs,
       },
-      { headerRow: sheetsConfig.headerRow || 1 },
-    );
-    const parsed = parseSalesSheetData(sheetData.headers, sheetData.rows);
-    if (!parsed.catalog.length && !parsed.shippingRules.length) {
-      return config;
-    }
-
-    return {
-      ...config,
-      catalog: parsed.catalog.length ? parsed.catalog : config.catalog,
-      shippingRules: parsed.shippingRules.length ? parsed.shippingRules : config.shippingRules,
-    };
-  } catch (error) {
-    console.error('Sales concierge sheet load failed:', error);
-    return config;
-  }
-}
-
-function selectCatalogCandidate(messageText: string, candidates: SalesCatalogItem[]): SalesCatalogItem | undefined {
-  if (!candidates.length) return undefined;
-  const normalized = normalizeText(messageText);
-  const indexMatch = normalized.match(/\b(1|2|3)\b/);
-  if (indexMatch) {
-    const index = Number(indexMatch[1]) - 1;
-    if (candidates[index]) return candidates[index];
-  }
-  return candidates.find((candidate) => {
-    const name = normalizeText(candidate.name);
-    const sku = normalizeText(candidate.sku || '');
-    return (name && normalized.includes(name)) || (sku && normalized.includes(sku));
+      detectedGoal: goalMatched !== 'none' ? goalMatched : 'none',
+      activeGoalType: goalMatched !== 'none' ? goalMatched : undefined,
+      goalState: goalMatched !== 'none' ? 'collecting' : 'idle',
+      collectedFields: conversation.goalCollectedFields || {},
+    },
+    workspaceSettingsOverride: settings,
+    tone: aiSettings?.tone,
+    maxReplySentences: aiSettings?.maxReplySentences,
   });
-}
-
-function extractVariant(messageText: string, item?: SalesCatalogItem) {
-  if (!item?.variants) return {};
-  const normalized = normalizeText(messageText);
-  const size = item.variants.size?.find((option) => normalized.includes(normalizeText(option)));
-  const color = item.variants.color?.find((option) => normalized.includes(normalizeText(option)));
-  return { size, color };
-}
-
-function formatPrice(price: SalesCatalogItem['price'], currency: string): string | undefined {
-  if (!price) return undefined;
-  if (typeof price === 'number') {
-    return `${price} ${currency}`;
-  }
-  if (price.min && price.max) {
-    return `${price.min}-${price.max} ${currency}`;
-  }
-  return undefined;
-}
-
-function formatStock(stock?: SalesCatalogItem['stock']): string | undefined {
-  if (!stock) return undefined;
-  if (stock === 'in') return 'In stock';
-  if (stock === 'low') return 'Low stock';
-  if (stock === 'out') return 'Out of stock';
-  return 'Confirming';
-}
-
-function buildSalesQuote(item: SalesCatalogItem, city: string, config: SalesConciergeConfig) {
-  const currency = item.currency || 'SAR';
-  const shippingRule = config.shippingRules.find((rule) => normalizeText(rule.city) === normalizeText(city));
-  return {
-    priceText: formatPrice(item.price, currency),
-    stockText: formatStock(item.stock),
-    shippingFee: shippingRule?.fee,
-    eta: shippingRule?.eta,
-    currency,
-    codAllowed: shippingRule?.codAllowed ?? false,
-  };
-}
-
-function buildSalesSummary(fields: Record<string, any>) {
-  return [
-    fields.productRef?.value ? `Ref: ${fields.productRef.value}` : null,
-    fields.sku ? `SKU: ${fields.sku}` : null,
-    fields.productName ? `Product: ${fields.productName}` : null,
-    fields.variant?.size ? `Size: ${fields.variant.size}` : null,
-    fields.variant?.color ? `Color: ${fields.variant.color}` : null,
-    fields.quantity ? `Qty: ${fields.quantity}` : null,
-    fields.city ? `City: ${fields.city}` : null,
-    fields.address ? `Address: ${fields.address}` : null,
-    fields.phone ? `Phone: ${fields.phone}` : null,
-    fields.paymentMethod ? `Payment: ${fields.paymentMethod.toUpperCase()}` : null,
-    fields.quote?.priceText ? `Price: ${fields.quote.priceText}` : null,
-    fields.quote?.stockText ? `Stock: ${fields.quote.stockText}` : null,
-    fields.quote?.shippingFee !== undefined ? `Shipping: ${fields.quote.shippingFee}` : null,
-    fields.quote?.eta ? `ETA: ${fields.quote.eta}` : null,
-  ].filter(Boolean).join('\n');
-}
-
-function incrementAttempt(fields: Record<string, any>, key: string): number {
-  const attempts = fields.attempts || {};
-  attempts[key] = (attempts[key] || 0) + 1;
-  fields.attempts = attempts;
-  return attempts[key];
-}
-
-function extractProductRef(messageText: string, context?: AutomationTestContext) {
-  const linkMatch = messageText.match(/https?:\/\/\S+/i);
-  if (linkMatch) {
-    return { type: 'link', value: linkMatch[0] };
-  }
-  if (context?.linkUrl) {
-    return { type: 'link', value: context.linkUrl };
-  }
-  if (context?.attachmentUrls && context.attachmentUrls.length > 0) {
-    return { type: 'image', value: context.attachmentUrls[0] };
-  }
-  return undefined;
-}
-
-function advanceSalesConciergeState(params: {
-  state: TemplateFlowState;
-  messageText: string;
-  config: SalesConciergeConfig;
-  context?: AutomationTestContext;
-}): { replies: TemplateFlowReply[]; state: TemplateFlowState; actions?: TemplateFlowActions } {
-  const { messageText, config, context } = params;
-  const nextState = normalizeFlowState(params.state);
-  const replies: TemplateFlowReply[] = [];
-  const actions: TemplateFlowActions = {};
-  const maxQuestions = config.maxQuestions ?? 6;
-  const minPhoneLength = config.minPhoneLength ?? 8;
-  const fields = nextState.collectedFields || {};
-
-  if (nextState.status && nextState.status !== 'active') {
-    replies.push({ text: 'This flow is complete. Reset to start again.' });
-    return { replies, state: nextState };
-  }
-
-  const intent = detectSalesIntent(messageText);
-  if (intent && !fields.intent) {
-    fields.intent = intent;
-  }
-  const paymentHint = detectPaymentMethod(messageText);
-  if (paymentHint && !fields.paymentMethod) {
-    fields.paymentMethod = paymentHint;
-  }
-
-  fields.flags = {
-    isAngry: SALES_ANGER_PATTERNS.test(messageText),
-    isNegotiation: SALES_NEGOTIATION_PATTERNS.test(messageText),
-    isSpam: SALES_SPAM_PATTERNS.test(messageText),
-  };
-
-  if (fields.flags.isSpam || fields.flags.isAngry || fields.flags.isNegotiation || intent === 'support') {
-    nextState.status = 'handoff';
-    actions.handoffReason = 'Sales concierge handoff requested';
-    actions.handoffTopic = 'Sales concierge handoff';
-    actions.handoffSummary = buildSalesSummary(fields);
-    actions.recommendedNextAction = 'Review intent and reply manually.';
-    nextState.collectedFields = fields;
-    return { replies: [{ text: "Thanks for the details. We'll have our team follow up shortly." }], state: nextState, actions };
-  }
-
-  if (nextState.questionCount >= maxQuestions) {
-    nextState.status = 'handoff';
-    actions.handoffReason = 'Sales concierge handoff (max questions)';
-    actions.handoffTopic = 'Sales concierge handoff';
-    actions.handoffSummary = buildSalesSummary(fields);
-    actions.recommendedNextAction = 'Follow up with customer details.';
-    replies.push({ text: "Thanks for the details. We'll have our team follow up shortly." });
-    nextState.collectedFields = fields;
-    return { replies, state: nextState, actions };
-  }
-
-  if (!fields.productRef) {
-    const productRef = extractProductRef(messageText, context);
-    if (productRef) {
-      fields.productRef = productRef;
-    }
-  }
-
-  if (!fields.productRef) {
-    const candidates = findCatalogCandidates(config, messageText);
-    if (candidates.length > 0) {
-      fields.productRef = { type: 'text', value: messageText };
-      fields.skuCandidates = candidates;
-    }
-  }
-
-  if (!fields.productRef) {
-    if (!fields.intentPrompted && intent === 'other') {
-      fields.intentPrompted = true;
-      nextState.questionCount += 1;
-      replies.push({
-        text: 'What can we help with?',
-        buttons: SALES_INTENT_OPTIONS.map((option) => ({ title: option })),
-      });
-      nextState.step = 'NEED_PRODUCT_REF';
-      nextState.collectedFields = fields;
-      return { replies, state: nextState };
-    }
-
-    nextState.step = 'NEED_PRODUCT_REF';
-    nextState.questionCount += 1;
-    replies.push({ text: 'Got it. Please share the product link or photo so we can check the details.' });
-    nextState.collectedFields = fields;
-    return { replies, state: nextState };
-  }
-
-  if (!fields.sku) {
-    const searchQuery = [fields.productRef?.value, messageText].filter(Boolean).join(' ');
-    const candidates = Array.isArray(fields.skuCandidates) && fields.skuCandidates.length > 0
-      ? fields.skuCandidates
-      : findCatalogCandidates(config, searchQuery);
-    if (!candidates.length) {
-      const attempt = incrementAttempt(fields, 'sku');
-      if (attempt > 2) {
-        nextState.status = 'handoff';
-        actions.handoffReason = 'Sales concierge handoff (product unclear)';
-        actions.handoffTopic = 'Sales concierge handoff';
-        actions.handoffSummary = buildSalesSummary(fields);
-        actions.recommendedNextAction = 'Clarify product reference.';
-        replies.push({ text: "We're not fully sure which item you mean. We'll have our team follow up." });
-        nextState.collectedFields = fields;
-        return { replies, state: nextState, actions };
-      }
-      nextState.questionCount += 1;
-      replies.push({ text: 'Which product are you asking about? A link or exact name helps.' });
-      nextState.step = 'NEED_PRODUCT_REF';
-      nextState.collectedFields = fields;
-      return { replies, state: nextState };
-    }
-
-    if (candidates.length > 1) {
-      const selected = selectCatalogCandidate(messageText, candidates);
-      if (!selected) {
-        const attempt = incrementAttempt(fields, 'sku');
-        if (attempt > 2) {
-          nextState.status = 'handoff';
-          actions.handoffReason = 'Sales concierge handoff (low SKU confidence)';
-          actions.handoffTopic = 'Sales concierge handoff';
-          actions.handoffSummary = buildSalesSummary(fields);
-          actions.recommendedNextAction = 'Confirm SKU with customer.';
-          replies.push({ text: "We're not fully sure which item you mean. We'll have our team follow up." });
-          nextState.collectedFields = fields;
-          return { replies, state: nextState, actions };
-        }
-        nextState.questionCount += 1;
-        replies.push({
-          text: 'Which one do you mean?',
-          buttons: candidates.map((candidate) => ({ title: candidate.name })),
-        });
-        nextState.step = 'NEED_PRODUCT_REF';
-        nextState.collectedFields = { ...fields, skuCandidates: candidates };
-        return { replies, state: nextState };
-      }
-      fields.sku = selected.sku;
-      fields.productName = selected.name;
-      fields.skuCandidates = undefined;
-    } else {
-      fields.sku = candidates[0].sku;
-      fields.productName = candidates[0].name;
-      fields.skuCandidates = undefined;
-    }
-  }
-
-  const item = config.catalog.find((catalogItem) => catalogItem.sku === fields.sku);
-  if (!item) {
-    nextState.status = 'handoff';
-    actions.handoffReason = 'Sales concierge handoff (missing SKU)';
-    actions.handoffTopic = 'Sales concierge handoff';
-    actions.handoffSummary = buildSalesSummary(fields);
-    actions.recommendedNextAction = 'Confirm SKU in catalog.';
-    replies.push({ text: "We're checking the product details and will follow up shortly." });
-    nextState.collectedFields = fields;
-    return { replies, state: nextState, actions };
-  }
-
-  if (item.variants) {
-    const variantUpdate = extractVariant(messageText, item);
-    fields.variant = { ...(fields.variant || {}), ...variantUpdate };
-
-    const needsSize = item.variants.size && !fields.variant?.size;
-    const needsColor = item.variants.color && !fields.variant?.color;
-
-    if (needsSize || needsColor) {
-      const attempt = incrementAttempt(fields, 'variant');
-      if (attempt > 2) {
-        nextState.status = 'handoff';
-        actions.handoffReason = 'Sales concierge handoff (variant unclear)';
-        actions.handoffTopic = 'Sales concierge handoff';
-        actions.handoffSummary = buildSalesSummary(fields);
-        actions.recommendedNextAction = 'Confirm size/color options.';
-        replies.push({ text: "We'll have our team confirm the right variant for you." });
-        nextState.collectedFields = fields;
-        return { replies, state: nextState, actions };
-      }
-      nextState.questionCount += 1;
-      const prompt = needsSize ? 'Which size do you need?' : 'Which color do you prefer?';
-      const options = needsSize ? item.variants.size : item.variants.color;
-      replies.push({
-        text: prompt,
-        buttons: (options || []).slice(0, 3).map((option) => ({ title: option })),
-      });
-      nextState.step = 'NEED_VARIANT';
-      nextState.collectedFields = fields;
-      return { replies, state: nextState };
-    }
-  }
-
-  if (!fields.quantity) {
-    const quantity = extractQuantity(messageText);
-    if (quantity) {
-      fields.quantity = quantity;
-    } else {
-      fields.quantity = 1;
-    }
-  }
-
-  if (!fields.city) {
-    const city = normalizeCityName(messageText, config);
-    if (city) {
-      fields.city = city;
-    } else {
-      const attempt = incrementAttempt(fields, 'city');
-      if (attempt > 2) {
-        nextState.status = 'handoff';
-        actions.handoffReason = 'Sales concierge handoff (city unclear)';
-        actions.handoffTopic = 'Sales concierge handoff';
-        actions.handoffSummary = buildSalesSummary(fields);
-        actions.recommendedNextAction = 'Confirm delivery city.';
-        replies.push({ text: "We'll have our team confirm delivery details with you." });
-        nextState.collectedFields = fields;
-        return { replies, state: nextState, actions };
-      }
-      nextState.questionCount += 1;
-      replies.push({ text: 'Which city for delivery?' });
-      nextState.step = 'NEED_CITY';
-      nextState.collectedFields = fields;
-      return { replies, state: nextState };
-    }
-  }
-
-  fields.quote = buildSalesQuote(item, fields.city, config);
-  if (fields.quote.stockText === 'Out of stock') {
-    nextState.status = 'handoff';
-    actions.handoffReason = 'Sales concierge handoff (out of stock)';
-    actions.handoffTopic = 'Sales concierge out of stock';
-    actions.handoffSummary = buildSalesSummary(fields);
-    actions.recommendedNextAction = 'Offer alternatives or restock timeline.';
-    replies.push({ text: "That item is currently out of stock. We'll have our team share alternatives." });
-    nextState.collectedFields = fields;
-    return { replies, state: nextState, actions };
-  }
-  if (!fields.quote.priceText || fields.quote.shippingFee === undefined || !fields.quote.eta) {
-    nextState.status = 'handoff';
-    actions.handoffReason = 'Sales concierge handoff (quote missing)';
-    actions.handoffTopic = 'Sales concierge handoff';
-    actions.handoffSummary = buildSalesSummary(fields);
-    actions.recommendedNextAction = 'Provide price or shipping details.';
-    replies.push({ text: "We're confirming pricing and delivery details with our team." });
-    nextState.collectedFields = fields;
-    return { replies, state: nextState, actions };
-  }
-
-  if (!fields.paymentMethod) {
-    const paymentMethod = detectPaymentMethod(messageText);
-    if (paymentMethod) {
-      fields.paymentMethod = paymentMethod;
-    } else {
-      nextState.questionCount += 1;
-      const paymentButtons = [{ title: 'Online payment' }];
-      if (fields.quote.codAllowed) {
-        paymentButtons.push({ title: 'Cash on delivery' });
-      }
-      const currency = fields.quote.currency || 'SAR';
-      const quoteLines = [
-        `Price: ${fields.quote.priceText}`,
-        `Availability: ${fields.quote.stockText || 'Confirming'}`,
-        `Delivery: ${fields.quote.shippingFee} ${currency}, ${fields.quote.eta}`,
-      ];
-      replies.push({ text: `${quoteLines.join(' • ')}\n\nDo you want COD or online payment?`, buttons: paymentButtons });
-      nextState.step = 'NEED_PAYMENT_METHOD';
-      nextState.collectedFields = fields;
-      return { replies, state: nextState };
-    }
-  }
-
-  if (fields.paymentMethod === 'cod' && !fields.quote.codAllowed) {
-    nextState.questionCount += 1;
-    replies.push({ text: 'COD is not available for your area. Do you want the payment link instead?', buttons: [{ title: 'Online payment' }] });
-    nextState.step = 'NEED_PAYMENT_METHOD';
-    nextState.collectedFields = fields;
-    return { replies, state: nextState };
-  }
-
-  if (fields.paymentMethod === 'online') {
-    nextState.step = 'DRAFT_CREATED';
-    nextState.status = 'completed';
-    actions.createDraft = true;
-    actions.paymentLinkRequired = true;
-    actions.draftPayload = { ...fields };
-    replies.push({ text: 'Perfect. Here is your payment link: {payment_link}' });
-    nextState.collectedFields = fields;
-    return { replies, state: nextState, actions };
-  }
-
-  if (!fields.phone) {
-    const phone = extractPhone(messageText);
-    if (phone && phone.length >= minPhoneLength) {
-      fields.phone = phone;
-    } else {
-      const attempt = incrementAttempt(fields, 'phone');
-      if (attempt > 2) {
-        nextState.status = 'handoff';
-        actions.handoffReason = 'Sales concierge handoff (phone invalid)';
-        actions.handoffTopic = 'Sales concierge handoff';
-        actions.handoffSummary = buildSalesSummary(fields);
-        actions.recommendedNextAction = 'Collect phone manually.';
-        replies.push({ text: "We'll have our team reach out to confirm details." });
-        nextState.collectedFields = fields;
-        return { replies, state: nextState, actions };
-      }
-      nextState.questionCount += 1;
-      replies.push({ text: `Please share a valid phone number (at least ${minPhoneLength} digits).` });
-      nextState.step = 'NEED_ADDRESS';
-      nextState.collectedFields = fields;
-      return { replies, state: nextState };
-    }
-  }
-
-  if (!fields.address) {
-    if (looksLikeAddress(messageText)) {
-      fields.address = messageText.trim();
-    } else {
-      const attempt = incrementAttempt(fields, 'address');
-      if (attempt > 2) {
-        nextState.status = 'handoff';
-        actions.handoffReason = 'Sales concierge handoff (address invalid)';
-        actions.handoffTopic = 'Sales concierge handoff';
-        actions.handoffSummary = buildSalesSummary(fields);
-        actions.recommendedNextAction = 'Collect address manually.';
-        replies.push({ text: "We'll have our team confirm your address." });
-        nextState.collectedFields = fields;
-        return { replies, state: nextState, actions };
-      }
-      nextState.questionCount += 1;
-      replies.push({ text: 'Please share the delivery address (area + street).', buttons: undefined });
-      nextState.step = 'NEED_ADDRESS';
-      nextState.collectedFields = fields;
-      return { replies, state: nextState };
-    }
-  }
-
-  nextState.step = 'DRAFT_CREATED';
-  nextState.status = 'handoff';
-  actions.createDraft = true;
-  actions.draftPayload = { ...fields };
-  actions.handoffReason = 'Sales concierge handoff (COD confirmation)';
-  actions.handoffTopic = 'Sales concierge draft ready';
-  actions.handoffSummary = buildSalesSummary(fields);
-  actions.recommendedNextAction = 'Confirm COD order and delivery address.';
-  replies.push({ text: "Thanks! You're in the queue — our team will confirm your COD order shortly." });
-  nextState.collectedFields = fields;
-  return { replies, state: nextState, actions };
 }
 
 async function handoffToTeam(params: {
@@ -1470,213 +396,6 @@ async function trackSalesStep(workspaceId: mongoose.Types.ObjectId, step?: strin
   await trackDailyMetric(workspaceId, new Date(), { [`salesConciergeStepCounts.${step}`]: 1 });
 }
 
-async function handleBookingConciergeFlow(params: {
-  automation: any;
-  replyStep: { templateFlow: TemplateFlowConfig };
-  session: any;
-  conversation: any;
-  igAccount: any;
-  messageText: string;
-  platform?: string;
-}): Promise<{ success: boolean; error?: string }> {
-  const { automation, replyStep, session, conversation, igAccount, messageText, platform } = params;
-  const config = replyStep.templateFlow.config as BookingConciergeConfig;
-  const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
-  const tags = config.tags || ['intent_booking', 'template_booking_concierge'];
-
-  session.lastCustomerMessageAt = new Date();
-
-  const currentState = normalizeFlowState({
-    step: session.step,
-    status: session.status,
-    questionCount: session.questionCount,
-    collectedFields: session.collectedFields || {},
-  });
-  const { replies, state: nextState, actions } = advanceBookingConciergeState({
-    state: currentState,
-    messageText,
-    config,
-  });
-
-  let sentAny = false;
-  for (const reply of replies) {
-    if (!updateRateLimit(session, rateLimit)) {
-      if (!sentAny) {
-        return { success: false, error: 'Rate limit exceeded' };
-      }
-      break;
-    }
-    await sendTemplateMessage({
-      conversation,
-      automation,
-      igAccount,
-      recipientId: conversation.participantInstagramId,
-      text: reply.text,
-      buttons: reply.buttons,
-      platform,
-      tags,
-    });
-    sentAny = true;
-  }
-
-  if (sentAny) {
-    session.lastAutomationMessageAt = new Date();
-  }
-
-  session.step = nextState.step;
-  session.status = nextState.status;
-  session.questionCount = nextState.questionCount;
-  session.collectedFields = nextState.collectedFields;
-
-  if (actions?.createLead || actions?.createBooking) {
-    const fields = nextState.collectedFields || {};
-    const summary = buildBookingSummary(fields);
-    if (actions.createLead) {
-      const existingLead = await LeadCapture.findOne({ conversationId: conversation._id, goalType: 'capture_lead' });
-      if (!existingLead) {
-        await LeadCapture.create({
-          workspaceId: conversation.workspaceId,
-          conversationId: conversation._id,
-          goalType: 'capture_lead',
-          participantName: conversation.participantName,
-          participantHandle: conversation.participantHandle,
-          name: fields.leadName,
-          phone: fields.phone,
-          customNote: fields.service ? `Service: ${fields.service}. ${fields.preferredDayTime || ''}`.trim() : undefined,
-        });
-      }
-    }
-    if (actions.createBooking) {
-      const existingBooking = await BookingRequest.findOne({ conversationId: conversation._id });
-      if (!existingBooking) {
-        await BookingRequest.create({
-          workspaceId: conversation.workspaceId,
-          conversationId: conversation._id,
-          serviceType: fields.service,
-          summary,
-        });
-      }
-    }
-  }
-
-  if (actions?.handoffReason) {
-    await handoffToTeam({ conversation, reason: actions.handoffReason, customerMessage: messageText });
-  }
-
-  await session.save();
-  return { success: true };
-}
-
-async function handleAfterHoursCaptureFlow(params: {
-  automation: any;
-  replyStep: { templateFlow: TemplateFlowConfig };
-  session: any;
-  conversation: any;
-  igAccount: any;
-  messageText: string;
-  platform?: string;
-}): Promise<{ success: boolean; error?: string }> {
-  const { automation, replyStep, session, conversation, igAccount, messageText, platform } = params;
-  const config = replyStep.templateFlow.config as AfterHoursCaptureConfig;
-  const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
-  const tags = config.tags || ['after_hours_lead', 'template_after_hours_capture'];
-
-  session.lastCustomerMessageAt = new Date();
-
-  const currentState = normalizeFlowState({
-    step: session.step,
-    status: session.status,
-    questionCount: session.questionCount,
-    collectedFields: session.collectedFields || {},
-  });
-  const { replies, state: nextState, actions } = advanceAfterHoursCaptureState({
-    state: currentState,
-    messageText,
-    config,
-  });
-
-  let sentAny = false;
-  for (const reply of replies) {
-    if (!updateRateLimit(session, rateLimit)) {
-      if (!sentAny) {
-        return { success: false, error: 'Rate limit exceeded' };
-      }
-      break;
-    }
-    await sendTemplateMessage({
-      conversation,
-      automation,
-      igAccount,
-      recipientId: conversation.participantInstagramId,
-      text: reply.text,
-      buttons: reply.buttons,
-      platform,
-      tags,
-    });
-    sentAny = true;
-  }
-
-  if (sentAny) {
-    session.lastAutomationMessageAt = new Date();
-  }
-
-  session.step = nextState.step;
-  session.status = nextState.status;
-  session.questionCount = nextState.questionCount;
-  session.collectedFields = nextState.collectedFields;
-
-  if (actions?.createLead) {
-    const fields = nextState.collectedFields || {};
-    const existingLead = await LeadCapture.findOne({ conversationId: conversation._id, goalType: 'capture_lead' });
-    if (!existingLead) {
-      const noteParts = [
-        fields.intent ? `Intent: ${fields.intent}` : null,
-        fields.preferredTime ? `Preferred time: ${fields.preferredTime}` : null,
-        fields.message ? `Message: ${fields.message}` : null,
-      ].filter(Boolean);
-      await LeadCapture.create({
-        workspaceId: conversation.workspaceId,
-        conversationId: conversation._id,
-        goalType: 'capture_lead',
-        participantName: conversation.participantName,
-        participantHandle: conversation.participantHandle,
-        name: fields.leadName,
-        phone: fields.phone,
-        customNote: noteParts.length ? noteParts.join(' | ') : undefined,
-      });
-    }
-  }
-
-  if (actions?.handoffReason) {
-    await handoffToTeam({ conversation, reason: actions.handoffReason, customerMessage: messageText });
-  }
-
-  if (actions?.scheduleFollowup) {
-    const nextOpen = getNextOpenTime(config.businessHours);
-    const lastCustomerMessageAt = conversation.lastCustomerMessageAt || new Date();
-    const windowExpiresAt = new Date(lastCustomerMessageAt.getTime() + 24 * 60 * 60 * 1000);
-    if (nextOpen > new Date() && nextOpen <= windowExpiresAt) {
-      const task = await FollowupTask.create({
-        workspaceId: conversation.workspaceId,
-        conversationId: conversation._id,
-        instagramAccountId: conversation.instagramAccountId,
-        participantInstagramId: conversation.participantInstagramId,
-        lastCustomerMessageAt,
-        lastBusinessMessageAt: conversation.lastBusinessMessageAt,
-        windowExpiresAt,
-        scheduledFollowupAt: nextOpen,
-        status: 'scheduled',
-        followupType: 'after_hours',
-        customMessage: config.followupMessage || "We're open now if you'd like to continue. Reply anytime.",
-      });
-      session.followupTaskId = task._id;
-    }
-  }
-
-  await session.save();
-  return { success: true };
-}
-
 async function handleSalesConciergeFlow(params: {
   automation: any;
   replyStep: { templateFlow: TemplateFlowConfig };
@@ -1717,6 +436,18 @@ async function handleSalesConciergeFlow(params: {
     config,
     context: messageContext,
   });
+  const aiResponse = replies.length
+    ? await buildAutomationAiReply({
+        conversation,
+        messageText,
+        messageContext,
+        aiSettings: config.aiSettings,
+      })
+    : null;
+  const combinedTags = [...tags, ...(aiResponse?.tags || [])];
+  const repliesToSend = aiResponse
+    ? [{ ...replies[0], text: aiResponse.replyText }]
+    : replies;
 
   let draftId = nextState.collectedFields?.draftId;
   let paymentLink: string | undefined;
@@ -1747,7 +478,7 @@ async function handleSalesConciergeFlow(params: {
   }
 
   let sentAny = false;
-  for (const reply of replies) {
+  for (const reply of repliesToSend) {
     if (!updateRateLimit(session, rateLimit)) {
       if (!sentAny) {
         return { success: false, error: 'Rate limit exceeded' };
@@ -1763,7 +494,14 @@ async function handleSalesConciergeFlow(params: {
       text,
       buttons: reply.buttons,
       platform,
-      tags,
+      tags: combinedTags,
+      aiMeta: aiResponse
+        ? {
+            shouldEscalate: aiResponse.shouldEscalate,
+            escalationReason: aiResponse.escalationReason,
+            knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
+          }
+        : undefined,
     });
     sentAny = true;
   }
@@ -1789,6 +527,117 @@ async function handleSalesConciergeFlow(params: {
 
   await trackSalesStep(conversation.workspaceId, nextState.step);
   await session.save();
+  return { success: true };
+}
+
+async function handleAiReplyFlow(params: {
+  automation: any;
+  replyStep: { aiReply: { goalType: string; tone?: string; maxReplySentences?: number } };
+  conversation: any;
+  igAccount: any;
+  messageText: string;
+  platform?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{ success: boolean; error?: string }> {
+  const { automation, replyStep, conversation, igAccount, messageText, platform, messageContext } = params;
+  const settings = await getWorkspaceSettings(conversation.workspaceId);
+  const goalConfigs = getGoalConfigs(settings);
+  const explicitGoal = replyStep.aiReply?.goalType;
+  const detectedGoal = explicitGoal && explicitGoal !== 'none'
+    ? explicitGoal
+    : detectGoalIntent(messageText || '');
+  const goalMatched = goalMatchesWorkspace(
+    detectedGoal as any,
+    settings?.primaryGoal,
+    settings?.secondaryGoal,
+  )
+    ? detectedGoal
+    : 'none';
+
+  const aiResponse = await generateAIReply({
+    conversation,
+    workspaceId: conversation.workspaceId,
+    latestCustomerMessage: messageText,
+    categoryId: messageContext?.categoryId,
+    categorization: messageContext?.categoryName
+      ? { categoryName: messageContext.categoryName }
+      : undefined,
+    historyLimit: 20,
+    goalContext: {
+      workspaceGoals: {
+        primaryGoal: settings?.primaryGoal,
+        secondaryGoal: settings?.secondaryGoal,
+        configs: goalConfigs,
+      },
+      detectedGoal: goalMatched !== 'none' ? goalMatched : 'none',
+      activeGoalType: goalMatched !== 'none' ? goalMatched : undefined,
+      goalState: goalMatched !== 'none' ? 'collecting' : 'idle',
+      collectedFields: conversation.goalCollectedFields || {},
+    },
+    workspaceSettingsOverride: settings,
+    tone: replyStep.aiReply?.tone,
+    maxReplySentences: replyStep.aiReply?.maxReplySentences,
+  });
+
+  const activeTicket = await getActiveTicket(conversation._id);
+  if (activeTicket && aiResponse.shouldEscalate) {
+    aiResponse.replyText = buildFollowupResponse(activeTicket.followUpCount || 0, aiResponse.replyText);
+  } else if (activeTicket && !aiResponse.shouldEscalate) {
+    aiResponse.replyText = `${aiResponse.replyText} Your earlier request is with a human teammate and they will confirm that separately.`;
+  } else if (aiResponse.shouldEscalate) {
+    aiResponse.replyText = buildInitialEscalationReply(aiResponse.replyText);
+  }
+
+  const message = await sendAiReplyMessage({
+    conversation,
+    automation,
+    igAccount,
+    recipientId: conversation.participantInstagramId,
+    text: aiResponse.replyText,
+    platform,
+    tags: aiResponse.tags,
+    aiMeta: {
+      shouldEscalate: aiResponse.shouldEscalate,
+      escalationReason: aiResponse.escalationReason,
+      knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
+    },
+  });
+
+  let ticketId = activeTicket?._id;
+  if (aiResponse.shouldEscalate && !ticketId) {
+    const ticket = await createTicket({
+      conversationId: conversation._id,
+      topicSummary: (aiResponse.escalationReason || aiResponse.replyText).slice(0, 140),
+      reason: aiResponse.escalationReason || 'Escalated by AI',
+      createdBy: 'ai',
+    });
+    ticketId = ticket._id;
+    conversation.humanRequired = true;
+    conversation.humanRequiredReason = ticket.reason;
+    conversation.humanTriggeredAt = ticket.createdAt;
+    conversation.humanTriggeredByMessageId = message._id;
+    conversation.humanHoldUntil = settings?.humanEscalationBehavior === 'ai_silent'
+      ? new Date(Date.now() + (settings?.humanHoldMinutes || 60) * 60 * 1000)
+      : undefined;
+  }
+
+  if (ticketId) {
+    await addTicketUpdate(ticketId, { from: 'ai', text: aiResponse.replyText, messageId: message._id });
+  }
+
+  if (aiResponse.shouldEscalate) {
+    const holdMinutes = settings?.humanHoldMinutes || 60;
+    const behavior = settings?.humanEscalationBehavior || 'ai_silent';
+    conversation.humanRequired = true;
+    conversation.humanRequiredReason = aiResponse.escalationReason || 'Escalation requested by AI';
+    conversation.humanTriggeredAt = new Date();
+    conversation.humanTriggeredByMessageId = message._id;
+    conversation.humanHoldUntil = behavior === 'ai_silent'
+      ? new Date(Date.now() + holdMinutes * 60 * 1000)
+      : undefined;
+    await conversation.save();
+  }
+
   return { success: true };
 }
 
@@ -1847,30 +696,6 @@ async function executeTemplateFlow(params: {
     return { success: false, error: 'Missing participant Instagram ID' };
   }
 
-  if (templateFlow.templateId === 'booking_concierge') {
-    return handleBookingConciergeFlow({
-      automation,
-      replyStep,
-      session,
-      conversation,
-      igAccount,
-      messageText,
-      platform,
-    });
-  }
-
-  if (templateFlow.templateId === 'after_hours_capture') {
-    return handleAfterHoursCaptureFlow({
-      automation,
-      replyStep,
-      session,
-      conversation,
-      igAccount,
-      messageText,
-      platform,
-    });
-  }
-
   if (templateFlow.templateId === 'sales_concierge') {
     return handleSalesConciergeFlow({
       automation,
@@ -1884,7 +709,7 @@ async function executeTemplateFlow(params: {
     });
   }
 
-  return { success: false, error: 'Unknown template flow' };
+  return { success: false, error: 'Unsupported template flow' };
 }
 
 /**
@@ -1894,41 +719,49 @@ export async function executeAutomation(params: {
   workspaceId: string;
   triggerType: TriggerType;
   conversationId: string;
-  participantInstagramId: string;
   messageText?: string;
   instagramAccountId: string;
   platform?: string;
   messageContext?: AutomationTestContext;
+  automationId?: string;
 }): Promise<{ success: boolean; automationExecuted?: string; error?: string }> {
   try {
     const {
       workspaceId,
       triggerType,
       conversationId,
-      participantInstagramId,
       messageText,
       instagramAccountId,
       platform,
       messageContext,
+      automationId,
     } = params;
 
-    console.log('🤖 [AUTOMATION] Starting automation execution:', {
+    console.log('🤖 [AUTOMATION] Start', {
       workspaceId,
       triggerType,
       conversationId,
-      participantInstagramId,
       instagramAccountId,
       messageTextPreview: messageText?.slice(0, 50),
       platform,
+      automationId,
     });
 
-    const automations = await Automation.find({
+    const automationQuery: Record<string, any> = {
       workspaceId: new mongoose.Types.ObjectId(workspaceId),
       triggerType,
       isActive: true,
-    }).sort({ createdAt: 1 });
+    };
+    if (automationId) {
+      automationQuery._id = new mongoose.Types.ObjectId(automationId);
+    }
 
-    console.log(`🔍 [AUTOMATION] Found ${automations.length} active automation(s) for trigger: ${triggerType}`);
+    const automations = await Automation.find(automationQuery).sort({ createdAt: 1 });
+
+    console.log('🔍 [AUTOMATION] Active', {
+      count: automations.length,
+      triggerType,
+    });
 
     if (automations.length === 0) {
       console.log('⚠️  [AUTOMATION] No active automations found');
@@ -1953,6 +786,22 @@ export async function executeAutomation(params: {
       }
 
       if (matchesTriggerConfig(normalizedMessage, candidate.triggerConfig, messageContext)) {
+        const triggerMode = candidate.triggerConfig?.triggerMode || 'any';
+        const matchedBy = triggerMode === 'categories' && (messageContext?.categoryId || messageContext?.categoryName)
+          ? 'category'
+          : candidate.triggerConfig?.matchOn?.link && messageContext?.hasLink
+            ? 'link'
+            : candidate.triggerConfig?.matchOn?.attachment && messageContext?.hasAttachment
+              ? 'attachment'
+              : 'keyword';
+        console.log('✅ [AUTOMATION] Match', {
+          automationId: candidate._id?.toString(),
+          name: candidate.name,
+          triggerType,
+          triggerMode,
+          matchedBy,
+          categoryName: messageContext?.categoryName,
+        });
         matchingAutomations.push(candidate);
       }
     }
@@ -1963,31 +812,72 @@ export async function executeAutomation(params: {
     }
 
     const automation = matchingAutomations[0];
-    console.log(`✅ [AUTOMATION] Executing automation: "${automation.name}" (ID: ${automation._id})`);
+    console.log('✅ [AUTOMATION] Execute', {
+      automationId: automation._id?.toString(),
+      name: automation.name,
+      replyType: automation.replySteps[0]?.type,
+    });
 
     const replyStep = automation.replySteps[0];
 
-    if (!replyStep || replyStep.type !== 'template_flow') {
-      console.log('❌ [AUTOMATION] Only template_flow automations are supported');
-      return { success: false, error: 'Only template_flow automations are supported' };
+    if (!replyStep) {
+      console.log('❌ [AUTOMATION] No reply step configured');
+      return { success: false, error: 'No reply step configured' };
     }
 
-    const templateResult = await executeTemplateFlow({
-      automation,
-      replyStep,
-      conversationId,
-      workspaceId,
-      instagramAccountId,
-      messageText: normalizedMessage,
-      platform,
-      messageContext,
-    });
+    if (replyStep.type === 'template_flow') {
+      const templateResult = await executeTemplateFlow({
+        automation,
+        replyStep,
+        conversationId,
+        workspaceId,
+        instagramAccountId,
+        messageText: normalizedMessage,
+        platform,
+        messageContext,
+      });
 
-    if (templateResult.success) {
-      return { success: true, automationExecuted: automation.name };
+      if (templateResult.success) {
+        return { success: true, automationExecuted: automation.name };
+      }
+
+      return { success: false, error: templateResult.error || 'Template flow not executed' };
     }
 
-    return { success: false, error: templateResult.error || 'Template flow not executed' };
+    if (replyStep.type === 'ai_reply') {
+      const conversation = await Conversation.findById(conversationId);
+      if (!conversation) {
+        return { success: false, error: 'Conversation not found' };
+      }
+
+      const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
+      if (!igAccount || !igAccount.accessToken) {
+        return { success: false, error: 'Instagram account not found or not connected' };
+      }
+
+      if (!conversation.participantInstagramId) {
+        return { success: false, error: 'Missing participant Instagram ID' };
+      }
+
+      const aiResult = await handleAiReplyFlow({
+        automation,
+        replyStep,
+        conversation,
+        igAccount,
+        messageText: normalizedMessage,
+        platform,
+        messageContext,
+      });
+
+      if (aiResult.success) {
+        return { success: true, automationExecuted: automation.name };
+      }
+
+      return { success: false, error: aiResult.error || 'AI reply not sent' };
+    }
+
+    console.log('❌ [AUTOMATION] Only template_flow and ai_reply automations are supported');
+    return { success: false, error: 'Only template_flow and ai_reply automations are supported' };
   } catch (error: any) {
     console.error('❌ [AUTOMATION] Error executing automation:', error);
     console.error('❌ [AUTOMATION] Error stack:', error.stack);
@@ -2003,7 +893,6 @@ export async function checkAndExecuteAutomations(params: {
   workspaceId: string;
   triggerType: TriggerType;
   conversationId: string;
-  participantInstagramId: string;
   messageText?: string;
   instagramAccountId: string;
   platform?: string;
@@ -2016,31 +905,6 @@ export async function checkAndExecuteAutomations(params: {
   };
 }
 
-type AutomationTestHistoryItem = {
-  from: 'customer' | 'ai';
-  text: string;
-  createdAt?: string;
-};
-
-type AutomationTestState = {
-  history?: AutomationTestHistoryItem[];
-  template?: {
-    templateId: AutomationTemplateId;
-    step?: string;
-    status?: 'active' | 'completed' | 'handoff';
-    questionCount: number;
-    collectedFields?: Record<string, any>;
-    followup?: {
-      status: 'scheduled' | 'sent' | 'cancelled';
-      scheduledAt?: string;
-      message?: string;
-    };
-    lastCustomerMessageAt?: string;
-    lastBusinessMessageAt?: string;
-  };
-  [key: string]: any;
-};
-
 function appendTestHistory(history: AutomationTestHistoryItem[], from: 'customer' | 'ai', text: string) {
   history.push({
     from,
@@ -2049,146 +913,222 @@ function appendTestHistory(history: AutomationTestHistoryItem[], from: 'customer
   });
 }
 
-function createTemplateState(templateId: AutomationTemplateId): NonNullable<AutomationTestState['template']> {
-  return {
-    templateId,
-    step: undefined,
-    questionCount: 0,
-    collectedFields: {},
-    status: 'active',
-    followup: undefined,
-    lastCustomerMessageAt: undefined,
-    lastBusinessMessageAt: undefined,
-  };
+type AutomationTestMode = 'self_chat' | 'test_user';
+
+const TEST_ACCESS_TOKEN = 'test_preview';
+const TEST_ACCOUNT_NAME = 'Preview Test Account';
+const TEST_ACCOUNT_HANDLE = 'preview.test';
+
+function resolveTestMode(
+  mode?: AutomationTestContext['testMode'],
+  fallback?: AutomationTestState['testMode'],
+): AutomationTestMode {
+  if (mode === 'self_chat' || mode === 'test_user') {
+    return mode;
+  }
+  if (fallback === 'self_chat' || fallback === 'test_user') {
+    return fallback;
+  }
+  return 'test_user';
 }
 
-function ensureTemplateState(templateId: AutomationTemplateId, state?: AutomationTestState): AutomationTestState['template'] {
-  if (state?.template && state.template.templateId === templateId) {
-    const status = state.template.status || 'active';
-    if (status === 'active') {
-      return {
-        ...state.template,
-        questionCount: state.template.questionCount ?? 0,
-        collectedFields: state.template.collectedFields || {},
-        status,
-        followup: state.template.followup,
-        lastCustomerMessageAt: state.template.lastCustomerMessageAt,
-        lastBusinessMessageAt: state.template.lastBusinessMessageAt,
+async function ensureTestInstagramAccount(
+  workspaceId: string,
+  existingAccountId?: string,
+): Promise<any> {
+  let account: any | null = null;
+  if (existingAccountId) {
+    account = await InstagramAccount.findById(existingAccountId).select('+accessToken');
+    if (account?.status !== 'mock') {
+      account = null;
+    }
+  }
+
+  const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
+  const username = `${TEST_ACCOUNT_HANDLE}-${workspaceId}`;
+  if (!account) {
+    account = await InstagramAccount.findOne({
+      workspaceId: workspaceObjectId,
+      status: 'mock',
+      username,
+    }).select('+accessToken');
+  }
+
+  if (!account) {
+    account = await InstagramAccount.create({
+      username,
+      workspaceId: workspaceObjectId,
+      status: 'mock',
+      instagramAccountId: `test_ig_${workspaceId}`,
+      instagramUserId: `test_user_${workspaceId}`,
+      name: TEST_ACCOUNT_NAME,
+      accessToken: TEST_ACCESS_TOKEN,
+      accountType: 'test',
+    });
+  }
+
+  if (!account.instagramAccountId) {
+    account.instagramAccountId = `test_ig_${workspaceId}`;
+  }
+  if (!account.instagramUserId) {
+    account.instagramUserId = `test_user_${workspaceId}`;
+  }
+
+  if (!account.accessToken || !account.accessToken.startsWith('test_')) {
+    account.accessToken = TEST_ACCESS_TOKEN;
+  }
+
+  if (account.isModified()) {
+    await account.save();
+    account = await InstagramAccount.findById(account._id).select('+accessToken');
+  }
+
+  return account;
+}
+
+async function ensureTestConversation(params: {
+  automationId: string;
+  workspaceId: string;
+  instagramAccount: any;
+  state: AutomationTestState;
+  testMode: AutomationTestMode;
+}): Promise<any> {
+  const { automationId, workspaceId, instagramAccount, state, testMode } = params;
+
+  if (state.testConversationId && state.testMode === testMode) {
+    const existing = await Conversation.findById(state.testConversationId);
+    if (
+      existing
+      && existing.workspaceId.toString() === workspaceId
+      && existing.instagramAccountId.toString() === instagramAccount._id.toString()
+    ) {
+      if (!existing.participantInstagramId) {
+        existing.participantInstagramId = testMode === 'self_chat'
+          ? instagramAccount.instagramAccountId || `test_ig_${workspaceId}`
+          : state.testParticipantInstagramId || `test_user_${automationId}`;
+        existing.platform = 'instagram';
+        await existing.save();
+      }
+      return existing;
+    }
+  }
+
+  const participantInstagramId = testMode === 'self_chat'
+    ? instagramAccount.instagramAccountId || `test_ig_${workspaceId}`
+    : state.testParticipantInstagramId || `test_user_${automationId}`;
+  const participantHandle = testMode === 'self_chat'
+    ? instagramAccount.username || TEST_ACCOUNT_HANDLE
+    : 'preview.test.user';
+  const participantName = testMode === 'self_chat'
+    ? instagramAccount.name || instagramAccount.username || TEST_ACCOUNT_NAME
+    : 'Preview Test User';
+
+  return Conversation.create({
+    participantName,
+    participantHandle,
+    workspaceId: new mongoose.Types.ObjectId(workspaceId),
+    instagramAccountId: instagramAccount._id,
+    platform: 'instagram',
+    instagramConversationId: `preview_${automationId}`,
+    participantInstagramId,
+  });
+}
+
+async function recordTestCustomerMessage(
+  conversation: any,
+  messageText: string,
+): Promise<{ message: any; sentAt: Date }> {
+  const sentAt = new Date();
+  const message = await Message.create({
+    conversationId: conversation._id,
+    workspaceId: conversation.workspaceId,
+    text: messageText,
+    from: 'customer',
+    platform: 'instagram',
+    createdAt: sentAt,
+  });
+
+  conversation.lastMessage = messageText;
+  conversation.lastMessageAt = sentAt;
+  conversation.lastCustomerMessageAt = sentAt;
+  await conversation.save();
+
+  return { message, sentAt };
+}
+
+async function applyMessageCategorization(params: {
+  workspaceId: string;
+  conversation: any;
+  message: any;
+  messageText: string;
+}): Promise<{ categoryId: string; categoryName: string }> {
+  const { workspaceId, conversation, message, messageText } = params;
+  const categorization = await categorizeMessage(messageText, workspaceId);
+  const categoryId = await getOrCreateCategory(workspaceId, categorization.categoryName);
+  await incrementCategoryCount(categoryId);
+
+  message.categoryId = categoryId;
+  message.detectedLanguage = categorization.detectedLanguage;
+  if (categorization.translatedText) {
+    message.translatedText = categorization.translatedText;
+  }
+  await message.save();
+
+  conversation.categoryId = categoryId;
+  conversation.categoryConfidence = categorization.confidence;
+  await conversation.save();
+
+  return { categoryId: categoryId.toString(), categoryName: categorization.categoryName };
+}
+
+async function buildTestTemplateState(
+  automationId: mongoose.Types.ObjectId,
+  conversationId: mongoose.Types.ObjectId,
+): Promise<AutomationTestState['template'] | undefined> {
+  const session = await AutomationSession.findOne({
+    automationId,
+    conversationId,
+  }).sort({ createdAt: -1 });
+
+  if (!session) {
+    return undefined;
+  }
+
+  let followup;
+  if (session.followupTaskId) {
+    const task = await FollowupTask.findById(session.followupTaskId);
+    if (task) {
+      const followupStatus = ['scheduled', 'sent', 'cancelled'].includes(task.status)
+        ? (task.status as 'scheduled' | 'sent' | 'cancelled')
+        : 'cancelled';
+      followup = {
+        status: followupStatus,
+        scheduledAt: task.scheduledFollowupAt?.toISOString(),
+        message: task.customMessage || task.followupText,
       };
     }
   }
-  return createTemplateState(templateId);
-}
-
-function scheduleAfterHoursFollowup(
-  templateState: NonNullable<AutomationTestState['template']>,
-  config: AfterHoursCaptureConfig,
-  now: Date,
-) {
-  const lastCustomerMessageAt = templateState.lastCustomerMessageAt
-    ? new Date(templateState.lastCustomerMessageAt)
-    : now;
-  const windowExpiresAt = new Date(lastCustomerMessageAt.getTime() + 24 * 60 * 60 * 1000);
-  const nextOpen = getNextOpenTime(config.businessHours, now);
-  if (nextOpen > now && nextOpen <= windowExpiresAt) {
-    templateState.followup = {
-      status: 'scheduled',
-      scheduledAt: nextOpen.toISOString(),
-      message: config.followupMessage || "We're open now if you'd like to continue. Reply anytime.",
-    };
-  }
-}
-
-function simulateBookingConciergeTest(
-  messageText: string,
-  templateState: NonNullable<AutomationTestState['template']>,
-  config: BookingConciergeConfig,
-): { replies: string[]; templateState: NonNullable<AutomationTestState['template']>; actions?: TemplateFlowActions } {
-  const currentState = normalizeFlowState({
-    step: templateState.step,
-    status: templateState.status,
-    questionCount: templateState.questionCount,
-    collectedFields: templateState.collectedFields || {},
-  });
-  const { replies, state: nextState, actions } = advanceBookingConciergeState({
-    state: currentState,
-    messageText,
-    config,
-  });
 
   return {
-    replies: replies.map((reply) => reply.text),
-    templateState: {
-      ...templateState,
-      step: nextState.step,
-      status: nextState.status,
-      questionCount: nextState.questionCount,
-      collectedFields: nextState.collectedFields,
-    },
-    actions,
+    templateId: session.templateId,
+    step: session.step,
+    status: session.status,
+    questionCount: session.questionCount,
+    collectedFields: session.collectedFields || {},
+    followup,
+    lastCustomerMessageAt: session.lastCustomerMessageAt?.toISOString(),
+    lastBusinessMessageAt: session.lastAutomationMessageAt?.toISOString(),
   };
 }
 
-function simulateAfterHoursCaptureTest(
-  messageText: string,
-  templateState: NonNullable<AutomationTestState['template']>,
-  config: AfterHoursCaptureConfig,
-): { replies: string[]; templateState: NonNullable<AutomationTestState['template']>; actions?: TemplateFlowActions } {
-  const currentState = normalizeFlowState({
-    step: templateState.step,
-    status: templateState.status,
-    questionCount: templateState.questionCount,
-    collectedFields: templateState.collectedFields || {},
-  });
-  const { replies, state: nextState, actions } = advanceAfterHoursCaptureState({
-    state: currentState,
-    messageText,
-    config,
-  });
+async function fetchTestReplies(conversationId: mongoose.Types.ObjectId, since: Date): Promise<string[]> {
+  const messages = await Message.find({
+    conversationId,
+    from: 'ai',
+    createdAt: { $gte: since },
+  }).sort({ createdAt: 1 });
 
-  return {
-    replies: replies.map((reply) => reply.text),
-    templateState: {
-      ...templateState,
-      step: nextState.step,
-      status: nextState.status,
-      questionCount: nextState.questionCount,
-      collectedFields: nextState.collectedFields,
-    },
-    actions,
-  };
-}
-
-function simulateSalesConciergeTest(
-  messageText: string,
-  templateState: NonNullable<AutomationTestState['template']>,
-  config: SalesConciergeConfig,
-  context?: AutomationTestContext,
-): { replies: string[]; templateState: NonNullable<AutomationTestState['template']>; actions?: TemplateFlowActions } {
-  const currentState = normalizeFlowState({
-    step: templateState.step,
-    status: templateState.status,
-    questionCount: templateState.questionCount,
-    collectedFields: templateState.collectedFields || {},
-  });
-  const { replies, state: nextState, actions } = advanceSalesConciergeState({
-    state: currentState,
-    messageText,
-    config,
-    context,
-  });
-
-  return {
-    replies: replies.map((reply) => reply.text),
-    templateState: {
-      ...templateState,
-      step: nextState.step,
-      status: nextState.status,
-      questionCount: nextState.questionCount,
-      collectedFields: nextState.collectedFields,
-    },
-    actions,
-  };
+  return messages.map((message) => message.text);
 }
 
 export async function runAutomationTest(params: {
@@ -2209,26 +1149,48 @@ export async function runAutomationTest(params: {
     throw new Error('Automation not found');
   }
 
-  const replyStep = automation.replySteps[0];
-  if (!replyStep) {
-    throw new Error('No reply step configured');
-  }
-
   console.log('🧪 [AUTOMATION TEST] Run', {
     automationId,
     workspaceId,
     action,
-    messageTextPreview: messageText?.slice(0, 160),
-    replyType: replyStep.type,
-    templateId: replyStep.templateFlow?.templateId,
-    triggerConfig: automation.triggerConfig,
-    context,
+    messageTextPreview: messageText?.slice(0, 100),
+    triggerConfig: {
+      triggerMode: automation.triggerConfig?.triggerMode,
+      keywordsCount: automation.triggerConfig?.keywords?.length || 0,
+      categoryIdsCount: automation.triggerConfig?.categoryIds?.length || 0,
+      matchOn: automation.triggerConfig?.matchOn,
+      outsideBusinessHours: automation.triggerConfig?.outsideBusinessHours,
+    },
   });
 
   const nextState: AutomationTestState = params.state ? { ...params.state } : {};
   const history = nextState.history ? [...nextState.history] : [];
+  const testMode = resolveTestMode(context?.testMode, nextState.testMode);
+  const instagramAccount = await ensureTestInstagramAccount(workspaceId, nextState.testInstagramAccountId);
+  const conversation = await ensureTestConversation({
+    automationId,
+    workspaceId,
+    instagramAccount,
+    state: nextState,
+    testMode,
+  });
+  if (conversation.instagramAccountId.toString() !== instagramAccount._id.toString()) {
+    conversation.instagramAccountId = instagramAccount._id;
+    await conversation.save();
+  }
+
+  nextState.testConversationId = conversation._id.toString();
+  nextState.testInstagramAccountId = instagramAccount._id.toString();
+  nextState.testParticipantInstagramId = conversation.participantInstagramId;
+  nextState.testMode = testMode;
+
   if (action === 'simulate_followup') {
-    if (!nextState.template?.followup || nextState.template.followup.status !== 'scheduled') {
+    const followupTask = await FollowupTask.findOne({
+      conversationId: conversation._id,
+      status: 'scheduled',
+    }).sort({ scheduledFollowupAt: 1 });
+
+    if (!followupTask) {
       return {
         replies: [],
         state: {
@@ -2239,21 +1201,25 @@ export async function runAutomationTest(params: {
       };
     }
 
-    const followupMessage = nextState.template.followup.message || "We're open now if you'd like to continue. Reply anytime.";
-    appendTestHistory(history, 'ai', followupMessage);
+    followupTask.scheduledFollowupAt = new Date();
+    await followupTask.save();
+
+    const startedAt = new Date();
+    await processDueFollowups({
+      conversationId: conversation._id,
+      now: startedAt,
+    });
+
+    const replies = await fetchTestReplies(conversation._id, startedAt);
+    replies.forEach((reply) => appendTestHistory(history, 'ai', reply));
+
+    const template = await buildTestTemplateState(automation._id, conversation._id);
     return {
-      replies: [followupMessage],
+      replies,
       state: {
         ...nextState,
         history,
-        template: {
-          ...nextState.template,
-          followup: {
-            ...nextState.template.followup,
-            status: 'sent',
-          },
-          lastBusinessMessageAt: new Date().toISOString(),
-        },
+        template,
       },
       meta: { action: 'simulate_followup' },
     };
@@ -2263,136 +1229,73 @@ export async function runAutomationTest(params: {
     throw new Error('messageText is required');
   }
 
-  const triggerMatched = matchesTriggerConfig(messageText, automation.triggerConfig, context);
-  console.log('🧪 [AUTOMATION TEST] Trigger match', {
-    automationId,
-    triggerMatched,
-    context,
-  });
   appendTestHistory(history, 'customer', messageText);
 
-  if (replyStep.type !== 'template_flow' || !replyStep.templateFlow) {
-    return {
-      replies: [],
-      state: {
-        ...nextState,
-        history,
-      },
-      meta: {
-        triggerMatched,
-        error: 'Only template_flow automations are supported',
-      },
-    };
-  }
-
-  const templateId = replyStep.templateFlow.templateId;
-  const existingTemplateState = nextState.template?.templateId === templateId
-    ? { ...nextState.template }
-    : undefined;
-  if (existingTemplateState?.followup?.status === 'scheduled') {
-    existingTemplateState.followup = {
-      ...existingTemplateState.followup,
-      status: 'cancelled',
-    };
-  }
-
-  const hasActiveSession = existingTemplateState
-    ? (existingTemplateState.status || 'active') === 'active'
-    : false;
-  const shouldProcess = hasActiveSession || triggerMatched;
-  console.log('🧪 [AUTOMATION TEST] Template routing', {
-    automationId,
-    templateId,
-    hasActiveSession,
-    shouldProcess,
+  await cancelFollowupOnCustomerReply(conversation._id);
+  const { message } = await recordTestCustomerMessage(conversation, messageText);
+  const { categoryId, categoryName } = await applyMessageCategorization({
+    workspaceId,
+    conversation,
+    message,
+    messageText,
   });
 
-  if (!shouldProcess) {
-    return {
-      replies: [],
-      state: {
-        ...nextState,
-        history,
-        template: existingTemplateState,
-      },
-      meta: {
-        triggerMatched: false,
-      },
-    };
+  const linkMatch = messageText.match(/https?:\/\/\S+/i);
+  const messageContext: AutomationTestContext = {
+    ...context,
+    categoryId,
+    categoryName,
+    hasLink: Boolean(linkMatch),
+    linkUrl: linkMatch ? linkMatch[0] : undefined,
+  };
+  const triggerMatched = matchesTriggerConfig(messageText, automation.triggerConfig, messageContext);
+
+  const testTriggerMode = automation.triggerConfig?.triggerMode || 'any';
+  const matchedBy = testTriggerMode === 'categories' && (messageContext.categoryId || messageContext.categoryName)
+    ? 'category'
+    : automation.triggerConfig?.matchOn?.link && messageContext.hasLink
+      ? 'link'
+      : automation.triggerConfig?.matchOn?.attachment && messageContext.hasAttachment
+        ? 'attachment'
+        : 'keyword';
+  console.log('🧪 [AUTOMATION TEST] Trigger', {
+    automationId,
+    triggerMatched,
+    matchedBy,
+    triggerMode: testTriggerMode,
+    categoryName: messageContext.categoryName,
+  });
+
+  if (!conversation.participantInstagramId) {
+    throw new Error('Missing participant Instagram ID for test conversation');
   }
 
-  const templateState = ensureTemplateState(templateId, { ...nextState, template: existingTemplateState });
-  if (templateState.followup?.status === 'scheduled') {
-    templateState.followup.status = 'cancelled';
-  }
-  templateState.lastCustomerMessageAt = new Date().toISOString();
-  let result: { replies: string[]; templateState: NonNullable<AutomationTestState['template']>; actions?: TemplateFlowActions };
+  const startedAt = new Date();
+  const executionResult = await executeAutomation({
+    workspaceId,
+    triggerType: automation.triggerType,
+    conversationId: conversation._id.toString(),
+    messageText,
+    instagramAccountId: instagramAccount._id.toString(),
+    platform: conversation.platform || 'instagram',
+    messageContext,
+    automationId,
+  });
 
-  if (templateId === 'booking_concierge') {
-    result = simulateBookingConciergeTest(messageText, templateState, replyStep.templateFlow.config as BookingConciergeConfig);
-  } else if (templateId === 'after_hours_capture') {
-    result = simulateAfterHoursCaptureTest(messageText, templateState, replyStep.templateFlow.config as AfterHoursCaptureConfig);
-    if (
-      (result.actions?.scheduleFollowup || result.templateState.status === 'completed') &&
-      !result.templateState.followup
-    ) {
-      scheduleAfterHoursFollowup(result.templateState, replyStep.templateFlow.config as AfterHoursCaptureConfig, new Date());
-    }
-  } else if (templateId === 'sales_concierge') {
-    const resolvedConfig = await resolveSalesConciergeConfig(
-      workspaceId,
-      replyStep.templateFlow.config as SalesConciergeConfig,
-    );
-    result = simulateSalesConciergeTest(
-      messageText,
-      templateState,
-      resolvedConfig,
-      context,
-    );
-    if (result.actions?.createDraft) {
-      const existingDraftId = result.templateState.collectedFields?.draftId as string | undefined;
-      const draftId = existingDraftId || `draft_${Date.now()}`;
-      result.templateState.collectedFields = {
-        ...result.templateState.collectedFields,
-        draftId,
-      };
-      if (result.actions.paymentLinkRequired) {
-        const paymentLink = createPaymentLink({
-          amountText: result.templateState.collectedFields?.quote?.priceText,
-          draftId,
-        });
-        result.templateState.collectedFields = {
-          ...result.templateState.collectedFields,
-          paymentLink,
-        };
-        result.replies = result.replies.map((reply) => hydratePaymentLink(reply, paymentLink));
-      }
-    }
-  } else {
-    return {
-      replies: [],
-      state: {
-        ...nextState,
-        history,
-      },
-      meta: {
-        triggerMatched: shouldProcess,
-        error: 'Unsupported template flow',
-      },
-    };
-  }
-
-  result.replies.forEach((reply) => appendTestHistory(history, 'ai', reply));
+  const replies = await fetchTestReplies(conversation._id, startedAt);
+  replies.forEach((reply) => appendTestHistory(history, 'ai', reply));
+  const template = await buildTestTemplateState(automation._id, conversation._id);
 
   return {
-    replies: result.replies,
+    replies,
     state: {
       ...nextState,
       history,
-      template: result.templateState,
+      template,
     },
     meta: {
-      triggerMatched: shouldProcess,
+      triggerMatched,
+      error: executionResult.success ? undefined : executionResult.error,
     },
   };
 }
@@ -2401,19 +1304,28 @@ export async function runAutomationTest(params: {
  * Process due follow-up tasks
  * This should be called by a background job
  */
-export async function processDueFollowups(): Promise<{
+export async function processDueFollowups(params?: {
+  conversationId?: mongoose.Types.ObjectId | string;
+  now?: Date;
+}): Promise<{
   processed: number;
   sent: number;
   failed: number;
   cancelled: number;
 }> {
   const stats = { processed: 0, sent: 0, failed: 0, cancelled: 0 };
+  const now = params?.now || new Date();
 
   try {
-    const dueTasks = await FollowupTask.find({
+    const query: Record<string, any> = {
       status: 'scheduled',
-      scheduledFollowupAt: { $lte: new Date() },
-    });
+      scheduledFollowupAt: { $lte: now },
+    };
+    if (params?.conversationId) {
+      query.conversationId = new mongoose.Types.ObjectId(params.conversationId);
+    }
+
+    const dueTasks = await FollowupTask.find(query);
 
     for (const task of dueTasks) {
       stats.processed++;
@@ -2555,6 +1467,21 @@ export async function cancelFollowupOnCustomerReply(
     },
     { status: 'customer_replied' },
   );
+}
+
+function buildFollowupResponse(followUpCount: number, base: string): string {
+  const templates = [
+    'I’ve flagged this to the team and they’ll handle it directly. I can’t confirm on their behalf, but I can gather any details they need.',
+    'Your request is with the team. I cannot make promises here, but I can note your urgency and pass along details.',
+    'Thanks for your patience. This needs a human to finalize. I’m here to help with any other questions meanwhile.',
+  ];
+  const variant = templates[followUpCount % templates.length];
+  return base && base.trim().length > 0 ? base : variant;
+}
+
+function buildInitialEscalationReply(base: string): string {
+  if (base && base.trim().length > 0) return base;
+  return 'This needs a teammate to review personally, so I’ve flagged it for them. I won’t make commitments here, but I can help with other questions meanwhile.';
 }
 
 function calculateResponseTime(conversation: any, sentAt: Date): Record<string, number> {

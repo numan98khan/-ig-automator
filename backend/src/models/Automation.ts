@@ -28,6 +28,8 @@ const triggerConfigSchema = new Schema<TriggerConfig>({
   keywords: [{ type: String }],
   excludeKeywords: [{ type: String }],
   keywordMatch: { type: String, enum: ['any', 'all'] },
+  categoryIds: [{ type: String }],
+  triggerMode: { type: String, enum: ['keywords', 'categories', 'any'] },
   outsideBusinessHours: { type: Boolean },
   matchOn: {
     link: { type: Boolean },
@@ -57,6 +59,8 @@ const replyStepSchema = new Schema<ReplyStep>({
     },
     goalDescription: { type: String },
     knowledgeItemIds: [{ type: String }],
+    tone: { type: String },
+    maxReplySentences: { type: Number },
   },
   templateFlow: {
     templateId: { type: String },

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
 import {
   automationAPI,
+  categoriesAPI,
   knowledgeAPI,
   Automation,
   KnowledgeItem,
@@ -13,7 +14,6 @@ import {
   AutomationTemplateId,
   TemplateFlowConfig,
   AutomationTestState,
-  AutomationTestContext,
 } from '../services/api';
 import {
   TRIGGER_METADATA,
@@ -69,7 +69,7 @@ const Automations: React.FC = () => {
   const [testState, setTestState] = useState<AutomationTestState | null>(null);
   const [testSending, setTestSending] = useState(false);
   const [testTriggerMatched, setTestTriggerMatched] = useState<boolean | null>(null);
-  const [testForceOutsideHours, setTestForceOutsideHours] = useState(false);
+  const [categories, setCategories] = useState<Array<{ _id: string; nameEn: string }>>([]);
   const [testEditForm, setTestEditForm] = useState({
     name: '',
     description: '',
@@ -127,12 +127,14 @@ const Automations: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const [automationsData, knowledgeData] = await Promise.all([
+      const [automationsData, knowledgeData, categoriesData] = await Promise.all([
         automationAPI.getByWorkspace(currentWorkspace._id),
         knowledgeAPI.getByWorkspace(currentWorkspace._id),
+        categoriesAPI.getByWorkspace(currentWorkspace._id),
       ]);
       setAutomations(automationsData);
       setKnowledgeItems(knowledgeData);
+      setCategories(categoriesData);
     } catch (err) {
       console.error('Error loading data:', err);
       setError('Failed to load automations');
@@ -182,23 +184,6 @@ const Automations: React.FC = () => {
   ) => {
     const base = getDefaultSetupData();
     const safeConfig = config || {};
-    if (templateId === 'booking_concierge') {
-      const triggerKeywords = Array.isArray(triggerConfig?.keywords)
-        ? triggerConfig?.keywords.join(', ')
-        : triggerConfig
-          ? ''
-          : base.triggerKeywords;
-      return {
-        ...base,
-        serviceList: (safeConfig.serviceOptions || []).join(', '),
-        priceRanges: safeConfig.priceRanges || '',
-        locationLink: safeConfig.locationLink || '',
-        locationHours: safeConfig.locationHours || '',
-        phoneMinLength: String(safeConfig.minPhoneLength || base.phoneMinLength),
-        triggerKeywords,
-        triggerKeywordMatch: triggerConfig?.keywordMatch || base.triggerKeywordMatch,
-      };
-    }
     if (templateId === 'sales_concierge') {
       const triggerKeywords = Array.isArray(triggerConfig?.keywords)
         ? triggerConfig?.keywords.join(', ')
@@ -209,6 +194,10 @@ const Automations: React.FC = () => {
         ...base,
         salesTriggerKeywords: triggerKeywords || base.salesTriggerKeywords,
         salesTriggerKeywordMatch: triggerConfig?.keywordMatch || base.salesTriggerKeywordMatch,
+        salesTriggerCategoryIds: Array.isArray(triggerConfig?.categoryIds)
+          ? triggerConfig?.categoryIds
+          : base.salesTriggerCategoryIds,
+        salesTriggerMatchMode: triggerConfig?.triggerMode || base.salesTriggerMatchMode,
         salesPhoneMinLength: String(safeConfig.minPhoneLength || base.salesPhoneMinLength),
         salesUseGoogleSheets: safeConfig.useGoogleSheets ?? base.salesUseGoogleSheets,
         salesKnowledgeItemIds: Array.isArray(safeConfig.knowledgeItemIds)
@@ -217,16 +206,6 @@ const Automations: React.FC = () => {
         salesCatalogJson: safeConfig.catalog ? JSON.stringify(safeConfig.catalog, null, 2) : base.salesCatalogJson,
         salesShippingJson: safeConfig.shippingRules ? JSON.stringify(safeConfig.shippingRules, null, 2) : base.salesShippingJson,
         salesCityAliasesJson: safeConfig.cityAliases ? JSON.stringify(safeConfig.cityAliases, null, 2) : base.salesCityAliasesJson,
-      };
-    }
-    if (templateId === 'after_hours_capture') {
-      return {
-        ...base,
-        businessHoursStart: safeConfig.businessHours?.startTime || base.businessHoursStart,
-        businessHoursEnd: safeConfig.businessHours?.endTime || base.businessHoursEnd,
-        businessTimezone: safeConfig.businessHours?.timezone || base.businessTimezone,
-        afterHoursMessage: safeConfig.closedMessageTemplate || base.afterHoursMessage,
-        followupMessage: safeConfig.followupMessage || base.followupMessage,
       };
     }
     return base;
@@ -256,14 +235,9 @@ const Automations: React.FC = () => {
       setIndustryFilter('all');
       setIsTemplateEditing(!!template);
 
-      if (replyStep.templateFlow.templateId === 'booking_concierge') {
+      if (replyStep.templateFlow.templateId === 'sales_concierge') {
         const config = replyStep.templateFlow.config as any;
-        setSetupData(buildSetupDataFromTemplateConfig('booking_concierge', config, automation.triggerConfig));
-      }
-
-      if (replyStep.templateFlow.templateId === 'after_hours_capture') {
-        const config = replyStep.templateFlow.config as any;
-        setSetupData(buildSetupDataFromTemplateConfig('after_hours_capture', config, automation.triggerConfig));
+        setSetupData(buildSetupDataFromTemplateConfig('sales_concierge', config, automation.triggerConfig));
       }
       if (!template) {
         setCurrentStep('gallery');
@@ -303,11 +277,9 @@ const Automations: React.FC = () => {
           automation.triggerConfig,
         ),
       );
-      setTestForceOutsideHours(replyStep.templateFlow.templateId === 'after_hours_capture');
     } else {
       setTestTemplate(null);
       setTestSetupData(getDefaultSetupData());
-      setTestForceOutsideHours(false);
     }
     setAutomationView('test');
   };
@@ -317,7 +289,6 @@ const Automations: React.FC = () => {
     setTestInput('');
     setTestState(null);
     setTestTriggerMatched(null);
-    setTestForceOutsideHours(testTemplate?.id === 'after_hours_capture');
   };
 
   const handleCloseTestView = () => {
@@ -325,7 +296,6 @@ const Automations: React.FC = () => {
     setTestingAutomation(null);
     setTestTemplate(null);
     setTestSetupData(getDefaultSetupData());
-    setTestForceOutsideHours(false);
     setAutomationView('list');
   };
 
@@ -353,8 +323,7 @@ const Automations: React.FC = () => {
     setTestSending(true);
 
     try {
-      const context: AutomationTestContext = { forceOutsideBusinessHours: testForceOutsideHours };
-      const result = await automationAPI.test(testingAutomation._id, messageText, testState || undefined, context);
+      const result = await automationAPI.test(testingAutomation._id, messageText, testState || undefined);
       setTestState(result.state);
       setTestTriggerMatched(result.meta?.triggerMatched ?? null);
       setTestMessages((prev) => [
@@ -379,8 +348,7 @@ const Automations: React.FC = () => {
     }
     setTestSending(true);
     try {
-      const context: AutomationTestContext = { forceOutsideBusinessHours: testForceOutsideHours };
-      const result = await automationAPI.testAction(testingAutomation._id, 'simulate_followup', testState, context);
+      const result = await automationAPI.testAction(testingAutomation._id, 'simulate_followup', testState);
       setTestState(result.state);
       setTestMessages((prev) => [
         ...prev,
@@ -464,32 +432,12 @@ const Automations: React.FC = () => {
     template: AutomationTemplate,
     data: SetupData = setupData
   ): TemplateFlowConfig | null => {
-    if (template.id === 'booking_concierge') {
-      const services = data.serviceList
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
-      return {
-        templateId: 'booking_concierge',
-        config: {
-          quickReplies: ['Book appointment', 'Prices', 'Location', 'Talk to staff'],
-          serviceOptions: services,
-          priceRanges: data.priceRanges.trim() || undefined,
-          locationLink: data.locationLink.trim() || undefined,
-          locationHours: data.locationHours.trim() || undefined,
-          minPhoneLength: Number.parseInt(data.phoneMinLength, 10) || 8,
-          maxQuestions: 5,
-          rateLimit: { maxMessages: 5, perMinutes: 1 },
-          handoffTeam: 'reception',
-          tags: ['intent_booking', 'template_booking_concierge'],
-          outputs: {
-            sheetRow: 'Leads',
-            notify: ['owner', 'reception'],
-            createContact: true,
-          },
-        },
-      };
-    }
+    const parsedMaxSentences = Number.parseInt(data.aiMaxSentences, 10);
+    const aiSettings = {
+      tone: data.aiTone?.trim() || undefined,
+      maxReplySentences: Number.isFinite(parsedMaxSentences) ? parsedMaxSentences : undefined,
+    };
+    const aiSettingsValue = aiSettings.tone || aiSettings.maxReplySentences ? aiSettings : undefined;
 
     if (template.id === 'sales_concierge') {
       let catalog;
@@ -517,33 +465,10 @@ const Automations: React.FC = () => {
           maxQuestions: 6,
           rateLimit: { maxMessages: 6, perMinutes: 1 },
           tags: ['intent_purchase', 'template_sales_concierge'],
+          aiSettings: aiSettingsValue,
           outputs: {
             notify: ['sales', 'owner'],
             createContact: true,
-          },
-        },
-      };
-    }
-
-    if (template.id === 'after_hours_capture') {
-      return {
-        templateId: 'after_hours_capture',
-        config: {
-          businessHours: {
-            startTime: data.businessHoursStart,
-            endTime: data.businessHoursEnd,
-            timezone: data.businessTimezone,
-          },
-          closedMessageTemplate: data.afterHoursMessage.trim() || "We're closed - leave details, we'll contact you at {next_open_time}.",
-          intentOptions: ['Booking', 'Prices', 'Order', 'Other'],
-          followupMessage: data.followupMessage.trim() || "We're open now if you'd like to continue. Reply anytime.",
-          maxQuestions: 4,
-          rateLimit: { maxMessages: 4, perMinutes: 1 },
-          tags: ['after_hours_lead', 'template_after_hours_capture'],
-          outputs: {
-            sheetRow: 'AfterHoursLeads',
-            notify: ['owner', 'staff'],
-            digestInclude: true,
           },
         },
       };
@@ -558,38 +483,23 @@ const Automations: React.FC = () => {
     data: SetupData = setupData,
   ): TriggerConfig | undefined => {
     const baseConfig = template.triggerConfig || {};
-    if (flow.templateId === 'booking_concierge') {
-      const keywordList = (data.triggerKeywords || '')
-        .split(',')
-        .map((keyword) => keyword.trim())
-        .filter(Boolean);
-      return {
-        ...baseConfig,
-        keywordMatch: data.triggerKeywordMatch || baseConfig.keywordMatch || 'any',
-        keywords: keywordList,
-      };
-    }
     if (flow.templateId === 'sales_concierge') {
       const keywordList = (data.salesTriggerKeywords || '')
         .split(',')
         .map((keyword) => keyword.trim())
         .filter(Boolean);
+      const categoryIds = (data.salesTriggerCategoryIds || []).filter(Boolean);
+      const triggerMode = data.salesTriggerMatchMode || 'any';
       return {
         ...baseConfig,
         keywordMatch: data.salesTriggerKeywordMatch || baseConfig.keywordMatch || 'any',
         keywords: keywordList,
+        triggerMode,
+        ...(categoryIds.length ? { categoryIds } : {}),
         matchOn: {
           link: true,
           attachment: true,
         },
-      };
-    }
-    if (flow.templateId === 'after_hours_capture') {
-      const afterHoursConfig = flow.config as any;
-      return {
-        ...baseConfig,
-        outsideBusinessHours: true,
-        businessHours: afterHoursConfig.businessHours,
       };
     }
     return baseConfig;
@@ -781,16 +691,15 @@ const Automations: React.FC = () => {
                   testInput={testInput}
                   testState={testState}
                   testTriggerMatched={testTriggerMatched}
-                  testForceOutsideHours={testForceOutsideHours}
                   testSending={testSending}
                   testEditForm={testEditForm}
                   testTemplate={testTemplate}
                   testSetupData={testSetupData}
                   testSaving={testSaving}
+                  categories={categories}
                   onClose={handleCloseTestView}
                   onReset={handleResetTest}
                   onSimulateFollowup={handleSimulateFollowup}
-                  onToggleAfterHours={() => setTestForceOutsideHours((prev) => !prev)}
                   onSendMessage={handleSendTestMessage}
                   onSaveConfig={handleSaveTestConfig}
                   onChangeTestInput={handleTestInputChange}
@@ -813,6 +722,7 @@ const Automations: React.FC = () => {
                   setupData={setupData}
                   saving={saving}
                   knowledgeItems={knowledgeItems}
+                  categories={categories}
                   accountDisplayName={accountDisplayName}
                   accountHandle={accountHandle}
                   accountAvatarUrl={accountAvatarUrl}

@@ -48,7 +48,15 @@ export interface AIReplyOptions {
     collectedFields?: Record<string, any>;
   };
   workspaceSettingsOverride?: Partial<IWorkspaceSettings>;
+  tone?: string;
+  maxReplySentences?: number;
 }
+
+const splitIntoSentences = (text: string): string[] => {
+  const matches = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
+  if (!matches) return [];
+  return matches.map((sentence) => sentence.trim()).filter(Boolean);
+};
 
 /**
  * Centralized AI reply generator used by manual and automated flows.
@@ -72,6 +80,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
 
   const workspaceSettings = options.workspaceSettingsOverride || baseWorkspaceSettings;
 
+  const model = 'gpt-4o-mini';
   const messages: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = messageHistory
     ? [...messageHistory].slice(-historyLimit)
     : await Message.find({ conversationId: conversation._id })
@@ -95,8 +104,9 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
   const decisionMode = workspaceSettings?.decisionMode || 'assist';
   const allowHashtags = workspaceSettings?.allowHashtags ?? false;
   const allowEmojis = workspaceSettings?.allowEmojis ?? true;
-  const maxReplySentences = workspaceSettings?.maxReplySentences || 3;
+  const maxReplySentences = (options.maxReplySentences ?? workspaceSettings?.maxReplySentences) || 3;
   const replyLanguage = workspaceSettings?.defaultReplyLanguage || workspaceSettings?.defaultLanguage || categorization?.detectedLanguage || 'en';
+  const tone = options.tone?.trim();
   let knowledgeItemsUsed = knowledgeItems.slice(0, 5).map(item => ({
     id: item._id.toString(),
     title: item.title,
@@ -314,7 +324,8 @@ Voice notes and audio messages are automatically transcribed. The transcribed te
 Global rules that ALWAYS apply:
 - Strictly obey workspace and category policies provided in the context.
 - NEVER promise discounts, prices, contracts, special deals, or commitments unless the business's knowledge base explicitly authorizes you to do so.
-- Keep replies short and natural: 1–3 sentences, maximum 60–80 words.
+- Keep replies short and natural: ${Math.max(1, maxReplySentences)} sentence${maxReplySentences === 1 ? '' : 's'} max, maximum 60–80 words.
+- Use a${tone ? ` ${tone}` : ' professional and friendly'} tone that fits the brand voice.
 - Be helpful and professional, but not overly salesy or full of marketing fluff.
 - Avoid asking the same question twice in the same conversation.
 - Do not repeat the opening phrase from your previous reply if there is one.
@@ -343,6 +354,7 @@ Workspace rules:
 - Hashtags allowed: ${allowHashtags}
 - Emojis allowed: ${allowEmojis}
 - Max sentences: ${maxReplySentences}
+- Desired tone: ${tone || 'professional and friendly'}
 - Default reply language: ${getLanguageName(replyLanguage)}
 ${workspaceSettings?.escalationGuidelines ? `- Escalation guidelines: ${workspaceSettings.escalationGuidelines}` : ''}
 ${workspaceSettings?.escalationExamples?.length ? `- Escalation examples: ${workspaceSettings.escalationExamples.join(' | ')}` : ''}
@@ -428,9 +440,9 @@ Generate a response following all rules above. Return JSON with:
     }
 
     const response = await openai.responses.create({
-      model: 'gpt-4o-mini',
+      model,
       temperature: 0.35,
-      max_output_tokens: 220,
+      max_output_tokens: 420,
       input: [
         { role: 'system', content: systemMessage.trim() },
         { role: 'user', content: userContent },
@@ -511,6 +523,13 @@ Generate a response following all rules above. Return JSON with:
     tags: ['escalation', 'ai_error'],
   };
 
+  if (reply.replyText && Number.isFinite(maxReplySentences) && maxReplySentences > 0) {
+    const sentences = splitIntoSentences(reply.replyText);
+    if (sentences.length > maxReplySentences) {
+      reply.replyText = sentences.slice(0, maxReplySentences).join(' ').trim();
+    }
+  }
+
   if (!parsed) {
     usedFallback = true;
     console.warn('Falling back to escalation reply after AI generation failure', {
@@ -561,13 +580,22 @@ Generate a response following all rules above. Return JSON with:
     conversationId: conversation._id?.toString(),
     workspaceId: workspaceId.toString(),
     categoryId: categoryId?.toString(),
-    detectedGoal,
-    activeGoalType,
-    repliedGoalType: loggedGoalType,
-    goalStatus: reply.goalProgress?.status,
+    model,
+    replyConfig: {
+      maxReplySentences,
+      tone: tone || 'default',
+      allowHashtags,
+      allowEmojis,
+    },
+    goal: {
+      detected: detectedGoal,
+      active: activeGoalType,
+      replied: loggedGoalType,
+      status: reply.goalProgress?.status,
+    },
     usedFallback,
     shouldEscalate: reply.shouldEscalate,
-    replyPreview: reply.replyText?.slice(0, 140),
+    replyPreview: reply.replyText?.slice(0, 120),
   });
 
   return reply;

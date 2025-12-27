@@ -13,7 +13,6 @@ import {
   AutomationTemplate,
   GOAL_OPTIONS,
   SetupData,
-  BOOKING_TRIGGER_KEYWORDS,
   SALES_TRIGGER_KEYWORDS,
 } from './constants';
 
@@ -38,16 +37,15 @@ type AutomationsTestViewProps = {
   testInput: string;
   testState: AutomationTestState | null;
   testTriggerMatched: boolean | null;
-  testForceOutsideHours: boolean;
   testSending: boolean;
   testEditForm: TestEditFormState;
   testTemplate: AutomationTemplate | null;
   testSetupData: SetupData;
   testSaving: boolean;
+  categories: Array<{ _id: string; nameEn: string }>;
   onClose: () => void;
   onReset: () => void;
   onSimulateFollowup: () => void;
-  onToggleAfterHours: () => void;
   onSendMessage: (event: React.FormEvent<HTMLFormElement>) => void;
   onSaveConfig: () => void;
   onChangeTestInput: (value: string) => void;
@@ -66,16 +64,15 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
   testInput,
   testState,
   testTriggerMatched,
-  testForceOutsideHours,
   testSending,
   testEditForm,
   testTemplate,
   testSetupData,
   testSaving,
+  categories,
   onClose,
   onReset,
   onSimulateFollowup,
-  onToggleAfterHours,
   onSendMessage,
   onSaveConfig,
   onChangeTestInput,
@@ -90,17 +87,6 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
     onUpdateTestSetupData((prev) => ({ ...prev, ...updates }));
   };
 
-  const addTriggerKeyword = (keyword: string) => {
-    const current = (testSetupData.triggerKeywords || '')
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
-    const exists = current.some((item) => item.toLowerCase() === keyword.toLowerCase());
-    if (!exists) {
-      updateTestSetupData({ triggerKeywords: [...current, keyword].join(', ') });
-    }
-  };
-
   const addSalesTriggerKeyword = (keyword: string) => {
     const current = (testSetupData.salesTriggerKeywords || '')
       .split(',')
@@ -110,6 +96,16 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
     if (!exists) {
       updateTestSetupData({ salesTriggerKeywords: [...current, keyword].join(', ') });
     }
+  };
+
+  const toggleSalesTriggerCategory = (categoryId: string) => {
+    const current = testSetupData.salesTriggerCategoryIds || [];
+    const exists = current.includes(categoryId);
+    updateTestSetupData({
+      salesTriggerCategoryIds: exists
+        ? current.filter((id) => id !== categoryId)
+        : [...current, categoryId],
+    });
   };
 
   return (
@@ -144,15 +140,6 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
             {testState?.template?.followup?.status === 'scheduled' && (
               <Button variant="outline" size="sm" onClick={onSimulateFollowup} disabled={testSending}>
                 Simulate Opening Hours
-              </Button>
-            )}
-            {testTemplate?.id === 'after_hours_capture' && (
-              <Button
-                variant={testForceOutsideHours ? 'default' : 'outline'}
-                size="sm"
-                onClick={onToggleAfterHours}
-              >
-                {testForceOutsideHours ? 'Simulating After-Hours' : 'Simulate After-Hours'}
               </Button>
             )}
             {testTriggerMatched === false && (
@@ -194,106 +181,78 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                 <div className="text-xs uppercase tracking-wide text-muted-foreground">
                   {testTemplate.name}
                 </div>
-                {testTemplate.id === 'booking_concierge' && (
-                  <>
-                    <Input
-                      label="Services"
-                      value={testSetupData.serviceList}
-                      onChange={(event) => updateTestSetupData({ serviceList: event.target.value })}
-                      placeholder="Facial, Makeup, Botox"
-                    />
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Price Ranges</label>
-                      <textarea
-                        value={testSetupData.priceRanges}
-                        onChange={(event) => updateTestSetupData({ priceRanges: event.target.value })}
-                        rows={3}
-                        className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                      />
-                    </div>
-                    <Input
-                      label="Location Link"
-                      value={testSetupData.locationLink}
-                      onChange={(event) => updateTestSetupData({ locationLink: event.target.value })}
-                    />
-                    <Input
-                      label="Location Hours"
-                      value={testSetupData.locationHours}
-                      onChange={(event) => updateTestSetupData({ locationHours: event.target.value })}
-                    />
-                    <Input
-                      label="Min Phone Digits"
-                      type="number"
-                      value={testSetupData.phoneMinLength}
-                      onChange={(event) => updateTestSetupData({ phoneMinLength: event.target.value })}
-                    />
-                    <div className="space-y-3">
-                      <Input
-                        label="Trigger Keywords"
-                        value={testSetupData.triggerKeywords}
-                        onChange={(event) => updateTestSetupData({ triggerKeywords: event.target.value })}
-                        placeholder="book, booking, appointment"
-                      />
-                      <div>
-                        <label className="block text-sm font-medium mb-1.5">Match Rule</label>
-                        <select
-                          value={testSetupData.triggerKeywordMatch}
-                          onChange={(event) => updateTestSetupData({ triggerKeywordMatch: event.target.value as 'any' | 'all' })}
-                          className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                        >
-                          <option value="any">Match any keyword</option>
-                          <option value="all">Match all keywords</option>
-                        </select>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {BOOKING_TRIGGER_KEYWORDS.map((keyword) => (
-                          <button
-                            key={keyword}
-                            type="button"
-                            onClick={() => addTriggerKeyword(keyword)}
-                            className="px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-                          >
-                            {keyword}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-
                 {testTemplate.id === 'sales_concierge' && (
                   <>
-                    <div className="space-y-3">
-                      <Input
-                        label="Sales Trigger Keywords"
-                        value={testSetupData.salesTriggerKeywords}
-                        onChange={(event) => updateTestSetupData({ salesTriggerKeywords: event.target.value })}
-                        placeholder="price, stock, order, delivery"
-                      />
-                      <div>
-                        <label className="block text-sm font-medium mb-1.5">Match Rule</label>
-                        <select
-                          value={testSetupData.salesTriggerKeywordMatch}
-                          onChange={(event) => updateTestSetupData({ salesTriggerKeywordMatch: event.target.value as 'any' | 'all' })}
-                          className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                        >
-                          <option value="any">Match any keyword</option>
-                          <option value="all">Match all keywords</option>
-                        </select>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {SALES_TRIGGER_KEYWORDS.map((keyword) => (
-                          <button
-                            key={keyword}
-                            type="button"
-                            onClick={() => addSalesTriggerKeyword(keyword)}
-                            className="px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-                          >
-                            {keyword}
-                          </button>
-                        ))}
-                      </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium">Trigger Mode</label>
+                      <select
+                        value={testSetupData.salesTriggerMatchMode}
+                        onChange={(event) => updateTestSetupData({ salesTriggerMatchMode: event.target.value as SetupData['salesTriggerMatchMode'] })}
+                        className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                      >
+                        <option value="any">Any (keywords, categories, links, attachments)</option>
+                        <option value="keywords">Keywords only</option>
+                        <option value="categories">AI categories only</option>
+                      </select>
                     </div>
+                    {(testSetupData.salesTriggerMatchMode === 'any' || testSetupData.salesTriggerMatchMode === 'keywords') && (
+                      <div className="space-y-3">
+                        <Input
+                          label="Sales Trigger Keywords"
+                          value={testSetupData.salesTriggerKeywords}
+                          onChange={(event) => updateTestSetupData({ salesTriggerKeywords: event.target.value })}
+                          placeholder="price, stock, order, delivery"
+                        />
+                        <div>
+                          <label className="block text-sm font-medium mb-1.5">Match Rule</label>
+                          <select
+                            value={testSetupData.salesTriggerKeywordMatch}
+                            onChange={(event) => updateTestSetupData({ salesTriggerKeywordMatch: event.target.value as 'any' | 'all' })}
+                            className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                          >
+                            <option value="any">Match any keyword</option>
+                            <option value="all">Match all keywords</option>
+                          </select>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {SALES_TRIGGER_KEYWORDS.map((keyword) => (
+                            <button
+                              key={keyword}
+                              type="button"
+                              onClick={() => addSalesTriggerKeyword(keyword)}
+                              className="px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                            >
+                              {keyword}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {(testSetupData.salesTriggerMatchMode === 'any' || testSetupData.salesTriggerMatchMode === 'categories') && (
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium">AI Categories (optional)</label>
+                        <p className="text-xs text-muted-foreground">
+                          Triggers when the message is categorized into any selected category.
+                        </p>
+                        {categories.length > 0 ? (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {categories.map((category) => (
+                              <label key={category._id} className="flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={(testSetupData.salesTriggerCategoryIds || []).includes(category._id)}
+                                  onChange={() => toggleSalesTriggerCategory(category._id)}
+                                  className="rounded border-border"
+                                />
+                                {category.nameEn}
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
+                        )}
+                      </div>
+                    )}
 
                     <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
                       <label className="flex items-center gap-2 text-sm font-medium">
@@ -346,47 +305,6 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                   </>
                 )}
 
-                {testTemplate.id === 'after_hours_capture' && (
-                  <>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        label="Open"
-                        type="time"
-                        value={testSetupData.businessHoursStart}
-                        onChange={(event) => updateTestSetupData({ businessHoursStart: event.target.value })}
-                      />
-                      <Input
-                        label="Close"
-                        type="time"
-                        value={testSetupData.businessHoursEnd}
-                        onChange={(event) => updateTestSetupData({ businessHoursEnd: event.target.value })}
-                      />
-                    </div>
-                    <Input
-                      label="Timezone"
-                      value={testSetupData.businessTimezone}
-                      onChange={(event) => updateTestSetupData({ businessTimezone: event.target.value })}
-                    />
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Closed Message</label>
-                      <textarea
-                        value={testSetupData.afterHoursMessage}
-                        onChange={(event) => updateTestSetupData({ afterHoursMessage: event.target.value })}
-                        rows={3}
-                        className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1.5">Next-Open Follow-up</label>
-                      <textarea
-                        value={testSetupData.followupMessage}
-                        onChange={(event) => updateTestSetupData({ followupMessage: event.target.value })}
-                        rows={2}
-                        className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                      />
-                    </div>
-                  </>
-                )}
               </div>
             )}
 

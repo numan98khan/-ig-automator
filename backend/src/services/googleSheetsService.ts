@@ -147,7 +147,7 @@ export async function getGoogleSheetPreview(
   const headerRow = options?.headerRow && options.headerRow > 0 ? options.headerRow : 1;
   const sampleRows = options?.sampleRows && options.sampleRows > 0 ? options.sampleRows : 5;
   const endRow = headerRow + sampleRows;
-  const range = `${sheetName}!${headerRow}:${endRow}`;
+  const range = `${sheetName}!A${headerRow}:ZZ${endRow}`;
   const encodedRange = encodeURIComponent(range);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.spreadsheetId}/values/${encodedRange}`;
 
@@ -175,7 +175,7 @@ export async function getGoogleSheetRows(
   const accessToken = await resolveAccessToken(config);
   const sheetName = config.sheetName || 'Sheet1';
   const headerRow = options?.headerRow && options.headerRow > 0 ? options.headerRow : 1;
-  const range = `${sheetName}!${headerRow}:`;
+  const range = `${sheetName}!A${headerRow}:`;
   const encodedRange = encodeURIComponent(range);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.spreadsheetId}/values/${encodedRange}`;
 
