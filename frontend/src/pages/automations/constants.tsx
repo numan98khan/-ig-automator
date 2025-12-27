@@ -66,6 +66,14 @@ export const GOAL_OPTIONS: { value: GoalType; label: string; description: string
   { value: 'drive_to_channel', label: 'Drive to Channel', description: 'Direct to external link' },
 ];
 
+export const AI_TONE_OPTIONS = [
+  { value: 'friendly', label: 'Friendly' },
+  { value: 'professional', label: 'Professional' },
+  { value: 'empathetic', label: 'Empathetic' },
+  { value: 'direct', label: 'Direct' },
+  { value: 'playful', label: 'Playful' },
+];
+
 export interface AutomationTemplate {
   id: AutomationTemplateId;
   name: string;
@@ -139,6 +147,8 @@ export const getDefaultSetupData = () => ({
   locationLink: '',
   locationHours: '',
   phoneMinLength: '8',
+  aiTone: 'friendly',
+  aiMaxSentences: '3',
   triggerKeywords: 'book, booking, appointment, slot, available, availability, price, حجز, موعد, سعر',
   triggerKeywordMatch: 'any' as 'any' | 'all',
   triggerCategoryIds: [] as string[],

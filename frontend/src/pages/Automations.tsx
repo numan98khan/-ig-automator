@@ -476,6 +476,13 @@ const Automations: React.FC = () => {
     template: AutomationTemplate,
     data: SetupData = setupData
   ): TemplateFlowConfig | null => {
+    const parsedMaxSentences = Number.parseInt(data.aiMaxSentences, 10);
+    const aiSettings = {
+      tone: data.aiTone?.trim() || undefined,
+      maxReplySentences: Number.isFinite(parsedMaxSentences) ? parsedMaxSentences : undefined,
+    };
+    const aiSettingsValue = aiSettings.tone || aiSettings.maxReplySentences ? aiSettings : undefined;
+
     if (template.id === 'booking_concierge') {
       const services = data.serviceList
         .split(',')
@@ -494,6 +501,7 @@ const Automations: React.FC = () => {
           rateLimit: { maxMessages: 5, perMinutes: 1 },
           handoffTeam: 'reception',
           tags: ['intent_booking', 'template_booking_concierge'],
+          aiSettings: aiSettingsValue,
           outputs: {
             sheetRow: 'Leads',
             notify: ['owner', 'reception'],
@@ -529,6 +537,7 @@ const Automations: React.FC = () => {
           maxQuestions: 6,
           rateLimit: { maxMessages: 6, perMinutes: 1 },
           tags: ['intent_purchase', 'template_sales_concierge'],
+          aiSettings: aiSettingsValue,
           outputs: {
             notify: ['sales', 'owner'],
             createContact: true,
@@ -552,6 +561,7 @@ const Automations: React.FC = () => {
           maxQuestions: 4,
           rateLimit: { maxMessages: 4, perMinutes: 1 },
           tags: ['after_hours_lead', 'template_after_hours_capture'],
+          aiSettings: aiSettingsValue,
           outputs: {
             sheetRow: 'AfterHoursLeads',
             notify: ['owner', 'staff'],

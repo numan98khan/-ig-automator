@@ -261,8 +261,9 @@ async function buildAutomationAiReply(params: {
   conversation: any;
   messageText: string;
   messageContext?: AutomationTestContext;
+  aiSettings?: { tone?: string; maxReplySentences?: number };
 }) {
-  const { conversation, messageText, messageContext } = params;
+  const { conversation, messageText, messageContext, aiSettings } = params;
   const settings = await getWorkspaceSettings(conversation.workspaceId);
   const goalConfigs = getGoalConfigs(settings);
   const detectedGoal = detectGoalIntent(messageText || '');
@@ -295,6 +296,8 @@ async function buildAutomationAiReply(params: {
       collectedFields: conversation.goalCollectedFields || {},
     },
     workspaceSettingsOverride: settings,
+    tone: aiSettings?.tone,
+    maxReplySentences: aiSettings?.maxReplySentences,
   });
 }
 
@@ -431,7 +434,12 @@ async function handleBookingConciergeFlow(params: {
     config,
   });
   const aiResponse = replies.length
-    ? await buildAutomationAiReply({ conversation, messageText, messageContext })
+    ? await buildAutomationAiReply({
+        conversation,
+        messageText,
+        messageContext,
+        aiSettings: config.aiSettings,
+      })
     : null;
   const combinedTags = [...tags, ...(aiResponse?.tags || [])];
   const repliesToSend = aiResponse
@@ -543,7 +551,12 @@ async function handleAfterHoursCaptureFlow(params: {
     config,
   });
   const aiResponse = replies.length
-    ? await buildAutomationAiReply({ conversation, messageText, messageContext })
+    ? await buildAutomationAiReply({
+        conversation,
+        messageText,
+        messageContext,
+        aiSettings: config.aiSettings,
+      })
     : null;
   const combinedTags = [...tags, ...(aiResponse?.tags || [])];
   const repliesToSend = aiResponse
@@ -680,7 +693,12 @@ async function handleSalesConciergeFlow(params: {
     context: messageContext,
   });
   const aiResponse = replies.length
-    ? await buildAutomationAiReply({ conversation, messageText, messageContext })
+    ? await buildAutomationAiReply({
+        conversation,
+        messageText,
+        messageContext,
+        aiSettings: config.aiSettings,
+      })
     : null;
   const combinedTags = [...tags, ...(aiResponse?.tags || [])];
   const repliesToSend = aiResponse
@@ -770,7 +788,7 @@ async function handleSalesConciergeFlow(params: {
 
 async function handleAiReplyFlow(params: {
   automation: any;
-  replyStep: { aiReply: { goalType: string } };
+  replyStep: { aiReply: { goalType: string; tone?: string; maxReplySentences?: number } };
   conversation: any;
   igAccount: any;
   messageText: string;
@@ -813,6 +831,8 @@ async function handleAiReplyFlow(params: {
       collectedFields: conversation.goalCollectedFields || {},
     },
     workspaceSettingsOverride: settings,
+    tone: replyStep.aiReply?.tone,
+    maxReplySentences: replyStep.aiReply?.maxReplySentences,
   });
 
   const activeTicket = await getActiveTicket(conversation._id);

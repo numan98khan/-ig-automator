@@ -164,6 +164,8 @@ export interface ReplyStep {
     goalType: GoalType;
     goalDescription?: string;
     knowledgeItemIds: string[];
+    tone?: string;
+    maxReplySentences?: number;
   };
   templateFlow?: TemplateFlowConfig;
 }
@@ -228,6 +230,11 @@ export interface AutomationRateLimit {
   perMinutes: number;
 }
 
+export interface AutomationAiSettings {
+  tone?: string;
+  maxReplySentences?: number;
+}
+
 export interface BookingConciergeConfig {
   quickReplies: string[];
   serviceOptions: string[];
@@ -239,6 +246,7 @@ export interface BookingConciergeConfig {
   rateLimit?: AutomationRateLimit;
   handoffTeam?: string;
   tags?: string[];
+  aiSettings?: AutomationAiSettings;
   outputs?: {
     sheetRow?: string;
     notify?: string[];
@@ -254,6 +262,7 @@ export interface AfterHoursCaptureConfig {
   maxQuestions?: number;
   rateLimit?: AutomationRateLimit;
   tags?: string[];
+  aiSettings?: AutomationAiSettings;
   outputs?: {
     sheetRow?: string;
     notify?: string[];
@@ -293,6 +302,7 @@ export interface SalesConciergeConfig {
   maxQuestions?: number;
   rateLimit?: AutomationRateLimit;
   tags?: string[];
+  aiSettings?: AutomationAiSettings;
   outputs?: {
     notify?: string[];
     createContact?: boolean;

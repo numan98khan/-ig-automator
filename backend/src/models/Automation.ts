@@ -59,6 +59,8 @@ const replyStepSchema = new Schema<ReplyStep>({
     },
     goalDescription: { type: String },
     knowledgeItemIds: [{ type: String }],
+    tone: { type: String },
+    maxReplySentences: { type: Number },
   },
   templateFlow: {
     templateId: { type: String },

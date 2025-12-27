@@ -23,6 +23,7 @@ import {
   SetupData,
   BOOKING_TRIGGER_KEYWORDS,
   SALES_TRIGGER_KEYWORDS,
+  AI_TONE_OPTIONS,
 } from './constants';
 
 type CreateFormData = {
@@ -929,6 +930,37 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                           )}
                         </p>
                       </div>
+
+                      {selectedTemplate.replyType !== 'constant_reply' && (
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground uppercase">AI Response Settings</label>
+                          <div className="grid gap-3 mt-2 sm:grid-cols-2">
+                            <div>
+                              <label className="block text-sm font-medium mb-1.5">Tone</label>
+                              <select
+                                value={setupData.aiTone}
+                                onChange={(event) => updateSetupData({ aiTone: event.target.value })}
+                                className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                              >
+                                {AI_TONE_OPTIONS.map((tone) => (
+                                  <option key={tone.value} value={tone.value}>{tone.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <Input
+                              label="Max sentences"
+                              type="number"
+                              min={1}
+                              max={5}
+                              value={setupData.aiMaxSentences}
+                              onChange={(event) => updateSetupData({ aiMaxSentences: event.target.value })}
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            AI replies will be trimmed to the maximum number of sentences.
+                          </p>
+                        </div>
+                      )}
 
                       <div>
                         <label className="text-xs font-medium text-muted-foreground uppercase mb-2 block">
