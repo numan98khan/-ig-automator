@@ -80,6 +80,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
 
   const workspaceSettings = options.workspaceSettingsOverride || baseWorkspaceSettings;
 
+  const model = 'gpt-4o-mini';
   const messages: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = messageHistory
     ? [...messageHistory].slice(-historyLimit)
     : await Message.find({ conversationId: conversation._id })
@@ -439,7 +440,7 @@ Generate a response following all rules above. Return JSON with:
     }
 
     const response = await openai.responses.create({
-      model: 'gpt-4o-mini',
+      model,
       temperature: 0.35,
       max_output_tokens: 220,
       input: [
@@ -579,13 +580,22 @@ Generate a response following all rules above. Return JSON with:
     conversationId: conversation._id?.toString(),
     workspaceId: workspaceId.toString(),
     categoryId: categoryId?.toString(),
-    detectedGoal,
-    activeGoalType,
-    repliedGoalType: loggedGoalType,
-    goalStatus: reply.goalProgress?.status,
+    model,
+    replyConfig: {
+      maxReplySentences,
+      tone: tone || 'default',
+      allowHashtags,
+      allowEmojis,
+    },
+    goal: {
+      detected: detectedGoal,
+      active: activeGoalType,
+      replied: loggedGoalType,
+      status: reply.goalProgress?.status,
+    },
     usedFallback,
     shouldEscalate: reply.shouldEscalate,
-    replyPreview: reply.replyText?.slice(0, 140),
+    replyPreview: reply.replyText?.slice(0, 120),
   });
 
   return reply;

@@ -267,8 +267,11 @@ router.post('/:id/test', authenticate, async (req: AuthRequest, res: Response) =
     console.log('🧪 [AUTOMATION TEST] Request', {
       automationId: id,
       action,
-      messageTextPreview: typeof messageText === 'string' ? messageText.slice(0, 160) : undefined,
-      context,
+      messageTextPreview: typeof messageText === 'string' ? messageText.slice(0, 100) : undefined,
+      context: {
+        testMode: context?.testMode,
+        forceOutsideBusinessHours: context?.forceOutsideBusinessHours,
+      },
     });
 
     const result = await runAutomationTest({

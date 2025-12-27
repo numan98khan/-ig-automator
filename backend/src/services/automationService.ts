@@ -1019,13 +1019,14 @@ export async function executeAutomation(params: {
       automationId,
     } = params;
 
-    console.log('🤖 [AUTOMATION] Starting automation execution:', {
+    console.log('🤖 [AUTOMATION] Start', {
       workspaceId,
       triggerType,
       conversationId,
       instagramAccountId,
       messageTextPreview: messageText?.slice(0, 50),
       platform,
+      automationId,
     });
 
     const automationQuery: Record<string, any> = {
@@ -1039,7 +1040,10 @@ export async function executeAutomation(params: {
 
     const automations = await Automation.find(automationQuery).sort({ createdAt: 1 });
 
-    console.log(`🔍 [AUTOMATION] Found ${automations.length} active automation(s) for trigger: ${triggerType}`);
+    console.log('🔍 [AUTOMATION] Active', {
+      count: automations.length,
+      triggerType,
+    });
 
     if (automations.length === 0) {
       console.log('⚠️  [AUTOMATION] No active automations found');
@@ -1064,12 +1068,22 @@ export async function executeAutomation(params: {
       }
 
       if (matchesTriggerConfig(normalizedMessage, candidate.triggerConfig, messageContext)) {
-        if (messageContext?.categoryId || messageContext?.categoryName) {
-          console.log('✅ [AUTOMATION] Trigger matched via category:', {
-            categoryId: messageContext?.categoryId,
-            categoryName: messageContext?.categoryName,
-          });
-        }
+        const triggerMode = candidate.triggerConfig?.triggerMode || 'any';
+        const matchedBy = triggerMode === 'categories' && (messageContext?.categoryId || messageContext?.categoryName)
+          ? 'category'
+          : candidate.triggerConfig?.matchOn?.link && messageContext?.hasLink
+            ? 'link'
+            : candidate.triggerConfig?.matchOn?.attachment && messageContext?.hasAttachment
+              ? 'attachment'
+              : 'keyword';
+        console.log('✅ [AUTOMATION] Match', {
+          automationId: candidate._id?.toString(),
+          name: candidate.name,
+          triggerType,
+          triggerMode,
+          matchedBy,
+          categoryName: messageContext?.categoryName,
+        });
         matchingAutomations.push(candidate);
       }
     }
@@ -1080,7 +1094,11 @@ export async function executeAutomation(params: {
     }
 
     const automation = matchingAutomations[0];
-    console.log(`✅ [AUTOMATION] Executing automation: "${automation.name}" (ID: ${automation._id})`);
+    console.log('✅ [AUTOMATION] Execute', {
+      automationId: automation._id?.toString(),
+      name: automation.name,
+      replyType: automation.replySteps[0]?.type,
+    });
 
     const replyStep = automation.replySteps[0];
 
@@ -1417,9 +1435,14 @@ export async function runAutomationTest(params: {
     automationId,
     workspaceId,
     action,
-    messageTextPreview: messageText?.slice(0, 160),
-    triggerConfig: automation.triggerConfig,
-    context,
+    messageTextPreview: messageText?.slice(0, 100),
+    triggerConfig: {
+      triggerMode: automation.triggerConfig?.triggerMode,
+      keywordsCount: automation.triggerConfig?.keywords?.length || 0,
+      categoryIdsCount: automation.triggerConfig?.categoryIds?.length || 0,
+      matchOn: automation.triggerConfig?.matchOn,
+      outsideBusinessHours: automation.triggerConfig?.outsideBusinessHours,
+    },
   });
 
   const nextState: AutomationTestState = params.state ? { ...params.state } : {};
@@ -1509,10 +1532,20 @@ export async function runAutomationTest(params: {
   };
   const triggerMatched = matchesTriggerConfig(messageText, automation.triggerConfig, messageContext);
 
-  console.log('🧪 [AUTOMATION TEST] Trigger match', {
+  const testTriggerMode = automation.triggerConfig?.triggerMode || 'any';
+  const matchedBy = testTriggerMode === 'categories' && (messageContext.categoryId || messageContext.categoryName)
+    ? 'category'
+    : automation.triggerConfig?.matchOn?.link && messageContext.hasLink
+      ? 'link'
+      : automation.triggerConfig?.matchOn?.attachment && messageContext.hasAttachment
+        ? 'attachment'
+        : 'keyword';
+  console.log('🧪 [AUTOMATION TEST] Trigger', {
     automationId,
     triggerMatched,
-    context: messageContext,
+    matchedBy,
+    triggerMode: testTriggerMode,
+    categoryName: messageContext.categoryName,
   });
 
   if (!conversation.participantInstagramId) {
