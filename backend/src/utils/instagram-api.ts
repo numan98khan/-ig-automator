@@ -9,9 +9,11 @@ import { webhookLogger } from './webhook-logger';
 const API_VERSION = 'v24.0';
 const BASE_URL = `https://graph.instagram.com/${API_VERSION}`;
 const TEST_ACCESS_TOKEN_PREFIX = 'test_';
+const MOCK_INSTAGRAM_ACCOUNT_PREFIX = 'test_ig_';
 
-function isTestAccessToken(accessToken?: string): boolean {
-  return !!accessToken && accessToken.startsWith(TEST_ACCESS_TOKEN_PREFIX);
+function shouldStubSend(accessToken?: string, instagramAccountId?: string): boolean {
+  return !!accessToken && accessToken.startsWith(TEST_ACCESS_TOKEN_PREFIX)
+    || !!instagramAccountId && instagramAccountId.startsWith(MOCK_INSTAGRAM_ACCOUNT_PREFIX);
 }
 
 function buildTestResponse(recipientId: string) {
@@ -253,7 +255,7 @@ export async function sendMessage(
 
   webhookLogger.logApiCall(endpoint, 'POST', payload);
 
-  if (isTestAccessToken(accessToken)) {
+  if (shouldStubSend(accessToken)) {
     const testResponse = buildTestResponse(recipientId);
     console.log('🧪 [IG-API] Test send stubbed:', {
       endpoint,
@@ -359,7 +361,7 @@ export async function sendMediaMessage(
 
   webhookLogger.logApiCall(endpoint, 'POST', payload);
 
-  if (isTestAccessToken(accessToken)) {
+  if (shouldStubSend(accessToken)) {
     const testResponse = buildTestResponse(recipientId);
     console.log('🧪 [IG-API] Test button send stubbed:', {
       endpoint,
@@ -421,6 +423,17 @@ export async function sendButtonMessage(
   };
 
   webhookLogger.logApiCall(endpoint, 'POST', payload);
+
+  if (shouldStubSend(accessToken, instagramAccountId)) {
+    const testResponse = buildTestResponse(recipientId);
+    console.log('🧪 [IG-API] Test button send stubbed:', {
+      endpoint,
+      recipientId,
+      buttonCount: limitedButtons.length,
+    });
+    webhookLogger.logApiResponse(endpoint, 200, testResponse);
+    return testResponse;
+  }
 
   try {
     const response = await axios.post(endpoint, payload, {
