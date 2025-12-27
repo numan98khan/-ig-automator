@@ -19,12 +19,12 @@ export const AUTOMATION_TEMPLATE_DEFAULTS: Record<AutomationTemplateId, Automati
       model: 'gpt-4o-mini',
       temperature: 0.35,
       maxOutputTokens: 420,
-      reasoningEffort: undefined,
+      reasoningEffort: 'none',
     },
     categorization: {
       model: 'gpt-4o-mini',
       temperature: 0.1,
-      reasoningEffort: undefined,
+      reasoningEffort: 'none',
     },
   },
 };

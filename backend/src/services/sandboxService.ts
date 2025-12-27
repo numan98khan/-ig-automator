@@ -4,7 +4,7 @@ import SandboxRun, { SandboxRunStep } from '../models/SandboxRun';
 import MessageCategory from '../models/MessageCategory';
 import { categorizeMessage } from './aiCategorization';
 import { generateAIReply } from './aiReplyService';
-import { pauseForTypingIfNeeded } from './automationService';
+import { pauseForTypingIfNeeded } from './automation/typing';
 import {
   getWorkspaceSettings,
   getGoalConfigs,

@@ -62,6 +62,13 @@ const EMPTY_FIELDS: Record<InventoryMappingField, InventoryMappingEntry> = INVEN
   {} as Record<InventoryMappingField, InventoryMappingEntry>,
 );
 
+const INVENTORY_FIELD_KEYS = new Set<InventoryMappingField>(
+  INVENTORY_FIELDS.map((field) => field.key),
+);
+
+const isInventoryMappingField = (value: unknown): value is InventoryMappingField =>
+  typeof value === 'string' && INVENTORY_FIELD_KEYS.has(value as InventoryMappingField);
+
 export async function analyzeInventoryMapping(
   headers: string[],
   rows: string[][],
@@ -170,7 +177,7 @@ export async function analyzeInventoryMapping(
   const mappedFields = { ...EMPTY_FIELDS };
   if (Array.isArray(payload?.fields)) {
     for (const item of payload.fields) {
-      if (!item?.field) continue;
+      if (!item?.field || !isInventoryMappingField(item.field)) continue;
       const normalizedHeader = item.header?.toString().trim();
       const resolvedHeader = normalizedHeader
         ? headerLookup.get(normalizedHeader.toLowerCase())

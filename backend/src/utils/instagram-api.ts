@@ -366,7 +366,7 @@ export async function sendMediaMessage(
     console.log('🧪 [IG-API] Test button send stubbed:', {
       endpoint,
       recipientId,
-      buttonCount: limitedButtons.length,
+      buttonCount: 0,
     });
     webhookLogger.logApiResponse(endpoint, 200, testResponse);
     return testResponse;

@@ -34,6 +34,7 @@ import {
   AutomationRateLimit,
   AutomationAiSettings,
   AutomationTemplateId,
+  ReplyStep,
   SalesConciergeConfig,
   TemplateFlowConfig,
   TriggerType,
@@ -557,7 +558,7 @@ async function handleSalesConciergeFlow(params: {
 
 async function handleAiReplyFlow(params: {
   automation: any;
-  replyStep: { aiReply: { goalType: string; tone?: string; maxReplySentences?: number } };
+  replyStep: ReplyStep & { type: 'ai_reply'; aiReply: NonNullable<ReplyStep['aiReply']> };
   conversation: any;
   igAccount: any;
   messageText: string;
@@ -574,7 +575,7 @@ async function handleAiReplyFlow(params: {
     ? explicitGoal
     : detectGoalIntent(messageText || '');
   const goalMatched = goalMatchesWorkspace(
-    detectedGoal as any,
+    detectedGoal,
     settings?.primaryGoal,
     settings?.secondaryGoal,
   )
@@ -997,6 +998,10 @@ export async function executeAutomation(params: {
 
       if (!conversation.participantInstagramId) {
         return finish({ success: false, error: 'Missing participant Instagram ID' });
+      }
+
+      if (!replyStep.aiReply) {
+        return finish({ success: false, error: 'AI reply configuration missing' });
       }
 
       const aiStart = nowMs();
