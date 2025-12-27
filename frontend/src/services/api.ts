@@ -455,12 +455,42 @@ export interface GoogleSheetsIntegration {
   sheetName?: string;
   serviceAccountJson?: string;
   headerRow?: number;
+  inventoryMapping?: InventoryMapping;
   oauthConnected?: boolean;
   oauthConnectedAt?: string;
   oauthEmail?: string;
   lastTestedAt?: string;
   lastTestStatus?: 'success' | 'failed';
   lastTestMessage?: string;
+}
+
+export type InventoryMappingField =
+  | 'productName'
+  | 'sku'
+  | 'description'
+  | 'price'
+  | 'quantity'
+  | 'variant'
+  | 'category'
+  | 'brand'
+  | 'imageUrl'
+  | 'location'
+  | 'status'
+  | 'cost'
+  | 'barcode';
+
+export interface InventoryMappingEntry {
+  header?: string;
+  confidence?: number;
+  notes?: string;
+}
+
+export interface InventoryMapping {
+  fields?: Record<InventoryMappingField, InventoryMappingEntry>;
+  summary?: string;
+  updatedAt?: string;
+  sourceRange?: string;
+  sourceHeaders?: string[];
 }
 
 export interface MessageCategory {
@@ -905,6 +935,13 @@ export const integrationsAPI = {
   },
   listGoogleSheetsTabs: async (workspaceId: string, spreadsheetId: string): Promise<{ tabs: string[] }> => {
     const { data } = await api.get('/api/integrations/google-sheets/tabs', { params: { workspaceId, spreadsheetId } });
+    return data;
+  },
+  analyzeGoogleSheets: async (
+    workspaceId: string,
+    config: GoogleSheetsIntegration,
+  ): Promise<{ success: boolean; preview?: { headers: string[]; rows: string[][]; range: string }; mapping?: InventoryMapping }> => {
+    const { data } = await api.post('/api/integrations/google-sheets/analyze', { workspaceId, config });
     return data;
   },
 };

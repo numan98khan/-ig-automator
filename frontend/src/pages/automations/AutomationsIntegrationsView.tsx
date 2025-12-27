@@ -4,13 +4,57 @@ import { AlertTriangle, CheckCircle, RefreshCw, FileSpreadsheet, ExternalLink, L
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { GoogleSheetsIntegration, integrationsAPI, settingsAPI } from '../../services/api';
+import {
+  GoogleSheetsIntegration,
+  InventoryMapping,
+  InventoryMappingField,
+  integrationsAPI,
+  settingsAPI,
+} from '../../services/api';
 
 const DEFAULT_CONFIG: GoogleSheetsIntegration = {
   enabled: false,
   spreadsheetId: '',
   sheetName: 'Sheet1',
   headerRow: 1,
+};
+
+const INVENTORY_FIELDS: Array<{ key: InventoryMappingField; label: string; hint: string }> = [
+  { key: 'productName', label: 'Product name', hint: 'Product title or name.' },
+  { key: 'sku', label: 'SKU', hint: 'Unique identifier or SKU code.' },
+  { key: 'description', label: 'Description', hint: 'Long or short description.' },
+  { key: 'price', label: 'Price', hint: 'Selling price or MSRP.' },
+  { key: 'quantity', label: 'Quantity', hint: 'Inventory count or stock on hand.' },
+  { key: 'variant', label: 'Variant', hint: 'Size, color, or variant info.' },
+  { key: 'category', label: 'Category', hint: 'Category or product type.' },
+  { key: 'brand', label: 'Brand', hint: 'Brand or manufacturer.' },
+  { key: 'imageUrl', label: 'Image URL', hint: 'Primary product image URL.' },
+  { key: 'location', label: 'Location', hint: 'Warehouse or bin location.' },
+  { key: 'status', label: 'Status', hint: 'Active, inactive, in-stock, etc.' },
+  { key: 'cost', label: 'Cost', hint: 'Cost of goods or wholesale cost.' },
+  { key: 'barcode', label: 'Barcode', hint: 'UPC, EAN, or barcode.' },
+];
+
+const buildEmptyMapping = (): InventoryMapping => ({
+  fields: INVENTORY_FIELDS.reduce((acc, field) => {
+    acc[field.key] = {};
+    return acc;
+  }, {} as Record<InventoryMappingField, { header?: string; confidence?: number; notes?: string }>),
+});
+
+const normalizeMapping = (mapping?: InventoryMapping): InventoryMapping => {
+  const base = buildEmptyMapping();
+  if (!mapping?.fields) return base;
+  INVENTORY_FIELDS.forEach((field) => {
+    if (mapping.fields?.[field.key]) {
+      base.fields![field.key] = mapping.fields[field.key];
+    }
+  });
+  return {
+    ...base,
+    ...mapping,
+    fields: base.fields,
+  };
 };
 
 export const AutomationsIntegrationsView: React.FC = () => {
@@ -27,6 +71,7 @@ export const AutomationsIntegrationsView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [loadingSheets, setLoadingSheets] = useState(false);
@@ -68,6 +113,7 @@ export const AutomationsIntegrationsView: React.FC = () => {
         spreadsheetId: googleSheets.spreadsheetId || '',
         sheetName: googleSheets.sheetName || 'Sheet1',
         headerRow: googleSheets.headerRow || 1,
+        inventoryMapping: normalizeMapping(googleSheets.inventoryMapping),
       });
       setSpreadsheetInput(googleSheets.spreadsheetId || '');
       setLastTest({
@@ -96,7 +142,10 @@ export const AutomationsIntegrationsView: React.FC = () => {
           ...lastTest,
         },
       });
-      setFormData(updated.googleSheets || DEFAULT_CONFIG);
+      setFormData({
+        ...(updated.googleSheets || DEFAULT_CONFIG),
+        inventoryMapping: normalizeMapping(updated.googleSheets?.inventoryMapping),
+      });
       setLastTest({
         lastTestedAt: updated.googleSheets?.lastTestedAt,
         lastTestStatus: updated.googleSheets?.lastTestStatus,
@@ -133,6 +182,52 @@ export const AutomationsIntegrationsView: React.FC = () => {
       setTesting(false);
     }
   };
+
+  const handleAnalyze = async () => {
+    if (!currentWorkspace) return;
+    setAnalyzing(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await integrationsAPI.analyzeGoogleSheets(currentWorkspace._id, formData);
+      setPreview(result.preview || null);
+      if (result.mapping) {
+        setFormData((prev) => ({
+          ...prev,
+          inventoryMapping: normalizeMapping(result.mapping),
+        }));
+      }
+      setSuccess('AI mapped your sheet columns. Review the mapping below and save.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to analyze Google Sheets');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleUpdateMapping = (fieldKey: InventoryMappingField, header: string) => {
+    setFormData((prev) => {
+      const mapping = normalizeMapping(prev.inventoryMapping);
+      const nextFields = {
+        ...mapping.fields,
+        [fieldKey]: {
+          ...mapping.fields?.[fieldKey],
+          header: header || undefined,
+        },
+      };
+      return {
+        ...prev,
+        inventoryMapping: {
+          ...mapping,
+          fields: nextFields,
+        },
+      };
+    });
+  };
+
+  const mappingHeaders = preview?.headers
+    || formData.inventoryMapping?.sourceHeaders
+    || [];
 
   const handleConnect = async () => {
     if (!currentWorkspace) return;
@@ -443,6 +538,74 @@ export const AutomationsIntegrationsView: React.FC = () => {
             )}
           </div>
         )}
+
+        <div className="border border-border/60 rounded-xl p-4 bg-muted/30 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">Inventory Mapping Wizard</div>
+              <p className="text-xs text-muted-foreground">
+                Use AI to interpret your headers into inventory fields and keep a saved mapping for future syncs.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleAnalyze}
+              isLoading={analyzing}
+              disabled={!oauthConnected || !formData.spreadsheetId}
+            >
+              Analyze with AI
+            </Button>
+          </div>
+
+          {formData.inventoryMapping?.updatedAt && (
+            <div className="text-xs text-muted-foreground">
+              Last analyzed: {new Date(formData.inventoryMapping.updatedAt).toLocaleString()}
+              {formData.inventoryMapping.sourceRange ? ` · ${formData.inventoryMapping.sourceRange}` : ''}
+            </div>
+          )}
+          {formData.inventoryMapping?.summary && (
+            <div className="text-xs text-muted-foreground">
+              {formData.inventoryMapping.summary}
+            </div>
+          )}
+
+          {mappingHeaders.length === 0 ? (
+            <div className="text-xs text-muted-foreground">
+              Run the test or AI analysis to load headers, then map them to inventory fields.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {INVENTORY_FIELDS.map((field) => {
+                const entry = formData.inventoryMapping?.fields?.[field.key];
+                return (
+                  <div key={field.key} className="grid grid-cols-1 md:grid-cols-[180px_1fr_120px] gap-2 items-center">
+                    <div className="text-sm font-medium text-foreground">{field.label}</div>
+                    <select
+                      value={entry?.header || ''}
+                      onChange={(event) => handleUpdateMapping(field.key, event.target.value)}
+                      className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
+                    >
+                      <option value="">Not mapped</option>
+                      {mappingHeaders.map((header) => (
+                        <option key={header} value={header}>
+                          {header}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="text-xs text-muted-foreground md:text-right">
+                      {typeof entry?.confidence === 'number'
+                        ? `${Math.round(entry.confidence * 100)}%`
+                        : '—'}
+                    </div>
+                    <div className="md:col-span-3 text-xs text-muted-foreground">
+                      {entry?.notes || field.hint}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

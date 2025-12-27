@@ -10,6 +10,7 @@ import {
   listGoogleSpreadsheetTabs,
   listGoogleSpreadsheets,
 } from '../services/googleSheetsService';
+import { analyzeInventoryMapping } from '../services/googleSheetsMappingService';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -328,6 +329,91 @@ router.post('/google-sheets/test', authenticate, async (req: AuthRequest, res: R
       );
     }
     res.status(500).json({ error: error?.message || 'Failed to test Google Sheets integration' });
+  }
+});
+
+router.post('/google-sheets/analyze', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { workspaceId, config } = req.body as {
+      workspaceId: string;
+      config?: {
+        spreadsheetId?: string;
+        sheetName?: string;
+        serviceAccountJson?: string;
+        headerRow?: number;
+      };
+    };
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'workspaceId is required' });
+    }
+
+    const workspace = await Workspace.findOne({
+      _id: workspaceId,
+      userId: req.userId,
+    });
+
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    const settings = await WorkspaceSettings.findOne({ workspaceId });
+    const savedConfig = settings?.googleSheets;
+    const resolvedConfig = {
+      spreadsheetId: config?.spreadsheetId || savedConfig?.spreadsheetId,
+      sheetName: config?.sheetName || savedConfig?.sheetName || 'Sheet1',
+      serviceAccountJson: config?.serviceAccountJson || savedConfig?.serviceAccountJson,
+      headerRow: config?.headerRow || savedConfig?.headerRow || 1,
+    };
+
+    if (!resolvedConfig.spreadsheetId) {
+      return res.status(400).json({ error: 'Spreadsheet ID is required' });
+    }
+
+    const refreshToken = savedConfig?.oauthRefreshToken;
+    if (!resolvedConfig.serviceAccountJson && !refreshToken) {
+      return res.status(400).json({ error: 'Google Sheets is not connected' });
+    }
+
+    const preview = refreshToken
+      ? await getGoogleSheetPreview(
+          {
+            spreadsheetId: resolvedConfig.spreadsheetId,
+            sheetName: resolvedConfig.sheetName,
+            accessToken: (await getOAuthAccessToken({ refreshToken })).accessToken,
+          },
+          { headerRow: resolvedConfig.headerRow, sampleRows: 8 },
+        )
+      : await getGoogleSheetPreview(
+          {
+            spreadsheetId: resolvedConfig.spreadsheetId,
+            sheetName: resolvedConfig.sheetName,
+            serviceAccountJson: resolvedConfig.serviceAccountJson,
+          },
+          { headerRow: resolvedConfig.headerRow, sampleRows: 8 },
+        );
+
+    const analysis = await analyzeInventoryMapping(preview.headers, preview.rows);
+    const mapping = {
+      fields: analysis.fields,
+      summary: analysis.summary,
+      updatedAt: new Date(),
+      sourceRange: preview.range,
+      sourceHeaders: preview.headers,
+    };
+
+    await WorkspaceSettings.findOneAndUpdate(
+      { workspaceId },
+      { $set: { 'googleSheets.inventoryMapping': mapping } },
+      { new: true },
+    );
+
+    res.json({ success: true, preview, mapping });
+  } catch (error: any) {
+    console.error('Google Sheets analyze error:', error);
+    const message = error?.message || 'Failed to analyze Google Sheets';
+    const status = message.includes('OpenAI API key') ? 503 : 500;
+    res.status(status).json({ error: message });
   }
 });
 
