@@ -442,7 +442,7 @@ Generate a response following all rules above. Return JSON with:
     const response = await openai.responses.create({
       model,
       temperature: 0.35,
-      max_output_tokens: 220,
+      max_output_tokens: 420,
       input: [
         { role: 'system', content: systemMessage.trim() },
         { role: 'user', content: userContent },
