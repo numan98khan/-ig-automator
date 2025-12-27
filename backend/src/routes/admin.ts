@@ -19,6 +19,11 @@ import {
   isAutomationTemplateId,
   listAutomationTemplateConfigs,
 } from '../services/automationTemplateService';
+import {
+  getAutomationDefaults,
+  listAutomationDefaults,
+  updateAutomationDefaults,
+} from '../services/adminAutomationDefaultsService';
 import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
 import {
   GLOBAL_WORKSPACE_KEY,
@@ -740,6 +745,45 @@ router.put('/automation-templates/:templateId', authenticate, requireAdmin, asyn
     res.json({ data: template });
   } catch (error) {
     console.error('Admin automation template update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Automation defaults (admin-level runtime config)
+router.get('/automation-defaults', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const defaults = await listAutomationDefaults();
+    res.json({ data: defaults });
+  } catch (error) {
+    console.error('Admin automation defaults list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/automation-defaults/:templateId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    if (!isAutomationTemplateId(templateId)) {
+      return res.status(404).json({ error: 'Unknown automation template' });
+    }
+    const defaults = await getAutomationDefaults(templateId);
+    res.json({ data: { templateId, ...defaults } });
+  } catch (error) {
+    console.error('Admin automation defaults get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/automation-defaults/:templateId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    if (!isAutomationTemplateId(templateId)) {
+      return res.status(404).json({ error: 'Unknown automation template' });
+    }
+    const defaults = await updateAutomationDefaults(templateId, req.body || {});
+    res.json({ data: { templateId, ...defaults } });
+  } catch (error) {
+    console.error('Admin automation defaults update error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

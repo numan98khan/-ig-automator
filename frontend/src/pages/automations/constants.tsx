@@ -105,14 +105,13 @@ export const SALES_TRIGGER_KEYWORDS = [
   'buy',
   'order',
   'checkout',
-  'cod',
   'delivery',
 ];
 
 export const getDefaultSetupData = () => ({
   aiTone: 'friendly',
   aiMaxSentences: '3',
-  salesTriggerKeywords: 'price, pricing, stock, available, buy, order, checkout, cod, delivery',
+  salesTriggerKeywords: 'price, pricing, stock, available, buy, order, checkout, delivery',
   salesTriggerKeywordMatch: 'any' as 'any' | 'all',
   salesTriggerCategoryIds: [] as string[],
   salesTriggerMatchMode: 'any' as 'any' | 'keywords' | 'categories',
@@ -126,17 +125,17 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   {
     id: 'sales_concierge',
     name: 'Sales Concierge',
-    outcome: 'Turn product inquiries into structured checkout drafts',
+    outcome: 'Turn product inquiries into tailored sales replies',
     goal: 'Sales',
     industry: 'Retail',
     triggers: ['dm_message'],
     setupTime: '~5 min',
-    collects: ['product', 'variant', 'city', 'payment method'],
+    collects: ['product', 'variant', 'city'],
     icon: <MessageSquare className="w-5 h-5" />,
     triggerType: 'dm_message',
     triggerConfig: {
       keywordMatch: 'any',
-      keywords: ['price', 'pricing', 'stock', 'available', 'buy', 'order', 'checkout', 'cod', 'delivery'],
+      keywords: ['price', 'pricing', 'stock', 'available', 'buy', 'order', 'checkout', 'delivery'],
       matchOn: { link: true, attachment: true },
     },
     replyType: 'template_flow',
@@ -144,7 +143,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       { from: 'customer', message: 'Price for the linen shirt?' },
       { from: 'bot', message: 'Sure — checking. Which city for delivery?' },
       { from: 'customer', message: 'Riyadh' },
-      { from: 'bot', message: 'Price is 120-150 SAR depending on size. COD or online payment?' },
+      { from: 'bot', message: 'Price is 120-150 SAR depending on size. Want sizing or stock details?' },
     ],
     setupFields: {
       salesTriggerKeywords: true,

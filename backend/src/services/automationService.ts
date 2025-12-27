@@ -28,6 +28,8 @@ import {
 } from './automation/templateFlows';
 import { AutomationTestContext } from './automation/types';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
+import { getAutomationDefaults } from './adminAutomationDefaultsService';
+import { normalizeText } from './automation/utils';
 import {
   AutomationRateLimit,
   AutomationAiSettings,
@@ -60,6 +62,39 @@ const logAutomationStep = (step: string, startMs: number, details?: Record<strin
   if (!shouldLogAutomationSteps()) return;
   const ms = Math.max(0, Math.round(nowMs() - startMs));
   console.log('⏱️ [AUTOMATION] Step', { step, ms, ...(details || {}) });
+};
+
+const normalizeKeywordList = (values?: string[]): string[] => (
+  (values || [])
+    .map((value) => normalizeText(String(value || '')))
+    .filter(Boolean)
+);
+
+const messageHasKeyword = (messageText: string, keywords: string[]): boolean => {
+  if (!keywords.length) return false;
+  const normalized = normalizeText(messageText);
+  return keywords.some((keyword) => normalized.includes(keyword));
+};
+
+const isSessionExpired = (session: any, ttlMinutes?: number): boolean => {
+  if (!ttlMinutes || ttlMinutes <= 0) return false;
+  const lastMessageAt = session.lastCustomerMessageAt || session.updatedAt;
+  if (!lastMessageAt) return false;
+  const elapsedMs = Date.now() - new Date(lastMessageAt).getTime();
+  return elapsedMs > ttlMinutes * 60 * 1000;
+};
+
+const shouldHandleFaqInterrupt = (messageText: string, config: SalesConciergeConfig): boolean => {
+  if (config.faqInterruptEnabled === false) return false;
+  const keywords = normalizeKeywordList(config.faqIntentKeywords);
+  if (!keywords.length) return false;
+  const normalized = normalizeText(messageText);
+  const hasQuestion = normalized.startsWith('what ')
+    || normalized.startsWith('when ')
+    || normalized.startsWith('where ')
+    || normalized.startsWith('how ')
+    || messageText.includes('?');
+  return hasQuestion && messageHasKeyword(messageText, keywords);
 };
 
 async function getTemplateSession(params: {
@@ -266,8 +301,9 @@ async function buildAutomationAiReply(params: {
   messageText: string;
   messageContext?: AutomationTestContext;
   aiSettings?: AutomationAiSettings;
+  knowledgeItemIds?: string[];
 }) {
-  const { conversation, messageText, messageContext, aiSettings } = params;
+  const { conversation, messageText, messageContext, aiSettings, knowledgeItemIds } = params;
   const settings = await getWorkspaceSettings(conversation.workspaceId);
   const goalConfigs = getGoalConfigs(settings);
   const detectedGoal = detectGoalIntent(messageText || '');
@@ -305,6 +341,7 @@ async function buildAutomationAiReply(params: {
     model: aiSettings?.model,
     temperature: aiSettings?.temperature,
     maxOutputTokens: aiSettings?.maxOutputTokens,
+    knowledgeItemIds,
   });
 }
 
@@ -362,7 +399,11 @@ async function handleSalesConciergeFlow(params: {
     messageContext,
   } = params;
   const configStart = nowMs();
-  const baseConfig = replyStep.templateFlow.config as SalesConciergeConfig;
+  const adminDefaults = await getAutomationDefaults('sales_concierge');
+  const baseConfig = {
+    ...adminDefaults,
+    ...(replyStep.templateFlow.config as SalesConciergeConfig),
+  };
   const config = await resolveSalesConciergeConfig(conversation.workspaceId, baseConfig);
   const templateConfig = await getAutomationTemplateConfig('sales_concierge');
   logAutomationStep('sales_config', configStart, { templateId: 'sales_concierge' });
@@ -377,6 +418,48 @@ async function handleSalesConciergeFlow(params: {
     questionCount: session.questionCount,
     collectedFields: session.collectedFields || {},
   });
+
+  if (shouldHandleFaqInterrupt(messageText, config)) {
+    const faqStart = nowMs();
+    const aiSettings = {
+      ...(config.aiSettings || {}),
+      ...templateConfig.aiReply,
+    };
+    const faqResponse = await buildAutomationAiReply({
+      conversation,
+      messageText,
+      messageContext,
+      aiSettings,
+      knowledgeItemIds: config.knowledgeItemIds,
+    });
+    logAutomationStep('sales_faq_interrupt', faqStart, { answered: Boolean(faqResponse) });
+
+    const suffix = (config.faqResponseSuffix || '').trim();
+    const replyText = suffix ? `${faqResponse.replyText} ${suffix}` : faqResponse.replyText;
+
+    if (!updateRateLimit(session, rateLimit)) {
+      return { success: false, error: 'Rate limit exceeded' };
+    }
+
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: replyText,
+      platform,
+      tags: [...tags, ...(faqResponse.tags || [])],
+      aiMeta: {
+        shouldEscalate: faqResponse.shouldEscalate,
+        escalationReason: faqResponse.escalationReason,
+        knowledgeItemIds: faqResponse.knowledgeItemsUsed?.map((item) => item.id),
+      },
+    });
+
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
 
   const stateStart = nowMs();
   const { replies, state: nextState, actions } = advanceSalesConciergeState({
@@ -715,6 +798,81 @@ export async function executeAutomation(params: {
       platform,
     });
 
+    const normalizedMessage = messageText || '';
+    const activeSession = await AutomationSession.findOne({
+      conversationId: new mongoose.Types.ObjectId(conversationId),
+      status: 'active',
+    }).sort({ updatedAt: -1 });
+
+    if (activeSession) {
+      const automation = await Automation.findById(activeSession.automationId);
+      const replyStep = automation?.replySteps?.[0];
+      if (automation && replyStep?.type === 'template_flow') {
+        if (replyStep.templateFlow?.templateId === 'sales_concierge') {
+          const defaults = await getAutomationDefaults('sales_concierge');
+          const mergedConfig: SalesConciergeConfig = {
+            ...defaults,
+            ...(replyStep.templateFlow.config as SalesConciergeConfig),
+          };
+          const lockMode = mergedConfig.lockMode || 'session_only';
+          const releaseKeywords = normalizeKeywordList(mergedConfig.releaseKeywords);
+
+          if (releaseKeywords.length && messageHasKeyword(normalizedMessage, releaseKeywords)) {
+            activeSession.status = 'paused';
+            await activeSession.save();
+            logAutomation('🔓 [AUTOMATION] Session released by keyword', {
+              automationId: automation._id?.toString(),
+              templateId: replyStep.templateFlow.templateId,
+            });
+          } else if (isSessionExpired(activeSession, mergedConfig.lockTtlMinutes)) {
+            activeSession.status = 'paused';
+            await activeSession.save();
+            logAutomation('⌛ [AUTOMATION] Session expired', {
+              automationId: automation._id?.toString(),
+              templateId: replyStep.templateFlow.templateId,
+              ttlMinutes: mergedConfig.lockTtlMinutes,
+            });
+          } else if (lockMode !== 'none') {
+            logAutomation('🔒 [AUTOMATION] Active session lock', {
+              automationId: automation._id?.toString(),
+              templateId: replyStep.templateFlow.templateId,
+            });
+            const templateResult = await executeTemplateFlow({
+              automation,
+              replyStep,
+              conversationId,
+              workspaceId,
+              instagramAccountId,
+              messageText: normalizedMessage,
+              platform,
+              messageContext,
+            });
+            return templateResult.success
+              ? finish({ success: true, automationExecuted: automation.name })
+              : finish({ success: false, error: templateResult.error || 'Template flow not executed' });
+          }
+        } else {
+          logAutomation('🔒 [AUTOMATION] Active session lock', {
+            automationId: automation._id?.toString(),
+            templateId: replyStep.templateFlow?.templateId,
+          });
+          const templateResult = await executeTemplateFlow({
+            automation,
+            replyStep,
+            conversationId,
+            workspaceId,
+            instagramAccountId,
+            messageText: normalizedMessage,
+            platform,
+            messageContext,
+          });
+          return templateResult.success
+            ? finish({ success: true, automationExecuted: automation.name })
+            : finish({ success: false, error: templateResult.error || 'Template flow not executed' });
+        }
+      }
+    }
+
     const automationQuery: Record<string, any> = {
       workspaceId: new mongoose.Types.ObjectId(workspaceId),
       triggerType,
@@ -735,7 +893,6 @@ export async function executeAutomation(params: {
       return finish({ success: false, error: 'No active automations found for this trigger' });
     }
 
-    const normalizedMessage = messageText || '';
     const matchingAutomations: typeof automations = [];
 
     const matchStart = nowMs();

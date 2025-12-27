@@ -34,6 +34,7 @@ export interface AIReplyOptions {
   latestCustomerMessage?: string;
   categoryId?: mongoose.Types.ObjectId | string;
   categorization?: { categoryName?: string; detectedLanguage?: string; translatedText?: string };
+  knowledgeItemIds?: string[];
   historyLimit?: number;
   mode?: 'live' | 'sandbox';
   messageHistory?: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[];
@@ -85,8 +86,12 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     messageHistory,
   } = options;
 
+  const knowledgeQuery = Array.isArray(options.knowledgeItemIds) && options.knowledgeItemIds.length > 0
+    ? { workspaceId, _id: { $in: options.knowledgeItemIds } }
+    : { workspaceId };
+
   const [knowledgeItems, baseWorkspaceSettings] = await Promise.all([
-    KnowledgeItem.find({ workspaceId }),
+    KnowledgeItem.find(knowledgeQuery),
     options.workspaceSettingsOverride ? null : WorkspaceSettings.findOne({ workspaceId }),
   ]);
 

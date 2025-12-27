@@ -67,6 +67,12 @@ export interface SalesConciergeConfig {
   minPhoneLength?: number;
   useGoogleSheets?: boolean;
   knowledgeItemIds?: string[];
+  lockMode?: 'none' | 'session_only';
+  lockTtlMinutes?: number;
+  releaseKeywords?: string[];
+  faqInterruptEnabled?: boolean;
+  faqIntentKeywords?: string[];
+  faqResponseSuffix?: string;
   maxQuestions?: number;
   rateLimit?: AutomationRateLimit;
   tags?: string[];

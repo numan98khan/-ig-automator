@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { adminApi, unwrapData } from '../services/api'
-import { Bot, RefreshCw, Save, Settings } from 'lucide-react'
+import { Bot, RefreshCw, Save, Settings, ToggleLeft, ToggleRight } from 'lucide-react'
 
 type TemplateConfig = {
   templateId: string
@@ -27,6 +27,15 @@ type FormState = {
   categorizationTemperature: number | null
 }
 
+type DefaultsState = {
+  lockMode: 'none' | 'session_only'
+  lockTtlMinutes: number | null
+  releaseKeywords: string
+  faqInterruptEnabled: boolean
+  faqIntentKeywords: string
+  faqResponseSuffix: string
+}
+
 const DEFAULTS = {
   aiReply: {
     model: 'gpt-4o-mini',
@@ -36,6 +45,14 @@ const DEFAULTS = {
   categorization: {
     model: 'gpt-4o-mini',
     temperature: 0.1,
+  },
+  defaults: {
+    lockMode: 'session_only' as const,
+    lockTtlMinutes: 45,
+    releaseKeywords: 'agent, human, stop, cancel',
+    faqInterruptEnabled: true,
+    faqIntentKeywords: 'return, refund, policy, exchange, warranty, shipping, delivery, hours, location',
+    faqResponseSuffix: 'Want to continue with the product details?',
   },
 }
 
@@ -52,11 +69,25 @@ export default function AutomationTemplates() {
     categorizationModel: DEFAULTS.categorization.model,
     categorizationTemperature: DEFAULTS.categorization.temperature,
   })
+  const [defaultsState, setDefaultsState] = useState<DefaultsState>({
+    lockMode: DEFAULTS.defaults.lockMode,
+    lockTtlMinutes: DEFAULTS.defaults.lockTtlMinutes,
+    releaseKeywords: DEFAULTS.defaults.releaseKeywords,
+    faqInterruptEnabled: DEFAULTS.defaults.faqInterruptEnabled,
+    faqIntentKeywords: DEFAULTS.defaults.faqIntentKeywords,
+    faqResponseSuffix: DEFAULTS.defaults.faqResponseSuffix,
+  })
   const [isSaving, setIsSaving] = useState(false)
+  const [isSavingDefaults, setIsSavingDefaults] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['automation-templates'],
     queryFn: () => adminApi.getAutomationTemplates(),
+  })
+  const { data: defaultsData } = useQuery({
+    queryKey: ['automation-defaults', selectedTemplateId],
+    queryFn: () => adminApi.getAutomationDefaults(selectedTemplateId),
+    enabled: Boolean(selectedTemplateId),
   })
 
   const templates = useMemo(() => {
@@ -90,6 +121,23 @@ export default function AutomationTemplates() {
     })
   }, [currentTemplate?.templateId, currentTemplate?.updatedAt])
 
+  useEffect(() => {
+    const payload = unwrapData<any>(defaultsData)
+    if (!payload) return
+    setDefaultsState({
+      lockMode: payload.lockMode || DEFAULTS.defaults.lockMode,
+      lockTtlMinutes: toNumberOrDefault(payload.lockTtlMinutes, DEFAULTS.defaults.lockTtlMinutes),
+      releaseKeywords: Array.isArray(payload.releaseKeywords)
+        ? payload.releaseKeywords.join(', ')
+        : DEFAULTS.defaults.releaseKeywords,
+      faqInterruptEnabled: payload.faqInterruptEnabled ?? DEFAULTS.defaults.faqInterruptEnabled,
+      faqIntentKeywords: Array.isArray(payload.faqIntentKeywords)
+        ? payload.faqIntentKeywords.join(', ')
+        : DEFAULTS.defaults.faqIntentKeywords,
+      faqResponseSuffix: payload.faqResponseSuffix || DEFAULTS.defaults.faqResponseSuffix,
+    })
+  }, [defaultsData])
+
   const updateMutation = useMutation({
     mutationFn: (payload: any) => adminApi.updateAutomationTemplate(selectedTemplateId, payload),
     onSuccess: () => {
@@ -98,6 +146,17 @@ export default function AutomationTemplates() {
     },
     onError: () => {
       setIsSaving(false)
+    },
+  })
+
+  const updateDefaultsMutation = useMutation({
+    mutationFn: (payload: any) => adminApi.updateAutomationDefaults(selectedTemplateId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['automation-defaults', selectedTemplateId] })
+      setIsSavingDefaults(false)
+    },
+    onError: () => {
+      setIsSavingDefaults(false)
     },
   })
 
@@ -131,6 +190,25 @@ export default function AutomationTemplates() {
         currentTemplate.categorization?.temperature,
         DEFAULTS.categorization.temperature,
       ),
+    })
+  }
+
+  const handleSaveDefaults = () => {
+    if (!selectedTemplateId) return
+    setIsSavingDefaults(true)
+    updateDefaultsMutation.mutate({
+      lockMode: defaultsState.lockMode,
+      lockTtlMinutes: defaultsState.lockTtlMinutes ?? DEFAULTS.defaults.lockTtlMinutes,
+      releaseKeywords: defaultsState.releaseKeywords
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+      faqInterruptEnabled: defaultsState.faqInterruptEnabled,
+      faqIntentKeywords: defaultsState.faqIntentKeywords
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+      faqResponseSuffix: defaultsState.faqResponseSuffix.trim() || DEFAULTS.defaults.faqResponseSuffix,
     })
   }
 
@@ -296,6 +374,109 @@ export default function AutomationTemplates() {
                       }
                     />
                   </div>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-6 space-y-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Runtime Defaults</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Global defaults applied to Sales Concierge automations at runtime.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Lock mode</label>
+                    <select
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                      value={defaultsState.lockMode}
+                      onChange={(e) =>
+                        setDefaultsState((prev) => ({
+                          ...prev,
+                          lockMode: e.target.value as DefaultsState['lockMode'],
+                        }))
+                      }
+                    >
+                      <option value="session_only">Session lock</option>
+                      <option value="none">No lock</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Lock TTL (minutes)</label>
+                    <input
+                      className="input w-full"
+                      type="number"
+                      min={1}
+                      value={defaultsState.lockTtlMinutes ?? ''}
+                      onChange={(e) =>
+                        setDefaultsState((prev) => ({
+                          ...prev,
+                          lockTtlMinutes: e.target.value === '' ? null : Number(e.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Release keywords (comma-separated)</label>
+                  <input
+                    className="input w-full"
+                    value={defaultsState.releaseKeywords}
+                    onChange={(e) =>
+                      setDefaultsState((prev) => ({ ...prev, releaseKeywords: e.target.value }))
+                    }
+                    placeholder="agent, human, stop, cancel"
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">FAQ interrupts</p>
+                    <p className="text-xs text-muted-foreground">Answer FAQs mid-flow using RAG.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDefaultsState((prev) => ({
+                        ...prev,
+                        faqInterruptEnabled: !prev.faqInterruptEnabled,
+                      }))
+                    }
+                    className="text-primary"
+                  >
+                    {defaultsState.faqInterruptEnabled ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">FAQ intent keywords</label>
+                  <input
+                    className="input w-full"
+                    value={defaultsState.faqIntentKeywords}
+                    onChange={(e) =>
+                      setDefaultsState((prev) => ({ ...prev, faqIntentKeywords: e.target.value }))
+                    }
+                    placeholder="return, refund, policy, exchange"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">FAQ response suffix</label>
+                  <input
+                    className="input w-full"
+                    value={defaultsState.faqResponseSuffix}
+                    onChange={(e) =>
+                      setDefaultsState((prev) => ({ ...prev, faqResponseSuffix: e.target.value }))
+                    }
+                    placeholder="Want to continue with the product details?"
+                  />
+                </div>
+                <div className="flex items-center justify-end">
+                  <button
+                    className="btn btn-primary flex items-center gap-2"
+                    onClick={handleSaveDefaults}
+                    disabled={isSavingDefaults}
+                  >
+                    <Save className="w-4 h-4" />
+                    {isSavingDefaults ? 'Saving defaults...' : 'Save defaults'}
+                  </button>
                 </div>
               </div>
             </>
