@@ -8,11 +8,13 @@ import {
   instagramAPI,
   instagramSyncAPI,
   categoriesAPI,
+  automationSessionAPI,
   tierAPI,
   TierSummaryResponse,
   Conversation,
   Message,
   InstagramAccount,
+  AutomationSession,
   MessageCategory,
 } from '../services/api';
 import {
@@ -44,6 +46,7 @@ const Inbox: React.FC = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [automationSessions, setAutomationSessions] = useState<AutomationSession[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [instagramAccounts, setInstagramAccounts] = useState<InstagramAccount[]>([]);
   const [categories, setCategories] = useState<MessageCategory[]>([]);
@@ -138,6 +141,7 @@ const Inbox: React.FC = () => {
       loadConversations();
       if (selectedConversation) {
         loadMessages();
+        loadAutomationSessions();
       }
     }, 5000);
     return () => clearInterval(interval);
@@ -244,7 +248,10 @@ const Inbox: React.FC = () => {
       } else {
         loadMessages();
       }
+      loadAutomationSessions();
       setShouldAutoScroll(true);
+    } else {
+      setAutomationSessions([]);
     }
   }, [selectedConversation]);
 
@@ -263,6 +270,19 @@ const Inbox: React.FC = () => {
       await messageAPI.markSeen(selectedConversation._id);
     } catch (error) {
       console.error('Error loading messages:', error);
+    }
+  };
+
+  const loadAutomationSessions = async () => {
+    if (!selectedConversation || !selectedConversation._id) {
+      setAutomationSessions([]);
+      return;
+    }
+    try {
+      const data = await automationSessionAPI.getByConversation(selectedConversation._id);
+      setAutomationSessions(data || []);
+    } catch (error) {
+      console.error('Error loading automation sessions:', error);
     }
   };
 
@@ -319,6 +339,21 @@ const Inbox: React.FC = () => {
     if (hours < 24) return `${hours}h ago`;
     if (days < 7) return `${days}d ago`;
     return d.toLocaleDateString();
+  };
+
+  const formatOptionalTime = (value?: string) => (value ? formatTime(value) : 'N/A');
+
+  const formatRateLimit = (session: AutomationSession) => {
+    if (!session.rateLimit || typeof session.rateLimit.count !== 'number') return 'N/A';
+    const windowText = session.rateLimit.windowStart ? ` since ${formatTime(session.rateLimit.windowStart)}` : '';
+    return `${session.rateLimit.count}${windowText}`;
+  };
+
+  const getSessionStatusClasses = (status: AutomationSession['status']) => {
+    if (status === 'active') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100';
+    if (status === 'paused') return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100';
+    if (status === 'handoff') return 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100';
+    return 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-100';
   };
 
   const handleConnectInstagram = async () => {
@@ -764,6 +799,107 @@ const Inbox: React.FC = () => {
               </div>
 
               <div className="space-y-3">
+                <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-2">
+                  <div className="flex items-center justify-between text-sm font-semibold text-foreground">
+                    <span>Automation session</span>
+                    <span className="text-xs text-muted-foreground">
+                      {automationSessions.length > 0 ? `${automationSessions.length} sessions` : 'None'}
+                    </span>
+                  </div>
+                  {automationSessions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No active automation sessions</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {automationSessions.map((session) => {
+                        const collectedEntries = Object.entries(session.collectedFields || {});
+                        return (
+                          <div
+                            key={session._id}
+                            className="rounded-md border border-border/60 bg-background/80 p-2 space-y-2"
+                          >
+                            <div className="flex items-center justify-between text-xs font-medium">
+                              <span className="text-foreground">{session.templateId}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${getSessionStatusClasses(session.status)}`}>
+                                {session.status}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                              <div className="flex flex-col">
+                                <span className="uppercase tracking-wide text-[10px]">Step</span>
+                                <span className="text-foreground">{session.step || 'N/A'}</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="uppercase tracking-wide text-[10px]">Questions</span>
+                                <span className="text-foreground">{session.questionCount}</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="uppercase tracking-wide text-[10px]">Started</span>
+                                <span className="text-foreground">{formatTime(session.createdAt)}</span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="uppercase tracking-wide text-[10px]">Updated</span>
+                                <span className="text-foreground">{formatTime(session.updatedAt)}</span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1 text-[11px] text-muted-foreground">
+                              <div className="flex items-center justify-between">
+                                <span>Last automation</span>
+                                <span className="text-foreground">{formatOptionalTime(session.lastAutomationMessageAt)}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span>Last customer</span>
+                                <span className="text-foreground">{formatOptionalTime(session.lastCustomerMessageAt)}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span>Paused</span>
+                                <span className="text-foreground">{formatOptionalTime(session.pausedAt)}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span>Pause reason</span>
+                                <span className="text-foreground">{session.pauseReason || 'N/A'}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span>Rate limit</span>
+                                <span className="text-foreground">{formatRateLimit(session)}</span>
+                              </div>
+                            </div>
+
+                            <div className="text-[11px] text-muted-foreground space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span>Automation ID</span>
+                                <span className="text-foreground truncate max-w-[140px]" title={session.automationId}>
+                                  {session.automationId}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span>Follow-up task</span>
+                                <span className="text-foreground">{session.followupTaskId || 'N/A'}</span>
+                              </div>
+                            </div>
+
+                            <div className="text-[11px] text-muted-foreground">
+                              <span className="uppercase tracking-wide text-[10px]">Collected fields</span>
+                              {collectedEntries.length > 0 ? (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {collectedEntries.map(([key, value]) => (
+                                    <span key={key} className="px-2 py-0.5 rounded-full bg-muted/60 text-foreground">
+                                      {key}: {String(value)}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mt-1 text-muted-foreground">No fields captured yet</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 <div className="p-3 rounded-lg border border-border/70 bg-background/70">
                   <p className="text-xs text-muted-foreground">AI status</p>
                   <div className="mt-1 flex items-center justify-between text-sm font-medium text-foreground">

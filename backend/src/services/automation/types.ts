@@ -6,6 +6,8 @@ export type AutomationTestContext = {
   attachmentUrls?: string[];
   categoryId?: string;
   categoryName?: string;
+  categoryConfidence?: number;
+  categoryTrusted?: boolean;
 };
 
 export type TemplateFlowState = {

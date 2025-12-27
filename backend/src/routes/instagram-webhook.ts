@@ -406,11 +406,18 @@ async function processMessageAutomations(
   workspaceId: string,
 ) {
   try {
+    const CATEGORY_CONFIDENCE_THRESHOLD = 0.65;
     logAutomation(`🤖 Processing automations for conversation ${conversation._id}`);
 
     // 1. Categorize the message
     const categorization = await categorizeMessage(messageText, workspaceId);
     logAutomation(`📋 Message categorized as: ${categorization.categoryName} (${categorization.detectedLanguage})`);
+    const isCategoryTrusted = typeof categorization.confidence === 'number'
+      ? categorization.confidence >= CATEGORY_CONFIDENCE_THRESHOLD
+      : false;
+    if (!isCategoryTrusted) {
+      logAutomation(`⚠️ Category confidence low (${categorization.confidence?.toFixed?.(2) || 'n/a'}), ignoring for triggers.`);
+    }
 
     // 2. Get or create category and update message
     const categoryId = await getOrCreateCategory(workspaceId, categorization.categoryName);
@@ -431,8 +438,10 @@ async function processMessageAutomations(
       attachmentUrls: Array.isArray(savedMessage.attachments)
         ? savedMessage.attachments.map((attachment: any) => attachment.url).filter(Boolean)
         : undefined,
-      categoryId: categoryId.toString(),
-      categoryName: categorization.categoryName,
+      categoryId: isCategoryTrusted ? categoryId.toString() : undefined,
+      categoryName: isCategoryTrusted ? categorization.categoryName : undefined,
+      categoryConfidence: categorization.confidence,
+      categoryTrusted: isCategoryTrusted,
     };
 
     // 3. Check for active automations

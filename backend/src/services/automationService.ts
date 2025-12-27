@@ -44,6 +44,9 @@ const DEFAULT_RATE_LIMIT: AutomationRateLimit = {
   maxMessages: 5,
   perMinutes: 1,
 };
+const CATEGORY_CONFIDENCE_THRESHOLD = 0.65;
+const CLARIFICATION_MESSAGE =
+  'Quick question — is this about a product, an order, or support?';
 
 const nowMs = () => Date.now();
 
@@ -70,6 +73,8 @@ const normalizeKeywordList = (values?: string[]): string[] => (
     .map((value) => normalizeText(String(value || '')))
     .filter(Boolean)
 );
+
+const STOP_KEYWORDS = normalizeKeywordList(['stop', 'human', 'agent']);
 
 const messageHasKeyword = (messageText: string, keywords: string[]): boolean => {
   if (!keywords.length) return false;
@@ -230,6 +235,60 @@ async function sendTemplateMessage(params: {
   await trackDailyMetric(conversation.workspaceId, sentAt, increments);
 }
 
+async function sendClarificationMessage(params: {
+  conversationId: string;
+  instagramAccountId: string;
+  text: string;
+  platform?: string;
+}): Promise<boolean> {
+  const { conversationId, instagramAccountId, text, platform } = params;
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation || !conversation.participantInstagramId) {
+    return false;
+  }
+
+  if (conversation.humanHoldUntil && new Date(conversation.humanHoldUntil) > new Date()) {
+    return false;
+  }
+
+  const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
+  if (!igAccount || !igAccount.accessToken) {
+    return false;
+  }
+
+  await pauseForTypingIfNeeded(platform);
+
+  const result = await sendInstagramMessage(
+    conversation.participantInstagramId,
+    text,
+    igAccount.accessToken,
+  );
+
+  if (!result || (!result.message_id && !result.recipient_id)) {
+    return false;
+  }
+
+  const sentAt = new Date();
+  await Message.create({
+    conversationId: conversation._id,
+    workspaceId: conversation.workspaceId,
+    text,
+    from: 'ai',
+    platform: platform || 'instagram',
+    instagramMessageId: result.message_id,
+    automationSource: 'clarification',
+    createdAt: sentAt,
+  });
+
+  conversation.lastMessage = text;
+  conversation.lastMessageAt = sentAt;
+  conversation.lastBusinessMessageAt = sentAt;
+  await conversation.save();
+
+  await trackDailyMetric(conversation.workspaceId, sentAt, { outboundMessages: 1, aiReplies: 1 });
+  return true;
+}
+
 async function sendAiReplyMessage(params: {
   conversation: any;
   automation: any;
@@ -345,6 +404,31 @@ async function buildAutomationAiReply(params: {
     reasoningEffort: aiSettings?.reasoningEffort,
     knowledgeItemIds,
   });
+}
+
+async function handoffConversation(params: {
+  conversationId: string;
+  reason: string;
+  customerMessage?: string;
+}): Promise<void> {
+  const { conversationId, reason, customerMessage } = params;
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) return;
+
+  const ticket = await createTicket({
+    conversationId: conversation._id,
+    topicSummary: reason.slice(0, 140),
+    reason,
+    createdBy: 'system',
+    customerMessage,
+  });
+
+  conversation.humanRequired = true;
+  conversation.humanRequiredReason = ticket.reason;
+  conversation.humanTriggeredAt = ticket.createdAt;
+  conversation.humanTriggeredByMessageId = undefined;
+  conversation.humanHoldUntil = new Date(Date.now() + 60 * 60 * 1000);
+  await conversation.save();
 }
 
 async function handoffSalesConcierge(params: {
@@ -804,10 +888,29 @@ export async function executeAutomation(params: {
     });
 
     const normalizedMessage = messageText || '';
+    const shouldForceSession = Boolean(messageContext?.hasLink || messageContext?.hasAttachment);
+
+    if (normalizedMessage && messageHasKeyword(normalizedMessage, STOP_KEYWORDS)) {
+      await AutomationSession.updateMany(
+        {
+          conversationId: new mongoose.Types.ObjectId(conversationId),
+          status: 'active',
+        },
+        { $set: { status: 'paused' } },
+      );
+      await handoffConversation({
+        conversationId,
+        reason: 'Customer requested human assistance',
+        customerMessage: normalizedMessage,
+      });
+      logAutomation('🧑‍💼 [AUTOMATION] Human handoff requested', { conversationId });
+      return finish({ success: true, automationExecuted: 'human_handoff' });
+    }
     const activeSession = await AutomationSession.findOne({
       conversationId: new mongoose.Types.ObjectId(conversationId),
       status: 'active',
     }).sort({ updatedAt: -1 });
+    const hadActiveSession = Boolean(activeSession);
 
     if (activeSession) {
       const automation = await Automation.findById(activeSession.automationId);
@@ -821,6 +924,7 @@ export async function executeAutomation(params: {
           };
           const lockMode = mergedConfig.lockMode || 'session_only';
           const releaseKeywords = normalizeKeywordList(mergedConfig.releaseKeywords);
+          const shouldRouteToSession = lockMode !== 'none' || shouldForceSession;
 
           if (releaseKeywords.length && messageHasKeyword(normalizedMessage, releaseKeywords)) {
             activeSession.status = 'paused';
@@ -837,10 +941,11 @@ export async function executeAutomation(params: {
               templateId: replyStep.templateFlow.templateId,
               ttlMinutes: mergedConfig.lockTtlMinutes,
             });
-          } else if (lockMode !== 'none') {
+          } else if (shouldRouteToSession) {
             logAutomation('🔒 [AUTOMATION] Active session lock', {
               automationId: automation._id?.toString(),
               templateId: replyStep.templateFlow.templateId,
+              forcedByAttachment: shouldForceSession,
             });
             const templateResult = await executeTemplateFlow({
               automation,
@@ -942,6 +1047,21 @@ export async function executeAutomation(params: {
     });
 
     if (matchingAutomations.length === 0) {
+      const lowConfidence = messageContext?.categoryTrusted === false
+        || (typeof messageContext?.categoryConfidence === 'number'
+          && messageContext.categoryConfidence < CATEGORY_CONFIDENCE_THRESHOLD);
+      if (!hadActiveSession && lowConfidence && normalizedMessage.trim()) {
+        const sent = await sendClarificationMessage({
+          conversationId,
+          instagramAccountId,
+          text: CLARIFICATION_MESSAGE,
+          platform,
+        });
+        if (sent) {
+          logAutomation('ℹ️  [AUTOMATION] Clarification sent (low confidence)');
+          return finish({ success: true, automationExecuted: 'clarification' });
+        }
+      }
       logAutomation('⚠️  [AUTOMATION] No automations matched trigger filters');
       return finish({ success: false, error: 'No automations matched trigger filters' });
     }

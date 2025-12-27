@@ -98,6 +98,29 @@ export interface Conversation {
   humanHoldUntil?: string;
 }
 
+export interface AutomationSession {
+  _id: string;
+  workspaceId: string;
+  conversationId: string;
+  automationId: string;
+  templateId: string;
+  status: 'active' | 'paused' | 'completed' | 'handoff';
+  step?: string;
+  questionCount: number;
+  collectedFields?: Record<string, any>;
+  rateLimit?: {
+    windowStart?: string;
+    count?: number;
+  };
+  lastAutomationMessageAt?: string;
+  lastCustomerMessageAt?: string;
+  pausedAt?: string;
+  pauseReason?: string;
+  followupTaskId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface MessageAttachment {
   type: 'image' | 'video' | 'audio' | 'voice' | 'file';
   url: string;
@@ -745,6 +768,13 @@ export const conversationAPI = {
 
   getById: async (id: string): Promise<Conversation> => {
     const { data } = await api.get(`/api/conversations/${id}`);
+    return data;
+  },
+};
+
+export const automationSessionAPI = {
+  getByConversation: async (conversationId: string): Promise<AutomationSession[]> => {
+    const { data } = await api.get(`/api/automation-sessions/conversation/${conversationId}`);
     return data;
   },
 };
