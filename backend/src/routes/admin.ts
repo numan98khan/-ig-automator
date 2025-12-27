@@ -57,6 +57,14 @@ const clampNumber = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 const normalizeModel = (value: any) =>
   typeof value === 'string' && value.trim() ? value.trim() : undefined;
+const REASONING_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+const normalizeReasoningEffort = (value: any) => {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  return REASONING_EFFORTS.has(normalized) ? normalized : undefined;
+};
 const STORAGE_MODES = ['vector', 'text'];
 
 // Tiers CRUD
@@ -661,11 +669,13 @@ router.put('/log-settings', authenticate, requireAdmin, async (req, res) => {
     const aiTimingEnabled = toOptionalBoolean(req.body?.aiTimingEnabled);
     const automationLogsEnabled = toOptionalBoolean(req.body?.automationLogsEnabled);
     const automationStepsEnabled = toOptionalBoolean(req.body?.automationStepsEnabled);
+    const openaiApiLogsEnabled = toOptionalBoolean(req.body?.openaiApiLogsEnabled);
 
     const settings = await updateLogSettings({
       ...(aiTimingEnabled === undefined ? {} : { aiTimingEnabled }),
       ...(automationLogsEnabled === undefined ? {} : { automationLogsEnabled }),
       ...(automationStepsEnabled === undefined ? {} : { automationStepsEnabled }),
+      ...(openaiApiLogsEnabled === undefined ? {} : { openaiApiLogsEnabled }),
     });
     res.json({ data: settings });
   } catch (error) {
@@ -709,6 +719,7 @@ router.put('/automation-templates/:templateId', authenticate, requireAdmin, asyn
     const aiReply = req.body?.aiReply || {};
     const categorization = req.body?.categorization || {};
     const update: Record<string, any> = {};
+    const unset: Record<string, any> = {};
 
     const replyModel = normalizeModel(aiReply.model);
     if (replyModel) update['aiReply.model'] = replyModel;
@@ -723,6 +734,15 @@ router.put('/automation-templates/:templateId', authenticate, requireAdmin, asyn
       update['aiReply.maxOutputTokens'] = Math.max(1, Math.round(replyMaxTokens));
     }
 
+    if (Object.prototype.hasOwnProperty.call(aiReply, 'reasoningEffort')) {
+      const replyReasoning = normalizeReasoningEffort(aiReply.reasoningEffort);
+      if (replyReasoning === null) {
+        unset['aiReply.reasoningEffort'] = '';
+      } else if (replyReasoning) {
+        update['aiReply.reasoningEffort'] = replyReasoning;
+      }
+    }
+
     const categorizationModel = normalizeModel(categorization.model);
     if (categorizationModel) update['categorization.model'] = categorizationModel;
 
@@ -731,13 +751,25 @@ router.put('/automation-templates/:templateId', authenticate, requireAdmin, asyn
       update['categorization.temperature'] = clampNumber(categorizationTemperature, 0, 2);
     }
 
-    if (Object.keys(update).length === 0) {
+    if (Object.prototype.hasOwnProperty.call(categorization, 'reasoningEffort')) {
+      const categorizationReasoning = normalizeReasoningEffort(categorization.reasoningEffort);
+      if (categorizationReasoning === null) {
+        unset['categorization.reasoningEffort'] = '';
+      } else if (categorizationReasoning) {
+        update['categorization.reasoningEffort'] = categorizationReasoning;
+      }
+    }
+
+    if (Object.keys(update).length === 0 && Object.keys(unset).length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
 
     await AutomationTemplate.findOneAndUpdate(
       { templateId },
-      { $set: update },
+      {
+        ...(Object.keys(update).length ? { $set: update } : {}),
+        ...(Object.keys(unset).length ? { $unset: unset } : {}),
+      },
       { new: true, upsert: true },
     );
 

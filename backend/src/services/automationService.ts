@@ -341,6 +341,7 @@ async function buildAutomationAiReply(params: {
     model: aiSettings?.model,
     temperature: aiSettings?.temperature,
     maxOutputTokens: aiSettings?.maxOutputTokens,
+    reasoningEffort: aiSettings?.reasoningEffort,
     knowledgeItemIds,
   });
 }

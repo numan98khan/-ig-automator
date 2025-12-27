@@ -31,6 +31,7 @@ export interface AutomationAiSettings {
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 }
 
 export interface SalesCatalogVariantOptions {

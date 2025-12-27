@@ -55,6 +55,7 @@ export interface AIReplyOptions {
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 }
 
 const splitIntoSentences = (text: string): string[] => {
@@ -64,11 +65,92 @@ const splitIntoSentences = (text: string): string[] => {
 };
 
 const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
+const supportsReasoningEffort = (model?: string): boolean => /^(gpt-5|o)/i.test(model || '');
 const getDurationMs = (startNs: bigint) => Number(process.hrtime.bigint() - startNs) / 1e6;
 const logAiTiming = (label: string, model: string | undefined, startNs: bigint, success: boolean) => {
   if (!getLogSettingsSnapshot().aiTimingEnabled) return;
   const ms = getDurationMs(startNs);
   console.log('[AI] timing', { label, model, ms: Number(ms.toFixed(2)), success });
+};
+const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
+const logAiDebug = (message: string, details?: Record<string, any>) => {
+  if (!shouldLogAutomation()) return;
+  if (details) {
+    console.log('[AI]', message, details);
+    return;
+  }
+  console.log('[AI]', message);
+};
+const shouldLogOpenAiApi = () => getLogSettingsSnapshot().openaiApiLogsEnabled;
+const logOpenAiApi = (message: string, details?: Record<string, any>) => {
+  if (!shouldLogOpenAiApi()) return;
+  if (details) {
+    console.log('[OpenAI]', message, details);
+    return;
+  }
+  console.log('[OpenAI]', message);
+};
+
+const truncateText = (value: any, max = 800): string | undefined => {
+  if (value === undefined || value === null) return undefined;
+  const text = String(value);
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}…`;
+};
+
+const sanitizeOpenAiOutput = (output: any[]) => output.map((item) => {
+  const content = Array.isArray(item?.content) ? item.content : [];
+  const sanitizedContent = content.map((entry: any) => {
+    const base = { type: entry?.type };
+    if (entry?.type === 'output_text') {
+      return { ...base, text: truncateText(entry?.text, 800) };
+    }
+    if (entry?.type === 'refusal') {
+      return { ...base, refusal: truncateText(entry?.refusal, 300) };
+    }
+    if (entry?.type === 'tool_call') {
+      return { ...base, name: entry?.name || entry?.tool_name };
+    }
+    return base;
+  });
+  return {
+    type: item?.type,
+    role: item?.role,
+    content: sanitizedContent,
+  };
+});
+
+const summarizeOpenAiResponse = (response: any) => {
+  const output = Array.isArray(response?.output) ? response.output : [];
+  const outputSummary = output.map((item: any) => {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    const contentTypes = content.map((entry: any) => entry?.type).filter(Boolean);
+    const outputText = content.find((entry: any) => entry?.type === 'output_text')?.text;
+    const refusal = content.find((entry: any) => entry?.type === 'refusal');
+    const toolCall = content.find((entry: any) => entry?.type === 'tool_call');
+    return {
+      type: item?.type,
+      role: item?.role,
+      contentTypes,
+      outputTextPreview: outputText ? String(outputText).slice(0, 200) : undefined,
+      refusal: refusal ? String(refusal?.refusal || '').slice(0, 200) : undefined,
+      toolCall: toolCall ? (toolCall?.name || toolCall?.tool_name || 'tool_call') : undefined,
+    };
+  });
+
+  return {
+    id: response?.id,
+    model: response?.model,
+    status: response?.status,
+    incompleteDetails: response?.incomplete_details,
+    outputTextLength: response?.output_text?.length || 0,
+    outputTextPreview: truncateText(response?.output_text, 200),
+    outputCount: output.length,
+    outputSummary,
+    outputRaw: sanitizeOpenAiOutput(output),
+    usage: response?.usage,
+    error: response?.error,
+  };
 };
 
 /**
@@ -102,6 +184,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
   const maxOutputTokens = typeof options.maxOutputTokens === 'number'
     ? options.maxOutputTokens
     : 420;
+  const reasoningEffort = options.reasoningEffort;
   const messages: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = messageHistory
     ? [...messageHistory].slice(-historyLimit)
     : await Message.find({ conversationId: conversation._id })
@@ -421,6 +504,7 @@ Generate a response following all rules above. Return JSON with:
   let parsed: AIReplyResult | null = null;
   let responseContent: string | null = null;
   let usedFallback = false;
+  let requestError: Record<string, any> | null = null;
 
   let requestStart: bigint | null = null;
   try {
@@ -482,14 +566,46 @@ Generate a response following all rules above. Return JSON with:
     if (supportsTemperature(model)) {
       requestPayload.temperature = temperature;
     }
+    if (supportsReasoningEffort(model) && reasoningEffort) {
+      requestPayload.reasoning = { effort: reasoningEffort };
+    }
+
+    logAiDebug('reply_request', {
+      conversationId: conversation._id?.toString(),
+      workspaceId: workspaceId.toString(),
+      model,
+      temperature: supportsTemperature(model) ? temperature : undefined,
+      temperatureOmitted: !supportsTemperature(model),
+      reasoningEffort: supportsReasoningEffort(model) ? reasoningEffort : undefined,
+      maxOutputTokens,
+      category: categoryName || 'General',
+      aiPolicy,
+      decisionMode,
+      tone: tone || 'default',
+      maxReplySentences,
+      historyCount: messages.length,
+      attachments: recentCustomerAttachments.length,
+      knowledgeItems: knowledgeItems.length,
+      knowledgeItemFilter: options.knowledgeItemIds?.length || 0,
+      ragMatches: vectorContexts.length,
+    });
 
     requestStart = process.hrtime.bigint();
     const response = await openai.responses.create(requestPayload);
     logAiTiming('ai_reply', model, requestStart, true);
+    logOpenAiApi('response', summarizeOpenAiResponse(response));
 
     responseContent = response.output_text || '{}';
     const structured = extractStructuredJson<AIReplyResult>(response);
     const raw = structured || safeParseJson(responseContent);
+    logAiDebug('reply_parse', {
+      responseChars: responseContent.length,
+      usedStructured: Boolean(structured),
+      replyPreview: String(raw.replyText || '').trim().slice(0, 160),
+      shouldEscalate: Boolean(raw.shouldEscalate),
+      tagsCount: Array.isArray(raw.tags) ? raw.tags.length : 0,
+      goalStatus: raw.goalProgress?.status || null,
+    });
     const collectedFieldsDefaults = {
       name: null,
       phone: null,
@@ -545,6 +661,9 @@ Generate a response following all rules above. Return JSON with:
       details.partialResponse = responseContent.slice(0, 800);
     }
 
+    requestError = details;
+    logOpenAiApi('response_error', details);
+    logAiDebug('reply_error', details);
     console.error('AI reply generation failed:', details);
   }
 
@@ -564,6 +683,10 @@ Generate a response following all rules above. Return JSON with:
 
   if (!parsed) {
     usedFallback = true;
+    logAiDebug('reply_fallback', {
+      reason: requestError?.message || 'parse_failed',
+      responsePreview: responseContent ? responseContent.slice(0, 200) : null,
+    });
     console.warn('Falling back to escalation reply after AI generation failure', {
       conversationId: conversation._id?.toString(),
       workspaceId: workspaceId.toString(),
@@ -608,7 +731,7 @@ Generate a response following all rules above. Return JSON with:
 
   const loggedGoalType = reply.goalProgress?.goalType || activeGoalType || detectedGoal;
 
-  console.info('AI reply generated', {
+  logAiDebug('reply_generated', {
     conversationId: conversation._id?.toString(),
     workspaceId: workspaceId.toString(),
     categoryId: categoryId?.toString(),

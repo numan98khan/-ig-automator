@@ -9,6 +9,7 @@ const openai = new OpenAI({
 });
 
 const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
+const supportsReasoningEffort = (model?: string): boolean => /^(gpt-5|o)/i.test(model || '');
 const getDurationMs = (startNs: bigint) => Number(process.hrtime.bigint() - startNs) / 1e6;
 const logAiTiming = (label: string, model: string | undefined, startNs: bigint, success: boolean) => {
   if (!getLogSettingsSnapshot().aiTimingEnabled) return;
@@ -26,6 +27,7 @@ export interface CategorizationResult {
 export interface CategorizationOptions {
   model?: string;
   temperature?: number;
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 }
 
 /**
@@ -52,6 +54,7 @@ export async function categorizeMessage(
     const temperature = typeof options.temperature === 'number'
       ? options.temperature
       : templateConfig.categorization.temperature;
+    const reasoningEffort = options.reasoningEffort || templateConfig.categorization.reasoningEffort;
 
     const categoryNames = categoryMeta.map(c => c.name);
 
@@ -97,6 +100,9 @@ export async function categorizeMessage(
 
     if (supportsTemperature(model)) {
       requestPayload.temperature = temperature;
+    }
+    if (supportsReasoningEffort(model) && reasoningEffort) {
+      requestPayload.reasoning = { effort: reasoningEffort };
     }
 
     requestStart = process.hrtime.bigint();

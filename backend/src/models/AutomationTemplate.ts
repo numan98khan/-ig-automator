@@ -5,11 +5,13 @@ export interface AutomationTemplateAiReplyConfig {
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 }
 
 export interface AutomationTemplateCategorizationConfig {
   model?: string;
   temperature?: number;
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 }
 
 export interface IAutomationTemplate extends Document {
@@ -27,10 +29,12 @@ const automationTemplateSchema = new Schema<IAutomationTemplate>(
       model: { type: String, trim: true, default: 'gpt-4o-mini' },
       temperature: { type: Number, default: 0.35, min: 0, max: 2 },
       maxOutputTokens: { type: Number, default: 420, min: 1 },
+      reasoningEffort: { type: String, enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] },
     },
     categorization: {
       model: { type: String, trim: true, default: 'gpt-4o-mini' },
       temperature: { type: Number, default: 0.1, min: 0, max: 2 },
+      reasoningEffort: { type: String, enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] },
     },
   },
   { timestamps: true },

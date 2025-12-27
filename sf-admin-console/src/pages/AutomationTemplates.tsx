@@ -11,20 +11,26 @@ type TemplateConfig = {
     model?: string
     temperature?: number
     maxOutputTokens?: number
+    reasoningEffort?: string
   }
   categorization?: {
     model?: string
     temperature?: number
+    reasoningEffort?: string
   }
   updatedAt?: string
 }
+
+type ReasoningEffortOption = 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 
 type FormState = {
   aiReplyModel: string
   aiReplyTemperature: number | null
   aiReplyMaxOutputTokens: number | null
+  aiReplyReasoningEffort: ReasoningEffortOption
   categorizationModel: string
   categorizationTemperature: number | null
+  categorizationReasoningEffort: ReasoningEffortOption
 }
 
 type DefaultsState = {
@@ -41,10 +47,12 @@ const DEFAULTS = {
     model: 'gpt-4o-mini',
     temperature: 0.35,
     maxOutputTokens: 420,
+    reasoningEffort: 'default' as ReasoningEffortOption,
   },
   categorization: {
     model: 'gpt-4o-mini',
     temperature: 0.1,
+    reasoningEffort: 'default' as ReasoningEffortOption,
   },
   defaults: {
     lockMode: 'session_only' as const,
@@ -56,6 +64,25 @@ const DEFAULTS = {
   },
 }
 
+const MODEL_OPTIONS = [
+  'gpt-5-mini-2025-08-07',
+  'gpt-5-nano-2025-08-07',
+  'gpt-5-mini',
+  'gpt-5-nano',
+  'gpt-4o-mini',
+  'gpt-4o',
+]
+
+const REASONING_OPTIONS: Array<{ value: ReasoningEffortOption; label: string }> = [
+  { value: 'default', label: 'Default (model)' },
+  { value: 'minimal', label: 'Minimal' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Extra high' },
+  { value: 'none', label: 'None (gpt-5.1+ only)' },
+]
+
 const toNumberOrDefault = (value: any, fallback: number) =>
   typeof value === 'number' && !Number.isNaN(value) ? value : fallback
 
@@ -66,8 +93,10 @@ export default function AutomationTemplates() {
     aiReplyModel: DEFAULTS.aiReply.model,
     aiReplyTemperature: DEFAULTS.aiReply.temperature,
     aiReplyMaxOutputTokens: DEFAULTS.aiReply.maxOutputTokens,
+    aiReplyReasoningEffort: DEFAULTS.aiReply.reasoningEffort,
     categorizationModel: DEFAULTS.categorization.model,
     categorizationTemperature: DEFAULTS.categorization.temperature,
+    categorizationReasoningEffort: DEFAULTS.categorization.reasoningEffort,
   })
   const [defaultsState, setDefaultsState] = useState<DefaultsState>({
     lockMode: DEFAULTS.defaults.lockMode,
@@ -113,11 +142,16 @@ export default function AutomationTemplates() {
         currentTemplate.aiReply?.maxOutputTokens,
         DEFAULTS.aiReply.maxOutputTokens,
       ),
+      aiReplyReasoningEffort:
+        (currentTemplate.aiReply?.reasoningEffort as ReasoningEffortOption) || DEFAULTS.aiReply.reasoningEffort,
       categorizationModel: currentTemplate.categorization?.model || DEFAULTS.categorization.model,
       categorizationTemperature: toNumberOrDefault(
         currentTemplate.categorization?.temperature,
         DEFAULTS.categorization.temperature,
       ),
+      categorizationReasoningEffort:
+        (currentTemplate.categorization?.reasoningEffort as ReasoningEffortOption)
+        || DEFAULTS.categorization.reasoningEffort,
     })
   }, [currentTemplate?.templateId, currentTemplate?.updatedAt])
 
@@ -168,10 +202,14 @@ export default function AutomationTemplates() {
         model: formState.aiReplyModel.trim() || DEFAULTS.aiReply.model,
         temperature: formState.aiReplyTemperature ?? DEFAULTS.aiReply.temperature,
         maxOutputTokens: formState.aiReplyMaxOutputTokens ?? DEFAULTS.aiReply.maxOutputTokens,
+        reasoningEffort: formState.aiReplyReasoningEffort === 'default' ? null : formState.aiReplyReasoningEffort,
       },
       categorization: {
         model: formState.categorizationModel.trim() || DEFAULTS.categorization.model,
         temperature: formState.categorizationTemperature ?? DEFAULTS.categorization.temperature,
+        reasoningEffort: formState.categorizationReasoningEffort === 'default'
+          ? null
+          : formState.categorizationReasoningEffort,
       },
     })
   }
@@ -185,11 +223,16 @@ export default function AutomationTemplates() {
         currentTemplate.aiReply?.maxOutputTokens,
         DEFAULTS.aiReply.maxOutputTokens,
       ),
+      aiReplyReasoningEffort:
+        (currentTemplate.aiReply?.reasoningEffort as ReasoningEffortOption) || DEFAULTS.aiReply.reasoningEffort,
       categorizationModel: currentTemplate.categorization?.model || DEFAULTS.categorization.model,
       categorizationTemperature: toNumberOrDefault(
         currentTemplate.categorization?.temperature,
         DEFAULTS.categorization.temperature,
       ),
+      categorizationReasoningEffort:
+        (currentTemplate.categorization?.reasoningEffort as ReasoningEffortOption)
+        || DEFAULTS.categorization.reasoningEffort,
     })
   }
 
@@ -287,17 +330,23 @@ export default function AutomationTemplates() {
             <div className="text-sm text-muted-foreground">Select a template to edit.</div>
           ) : (
             <>
+              <datalist id="model-options">
+                {MODEL_OPTIONS.map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
               <div>
                 <h2 className="text-lg font-semibold text-foreground">AI Reply Settings</h2>
                 <p className="text-sm text-muted-foreground">
                   Controls the assistant model used to generate replies inside this template flow.
                 </p>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Model</label>
                   <input
                     className="input w-full font-mono text-sm"
+                    list="model-options"
                     value={formState.aiReplyModel}
                     onChange={(e) => setFormState((prev) => ({ ...prev, aiReplyModel: e.target.value }))}
                     placeholder="gpt-4o-mini"
@@ -336,6 +385,25 @@ export default function AutomationTemplates() {
                     }
                   />
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Reasoning effort</label>
+                  <select
+                    className="input w-full"
+                    value={formState.aiReplyReasoningEffort}
+                    onChange={(e) =>
+                      setFormState((prev) => ({
+                        ...prev,
+                        aiReplyReasoningEffort: e.target.value as ReasoningEffortOption,
+                      }))
+                    }
+                  >
+                    {REASONING_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="border-t border-border pt-6">
@@ -345,11 +413,12 @@ export default function AutomationTemplates() {
                     Adjust the model used to detect intent and language for inbound messages.
                   </p>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                   <div className="space-y-2">
                     <label className="text-sm text-muted-foreground">Model</label>
                     <input
                       className="input w-full font-mono text-sm"
+                      list="model-options"
                       value={formState.categorizationModel}
                       onChange={(e) =>
                         setFormState((prev) => ({ ...prev, categorizationModel: e.target.value }))
@@ -373,6 +442,25 @@ export default function AutomationTemplates() {
                         }))
                       }
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Reasoning effort</label>
+                    <select
+                      className="input w-full"
+                      value={formState.categorizationReasoningEffort}
+                      onChange={(e) =>
+                        setFormState((prev) => ({
+                          ...prev,
+                          categorizationReasoningEffort: e.target.value as ReasoningEffortOption,
+                        }))
+                      }
+                    >
+                      {REASONING_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>

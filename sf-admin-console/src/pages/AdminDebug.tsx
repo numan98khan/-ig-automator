@@ -18,6 +18,7 @@ export default function AdminDebug() {
     aiTimingEnabled: true,
     automationLogsEnabled: true,
     automationStepsEnabled: true,
+    openaiApiLogsEnabled: false,
   })
 
   const { data: workspaces, error: workspacesError } = useQuery({
@@ -49,6 +50,7 @@ export default function AdminDebug() {
         aiTimingEnabled: payload.aiTimingEnabled,
         automationLogsEnabled: payload.automationLogsEnabled,
         automationStepsEnabled: payload.automationStepsEnabled,
+        openaiApiLogsEnabled: payload.openaiApiLogsEnabled ?? false,
       })
     }
   }, [logSettingsData])
@@ -202,6 +204,13 @@ export default function AdminDebug() {
             description="Step-by-step timing within automations."
             enabled={logSettings.automationStepsEnabled}
             onToggle={() => toggleLogSetting('automationStepsEnabled')}
+            disabled={updateLogsMutation.isLoading}
+          />
+          <LogToggleRow
+            title="OpenAI API logs"
+            description="Raw OpenAI response summaries for debugging."
+            enabled={logSettings.openaiApiLogsEnabled}
+            onToggle={() => toggleLogSetting('openaiApiLogsEnabled')}
             disabled={updateLogsMutation.isLoading}
           />
         </div>
