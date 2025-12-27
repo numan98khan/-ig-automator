@@ -51,6 +51,17 @@ export interface IWorkspaceSettings extends Document {
     sheetName?: string;
     serviceAccountJson?: string;
     headerRow?: number;
+    inventoryMapping?: {
+      fields?: Record<string, {
+        header?: string;
+        confidence?: number;
+        notes?: string;
+      }>;
+      summary?: string;
+      updatedAt?: Date;
+      sourceRange?: string;
+      sourceHeaders?: string[];
+    };
     oauthConnected?: boolean;
     oauthConnectedAt?: Date;
     oauthEmail?: string;
@@ -101,6 +112,16 @@ const googleSheetsConfigSchema = new Schema({
   sheetName: { type: String, trim: true },
   serviceAccountJson: { type: String },
   headerRow: { type: Number, min: 1, default: 1 },
+  inventoryMapping: {
+    type: new Schema({
+      fields: { type: Schema.Types.Mixed, default: {} },
+      summary: { type: String, trim: true },
+      updatedAt: { type: Date },
+      sourceRange: { type: String, trim: true },
+      sourceHeaders: { type: [String], default: [] },
+    }, { _id: false }),
+    default: undefined,
+  },
   oauthConnected: { type: Boolean, default: false },
   oauthConnectedAt: { type: Date },
   oauthEmail: { type: String, trim: true },

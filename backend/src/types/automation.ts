@@ -41,6 +41,9 @@ export interface SalesCatalogVariantOptions {
 export interface SalesCatalogItem {
   sku: string;
   name: string;
+  description?: string;
+  category?: string;
+  brand?: string;
   keywords?: string[];
   price?: number | { min: number; max: number };
   currency?: string;

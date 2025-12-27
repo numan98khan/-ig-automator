@@ -161,11 +161,22 @@ function parsePriceRow(values: {
   return single !== undefined ? single : undefined;
 }
 
-function parseSalesSheetData(headers: string[], rows: string[][]): {
+function parseSalesSheetData(
+  headers: string[],
+  rows: string[][],
+  mapping?: {
+    fields?: Record<string, { header?: string }>;
+  },
+): {
   catalog: SalesCatalogItem[];
   shippingRules: SalesShippingRule[];
 } {
   const headerKeys = headers.map(normalizeSheetHeader);
+  const headerIndex = new Map<string, number>();
+  headers.forEach((header, index) => {
+    headerIndex.set(normalizeSheetHeader(header), index);
+  });
+  const mappedHeaders = mapping?.fields || {};
   const catalog: SalesCatalogItem[] = [];
   const shippingRules: SalesShippingRule[] = [];
 
@@ -176,18 +187,37 @@ function parseSalesSheetData(headers: string[], rows: string[][]): {
     });
 
     const getValue = (keys: string[]) => keys.map((key) => rowData[key]).find((value) => value);
+    const getMappedValue = (fieldKey: string) => {
+      const header = mappedHeaders[fieldKey]?.header;
+      if (!header) return undefined;
+      const index = headerIndex.get(normalizeSheetHeader(header));
+      if (index === undefined) return undefined;
+      return (row[index] || '').toString().trim();
+    };
+    const parseQuantityStock = (value?: string): SalesCatalogItem['stock'] | undefined => {
+      if (!value) return undefined;
+      const parsed = parseNumber(value);
+      if (parsed === undefined) return undefined;
+      if (parsed <= 0) return 'out';
+      if (parsed <= 5) return 'low';
+      return 'in';
+    };
 
-    const sku = getValue(['sku', 'product_id', 'id']);
-    const name = getValue(['name', 'product', 'title']);
+    const sku = getMappedValue('sku') || getValue(['sku', 'product_id', 'id']);
+    const name = getMappedValue('productName') || getValue(['name', 'product', 'title']);
+    const description = getMappedValue('description');
+    const category = getMappedValue('category');
+    const brand = getMappedValue('brand');
     const keywords = parseList(getValue(['keywords', 'tags', 'keywords_list']));
     const price = parsePriceRow({
-      priceRaw: getValue(['price', 'amount', 'unit_price']),
+      priceRaw: getMappedValue('price') || getValue(['price', 'amount', 'unit_price']),
       priceMinRaw: getValue(['price_min', 'min_price', 'min']),
       priceMaxRaw: getValue(['price_max', 'max_price', 'max']),
     });
     const currency = getValue(['currency', 'curr']);
-    const stock = parseStock(getValue(['stock', 'availability']));
-    const sizes = parseList(getValue(['size', 'sizes']));
+    const stock = parseStock(getMappedValue('status') || getValue(['stock', 'availability']))
+      || parseQuantityStock(getMappedValue('quantity'));
+    const sizes = parseList(getMappedValue('variant') || getValue(['size', 'sizes']));
     const colors = parseList(getValue(['color', 'colors']));
 
     if (sku || name) {
@@ -195,6 +225,9 @@ function parseSalesSheetData(headers: string[], rows: string[][]): {
         sku: sku || name || 'SKU',
         name: name || sku || 'Item',
       };
+      if (description) item.description = description;
+      if (category) item.category = category;
+      if (brand) item.brand = brand;
       if (keywords) item.keywords = keywords;
       if (price !== undefined) item.price = price;
       if (currency) item.currency = currency;
@@ -246,15 +279,41 @@ export async function resolveSalesConciergeConfig(
       return config;
     }
 
+    const headerRow = sheetsConfig.headerRow || 1;
+    console.log('[SalesConcierge] Loading sheet catalog', {
+      workspaceId: workspaceId.toString(),
+      spreadsheetId: sheetsConfig.spreadsheetId,
+      sheetName: sheetsConfig.sheetName || 'Sheet1',
+      headerRow,
+    });
     const sheetData = await getGoogleSheetRows(
       {
         spreadsheetId: sheetsConfig.spreadsheetId,
         sheetName: sheetsConfig.sheetName || 'Sheet1',
         ...auth,
       },
-      { headerRow: sheetsConfig.headerRow || 1 },
+      { headerRow },
     );
-    const parsed = parseSalesSheetData(sheetData.headers, sheetData.rows);
+    console.log('[SalesConcierge] Sheet loaded', {
+      workspaceId: workspaceId.toString(),
+      headers: sheetData.headers.slice(0, 12),
+      headerCount: sheetData.headers.length,
+      rowCount: sheetData.rows.length,
+    });
+    const parsed = parseSalesSheetData(
+      sheetData.headers,
+      sheetData.rows,
+      sheetsConfig.inventoryMapping,
+    );
+    if (sheetsConfig.inventoryMapping?.fields) {
+      const mappedFields = Object.entries(sheetsConfig.inventoryMapping.fields)
+        .filter(([, value]) => value?.header)
+        .map(([key, value]) => `${key}:${value?.header}`);
+      console.log('[SalesConcierge] Inventory mapping applied', {
+        workspaceId: workspaceId.toString(),
+        mappedFields,
+      });
+    }
     if (!parsed.catalog.length && !parsed.shippingRules.length) {
       return config;
     }
@@ -264,8 +323,13 @@ export async function resolveSalesConciergeConfig(
       catalog: parsed.catalog.length ? parsed.catalog : config.catalog,
       shippingRules: parsed.shippingRules.length ? parsed.shippingRules : config.shippingRules,
     };
-  } catch (error) {
-    console.error('Sales concierge sheet load failed:', error);
+  } catch (error: any) {
+    const apiMessage = error?.response?.data?.error?.message || error?.response?.data?.error;
+    console.error('[SalesConcierge] Sheet load failed', {
+      workspaceId: workspaceId.toString(),
+      status: error?.response?.status,
+      message: apiMessage || error?.message,
+    });
     return config;
   }
 }
