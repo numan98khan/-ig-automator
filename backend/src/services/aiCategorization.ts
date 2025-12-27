@@ -1,10 +1,13 @@
 import OpenAI from 'openai';
 import MessageCategory, { DEFAULT_CATEGORIES } from '../models/MessageCategory';
 import mongoose from 'mongoose';
+import { getAutomationTemplateConfig } from './automationTemplateService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
 
 export interface CategorizationResult {
   categoryName: string;
@@ -13,12 +16,18 @@ export interface CategorizationResult {
   confidence: number;
 }
 
+export interface CategorizationOptions {
+  model?: string;
+  temperature?: number;
+}
+
 /**
  * Detect language and categorize a message using OpenAI
  */
 export async function categorizeMessage(
   messageText: string,
-  workspaceId: mongoose.Types.ObjectId | string
+  workspaceId: mongoose.Types.ObjectId | string,
+  options: CategorizationOptions = {},
 ): Promise<CategorizationResult> {
   try {
     const categories = await MessageCategory.find({ workspaceId });
@@ -27,6 +36,12 @@ export async function categorizeMessage(
       description: cat.descriptionEn || '',
       examples: (cat.exampleMessages || []).slice(0, 3),
     }));
+
+    const templateConfig = await getAutomationTemplateConfig('sales_concierge');
+    const model = options.model || templateConfig.categorization.model || 'gpt-4o-mini';
+    const temperature = typeof options.temperature === 'number'
+      ? options.temperature
+      : templateConfig.categorization.temperature;
 
     const categoryNames = categoryMeta.map(c => c.name);
 
@@ -47,9 +62,8 @@ export async function categorizeMessage(
       return `- ${cat.name}: ${cat.description || 'No description.'}${examplesText}`;
     }).join('\n');
 
-    const response = await openai.responses.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.1,
+    const requestPayload: any = {
+      model,
       input: [
         {
           role: 'system',
@@ -69,7 +83,13 @@ export async function categorizeMessage(
         },
       },
       store: false, // Don't store categorization requests
-    });
+    };
+
+    if (supportsTemperature(model)) {
+      requestPayload.temperature = temperature;
+    }
+
+    const response = await openai.responses.create(requestPayload);
 
     const responseText = response.output_text?.trim() || '{}';
     const structured = extractStructuredJson<CategorizationResult>(response);

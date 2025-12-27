@@ -12,6 +12,7 @@ import Analytics from './pages/Analytics'
 import AIAssistantConfig from './pages/AIAssistantConfig'
 import AdminDebug from './pages/AdminDebug'
 import Tiers from './pages/Tiers'
+import AutomationTemplates from './pages/AutomationTemplates'
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
                 <Route path="/users" element={<Users />} />
                 <Route path="/tiers" element={<Tiers />} />
                 <Route path="/ai-assistant" element={<AIAssistantConfig />} />
+                <Route path="/automations" element={<AutomationTemplates />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/debug" element={<AdminDebug />} />
               </Routes>

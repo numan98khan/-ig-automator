@@ -7,6 +7,7 @@ import Automation from '../models/Automation';
 import AutomationSession from '../models/AutomationSession';
 import OrderDraft from '../models/OrderDraft';
 import { generateAIReply } from './aiReplyService';
+import { getAutomationTemplateConfig } from './automationTemplateService';
 import {
   sendMessage as sendInstagramMessage,
   sendButtonMessage,
@@ -29,6 +30,7 @@ import {
 import { AutomationTestContext } from './automation/types';
 import {
   AutomationRateLimit,
+  AutomationAiSettings,
   AutomationTemplateId,
   SalesConciergeConfig,
   TemplateFlowConfig,
@@ -243,7 +245,7 @@ async function buildAutomationAiReply(params: {
   conversation: any;
   messageText: string;
   messageContext?: AutomationTestContext;
-  aiSettings?: { tone?: string; maxReplySentences?: number };
+  aiSettings?: AutomationAiSettings;
 }) {
   const { conversation, messageText, messageContext, aiSettings } = params;
   const settings = await getWorkspaceSettings(conversation.workspaceId);
@@ -280,6 +282,9 @@ async function buildAutomationAiReply(params: {
     workspaceSettingsOverride: settings,
     tone: aiSettings?.tone,
     maxReplySentences: aiSettings?.maxReplySentences,
+    model: aiSettings?.model,
+    temperature: aiSettings?.temperature,
+    maxOutputTokens: aiSettings?.maxOutputTokens,
   });
 }
 
@@ -387,6 +392,7 @@ async function handleSalesConciergeFlow(params: {
   } = params;
   const baseConfig = replyStep.templateFlow.config as SalesConciergeConfig;
   const config = await resolveSalesConciergeConfig(conversation.workspaceId, baseConfig);
+  const templateConfig = await getAutomationTemplateConfig('sales_concierge');
   const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
   const tags = config.tags || ['intent_purchase', 'template_sales_concierge'];
 
@@ -405,12 +411,16 @@ async function handleSalesConciergeFlow(params: {
     config,
     context: messageContext,
   });
+  const aiSettings = {
+    ...(config.aiSettings || {}),
+    ...templateConfig.aiReply,
+  };
   const aiResponse = replies.length
     ? await buildAutomationAiReply({
         conversation,
         messageText,
         messageContext,
-        aiSettings: config.aiSettings,
+        aiSettings,
       })
     : null;
   const combinedTags = [...tags, ...(aiResponse?.tags || [])];

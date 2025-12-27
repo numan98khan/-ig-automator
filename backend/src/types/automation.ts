@@ -28,6 +28,9 @@ export interface AutomationRateLimit {
 export interface AutomationAiSettings {
   tone?: string;
   maxReplySentences?: number;
+  model?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
 }
 
 export interface SalesCatalogVariantOptions {

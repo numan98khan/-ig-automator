@@ -11,8 +11,14 @@ import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
+import AutomationTemplate from '../models/AutomationTemplate';
 import Tier from '../models/Tier';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
+import {
+  getAutomationTemplateConfig,
+  isAutomationTemplateId,
+  listAutomationTemplateConfigs,
+} from '../services/automationTemplateService';
 import {
   GLOBAL_WORKSPACE_KEY,
   deleteKnowledgeEmbedding,
@@ -27,6 +33,15 @@ const toInt = (value: any, fallback: number) => {
   const n = parseInt(String(value), 10);
   return Number.isNaN(n) ? fallback : n;
 };
+const toOptionalNumber = (value: any) => {
+  if (value === undefined || value === null || value === '') return undefined;
+  const n = Number(value);
+  return Number.isNaN(n) ? undefined : n;
+};
+const clampNumber = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+const normalizeModel = (value: any) =>
+  typeof value === 'string' && value.trim() ? value.trim() : undefined;
 const STORAGE_MODES = ['vector', 'text'];
 
 // Tiers CRUD
@@ -611,6 +626,81 @@ router.put('/assistant/config', authenticate, requireAdmin, async (req, res) => 
     });
   } catch (error) {
     console.error('Admin global assistant config update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Automation template configs (global)
+router.get('/automation-templates', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const templates = await listAutomationTemplateConfigs();
+    res.json({ data: templates });
+  } catch (error) {
+    console.error('Admin automation templates list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/automation-templates/:templateId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    if (!isAutomationTemplateId(templateId)) {
+      return res.status(404).json({ error: 'Unknown automation template' });
+    }
+    const template = await getAutomationTemplateConfig(templateId);
+    res.json({ data: template });
+  } catch (error) {
+    console.error('Admin automation template get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/automation-templates/:templateId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    if (!isAutomationTemplateId(templateId)) {
+      return res.status(404).json({ error: 'Unknown automation template' });
+    }
+
+    const aiReply = req.body?.aiReply || {};
+    const categorization = req.body?.categorization || {};
+    const update: Record<string, any> = {};
+
+    const replyModel = normalizeModel(aiReply.model);
+    if (replyModel) update['aiReply.model'] = replyModel;
+
+    const replyTemperature = toOptionalNumber(aiReply.temperature);
+    if (replyTemperature !== undefined) {
+      update['aiReply.temperature'] = clampNumber(replyTemperature, 0, 2);
+    }
+
+    const replyMaxTokens = toOptionalNumber(aiReply.maxOutputTokens);
+    if (replyMaxTokens !== undefined) {
+      update['aiReply.maxOutputTokens'] = Math.max(1, Math.round(replyMaxTokens));
+    }
+
+    const categorizationModel = normalizeModel(categorization.model);
+    if (categorizationModel) update['categorization.model'] = categorizationModel;
+
+    const categorizationTemperature = toOptionalNumber(categorization.temperature);
+    if (categorizationTemperature !== undefined) {
+      update['categorization.temperature'] = clampNumber(categorizationTemperature, 0, 2);
+    }
+
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    await AutomationTemplate.findOneAndUpdate(
+      { templateId },
+      { $set: update },
+      { new: true, upsert: true },
+    );
+
+    const template = await getAutomationTemplateConfig(templateId);
+    res.json({ data: template });
+  } catch (error) {
+    console.error('Admin automation template update error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

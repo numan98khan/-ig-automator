@@ -50,6 +50,9 @@ export interface AIReplyOptions {
   workspaceSettingsOverride?: Partial<IWorkspaceSettings>;
   tone?: string;
   maxReplySentences?: number;
+  model?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
 }
 
 const splitIntoSentences = (text: string): string[] => {
@@ -57,6 +60,8 @@ const splitIntoSentences = (text: string): string[] => {
   if (!matches) return [];
   return matches.map((sentence) => sentence.trim()).filter(Boolean);
 };
+
+const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
 
 /**
  * Centralized AI reply generator used by manual and automated flows.
@@ -80,7 +85,11 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
 
   const workspaceSettings = options.workspaceSettingsOverride || baseWorkspaceSettings;
 
-  const model = 'gpt-4o-mini';
+  const model = options.model || 'gpt-4o-mini';
+  const temperature = typeof options.temperature === 'number' ? options.temperature : 0.35;
+  const maxOutputTokens = typeof options.maxOutputTokens === 'number'
+    ? options.maxOutputTokens
+    : 420;
   const messages: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = messageHistory
     ? [...messageHistory].slice(-historyLimit)
     : await Message.find({ conversationId: conversation._id })
@@ -439,10 +448,9 @@ Generate a response following all rules above. Return JSON with:
       }
     }
 
-    const response = await openai.responses.create({
+    const requestPayload: any = {
       model,
-      temperature: 0.35,
-      max_output_tokens: 420,
+      max_output_tokens: maxOutputTokens,
       input: [
         { role: 'system', content: systemMessage.trim() },
         { role: 'user', content: userContent },
@@ -456,7 +464,13 @@ Generate a response following all rules above. Return JSON with:
         },
       },
       store: true, // Enable stateful context for better multi-turn conversations
-    });
+    };
+
+    if (supportsTemperature(model)) {
+      requestPayload.temperature = temperature;
+    }
+
+    const response = await openai.responses.create(requestPayload);
 
     responseContent = response.output_text || '{}';
     const structured = extractStructuredJson<AIReplyResult>(response);

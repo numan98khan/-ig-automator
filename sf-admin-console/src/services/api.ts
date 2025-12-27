@@ -92,6 +92,12 @@ export const adminApi = {
   deleteGlobalKnowledgeItem: (id: string) => api.delete(`/knowledge/${id}`),
   reindexGlobalKnowledge: () => api.post('/knowledge/reindex-vector'),
 
+  // Automation Templates
+  getAutomationTemplates: () => api.get('/automation-templates'),
+  getAutomationTemplate: (templateId: string) => api.get(`/automation-templates/${templateId}`),
+  updateAutomationTemplate: (templateId: string, payload: any) =>
+    api.put(`/automation-templates/${templateId}`, payload),
+
   // Tiers
   getTiers: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>
     api.get('/tiers', { params }),
