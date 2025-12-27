@@ -981,7 +981,6 @@ export async function executeAutomation(params: {
   workspaceId: string;
   triggerType: TriggerType;
   conversationId: string;
-  participantInstagramId: string;
   messageText?: string;
   instagramAccountId: string;
   platform?: string;
@@ -993,7 +992,6 @@ export async function executeAutomation(params: {
       workspaceId,
       triggerType,
       conversationId,
-      participantInstagramId,
       messageText,
       instagramAccountId,
       platform,
@@ -1005,7 +1003,6 @@ export async function executeAutomation(params: {
       workspaceId,
       triggerType,
       conversationId,
-      participantInstagramId,
       instagramAccountId,
       messageTextPreview: messageText?.slice(0, 50),
       platform,
@@ -1140,7 +1137,6 @@ export async function checkAndExecuteAutomations(params: {
   workspaceId: string;
   triggerType: TriggerType;
   conversationId: string;
-  participantInstagramId: string;
   messageText?: string;
   instagramAccountId: string;
   platform?: string;
@@ -1508,7 +1504,6 @@ export async function runAutomationTest(params: {
     workspaceId,
     triggerType: automation.triggerType,
     conversationId: conversation._id.toString(),
-    participantInstagramId: conversation.participantInstagramId,
     messageText,
     instagramAccountId: instagramAccount._id.toString(),
     platform: conversation.platform || 'instagram',

@@ -434,7 +434,6 @@ async function processMessageAutomations(
       workspaceId,
       triggerType: 'dm_message',
       conversationId: conversation._id.toString(),
-      participantInstagramId: conversation.participantInstagramId,
       messageText,
       instagramAccountId: conversation.instagramAccountId.toString(),
       platform: conversation.platform || 'instagram',
