@@ -161,11 +161,22 @@ function parsePriceRow(values: {
   return single !== undefined ? single : undefined;
 }
 
-function parseSalesSheetData(headers: string[], rows: string[][]): {
+function parseSalesSheetData(
+  headers: string[],
+  rows: string[][],
+  mapping?: {
+    fields?: Record<string, { header?: string }>;
+  },
+): {
   catalog: SalesCatalogItem[];
   shippingRules: SalesShippingRule[];
 } {
   const headerKeys = headers.map(normalizeSheetHeader);
+  const headerIndex = new Map<string, number>();
+  headers.forEach((header, index) => {
+    headerIndex.set(normalizeSheetHeader(header), index);
+  });
+  const mappedHeaders = mapping?.fields || {};
   const catalog: SalesCatalogItem[] = [];
   const shippingRules: SalesShippingRule[] = [];
 
@@ -176,18 +187,37 @@ function parseSalesSheetData(headers: string[], rows: string[][]): {
     });
 
     const getValue = (keys: string[]) => keys.map((key) => rowData[key]).find((value) => value);
+    const getMappedValue = (fieldKey: string) => {
+      const header = mappedHeaders[fieldKey]?.header;
+      if (!header) return undefined;
+      const index = headerIndex.get(normalizeSheetHeader(header));
+      if (index === undefined) return undefined;
+      return (row[index] || '').toString().trim();
+    };
+    const parseQuantityStock = (value?: string): SalesCatalogItem['stock'] | undefined => {
+      if (!value) return undefined;
+      const parsed = parseNumber(value);
+      if (parsed === undefined) return undefined;
+      if (parsed <= 0) return 'out';
+      if (parsed <= 5) return 'low';
+      return 'in';
+    };
 
-    const sku = getValue(['sku', 'product_id', 'id']);
-    const name = getValue(['name', 'product', 'title']);
+    const sku = getMappedValue('sku') || getValue(['sku', 'product_id', 'id']);
+    const name = getMappedValue('productName') || getValue(['name', 'product', 'title']);
+    const description = getMappedValue('description');
+    const category = getMappedValue('category');
+    const brand = getMappedValue('brand');
     const keywords = parseList(getValue(['keywords', 'tags', 'keywords_list']));
     const price = parsePriceRow({
-      priceRaw: getValue(['price', 'amount', 'unit_price']),
+      priceRaw: getMappedValue('price') || getValue(['price', 'amount', 'unit_price']),
       priceMinRaw: getValue(['price_min', 'min_price', 'min']),
       priceMaxRaw: getValue(['price_max', 'max_price', 'max']),
     });
     const currency = getValue(['currency', 'curr']);
-    const stock = parseStock(getValue(['stock', 'availability']));
-    const sizes = parseList(getValue(['size', 'sizes']));
+    const stock = parseStock(getMappedValue('status') || getValue(['stock', 'availability']))
+      || parseQuantityStock(getMappedValue('quantity'));
+    const sizes = parseList(getMappedValue('variant') || getValue(['size', 'sizes']));
     const colors = parseList(getValue(['color', 'colors']));
 
     if (sku || name) {
@@ -195,6 +225,9 @@ function parseSalesSheetData(headers: string[], rows: string[][]): {
         sku: sku || name || 'SKU',
         name: name || sku || 'Item',
       };
+      if (description) item.description = description;
+      if (category) item.category = category;
+      if (brand) item.brand = brand;
       if (keywords) item.keywords = keywords;
       if (price !== undefined) item.price = price;
       if (currency) item.currency = currency;
@@ -254,7 +287,11 @@ export async function resolveSalesConciergeConfig(
       },
       { headerRow: sheetsConfig.headerRow || 1 },
     );
-    const parsed = parseSalesSheetData(sheetData.headers, sheetData.rows);
+    const parsed = parseSalesSheetData(
+      sheetData.headers,
+      sheetData.rows,
+      sheetsConfig.inventoryMapping,
+    );
     if (!parsed.catalog.length && !parsed.shippingRules.length) {
       return config;
     }
