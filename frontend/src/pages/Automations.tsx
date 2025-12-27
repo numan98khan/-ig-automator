@@ -16,8 +16,6 @@ import {
   AutomationTestState,
 } from '../services/api';
 import {
-  TRIGGER_METADATA,
-  GOAL_OPTIONS,
   AUTOMATION_TEMPLATES,
   getDefaultSetupData,
   AutomationTemplate,

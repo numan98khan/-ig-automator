@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/Input';
 import {
   GoogleSheetsIntegration,
   InventoryMapping,
+  InventoryMappingEntry,
   InventoryMappingField,
   integrationsAPI,
   settingsAPI,
@@ -35,19 +36,23 @@ const INVENTORY_FIELDS: Array<{ key: InventoryMappingField; label: string; hint:
   { key: 'barcode', label: 'Barcode', hint: 'UPC, EAN, or barcode.' },
 ];
 
-const buildEmptyMapping = (): InventoryMapping => ({
+type NormalizedInventoryMapping = InventoryMapping & {
+  fields: Record<InventoryMappingField, InventoryMappingEntry>;
+};
+
+const buildEmptyMapping = (): NormalizedInventoryMapping => ({
   fields: INVENTORY_FIELDS.reduce((acc, field) => {
     acc[field.key] = {};
     return acc;
-  }, {} as Record<InventoryMappingField, { header?: string; confidence?: number; notes?: string }>),
+  }, {} as Record<InventoryMappingField, InventoryMappingEntry>),
 });
 
-const normalizeMapping = (mapping?: InventoryMapping): InventoryMapping => {
+const normalizeMapping = (mapping?: InventoryMapping): NormalizedInventoryMapping => {
   const base = buildEmptyMapping();
   if (!mapping?.fields) return base;
   INVENTORY_FIELDS.forEach((field) => {
     if (mapping.fields?.[field.key]) {
-      base.fields![field.key] = mapping.fields[field.key];
+      base.fields[field.key] = mapping.fields[field.key];
     }
   });
   return {
