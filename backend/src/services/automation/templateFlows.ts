@@ -204,6 +204,7 @@ function getCatalogIndex(config: SalesConciergeConfig): CatalogIndex {
 function findCatalogCandidates(config: SalesConciergeConfig, query: string): SalesCatalogItem[] {
   if (!query) return [];
   const threshold = typeof config.matchThreshold === 'number' ? config.matchThreshold : 0.65;
+  const ambiguityGap = 0.15;
   const queryNormalized = normalizeForMatch(query);
   const { items, synonyms } = getCatalogIndex(config);
   const queryTokens = expandTokens(tokenize(query), synonyms);
@@ -240,11 +241,17 @@ function findCatalogCandidates(config: SalesConciergeConfig, query: string): Sal
 
   const topScore = scored[0].score;
   const topMatches = scored.slice(0, 3);
+  const secondScore = scored[1]?.score ?? 0;
+  const gap = topScore - secondScore;
+  const ambiguous = scored.length > 1 && gap < ambiguityGap;
   logAutomation('[SalesConcierge] Match', {
     query: queryNormalized.slice(0, 80),
     matched: scored.length,
     topScore: Number(topScore.toFixed(2)),
+    secondScore: Number(secondScore.toFixed(2)),
+    gap: Number(gap.toFixed(2)),
     threshold,
+    ambiguous,
     top: topMatches.map((entry) => ({
       sku: entry.item.sku,
       name: entry.item.name,
@@ -253,8 +260,12 @@ function findCatalogCandidates(config: SalesConciergeConfig, query: string): Sal
     })),
   });
 
-  if (topScore < threshold && topMatches.length === 1) {
+  if (topScore < threshold) {
     return [];
+  }
+
+  if (!ambiguous) {
+    return [topMatches[0].item];
   }
 
   return topMatches.map((entry) => entry.item);
