@@ -5,7 +5,6 @@ import InstagramAccount from '../models/InstagramAccount';
 import FollowupTask from '../models/FollowupTask';
 import Automation from '../models/Automation';
 import AutomationSession from '../models/AutomationSession';
-import OrderDraft from '../models/OrderDraft';
 import { generateAIReply } from './aiReplyService';
 import { getAutomationTemplateConfig } from './automationTemplateService';
 import {
@@ -337,55 +336,6 @@ async function handoffSalesConcierge(params: {
   await conversation.save();
 }
 
-async function createSalesOrderDraft(params: {
-  conversation: any;
-  fields: Record<string, any>;
-}): Promise<any> {
-  const { conversation, fields } = params;
-  const existingDraft = await OrderDraft.findOne({
-    conversationId: conversation._id,
-    status: { $in: ['draft', 'queued', 'payment_sent', 'needs_confirmation'] },
-  }).sort({ createdAt: -1 });
-
-  if (existingDraft) {
-    return existingDraft;
-  }
-
-  return OrderDraft.create({
-    workspaceId: conversation.workspaceId,
-    conversationId: conversation._id,
-    productRef: fields.productRef,
-    sku: fields.sku,
-    productName: fields.productName,
-    variant: fields.variant,
-    quantity: fields.quantity,
-    city: fields.city,
-    address: fields.address,
-    phone: fields.phone,
-    paymentMethod: fields.paymentMethod,
-    quote: {
-      price: fields.quote?.priceText,
-      stock: fields.quote?.stockText,
-      shippingFee: fields.quote?.shippingFee,
-      eta: fields.quote?.eta,
-      currency: fields.quote?.currency,
-    },
-    status: fields.paymentMethod === 'online' ? 'payment_sent' : 'queued',
-  });
-}
-
-function createPaymentLink(params: { amountText?: string; draftId: string }) {
-  const base = process.env.PAYMENTS_BASE_URL || process.env.APP_BASE_URL || 'https://pay.sendfx.ai';
-  const safeBase = base.replace(/\/$/, '');
-  const amountParam = params.amountText ? `?amount=${encodeURIComponent(params.amountText)}` : '';
-  return `${safeBase}/pay/${params.draftId}${amountParam}`;
-}
-
-function hydratePaymentLink(text: string, paymentLink?: string): string {
-  if (!paymentLink) return text;
-  return text.replace('{payment_link}', paymentLink);
-}
-
 async function trackSalesStep(workspaceId: mongoose.Types.ObjectId, step?: string) {
   if (!step) return;
   await trackDailyMetric(workspaceId, new Date(), { [`salesConciergeStepCounts.${step}`]: 1 });
@@ -455,38 +405,6 @@ async function handleSalesConciergeFlow(params: {
     ? [{ ...replies[0], text: aiResponse.replyText }]
     : replies;
 
-  let draftId = nextState.collectedFields?.draftId;
-  let paymentLink: string | undefined;
-
-  if (actions?.createDraft) {
-    const draftStart = nowMs();
-    const draft = await createSalesOrderDraft({
-      conversation,
-      fields: nextState.collectedFields || {},
-    });
-    logAutomationStep('sales_create_draft', draftStart, { created: Boolean(draft?._id) });
-    draftId = draft?._id?.toString();
-    if (draftId) {
-      nextState.collectedFields = {
-        ...nextState.collectedFields,
-        draftId,
-      };
-    }
-  }
-
-  if (actions?.paymentLinkRequired && draftId) {
-    const paymentStart = nowMs();
-    paymentLink = createPaymentLink({
-      amountText: nextState.collectedFields?.quote?.priceText,
-      draftId,
-    });
-    nextState.collectedFields = {
-      ...nextState.collectedFields,
-      paymentLink,
-    };
-    logAutomationStep('sales_payment_link', paymentStart);
-  }
-
   let sentAny = false;
   let sentCount = 0;
   const sendStart = nowMs();
@@ -497,13 +415,12 @@ async function handleSalesConciergeFlow(params: {
       }
       break;
     }
-    const text = hydratePaymentLink(reply.text, paymentLink);
     await sendTemplateMessage({
       conversation,
       automation,
       igAccount,
       recipientId: conversation.participantInstagramId,
-      text,
+      text: reply.text,
       buttons: reply.buttons,
       platform,
       tags: combinedTags,

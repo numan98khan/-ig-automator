@@ -10,7 +10,6 @@ import { AutomationTestContext, TemplateFlowActions, TemplateFlowReply, Template
 import { normalizeText } from './utils';
 
 type SalesIntent = 'price' | 'availability' | 'delivery' | 'order' | 'support' | 'other';
-type SalesPaymentMethod = 'online' | 'cod';
 
 const SALES_INTENT_OPTIONS = ['Price', 'Availability', 'Delivery', 'Order', 'Support'];
 const SALES_NEGOTIATION_PATTERNS = /(discount|cheaper|too expensive|drop price|lower price|deal|offer)/i;
@@ -27,13 +26,6 @@ function detectSalesIntent(text: string): SalesIntent {
   return 'other';
 }
 
-function detectPaymentMethod(text: string): SalesPaymentMethod | undefined {
-  const normalized = normalizeText(text);
-  if (/(cod|cash on delivery|cash)/.test(normalized)) return 'cod';
-  if (/(online|card|link|pay|payment)/.test(normalized)) return 'online';
-  return undefined;
-}
-
 function extractQuantity(text: string): number | undefined {
   const digitsOnly = text.replace(/\D/g, '');
   if (digitsOnly.length >= 6) return undefined;
@@ -42,19 +34,6 @@ function extractQuantity(text: string): number | undefined {
   const qty = Number(match[1]);
   if (Number.isNaN(qty) || qty <= 0) return undefined;
   return qty;
-}
-
-function extractPhone(text: string): string | undefined {
-  const digits = text.replace(/\D/g, '');
-  if (digits.length < 6) return undefined;
-  return digits;
-}
-
-function looksLikeAddress(text: string): boolean {
-  const normalized = normalizeText(text);
-  const hasNumber = /\d/.test(text);
-  const hasKeyword = /(street|st|road|rd|block|area|building|apt|avenue|unit)/.test(normalized);
-  return normalized.length >= 10 && (hasNumber || hasKeyword);
 }
 
 function normalizeCityName(input: string, config: SalesConciergeConfig): string | undefined {
@@ -400,7 +379,6 @@ function buildSalesSummary(fields: Record<string, any>) {
     fields.city ? `City: ${fields.city}` : null,
     fields.address ? `Address: ${fields.address}` : null,
     fields.phone ? `Phone: ${fields.phone}` : null,
-    fields.paymentMethod ? `Payment: ${fields.paymentMethod.toUpperCase()}` : null,
     fields.quote?.priceText ? `Price: ${fields.quote.priceText}` : null,
     fields.quote?.stockText ? `Stock: ${fields.quote.stockText}` : null,
     fields.quote?.shippingFee !== undefined ? `Shipping: ${fields.quote.shippingFee}` : null,
@@ -449,7 +427,6 @@ export function advanceSalesConciergeState(params: {
   const replies: TemplateFlowReply[] = [];
   const actions: TemplateFlowActions = {};
   const maxQuestions = config.maxQuestions ?? 6;
-  const minPhoneLength = config.minPhoneLength ?? 8;
   const fields = nextState.collectedFields || {};
 
   if (nextState.status && nextState.status !== 'active') {
@@ -461,11 +438,6 @@ export function advanceSalesConciergeState(params: {
   if (intent && !fields.intent) {
     fields.intent = intent;
   }
-  const paymentHint = detectPaymentMethod(messageText);
-  if (paymentHint && !fields.paymentMethod) {
-    fields.paymentMethod = paymentHint;
-  }
-
   fields.flags = {
     isAngry: SALES_ANGER_PATTERNS.test(messageText),
     isNegotiation: SALES_NEGOTIATION_PATTERNS.test(messageText),
@@ -684,104 +656,17 @@ export function advanceSalesConciergeState(params: {
     return { replies, state: nextState, actions };
   }
 
-  if (!fields.paymentMethod) {
-    const paymentMethod = detectPaymentMethod(messageText);
-    if (paymentMethod) {
-      fields.paymentMethod = paymentMethod;
-    } else {
-      nextState.questionCount += 1;
-      const paymentButtons = [{ title: 'Online payment' }];
-      if (fields.quote.codAllowed) {
-        paymentButtons.push({ title: 'Cash on delivery' });
-      }
-      const currency = fields.quote.currency || 'SAR';
-      const quoteLines = [
-        `Price: ${fields.quote.priceText}`,
-        `Availability: ${fields.quote.stockText || 'Confirming'}`,
-        `Delivery: ${fields.quote.shippingFee} ${currency}, ${fields.quote.eta}`,
-      ];
-      replies.push({ text: `${quoteLines.join(' • ')}\n\nDo you want COD or online payment?`, buttons: paymentButtons });
-      nextState.step = 'NEED_PAYMENT_METHOD';
-      nextState.collectedFields = fields;
-      return { replies, state: nextState };
-    }
-  }
-
-  if (fields.paymentMethod === 'cod' && !fields.quote.codAllowed) {
-    nextState.questionCount += 1;
-    replies.push({ text: 'COD is not available for your area. Do you want the payment link instead?', buttons: [{ title: 'Online payment' }] });
-    nextState.step = 'NEED_PAYMENT_METHOD';
-    nextState.collectedFields = fields;
-    return { replies, state: nextState };
-  }
-
-  if (fields.paymentMethod === 'online') {
-    nextState.step = 'DRAFT_CREATED';
-    nextState.status = 'completed';
-    actions.createDraft = true;
-    actions.paymentLinkRequired = true;
-    actions.draftPayload = { ...fields };
-    replies.push({ text: 'Perfect. Here is your payment link: {payment_link}' });
-    nextState.collectedFields = fields;
-    return { replies, state: nextState, actions };
-  }
-
-  if (!fields.phone) {
-    const phone = extractPhone(messageText);
-    if (phone && phone.length >= minPhoneLength) {
-      fields.phone = phone;
-    } else {
-      const attempt = incrementAttempt(fields, 'phone');
-      if (attempt > 2) {
-        nextState.status = 'handoff';
-        actions.handoffReason = 'Sales concierge handoff (phone invalid)';
-        actions.handoffTopic = 'Sales concierge handoff';
-        actions.handoffSummary = buildSalesSummary(fields);
-        actions.recommendedNextAction = 'Collect phone manually.';
-        replies.push({ text: "We'll have our team reach out to confirm details." });
-        nextState.collectedFields = fields;
-        return { replies, state: nextState, actions };
-      }
-      nextState.questionCount += 1;
-      replies.push({ text: `Please share a valid phone number (at least ${minPhoneLength} digits).` });
-      nextState.step = 'NEED_ADDRESS';
-      nextState.collectedFields = fields;
-      return { replies, state: nextState };
-    }
-  }
-
-  if (!fields.address) {
-    if (looksLikeAddress(messageText)) {
-      fields.address = messageText.trim();
-    } else {
-      const attempt = incrementAttempt(fields, 'address');
-      if (attempt > 2) {
-        nextState.status = 'handoff';
-        actions.handoffReason = 'Sales concierge handoff (address invalid)';
-        actions.handoffTopic = 'Sales concierge handoff';
-        actions.handoffSummary = buildSalesSummary(fields);
-        actions.recommendedNextAction = 'Collect address manually.';
-        replies.push({ text: "We'll have our team confirm your address." });
-        nextState.collectedFields = fields;
-        return { replies, state: nextState, actions };
-      }
-      nextState.questionCount += 1;
-      replies.push({ text: 'Please share the delivery address (area + street).', buttons: undefined });
-      nextState.step = 'NEED_ADDRESS';
-      nextState.collectedFields = fields;
-      return { replies, state: nextState };
-    }
-  }
-
-  nextState.step = 'DRAFT_CREATED';
-  nextState.status = 'handoff';
-  actions.createDraft = true;
-  actions.draftPayload = { ...fields };
-  actions.handoffReason = 'Sales concierge handoff (COD confirmation)';
-  actions.handoffTopic = 'Sales concierge draft ready';
-  actions.handoffSummary = buildSalesSummary(fields);
-  actions.recommendedNextAction = 'Confirm COD order and delivery address.';
-  replies.push({ text: "Thanks! You're in the queue — our team will confirm your COD order shortly." });
+  const currency = fields.quote.currency || 'SAR';
+  const quoteLines = [
+    `Price: ${fields.quote.priceText}`,
+    `Availability: ${fields.quote.stockText || 'Confirming'}`,
+    `Delivery: ${fields.quote.shippingFee} ${currency}, ${fields.quote.eta}`,
+  ];
+  replies.push({
+    text: `${quoteLines.join(' • ')}\n\nIf you'd like to place an order, a teammate can follow up.`,
+  });
+  nextState.step = 'INFO_PROVIDED';
+  nextState.status = 'active';
   nextState.collectedFields = fields;
-  return { replies, state: nextState, actions };
+  return { replies, state: nextState };
 }
