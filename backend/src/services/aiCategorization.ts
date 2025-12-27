@@ -2,12 +2,19 @@ import OpenAI from 'openai';
 import MessageCategory, { DEFAULT_CATEGORIES } from '../models/MessageCategory';
 import mongoose from 'mongoose';
 import { getAutomationTemplateConfig } from './automationTemplateService';
+import { getLogSettingsSnapshot } from './adminLogSettingsService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
+const getDurationMs = (startNs: bigint) => Number(process.hrtime.bigint() - startNs) / 1e6;
+const logAiTiming = (label: string, model: string | undefined, startNs: bigint, success: boolean) => {
+  if (!getLogSettingsSnapshot().aiTimingEnabled) return;
+  const ms = getDurationMs(startNs);
+  console.log('[AI] timing', { label, model, ms: Number(ms.toFixed(2)), success });
+};
 
 export interface CategorizationResult {
   categoryName: string;
@@ -29,6 +36,8 @@ export async function categorizeMessage(
   workspaceId: mongoose.Types.ObjectId | string,
   options: CategorizationOptions = {},
 ): Promise<CategorizationResult> {
+  let requestStart: bigint | null = null;
+  let modelUsed: string | undefined;
   try {
     const categories = await MessageCategory.find({ workspaceId });
     const categoryMeta = (categories.length > 0 ? categories : DEFAULT_CATEGORIES).map(cat => ({
@@ -39,6 +48,7 @@ export async function categorizeMessage(
 
     const templateConfig = await getAutomationTemplateConfig('sales_concierge');
     const model = options.model || templateConfig.categorization.model || 'gpt-4o-mini';
+    modelUsed = model;
     const temperature = typeof options.temperature === 'number'
       ? options.temperature
       : templateConfig.categorization.temperature;
@@ -89,7 +99,9 @@ export async function categorizeMessage(
       requestPayload.temperature = temperature;
     }
 
+    requestStart = process.hrtime.bigint();
     const response = await openai.responses.create(requestPayload);
+    logAiTiming('categorization', model, requestStart, true);
 
     const responseText = response.output_text?.trim() || '{}';
     const structured = extractStructuredJson<CategorizationResult>(response);
@@ -133,6 +145,9 @@ export async function categorizeMessage(
     result.confidence = Math.max(0, Math.min(1, Number(confidence.toFixed(2))));
     return result;
   } catch (error) {
+    if (requestStart) {
+      logAiTiming('categorization', modelUsed || 'unknown', requestStart, false);
+    }
     console.error('Error categorizing message:', error);
     return {
       categoryName: 'General',
@@ -172,11 +187,13 @@ function safeParseJson(content: string): any {
  * Detect language only (lighter operation)
  */
 export async function detectLanguage(messageText: string): Promise<string> {
+  let requestStart: bigint | null = null;
   try {
     const prompt = `Detect the language of the following text and respond with ONLY the ISO 639-1 language code (e.g., "en", "ar", "es", "fr", "de"):
 
 "${messageText}"`;
 
+    requestStart = process.hrtime.bigint();
     const response = await openai.responses.create({
       model: 'gpt-4o-mini',
       input: prompt,
@@ -184,6 +201,7 @@ export async function detectLanguage(messageText: string): Promise<string> {
       max_output_tokens: 10,
       store: false, // Don't store language detection requests
     });
+    logAiTiming('detect_language', 'gpt-4o-mini', requestStart, true);
 
     const languageCode = response.output_text?.trim().toLowerCase() || 'en';
 
@@ -193,6 +211,9 @@ export async function detectLanguage(messageText: string): Promise<string> {
     }
     return 'en';
   } catch (error) {
+    if (requestStart) {
+      logAiTiming('detect_language', 'gpt-4o-mini', requestStart, false);
+    }
     console.error('Error detecting language:', error);
     return 'en';
   }

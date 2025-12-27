@@ -8,6 +8,7 @@ import MessageCategory from '../models/MessageCategory';
 import WorkspaceSettings, { IWorkspaceSettings } from '../models/WorkspaceSettings';
 import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
+import { getLogSettingsSnapshot } from './adminLogSettingsService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -62,6 +63,12 @@ const splitIntoSentences = (text: string): string[] => {
 };
 
 const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
+const getDurationMs = (startNs: bigint) => Number(process.hrtime.bigint() - startNs) / 1e6;
+const logAiTiming = (label: string, model: string | undefined, startNs: bigint, success: boolean) => {
+  if (!getLogSettingsSnapshot().aiTimingEnabled) return;
+  const ms = getDurationMs(startNs);
+  console.log('[AI] timing', { label, model, ms: Number(ms.toFixed(2)), success });
+};
 
 /**
  * Centralized AI reply generator used by manual and automated flows.
@@ -410,6 +417,7 @@ Generate a response following all rules above. Return JSON with:
   let responseContent: string | null = null;
   let usedFallback = false;
 
+  let requestStart: bigint | null = null;
   try {
     // Build user message content (text + images if present)
     // Note: Responses API uses 'input_text' and 'input_image' instead of 'text' and 'image_url'
@@ -470,7 +478,9 @@ Generate a response following all rules above. Return JSON with:
       requestPayload.temperature = temperature;
     }
 
+    requestStart = process.hrtime.bigint();
     const response = await openai.responses.create(requestPayload);
+    logAiTiming('ai_reply', model, requestStart, true);
 
     responseContent = response.output_text || '{}';
     const structured = extractStructuredJson<AIReplyResult>(response);
@@ -513,6 +523,9 @@ Generate a response following all rules above. Return JSON with:
         : undefined,
     };
   } catch (error: any) {
+    if (requestStart) {
+      logAiTiming('ai_reply', model, requestStart, false);
+    }
     const details: Record<string, any> = {
       message: error?.message,
       status: error?.status,

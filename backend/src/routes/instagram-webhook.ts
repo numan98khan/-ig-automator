@@ -15,8 +15,14 @@ import {
 } from '../services/aiCategorization';
 import { transcribeAudioFromUrl } from '../services/transcriptionService';
 import { trackDailyMetric } from '../services/reportingService';
+import { getLogSettingsSnapshot } from '../services/adminLogSettingsService';
 
 const router = express.Router();
+
+const logAutomation = (message: string) => {
+  if (!getLogSettingsSnapshot().automationLogsEnabled) return;
+  console.log(message);
+};
 
 const WEBHOOK_VERIFY_TOKEN = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN || 'your-verify-token';
 
@@ -400,11 +406,11 @@ async function processMessageAutomations(
   workspaceId: string,
 ) {
   try {
-    console.log(`🤖 Processing automations for conversation ${conversation._id}`);
+    logAutomation(`🤖 Processing automations for conversation ${conversation._id}`);
 
     // 1. Categorize the message
     const categorization = await categorizeMessage(messageText, workspaceId);
-    console.log(`📋 Message categorized as: ${categorization.categoryName} (${categorization.detectedLanguage})`);
+    logAutomation(`📋 Message categorized as: ${categorization.categoryName} (${categorization.detectedLanguage})`);
 
     // 2. Get or create category and update message
     const categoryId = await getOrCreateCategory(workspaceId, categorization.categoryName);
@@ -441,9 +447,9 @@ async function processMessageAutomations(
     });
 
     if (automationResult.executed) {
-      console.log(`✅ Automation executed: ${automationResult.automationName}`);
+      logAutomation(`✅ Automation executed: ${automationResult.automationName}`);
     } else {
-      console.log(`ℹ️ No active automations found for this trigger`);
+      logAutomation('ℹ️ No active automations found for this trigger');
     }
 
   } catch (error) {

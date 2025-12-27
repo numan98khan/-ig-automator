@@ -1,8 +1,16 @@
 import OpenAI from 'openai';
+import { getLogSettingsSnapshot } from './adminLogSettingsService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const getDurationMs = (startNs: bigint) => Number(process.hrtime.bigint() - startNs) / 1e6;
+const logAiTiming = (label: string, model: string | undefined, startNs: bigint, success: boolean) => {
+  if (!getLogSettingsSnapshot().aiTimingEnabled) return;
+  const ms = getDurationMs(startNs);
+  console.log('[AI] timing', { label, model, ms: Number(ms.toFixed(2)), success });
+};
 
 export type InventoryMappingField =
   | 'productName'
@@ -103,39 +111,48 @@ export async function analyzeInventoryMapping(
     required: ['fields', 'summary'],
   };
 
-  const response = await openai.responses.create({
-    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-    temperature: 0.1,
-    input: [
-      {
-        role: 'system',
-        content: 'You map spreadsheet columns to inventory management fields. Choose the best header match or null.',
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const requestStart = process.hrtime.bigint();
+  let response;
+  try {
+    response = await openai.responses.create({
+      model,
+      temperature: 0.1,
+      input: [
+        {
+          role: 'system',
+          content: 'You map spreadsheet columns to inventory management fields. Choose the best header match or null.',
+        },
+        {
+          role: 'user',
+          content: [
+            'Inventory fields to map:',
+            ...INVENTORY_FIELDS.map((field) => `- ${field.key}: ${field.description}`),
+            '',
+            `Headers: ${headerList.join(', ')}`,
+            '',
+            'Sample rows (JSON array of objects):',
+            JSON.stringify(sampleRows, null, 2),
+            '',
+            'Return a mapping for every inventory field. Use only headers from the list, or null if missing.',
+          ].join('\n'),
+        },
+      ],
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'inventory_mapping',
+          schema,
+          strict: true,
+        },
       },
-      {
-        role: 'user',
-        content: [
-          'Inventory fields to map:',
-          ...INVENTORY_FIELDS.map((field) => `- ${field.key}: ${field.description}`),
-          '',
-          `Headers: ${headerList.join(', ')}`,
-          '',
-          'Sample rows (JSON array of objects):',
-          JSON.stringify(sampleRows, null, 2),
-          '',
-          'Return a mapping for every inventory field. Use only headers from the list, or null if missing.',
-        ].join('\n'),
-      },
-    ],
-    text: {
-      format: {
-        type: 'json_schema',
-        name: 'inventory_mapping',
-        schema,
-        strict: true,
-      },
-    },
-    store: false,
-  });
+      store: false,
+    });
+    logAiTiming('inventory_mapping', model, requestStart, true);
+  } catch (error) {
+    logAiTiming('inventory_mapping', model, requestStart, false);
+    throw error;
+  }
 
   const structured = extractStructuredJson<{
     summary: string;

@@ -19,6 +19,7 @@ import {
   isAutomationTemplateId,
   listAutomationTemplateConfigs,
 } from '../services/automationTemplateService';
+import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
 import {
   GLOBAL_WORKSPACE_KEY,
   deleteKnowledgeEmbedding,
@@ -37,6 +38,15 @@ const toOptionalNumber = (value: any) => {
   if (value === undefined || value === null || value === '') return undefined;
   const n = Number(value);
   return Number.isNaN(n) ? undefined : n;
+};
+const toOptionalBoolean = (value: any) => {
+  if (value === true || value === false) return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return undefined;
 };
 const clampNumber = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -626,6 +636,35 @@ router.put('/assistant/config', authenticate, requireAdmin, async (req, res) => 
     });
   } catch (error) {
     console.error('Admin global assistant config update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Admin log settings (console logging controls)
+router.get('/log-settings', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const settings = await getLogSettings();
+    res.json({ data: settings });
+  } catch (error) {
+    console.error('Admin log settings get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/log-settings', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const aiTimingEnabled = toOptionalBoolean(req.body?.aiTimingEnabled);
+    const automationLogsEnabled = toOptionalBoolean(req.body?.automationLogsEnabled);
+    const automationStepsEnabled = toOptionalBoolean(req.body?.automationStepsEnabled);
+
+    const settings = await updateLogSettings({
+      ...(aiTimingEnabled === undefined ? {} : { aiTimingEnabled }),
+      ...(automationLogsEnabled === undefined ? {} : { automationLogsEnabled }),
+      ...(automationStepsEnabled === undefined ? {} : { automationStepsEnabled }),
+    });
+    res.json({ data: settings });
+  } catch (error) {
+    console.error('Admin log settings update error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

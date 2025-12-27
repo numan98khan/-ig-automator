@@ -28,6 +28,7 @@ import {
   resolveSalesConciergeConfig,
 } from './automation/templateFlows';
 import { AutomationTestContext } from './automation/types';
+import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import {
   AutomationRateLimit,
   AutomationAiSettings,
@@ -40,6 +41,26 @@ import {
 const DEFAULT_RATE_LIMIT: AutomationRateLimit = {
   maxMessages: 5,
   perMinutes: 1,
+};
+
+const nowMs = () => Date.now();
+
+const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
+const shouldLogAutomationSteps = () => getLogSettingsSnapshot().automationStepsEnabled;
+
+const logAutomation = (message: string, details?: Record<string, any>) => {
+  if (!shouldLogAutomation()) return;
+  if (details) {
+    console.log(message, details);
+    return;
+  }
+  console.log(message);
+};
+
+const logAutomationStep = (step: string, startMs: number, details?: Record<string, any>) => {
+  if (!shouldLogAutomationSteps()) return;
+  const ms = Math.max(0, Math.round(nowMs() - startMs));
+  console.log('⏱️ [AUTOMATION] Step', { step, ms, ...(details || {}) });
 };
 
 async function getTemplateSession(params: {
@@ -390,9 +411,11 @@ async function handleSalesConciergeFlow(params: {
     platform,
     messageContext,
   } = params;
+  const configStart = nowMs();
   const baseConfig = replyStep.templateFlow.config as SalesConciergeConfig;
   const config = await resolveSalesConciergeConfig(conversation.workspaceId, baseConfig);
   const templateConfig = await getAutomationTemplateConfig('sales_concierge');
+  logAutomationStep('sales_config', configStart, { templateId: 'sales_concierge' });
   const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
   const tags = config.tags || ['intent_purchase', 'template_sales_concierge'];
 
@@ -405,16 +428,19 @@ async function handleSalesConciergeFlow(params: {
     collectedFields: session.collectedFields || {},
   });
 
+  const stateStart = nowMs();
   const { replies, state: nextState, actions } = advanceSalesConciergeState({
     state: currentState,
     messageText,
     config,
     context: messageContext,
   });
+  logAutomationStep('sales_state', stateStart, { replies: replies.length, step: nextState.step });
   const aiSettings = {
     ...(config.aiSettings || {}),
     ...templateConfig.aiReply,
   };
+  const aiStart = nowMs();
   const aiResponse = replies.length
     ? await buildAutomationAiReply({
         conversation,
@@ -423,6 +449,7 @@ async function handleSalesConciergeFlow(params: {
         aiSettings,
       })
     : null;
+  logAutomationStep('sales_ai_reply', aiStart, { generated: Boolean(aiResponse) });
   const combinedTags = [...tags, ...(aiResponse?.tags || [])];
   const repliesToSend = aiResponse
     ? [{ ...replies[0], text: aiResponse.replyText }]
@@ -432,10 +459,12 @@ async function handleSalesConciergeFlow(params: {
   let paymentLink: string | undefined;
 
   if (actions?.createDraft) {
+    const draftStart = nowMs();
     const draft = await createSalesOrderDraft({
       conversation,
       fields: nextState.collectedFields || {},
     });
+    logAutomationStep('sales_create_draft', draftStart, { created: Boolean(draft?._id) });
     draftId = draft?._id?.toString();
     if (draftId) {
       nextState.collectedFields = {
@@ -446,6 +475,7 @@ async function handleSalesConciergeFlow(params: {
   }
 
   if (actions?.paymentLinkRequired && draftId) {
+    const paymentStart = nowMs();
     paymentLink = createPaymentLink({
       amountText: nextState.collectedFields?.quote?.priceText,
       draftId,
@@ -454,9 +484,12 @@ async function handleSalesConciergeFlow(params: {
       ...nextState.collectedFields,
       paymentLink,
     };
+    logAutomationStep('sales_payment_link', paymentStart);
   }
 
   let sentAny = false;
+  let sentCount = 0;
+  const sendStart = nowMs();
   for (const reply of repliesToSend) {
     if (!updateRateLimit(session, rateLimit)) {
       if (!sentAny) {
@@ -483,7 +516,13 @@ async function handleSalesConciergeFlow(params: {
         : undefined,
     });
     sentAny = true;
+    sentCount += 1;
   }
+  logAutomationStep('sales_send_replies', sendStart, {
+    attempted: repliesToSend.length,
+    sent: sentCount,
+    rateLimited: sentCount < repliesToSend.length,
+  });
 
   if (sentAny) {
     session.lastAutomationMessageAt = new Date();
@@ -495,6 +534,7 @@ async function handleSalesConciergeFlow(params: {
   session.collectedFields = nextState.collectedFields;
 
   if (actions?.handoffReason && actions?.handoffSummary) {
+    const handoffStart = nowMs();
     await handoffSalesConcierge({
       conversation,
       topic: actions.handoffTopic || actions.handoffReason,
@@ -502,10 +542,15 @@ async function handleSalesConciergeFlow(params: {
       recommendedNextAction: actions.recommendedNextAction,
       customerMessage: messageText,
     });
+    logAutomationStep('sales_handoff', handoffStart);
   }
 
+  const trackStart = nowMs();
   await trackSalesStep(conversation.workspaceId, nextState.step);
+  logAutomationStep('sales_track_step', trackStart, { step: nextState.step });
+  const saveStart = nowMs();
   await session.save();
+  logAutomationStep('sales_session_save', saveStart);
   return { success: true };
 }
 
@@ -519,8 +564,10 @@ async function handleAiReplyFlow(params: {
   messageContext?: AutomationTestContext;
 }): Promise<{ success: boolean; error?: string }> {
   const { automation, replyStep, conversation, igAccount, messageText, platform, messageContext } = params;
+  const settingsStart = nowMs();
   const settings = await getWorkspaceSettings(conversation.workspaceId);
   const goalConfigs = getGoalConfigs(settings);
+  logAutomationStep('ai_settings', settingsStart);
   const explicitGoal = replyStep.aiReply?.goalType;
   const detectedGoal = explicitGoal && explicitGoal !== 'none'
     ? explicitGoal
@@ -533,6 +580,7 @@ async function handleAiReplyFlow(params: {
     ? detectedGoal
     : 'none';
 
+  const replyStart = nowMs();
   const aiResponse = await generateAIReply({
     conversation,
     workspaceId: conversation.workspaceId,
@@ -557,6 +605,7 @@ async function handleAiReplyFlow(params: {
     tone: replyStep.aiReply?.tone,
     maxReplySentences: replyStep.aiReply?.maxReplySentences,
   });
+  logAutomationStep('ai_reply_generate', replyStart);
 
   const activeTicket = await getActiveTicket(conversation._id);
   if (activeTicket && aiResponse.shouldEscalate) {
@@ -567,6 +616,7 @@ async function handleAiReplyFlow(params: {
     aiResponse.replyText = buildInitialEscalationReply(aiResponse.replyText);
   }
 
+  const sendStart = nowMs();
   const message = await sendAiReplyMessage({
     conversation,
     automation,
@@ -581,15 +631,18 @@ async function handleAiReplyFlow(params: {
       knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
     },
   });
+  logAutomationStep('ai_reply_send', sendStart);
 
   let ticketId = activeTicket?._id;
   if (aiResponse.shouldEscalate && !ticketId) {
+    const ticketStart = nowMs();
     const ticket = await createTicket({
       conversationId: conversation._id,
       topicSummary: (aiResponse.escalationReason || aiResponse.replyText).slice(0, 140),
       reason: aiResponse.escalationReason || 'Escalated by AI',
       createdBy: 'ai',
     });
+    logAutomationStep('ai_create_ticket', ticketStart, { ticketId: ticket._id?.toString() });
     ticketId = ticket._id;
     conversation.humanRequired = true;
     conversation.humanRequiredReason = ticket.reason;
@@ -601,7 +654,9 @@ async function handleAiReplyFlow(params: {
   }
 
   if (ticketId) {
+    const updateStart = nowMs();
     await addTicketUpdate(ticketId, { from: 'ai', text: aiResponse.replyText, messageId: message._id });
+    logAutomationStep('ai_ticket_update', updateStart, { ticketId: ticketId.toString() });
   }
 
   if (aiResponse.shouldEscalate) {
@@ -614,7 +669,9 @@ async function handleAiReplyFlow(params: {
     conversation.humanHoldUntil = behavior === 'ai_silent'
       ? new Date(Date.now() + holdMinutes * 60 * 1000)
       : undefined;
+    const saveStart = nowMs();
     await conversation.save();
+    logAutomationStep('ai_conversation_save', saveStart);
   }
 
   return { success: true };
@@ -646,7 +703,9 @@ async function executeTemplateFlow(params: {
     return { success: false, error: 'Template flow configuration missing' };
   }
 
+  const conversationStart = nowMs();
   const conversation = await Conversation.findById(conversationId);
+  logAutomationStep('template_load_conversation', conversationStart, { conversationId });
   if (!conversation) {
     return { success: false, error: 'Conversation not found' };
   }
@@ -655,18 +714,22 @@ async function executeTemplateFlow(params: {
     return { success: false, error: 'Conversation is on human hold' };
   }
 
+  const sessionStart = nowMs();
   const session = await getTemplateSession({
     automationId: automation._id,
     conversationId: conversation._id,
     workspaceId: new mongoose.Types.ObjectId(workspaceId),
     templateId: templateFlow.templateId,
   });
+  logAutomationStep('template_load_session', sessionStart, { templateId: templateFlow.templateId });
 
   if (!session) {
     return { success: false, error: 'Automation paused for human response' };
   }
 
+  const igStart = nowMs();
   const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
+  logAutomationStep('template_load_ig_account', igStart, { instagramAccountId });
   if (!igAccount || !igAccount.accessToken) {
     return { success: false, error: 'Instagram account not found or not connected' };
   }
@@ -676,7 +739,8 @@ async function executeTemplateFlow(params: {
   }
 
   if (templateFlow.templateId === 'sales_concierge') {
-    return handleSalesConciergeFlow({
+    const flowStart = nowMs();
+    const result = await handleSalesConciergeFlow({
       automation,
       replyStep,
       session,
@@ -686,6 +750,8 @@ async function executeTemplateFlow(params: {
       platform,
       messageContext,
     });
+    logAutomationStep('template_sales_concierge', flowStart, { success: result.success });
+    return result;
   }
 
   return { success: false, error: 'Unsupported template flow' };
@@ -703,6 +769,15 @@ export async function executeAutomation(params: {
   platform?: string;
   messageContext?: AutomationTestContext;
 }): Promise<{ success: boolean; automationExecuted?: string; error?: string }> {
+  const totalStart = nowMs();
+  const finish = (result: { success: boolean; automationExecuted?: string; error?: string }) => {
+    logAutomationStep('automation_total', totalStart, {
+      success: result.success,
+      automation: result.automationExecuted,
+      error: result.error,
+    });
+    return result;
+  };
   try {
     const {
       workspaceId,
@@ -714,7 +789,7 @@ export async function executeAutomation(params: {
       messageContext,
     } = params;
 
-    console.log('🤖 [AUTOMATION] Start', {
+    logAutomation('🤖 [AUTOMATION] Start', {
       workspaceId,
       triggerType,
       conversationId,
@@ -729,21 +804,24 @@ export async function executeAutomation(params: {
       isActive: true,
     };
 
+    const fetchStart = nowMs();
     const automations = await Automation.find(automationQuery).sort({ createdAt: 1 });
+    logAutomationStep('fetch_automations', fetchStart, { count: automations.length, triggerType });
 
-    console.log('🔍 [AUTOMATION] Active', {
+    logAutomation('🔍 [AUTOMATION] Active', {
       count: automations.length,
       triggerType,
     });
 
     if (automations.length === 0) {
-      console.log('⚠️  [AUTOMATION] No active automations found');
-      return { success: false, error: 'No active automations found for this trigger' };
+      logAutomation('⚠️  [AUTOMATION] No active automations found');
+      return finish({ success: false, error: 'No active automations found for this trigger' });
     }
 
     const normalizedMessage = messageText || '';
     const matchingAutomations: typeof automations = [];
 
+    const matchStart = nowMs();
     for (const candidate of automations) {
       const replyStep = candidate.replySteps[0];
       if (replyStep?.type === 'template_flow') {
@@ -767,7 +845,7 @@ export async function executeAutomation(params: {
             : candidate.triggerConfig?.matchOn?.attachment && messageContext?.hasAttachment
               ? 'attachment'
               : 'keyword';
-        console.log('✅ [AUTOMATION] Match', {
+        logAutomation('✅ [AUTOMATION] Match', {
           automationId: candidate._id?.toString(),
           name: candidate.name,
           triggerType,
@@ -778,14 +856,19 @@ export async function executeAutomation(params: {
         matchingAutomations.push(candidate);
       }
     }
+    logAutomationStep('match_triggers', matchStart, {
+      matched: matchingAutomations.length,
+      evaluated: automations.length,
+      triggerType,
+    });
 
     if (matchingAutomations.length === 0) {
-      console.log('⚠️  [AUTOMATION] No automations matched trigger filters');
-      return { success: false, error: 'No automations matched trigger filters' };
+      logAutomation('⚠️  [AUTOMATION] No automations matched trigger filters');
+      return finish({ success: false, error: 'No automations matched trigger filters' });
     }
 
     const automation = matchingAutomations[0];
-    console.log('✅ [AUTOMATION] Execute', {
+    logAutomation('✅ [AUTOMATION] Execute', {
       automationId: automation._id?.toString(),
       name: automation.name,
       replyType: automation.replySteps[0]?.type,
@@ -794,11 +877,12 @@ export async function executeAutomation(params: {
     const replyStep = automation.replySteps[0];
 
     if (!replyStep) {
-      console.log('❌ [AUTOMATION] No reply step configured');
-      return { success: false, error: 'No reply step configured' };
+      logAutomation('❌ [AUTOMATION] No reply step configured');
+      return finish({ success: false, error: 'No reply step configured' });
     }
 
     if (replyStep.type === 'template_flow') {
+      const templateStart = nowMs();
       const templateResult = await executeTemplateFlow({
         automation,
         replyStep,
@@ -809,29 +893,38 @@ export async function executeAutomation(params: {
         platform,
         messageContext,
       });
+      logAutomationStep('execute_template_flow', templateStart, {
+        success: templateResult.success,
+        templateId: replyStep.templateFlow?.templateId,
+      });
 
       if (templateResult.success) {
-        return { success: true, automationExecuted: automation.name };
+        return finish({ success: true, automationExecuted: automation.name });
       }
 
-      return { success: false, error: templateResult.error || 'Template flow not executed' };
+      return finish({ success: false, error: templateResult.error || 'Template flow not executed' });
     }
 
     if (replyStep.type === 'ai_reply') {
+      const conversationStart = nowMs();
       const conversation = await Conversation.findById(conversationId);
+      logAutomationStep('ai_load_conversation', conversationStart, { conversationId });
       if (!conversation) {
-        return { success: false, error: 'Conversation not found' };
+        return finish({ success: false, error: 'Conversation not found' });
       }
 
+      const igStart = nowMs();
       const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
+      logAutomationStep('ai_load_ig_account', igStart, { instagramAccountId });
       if (!igAccount || !igAccount.accessToken) {
-        return { success: false, error: 'Instagram account not found or not connected' };
+        return finish({ success: false, error: 'Instagram account not found or not connected' });
       }
 
       if (!conversation.participantInstagramId) {
-        return { success: false, error: 'Missing participant Instagram ID' };
+        return finish({ success: false, error: 'Missing participant Instagram ID' });
       }
 
+      const aiStart = nowMs();
       const aiResult = await handleAiReplyFlow({
         automation,
         replyStep,
@@ -841,20 +934,21 @@ export async function executeAutomation(params: {
         platform,
         messageContext,
       });
+      logAutomationStep('execute_ai_reply', aiStart, { success: aiResult.success });
 
       if (aiResult.success) {
-        return { success: true, automationExecuted: automation.name };
+        return finish({ success: true, automationExecuted: automation.name });
       }
 
-      return { success: false, error: aiResult.error || 'AI reply not sent' };
+      return finish({ success: false, error: aiResult.error || 'AI reply not sent' });
     }
 
-    console.log('❌ [AUTOMATION] Only template_flow and ai_reply automations are supported');
-    return { success: false, error: 'Only template_flow and ai_reply automations are supported' };
+    logAutomation('❌ [AUTOMATION] Only template_flow and ai_reply automations are supported');
+    return finish({ success: false, error: 'Only template_flow and ai_reply automations are supported' });
   } catch (error: any) {
     console.error('❌ [AUTOMATION] Error executing automation:', error);
     console.error('❌ [AUTOMATION] Error stack:', error.stack);
-    return { success: false, error: `Failed to execute automation: ${error.message}` };
+    return finish({ success: false, error: `Failed to execute automation: ${error.message}` });
   }
 }
 
@@ -1024,7 +1118,7 @@ export async function processDueFollowups(params?: {
       }
     }
 
-    console.log(`Follow-up processing complete: ${JSON.stringify(stats)}`);
+    logAutomation(`Follow-up processing complete: ${JSON.stringify(stats)}`);
     return stats;
   } catch (error) {
     console.error('Error processing due follow-ups:', error);

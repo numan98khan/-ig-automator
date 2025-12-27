@@ -1,8 +1,25 @@
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { adminApi, unwrapData } from '../services/api'
-import { AlertCircle, CheckCircle, XCircle, Database, Users as UsersIcon, LayoutDashboard } from 'lucide-react'
+import {
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  Database,
+  Users as UsersIcon,
+  LayoutDashboard,
+  ToggleLeft,
+  ToggleRight,
+} from 'lucide-react'
 
 export default function AdminDebug() {
+  const queryClient = useQueryClient()
+  const [logSettings, setLogSettings] = useState({
+    aiTimingEnabled: true,
+    automationLogsEnabled: true,
+    automationStepsEnabled: true,
+  })
+
   const { data: workspaces, error: workspacesError } = useQuery({
     queryKey: ['debug-workspaces'],
     queryFn: () => adminApi.getWorkspaces({ limit: 100 }),
@@ -18,7 +35,36 @@ export default function AdminDebug() {
     queryFn: () => adminApi.getDashboardStats(),
   })
 
+  const { data: logSettingsData } = useQuery({
+    queryKey: ['admin-log-settings'],
+    queryFn: () => adminApi.getLogSettings(),
+  })
+
   const adminToken = localStorage.getItem('admin_token')
+
+  useEffect(() => {
+    const payload = unwrapData<any>(logSettingsData)
+    if (payload && typeof payload.aiTimingEnabled === 'boolean') {
+      setLogSettings({
+        aiTimingEnabled: payload.aiTimingEnabled,
+        automationLogsEnabled: payload.automationLogsEnabled,
+        automationStepsEnabled: payload.automationStepsEnabled,
+      })
+    }
+  }, [logSettingsData])
+
+  const updateLogsMutation = useMutation({
+    mutationFn: (payload: Partial<typeof logSettings>) => adminApi.updateLogSettings(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-log-settings'] })
+    },
+  })
+
+  const toggleLogSetting = (key: keyof typeof logSettings) => {
+    const nextValue = !logSettings[key]
+    setLogSettings((prev) => ({ ...prev, [key]: nextValue }))
+    updateLogsMutation.mutate({ [key]: nextValue })
+  }
 
   // Parse workspace count - handle both array and object responses
   const getWorkspaceCount = () => {
@@ -129,35 +175,39 @@ export default function AdminDebug() {
         </div>
       </div>
 
-      {/* Detailed Checks */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold text-foreground">API Endpoint Tests</h2>
-        {checks.map((check) => {
-          const Icon = check.icon
-          return (
-            <div key={check.name} className="card">
-              <div className="flex items-start gap-3">
-                <Icon className={`w-6 h-6 ${check.color} mt-0.5 flex-shrink-0`} />
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-foreground text-lg">{check.name}</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {check.details}
-                  </p>
-                  {check.data && (
-                    <details className="mt-3">
-                      <summary className="text-xs text-primary cursor-pointer hover:text-primary-light font-medium">
-                        📋 View Raw Response Data
-                      </summary>
-                      <pre className="mt-2 p-4 bg-muted/50 rounded-lg text-xs overflow-auto max-h-96 border border-border">
-                        {JSON.stringify(check.data, null, 2)}
-                      </pre>
-                    </details>
-                  )}
-                </div>
-              </div>
-            </div>
-          )
-        })}
+
+      {/* Log Controls */}
+      <div className="card">
+        <h3 className="font-semibold text-foreground mb-2">🧾 Backend Log Controls</h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          Toggle which categories of logs appear in the backend console.
+        </p>
+        <div className="space-y-3">
+          <LogToggleRow
+            title="AI timing logs"
+            description="Durations for OpenAI calls (ms)."
+            enabled={logSettings.aiTimingEnabled}
+            onToggle={() => toggleLogSetting('aiTimingEnabled')}
+            disabled={updateLogsMutation.isLoading}
+          />
+          <LogToggleRow
+            title="Automation logs"
+            description="Automation start/match/execute summaries."
+            enabled={logSettings.automationLogsEnabled}
+            onToggle={() => toggleLogSetting('automationLogsEnabled')}
+            disabled={updateLogsMutation.isLoading}
+          />
+          <LogToggleRow
+            title="Automation step timing"
+            description="Step-by-step timing within automations."
+            enabled={logSettings.automationStepsEnabled}
+            onToggle={() => toggleLogSetting('automationStepsEnabled')}
+            disabled={updateLogsMutation.isLoading}
+          />
+        </div>
+        {updateLogsMutation.isLoading && (
+          <p className="text-xs text-muted-foreground mt-3">Saving log settings...</p>
+        )}
       </div>
 
       {/* Warning if no data */}
@@ -183,30 +233,7 @@ export default function AdminDebug() {
         </div>
       )}
 
-      {/* Backend Requirements */}
-      <div className="card bg-blue-500/10 border-2 border-blue-500/30">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-6 h-6 text-blue-400 mt-0.5 flex-shrink-0" />
-          <div>
-            <h3 className="font-semibold text-foreground mb-2">📚 Backend Requirements</h3>
-            <p className="text-sm text-muted-foreground mb-3">
-              Your backend needs to implement these endpoints with admin-only access:
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <code className="text-xs bg-muted px-2 py-1 rounded text-foreground">GET /api/admin/workspaces</code>
-              <code className="text-xs bg-muted px-2 py-1 rounded text-foreground">GET /api/admin/users</code>
-              <code className="text-xs bg-muted px-2 py-1 rounded text-foreground">GET /api/admin/dashboard/stats</code>
-              <code className="text-xs bg-muted px-2 py-1 rounded text-foreground">GET /api/admin/conversations</code>
-            </div>
-            <p className="text-sm text-muted-foreground mt-3">
-              💡 These endpoints should return ALL data (god eye view), not filtered by user membership.
-            </p>
-            <p className="text-sm text-foreground mt-2">
-              📖 See <code className="bg-muted px-1 py-0.5 rounded">BACKEND_REQUIREMENTS.md</code> for complete specs
-            </p>
-          </div>
-        </div>
-      </div>
+
 
       {/* API Configuration */}
       <div className="card">
@@ -233,6 +260,33 @@ export default function AdminDebug() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function LogToggleRow(props: {
+  title: string
+  description: string
+  enabled: boolean
+  disabled?: boolean
+  onToggle: () => void
+}) {
+  const { title, description, enabled, disabled, onToggle } = props
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
+      <div>
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={disabled}
+        className="text-primary disabled:opacity-50"
+        aria-label={`${title} toggle`}
+      >
+        {enabled ? <ToggleRight className="w-7 h-7" /> : <ToggleLeft className="w-7 h-7" />}
+      </button>
     </div>
   )
 }

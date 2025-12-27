@@ -98,6 +98,10 @@ export const adminApi = {
   updateAutomationTemplate: (templateId: string, payload: any) =>
     api.put(`/automation-templates/${templateId}`, payload),
 
+  // Log settings
+  getLogSettings: () => api.get('/log-settings'),
+  updateLogSettings: (payload: any) => api.put('/log-settings', payload),
+
   // Tiers
   getTiers: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>
     api.get('/tiers', { params }),
