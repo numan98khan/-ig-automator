@@ -289,7 +289,23 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 />
               )}
 
-              {selectedTemplate.setupFields.triggerKeywords && (
+              {selectedTemplate.setupFields.triggerMatchMode && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">Trigger Mode</label>
+                  <select
+                    value={setupData.triggerMatchMode}
+                    onChange={(event) => updateSetupData({ triggerMatchMode: event.target.value as SetupData['triggerMatchMode'] })}
+                    className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                  >
+                    <option value="any">Any (keywords, categories, links, attachments)</option>
+                    <option value="keywords">Keywords only</option>
+                    <option value="categories">AI categories only</option>
+                  </select>
+                </div>
+              )}
+
+              {selectedTemplate.setupFields.triggerKeywords
+                && (setupData.triggerMatchMode === 'any' || setupData.triggerMatchMode === 'keywords') && (
                 <div className="space-y-3">
                   <Input
                     label="Trigger Keywords"
@@ -323,7 +339,8 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 </div>
               )}
 
-              {selectedTemplate.setupFields.triggerCategories && (
+              {selectedTemplate.setupFields.triggerCategories
+                && (setupData.triggerMatchMode === 'any' || setupData.triggerMatchMode === 'categories') && (
                 <div className="space-y-2">
                   <label className="block text-sm font-medium">AI Categories (optional)</label>
                   <p className="text-xs text-muted-foreground">
@@ -349,12 +366,12 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 </div>
               )}
 
-              {selectedTemplate.setupFields.triggerMatchMode && (
+              {selectedTemplate.setupFields.salesTriggerMatchMode && (
                 <div className="space-y-2">
                   <label className="block text-sm font-medium">Trigger Mode</label>
                   <select
-                    value={setupData.triggerMatchMode}
-                    onChange={(event) => updateSetupData({ triggerMatchMode: event.target.value as SetupData['triggerMatchMode'] })}
+                    value={setupData.salesTriggerMatchMode}
+                    onChange={(event) => updateSetupData({ salesTriggerMatchMode: event.target.value as SetupData['salesTriggerMatchMode'] })}
                     className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                   >
                     <option value="any">Any (keywords, categories, links, attachments)</option>
@@ -364,7 +381,8 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 </div>
               )}
 
-              {selectedTemplate.setupFields.salesTriggerKeywords && (
+              {selectedTemplate.setupFields.salesTriggerKeywords
+                && (setupData.salesTriggerMatchMode === 'any' || setupData.salesTriggerMatchMode === 'keywords') && (
                 <div className="space-y-3">
                   <Input
                     label="Sales Trigger Keywords"
@@ -398,7 +416,8 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 </div>
               )}
 
-              {selectedTemplate.setupFields.salesTriggerCategories && (
+              {selectedTemplate.setupFields.salesTriggerCategories
+                && (setupData.salesTriggerMatchMode === 'any' || setupData.salesTriggerMatchMode === 'categories') && (
                 <div className="space-y-2">
                   <label className="block text-sm font-medium">AI Categories (optional)</label>
                   <p className="text-xs text-muted-foreground">
@@ -421,21 +440,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                   ) : (
                     <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
                   )}
-                </div>
-              )}
-
-              {selectedTemplate.setupFields.salesTriggerMatchMode && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">Trigger Mode</label>
-                  <select
-                    value={setupData.salesTriggerMatchMode}
-                    onChange={(event) => updateSetupData({ salesTriggerMatchMode: event.target.value as SetupData['salesTriggerMatchMode'] })}
-                    className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                  >
-                    <option value="any">Any (keywords, categories, links, attachments)</option>
-                    <option value="keywords">Keywords only</option>
-                    <option value="categories">AI categories only</option>
-                  </select>
                 </div>
               )}
 

@@ -249,60 +249,6 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                       value={testSetupData.phoneMinLength}
                       onChange={(event) => updateTestSetupData({ phoneMinLength: event.target.value })}
                     />
-                    <div className="space-y-3">
-                      <Input
-                        label="Trigger Keywords"
-                        value={testSetupData.triggerKeywords}
-                        onChange={(event) => updateTestSetupData({ triggerKeywords: event.target.value })}
-                        placeholder="book, booking, appointment"
-                      />
-                      <div>
-                        <label className="block text-sm font-medium mb-1.5">Match Rule</label>
-                        <select
-                          value={testSetupData.triggerKeywordMatch}
-                          onChange={(event) => updateTestSetupData({ triggerKeywordMatch: event.target.value as 'any' | 'all' })}
-                          className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                        >
-                          <option value="any">Match any keyword</option>
-                          <option value="all">Match all keywords</option>
-                        </select>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {BOOKING_TRIGGER_KEYWORDS.map((keyword) => (
-                          <button
-                            key={keyword}
-                            type="button"
-                            onClick={() => addTriggerKeyword(keyword)}
-                            className="px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-                          >
-                            {keyword}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium">AI Categories (optional)</label>
-                      <p className="text-xs text-muted-foreground">
-                        Triggers when the message is categorized into any selected category.
-                      </p>
-                      {categories.length > 0 ? (
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {categories.map((category) => (
-                            <label key={category._id} className="flex items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={(testSetupData.triggerCategoryIds || []).includes(category._id)}
-                                onChange={() => toggleTriggerCategory(category._id)}
-                                className="rounded border-border"
-                              />
-                              {category.nameEn}
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
-                      )}
-                    </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-medium">Trigger Mode</label>
                       <select
@@ -315,65 +261,69 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                         <option value="categories">AI categories only</option>
                       </select>
                     </div>
+                    {(testSetupData.triggerMatchMode === 'any' || testSetupData.triggerMatchMode === 'keywords') && (
+                      <div className="space-y-3">
+                        <Input
+                          label="Trigger Keywords"
+                          value={testSetupData.triggerKeywords}
+                          onChange={(event) => updateTestSetupData({ triggerKeywords: event.target.value })}
+                          placeholder="book, booking, appointment"
+                        />
+                        <div>
+                          <label className="block text-sm font-medium mb-1.5">Match Rule</label>
+                          <select
+                            value={testSetupData.triggerKeywordMatch}
+                            onChange={(event) => updateTestSetupData({ triggerKeywordMatch: event.target.value as 'any' | 'all' })}
+                            className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                          >
+                            <option value="any">Match any keyword</option>
+                            <option value="all">Match all keywords</option>
+                          </select>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {BOOKING_TRIGGER_KEYWORDS.map((keyword) => (
+                            <button
+                              key={keyword}
+                              type="button"
+                              onClick={() => addTriggerKeyword(keyword)}
+                              className="px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                            >
+                              {keyword}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {(testSetupData.triggerMatchMode === 'any' || testSetupData.triggerMatchMode === 'categories') && (
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium">AI Categories (optional)</label>
+                        <p className="text-xs text-muted-foreground">
+                          Triggers when the message is categorized into any selected category.
+                        </p>
+                        {categories.length > 0 ? (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {categories.map((category) => (
+                              <label key={category._id} className="flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={(testSetupData.triggerCategoryIds || []).includes(category._id)}
+                                  onChange={() => toggleTriggerCategory(category._id)}
+                                  className="rounded border-border"
+                                />
+                                {category.nameEn}
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
 
                 {testTemplate.id === 'sales_concierge' && (
                   <>
-                    <div className="space-y-3">
-                      <Input
-                        label="Sales Trigger Keywords"
-                        value={testSetupData.salesTriggerKeywords}
-                        onChange={(event) => updateTestSetupData({ salesTriggerKeywords: event.target.value })}
-                        placeholder="price, stock, order, delivery"
-                      />
-                      <div>
-                        <label className="block text-sm font-medium mb-1.5">Match Rule</label>
-                        <select
-                          value={testSetupData.salesTriggerKeywordMatch}
-                          onChange={(event) => updateTestSetupData({ salesTriggerKeywordMatch: event.target.value as 'any' | 'all' })}
-                          className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                        >
-                          <option value="any">Match any keyword</option>
-                          <option value="all">Match all keywords</option>
-                        </select>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {SALES_TRIGGER_KEYWORDS.map((keyword) => (
-                          <button
-                            key={keyword}
-                            type="button"
-                            onClick={() => addSalesTriggerKeyword(keyword)}
-                            className="px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-                          >
-                            {keyword}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium">AI Categories (optional)</label>
-                      <p className="text-xs text-muted-foreground">
-                        Triggers when the message is categorized into any selected category.
-                      </p>
-                      {categories.length > 0 ? (
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {categories.map((category) => (
-                            <label key={category._id} className="flex items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={(testSetupData.salesTriggerCategoryIds || []).includes(category._id)}
-                                onChange={() => toggleSalesTriggerCategory(category._id)}
-                                className="rounded border-border"
-                              />
-                              {category.nameEn}
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
-                      )}
-                    </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-medium">Trigger Mode</label>
                       <select
@@ -386,6 +336,64 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                         <option value="categories">AI categories only</option>
                       </select>
                     </div>
+                    {(testSetupData.salesTriggerMatchMode === 'any' || testSetupData.salesTriggerMatchMode === 'keywords') && (
+                      <div className="space-y-3">
+                        <Input
+                          label="Sales Trigger Keywords"
+                          value={testSetupData.salesTriggerKeywords}
+                          onChange={(event) => updateTestSetupData({ salesTriggerKeywords: event.target.value })}
+                          placeholder="price, stock, order, delivery"
+                        />
+                        <div>
+                          <label className="block text-sm font-medium mb-1.5">Match Rule</label>
+                          <select
+                            value={testSetupData.salesTriggerKeywordMatch}
+                            onChange={(event) => updateTestSetupData({ salesTriggerKeywordMatch: event.target.value as 'any' | 'all' })}
+                            className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                          >
+                            <option value="any">Match any keyword</option>
+                            <option value="all">Match all keywords</option>
+                          </select>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {SALES_TRIGGER_KEYWORDS.map((keyword) => (
+                            <button
+                              key={keyword}
+                              type="button"
+                              onClick={() => addSalesTriggerKeyword(keyword)}
+                              className="px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                            >
+                              {keyword}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {(testSetupData.salesTriggerMatchMode === 'any' || testSetupData.salesTriggerMatchMode === 'categories') && (
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium">AI Categories (optional)</label>
+                        <p className="text-xs text-muted-foreground">
+                          Triggers when the message is categorized into any selected category.
+                        </p>
+                        {categories.length > 0 ? (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {categories.map((category) => (
+                              <label key={category._id} className="flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={(testSetupData.salesTriggerCategoryIds || []).includes(category._id)}
+                                  onChange={() => toggleSalesTriggerCategory(category._id)}
+                                  className="rounded border-border"
+                                />
+                                {category.nameEn}
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
+                        )}
+                      </div>
+                    )}
 
                     <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
                       <label className="flex items-center gap-2 text-sm font-medium">
