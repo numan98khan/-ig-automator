@@ -329,19 +329,9 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                     Use connected Google Sheet for catalog + stock
                   </label>
                   <p className="text-xs text-muted-foreground">
-                    Requires a Google Sheets connection in Integrations. JSON catalog stays as fallback.
+                    Requires a Google Sheets connection in Integrations. Without it, catalog matching is disabled.
                   </p>
                 </div>
-              )}
-
-              {selectedTemplate.setupFields.salesPhoneMinLength && (
-                <Input
-                  label="Min Phone Digits"
-                  type="number"
-                  value={setupData.salesPhoneMinLength}
-                  onChange={(event) => updateSetupData({ salesPhoneMinLength: event.target.value })}
-                  placeholder="8"
-                />
               )}
 
               {selectedTemplate.setupFields.salesKnowledgeItems && (

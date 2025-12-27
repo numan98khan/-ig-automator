@@ -265,17 +265,9 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                         Use connected Google Sheet for catalog + stock
                       </label>
                       <p className="text-xs text-muted-foreground">
-                        Requires a Google Sheets connection in Integrations. JSON catalog stays as fallback.
+                        Requires a Google Sheets connection in Integrations. Without it, catalog matching is disabled.
                       </p>
                     </div>
-
-                    <Input
-                      label="Min Phone Digits"
-                      type="number"
-                      value={testSetupData.salesPhoneMinLength}
-                      onChange={(event) => updateTestSetupData({ salesPhoneMinLength: event.target.value })}
-                      placeholder="8"
-                    />
 
                     <div>
                       <label className="block text-sm font-medium mb-1.5">Knowledge Items</label>

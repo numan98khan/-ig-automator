@@ -91,10 +91,6 @@ export interface AutomationTemplate {
     salesTriggerKeywords?: boolean;
     salesTriggerCategories?: boolean;
     salesTriggerMatchMode?: boolean;
-    salesCatalog?: boolean;
-    salesShipping?: boolean;
-    salesPhoneMinLength?: boolean;
-    salesCityAliases?: boolean;
     salesUseGoogleSheets?: boolean;
     salesKnowledgeItems?: boolean;
   };
@@ -120,37 +116,8 @@ export const getDefaultSetupData = () => ({
   salesTriggerKeywordMatch: 'any' as 'any' | 'all',
   salesTriggerCategoryIds: [] as string[],
   salesTriggerMatchMode: 'any' as 'any' | 'keywords' | 'categories',
-  salesPhoneMinLength: '8',
   salesUseGoogleSheets: false,
   salesKnowledgeItemIds: [] as string[],
-  salesCatalogJson: JSON.stringify([
-    {
-      sku: 'SKU-1001',
-      name: 'Classic Abaya',
-      keywords: ['abaya', 'classic'],
-      price: 180,
-      currency: 'SAR',
-      stock: 'in',
-      variants: { size: ['S', 'M', 'L'], color: ['black', 'navy'] },
-    },
-    {
-      sku: 'SKU-1002',
-      name: 'Linen Shirt',
-      keywords: ['linen', 'shirt'],
-      price: { min: 120, max: 150 },
-      currency: 'SAR',
-      stock: 'low',
-      variants: { size: ['M', 'L', 'XL'], color: ['white', 'beige'] },
-    },
-  ], null, 2),
-  salesShippingJson: JSON.stringify([
-    { city: 'Riyadh', fee: 15, eta: '1-2 days', codAllowed: true },
-    { city: 'Jeddah', fee: 25, eta: '2-3 days', codAllowed: false },
-  ], null, 2),
-  salesCityAliasesJson: JSON.stringify({
-    'riyadh north': 'Riyadh',
-    'riyadh south': 'Riyadh',
-  }, null, 2),
 });
 
 export type SetupData = ReturnType<typeof getDefaultSetupData>;
@@ -183,7 +150,6 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       salesTriggerKeywords: true,
       salesTriggerCategories: true,
       salesTriggerMatchMode: true,
-      salesPhoneMinLength: true,
       salesUseGoogleSheets: true,
       salesKnowledgeItems: true,
     },

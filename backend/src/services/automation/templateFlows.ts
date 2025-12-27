@@ -8,6 +8,7 @@ import {
 } from '../../types/automation';
 import { AutomationTestContext, TemplateFlowActions, TemplateFlowReply, TemplateFlowState } from './types';
 import { normalizeText } from './utils';
+import { getLogSettingsSnapshot } from '../adminLogSettingsService';
 
 type SalesIntent = 'price' | 'availability' | 'delivery' | 'order' | 'support' | 'other';
 
@@ -15,6 +16,25 @@ const SALES_INTENT_OPTIONS = ['Price', 'Availability', 'Delivery', 'Order', 'Sup
 const SALES_NEGOTIATION_PATTERNS = /(discount|cheaper|too expensive|drop price|lower price|deal|offer)/i;
 const SALES_ANGER_PATTERNS = /(angry|scam|fraud|bad service|terrible|worst|refund|complain|hate)/i;
 const SALES_SPAM_PATTERNS = /(http.*free money|crypto|click here|earn \$)/i;
+const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670\u0640]/g;
+const ARABIC_CHAR_MAP: Record<string, string> = {
+  'أ': 'ا',
+  'إ': 'ا',
+  'آ': 'ا',
+  'ى': 'ي',
+  'ؤ': 'و',
+  'ئ': 'ي',
+  'ة': 'ه',
+};
+
+const logAutomation = (message: string, details?: Record<string, any>) => {
+  if (!getLogSettingsSnapshot().automationLogsEnabled) return;
+  if (details) {
+    console.log(message, details);
+    return;
+  }
+  console.log(message);
+};
 
 function detectSalesIntent(text: string): SalesIntent {
   const normalized = normalizeText(text);
@@ -43,7 +63,7 @@ function normalizeCityName(input: string, config: SalesConciergeConfig): string 
     riyadh: 'Riyadh',
     jeddah: 'Jeddah',
     dammam: 'Dammam',
-    ...config.cityAliases,
+    ...(config.cityAliases || {}),
   } as Record<string, string>;
 
   if (aliasMap[normalized]) {
@@ -61,22 +81,183 @@ function normalizeCityName(input: string, config: SalesConciergeConfig): string 
   return undefined;
 }
 
+type CatalogIndexItem = {
+  item: SalesCatalogItem;
+  skuNormalized: string;
+  nameNormalized: string;
+  nameTokens: Set<string>;
+  keywordTokens: Set<string>;
+};
+
+type CatalogIndex = {
+  items: CatalogIndexItem[];
+  synonyms: Map<string, string[]>;
+};
+
+const catalogIndexCache = new WeakMap<SalesConciergeConfig, CatalogIndex>();
+
+function normalizeForMatch(text: string): string {
+  const normalized = normalizeText(text);
+  const withoutDiacritics = normalized.replace(ARABIC_DIACRITICS, '');
+  return withoutDiacritics.replace(/[أإآىؤئهة]/g, (match) => ARABIC_CHAR_MAP[match] || match);
+}
+
+function stemToken(token: string): string {
+  if (token.length > 3 && token.endsWith('s')) {
+    return token.slice(0, -1);
+  }
+  return token;
+}
+
+function tokenize(text: string): string[] {
+  return normalizeForMatch(text)
+    .split(' ')
+    .map((token) => stemToken(token.trim()))
+    .filter(Boolean);
+}
+
+function buildSynonymMap(config: SalesConciergeConfig): Map<string, string[]> {
+  const synonyms = new Map<string, string[]>();
+  if (!config.synonyms) return synonyms;
+  Object.entries(config.synonyms).forEach(([key, values]) => {
+    if (!key || !Array.isArray(values)) return;
+    const normalizedKey = normalizeForMatch(key);
+    if (!normalizedKey) return;
+    const normalizedValues = values
+      .map((value) => normalizeForMatch(value))
+      .filter(Boolean);
+    if (!normalizedValues.length) return;
+    synonyms.set(normalizedKey, normalizedValues);
+  });
+  return synonyms;
+}
+
+function expandTokens(tokens: string[], synonyms: Map<string, string[]>): Set<string> {
+  const expanded = new Set<string>(tokens);
+  tokens.forEach((token) => {
+    const mapped = synonyms.get(token);
+    if (mapped) {
+      mapped.forEach((value) => expanded.add(value));
+    }
+  });
+  return expanded;
+}
+
+function jaccardScore(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0;
+  let intersection = 0;
+  a.forEach((token) => {
+    if (b.has(token)) intersection += 1;
+  });
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function fuzzySimilarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const aLen = a.length;
+  const bLen = b.length;
+  const maxLen = Math.max(aLen, bLen);
+  if (maxLen === 0) return 0;
+  const dp = Array.from({ length: aLen + 1 }, () => new Array(bLen + 1).fill(0));
+  for (let i = 0; i <= aLen; i += 1) dp[i][0] = i;
+  for (let j = 0; j <= bLen; j += 1) dp[0][j] = j;
+  for (let i = 1; i <= aLen; i += 1) {
+    for (let j = 1; j <= bLen; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost,
+      );
+    }
+  }
+  const distance = dp[aLen][bLen];
+  return 1 - distance / maxLen;
+}
+
+function getCatalogIndex(config: SalesConciergeConfig): CatalogIndex {
+  const cached = catalogIndexCache.get(config);
+  if (cached) return cached;
+
+  const synonyms = buildSynonymMap(config);
+  const items = (config.catalog || []).map((item) => {
+    const skuNormalized = normalizeForMatch(item.sku || '');
+    const nameNormalized = normalizeForMatch(item.name || '');
+    const baseNameTokens = tokenize(item.name || '').concat(skuNormalized ? [skuNormalized] : []);
+    const keywordTokens = (item.keywords || []).flatMap((keyword) => tokenize(keyword));
+    return {
+      item,
+      skuNormalized,
+      nameNormalized,
+      nameTokens: expandTokens(baseNameTokens, synonyms),
+      keywordTokens: expandTokens(keywordTokens, synonyms),
+    };
+  });
+
+  const index = { items, synonyms };
+  catalogIndexCache.set(config, index);
+  return index;
+}
+
 function findCatalogCandidates(config: SalesConciergeConfig, query: string): SalesCatalogItem[] {
   if (!query) return [];
-  const normalizedQuery = normalizeText(query);
-  const scored = config.catalog.map((item) => {
-    let score = 0;
-    const name = normalizeText(item.name);
-    if (name && normalizedQuery.includes(name)) score += 3;
-    if (item.sku && normalizedQuery.includes(normalizeText(item.sku))) score += 4;
-    (item.keywords || []).forEach((keyword) => {
-      if (normalizedQuery.includes(normalizeText(keyword))) score += 2;
-    });
-    return { item, score };
+  const threshold = typeof config.matchThreshold === 'number' ? config.matchThreshold : 0.65;
+  const queryNormalized = normalizeForMatch(query);
+  const { items, synonyms } = getCatalogIndex(config);
+  const queryTokens = expandTokens(tokenize(query), synonyms);
+
+  const scored = items.map((entry) => {
+    const skuMatch = entry.skuNormalized && entry.skuNormalized === queryNormalized;
+    if (skuMatch) {
+      return { item: entry.item, score: 1, reason: 'sku_exact' };
+    }
+
+    const nameMatch = entry.nameNormalized && entry.nameNormalized === queryNormalized;
+    if (nameMatch) {
+      return { item: entry.item, score: 0.95, reason: 'name_exact' };
+    }
+
+    const tokenScore = jaccardScore(queryTokens, entry.nameTokens) * 0.8;
+    const fuzzyScore = fuzzySimilarity(queryNormalized, entry.nameNormalized) * 0.7;
+    const keywordScore = jaccardScore(queryTokens, entry.keywordTokens) * 0.6;
+    const bestScore = Math.max(tokenScore, fuzzyScore, keywordScore);
+    const reason = bestScore === tokenScore
+      ? 'token_overlap'
+      : bestScore === fuzzyScore
+        ? 'fuzzy_name'
+        : 'keyword_overlap';
+    return { item: entry.item, score: bestScore, reason };
   }).filter((entry) => entry.score > 0);
 
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, 3).map((entry) => entry.item);
+
+  if (!scored.length) {
+    logAutomation('[SalesConcierge] Match', { query: queryNormalized, matched: 0, threshold });
+    return [];
+  }
+
+  const topScore = scored[0].score;
+  const topMatches = scored.slice(0, 3);
+  logAutomation('[SalesConcierge] Match', {
+    query: queryNormalized.slice(0, 80),
+    matched: scored.length,
+    topScore: Number(topScore.toFixed(2)),
+    threshold,
+    top: topMatches.map((entry) => ({
+      sku: entry.item.sku,
+      name: entry.item.name,
+      score: Number(entry.score.toFixed(2)),
+      reason: entry.reason,
+    })),
+  });
+
+  if (topScore < threshold && topMatches.length === 1) {
+    return [];
+  }
+
+  return topMatches.map((entry) => entry.item);
 }
 
 function normalizeSheetHeader(value: string): string {
@@ -241,11 +422,16 @@ export async function resolveSalesConciergeConfig(
   workspaceId: string | mongoose.Types.ObjectId,
   config: SalesConciergeConfig,
 ): Promise<SalesConciergeConfig> {
-  if (!config.useGoogleSheets) return config;
+  const baseConfig: SalesConciergeConfig = {
+    ...config,
+    catalog: [],
+    shippingRules: [],
+  };
+  if (!config.useGoogleSheets) return baseConfig;
 
   const settings = await WorkspaceSettings.findOne({ workspaceId });
   const sheetsConfig = settings?.googleSheets;
-  if (!sheetsConfig?.spreadsheetId) return config;
+  if (!sheetsConfig?.spreadsheetId) return baseConfig;
 
   try {
     let auth: { accessToken?: string; serviceAccountJson?: string } = {};
@@ -294,13 +480,13 @@ export async function resolveSalesConciergeConfig(
       });
     }
     if (!parsed.catalog.length && !parsed.shippingRules.length) {
-      return config;
+      return baseConfig;
     }
 
     return {
-      ...config,
-      catalog: parsed.catalog.length ? parsed.catalog : config.catalog,
-      shippingRules: parsed.shippingRules.length ? parsed.shippingRules : config.shippingRules,
+      ...baseConfig,
+      catalog: parsed.catalog,
+      shippingRules: parsed.shippingRules,
     };
   } catch (error: any) {
     const apiMessage = error?.response?.data?.error?.message || error?.response?.data?.error;
@@ -309,30 +495,30 @@ export async function resolveSalesConciergeConfig(
       status: error?.response?.status,
       message: apiMessage || error?.message,
     });
-    return config;
+    return baseConfig;
   }
 }
 
 function selectCatalogCandidate(messageText: string, candidates: SalesCatalogItem[]): SalesCatalogItem | undefined {
   if (!candidates.length) return undefined;
-  const normalized = normalizeText(messageText);
+  const normalized = normalizeForMatch(messageText);
   const indexMatch = normalized.match(/\b(1|2|3)\b/);
   if (indexMatch) {
     const index = Number(indexMatch[1]) - 1;
     if (candidates[index]) return candidates[index];
   }
   return candidates.find((candidate) => {
-    const name = normalizeText(candidate.name);
-    const sku = normalizeText(candidate.sku || '');
+    const name = normalizeForMatch(candidate.name);
+    const sku = normalizeForMatch(candidate.sku || '');
     return (name && normalized.includes(name)) || (sku && normalized.includes(sku));
   });
 }
 
 function extractVariant(messageText: string, item?: SalesCatalogItem) {
   if (!item?.variants) return {};
-  const normalized = normalizeText(messageText);
-  const size = item.variants.size?.find((option) => normalized.includes(normalizeText(option)));
-  const color = item.variants.color?.find((option) => normalized.includes(normalizeText(option)));
+  const normalized = normalizeForMatch(messageText);
+  const size = item.variants.size?.find((option) => normalized.includes(normalizeForMatch(option)));
+  const color = item.variants.color?.find((option) => normalized.includes(normalizeForMatch(option)));
   return { size, color };
 }
 
@@ -357,7 +543,9 @@ function formatStock(stock?: SalesCatalogItem['stock']): string | undefined {
 
 function buildSalesQuote(item: SalesCatalogItem, city: string, config: SalesConciergeConfig) {
   const currency = item.currency || 'SAR';
-  const shippingRule = config.shippingRules.find((rule) => normalizeText(rule.city) === normalizeText(city));
+  const shippingRule = (config.shippingRules || []).find(
+    (rule) => normalizeText(rule.city) === normalizeText(city),
+  );
   return {
     priceText: formatPrice(item.price, currency),
     stockText: formatStock(item.stock),
@@ -557,7 +745,7 @@ export function advanceSalesConciergeState(params: {
     }
   }
 
-  const item = config.catalog.find((catalogItem) => catalogItem.sku === fields.sku);
+  const item = (config.catalog || []).find((catalogItem) => catalogItem.sku === fields.sku);
   if (!item) {
     nextState.status = 'handoff';
     actions.handoffReason = 'Sales concierge handoff (missing SKU)';

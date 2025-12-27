@@ -199,14 +199,10 @@ const Automations: React.FC = () => {
           ? triggerConfig?.categoryIds
           : base.salesTriggerCategoryIds,
         salesTriggerMatchMode: triggerConfig?.triggerMode || base.salesTriggerMatchMode,
-        salesPhoneMinLength: String(safeConfig.minPhoneLength || base.salesPhoneMinLength),
         salesUseGoogleSheets: safeConfig.useGoogleSheets ?? base.salesUseGoogleSheets,
         salesKnowledgeItemIds: Array.isArray(safeConfig.knowledgeItemIds)
           ? safeConfig.knowledgeItemIds
           : base.salesKnowledgeItemIds,
-        salesCatalogJson: safeConfig.catalog ? JSON.stringify(safeConfig.catalog, null, 2) : base.salesCatalogJson,
-        salesShippingJson: safeConfig.shippingRules ? JSON.stringify(safeConfig.shippingRules, null, 2) : base.salesShippingJson,
-        salesCityAliasesJson: safeConfig.cityAliases ? JSON.stringify(safeConfig.cityAliases, null, 2) : base.salesCityAliasesJson,
       };
     }
     return base;
@@ -409,26 +405,9 @@ const Automations: React.FC = () => {
     const aiSettingsValue = aiSettings.tone || aiSettings.maxReplySentences ? aiSettings : undefined;
 
     if (template.id === 'sales_concierge') {
-      let catalog;
-      let shippingRules;
-      let cityAliases;
-      try {
-        catalog = JSON.parse(data.salesCatalogJson || '[]');
-        shippingRules = JSON.parse(data.salesShippingJson || '[]');
-        cityAliases = data.salesCityAliasesJson ? JSON.parse(data.salesCityAliasesJson) : {};
-      } catch (error) {
-        return null;
-      }
-      if (!Array.isArray(catalog) || !Array.isArray(shippingRules)) {
-        return null;
-      }
       return {
         templateId: 'sales_concierge',
         config: {
-          catalog,
-          shippingRules,
-          cityAliases,
-          minPhoneLength: Number.parseInt(data.salesPhoneMinLength, 10) || 8,
           useGoogleSheets: data.salesUseGoogleSheets,
           knowledgeItemIds: data.salesKnowledgeItemIds,
           maxQuestions: 6,

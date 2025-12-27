@@ -256,8 +256,8 @@ export interface SalesShippingRule {
 }
 
 export interface SalesConciergeConfig {
-  catalog: SalesCatalogItem[];
-  shippingRules: SalesShippingRule[];
+  catalog?: SalesCatalogItem[];
+  shippingRules?: SalesShippingRule[];
   cityAliases?: Record<string, string>;
   minPhoneLength?: number;
   useGoogleSheets?: boolean;
