@@ -88,8 +88,9 @@ const Automations: React.FC = () => {
   const accountAvatarUrl = activeAccount?.profilePictureUrl;
   const accountInitial = accountDisplayName.charAt(0).toUpperCase();
   const isAutomationsSection = activeSection === 'automations';
+  const isTestPreviewEnabled = false;
   const isCreateView = isAutomationsSection && (automationView === 'create' || automationView === 'edit');
-  const isTestView = isAutomationsSection && automationView === 'test' && !!testingAutomation;
+  const isTestView = isAutomationsSection && isTestPreviewEnabled && automationView === 'test' && !!testingAutomation;
 
   // Template mode states
   const [creationMode, setCreationMode] = useState<'templates' | 'custom'>('templates');
@@ -211,7 +212,7 @@ const Automations: React.FC = () => {
     return base;
   };
 
-  const handleOpenEditModal = (automation: Automation) => {
+  const handleOpenEditAutomation = (automation: Automation) => {
     setEditingAutomation(automation);
     const replyStep = automation.replySteps[0];
     setFormData({
@@ -226,51 +227,15 @@ const Automations: React.FC = () => {
     });
 
     if (replyStep.type === 'template_flow' && replyStep.templateFlow) {
-      const template = AUTOMATION_TEMPLATES.find((item) => item.id === replyStep.templateFlow?.templateId);
+      const template = AUTOMATION_TEMPLATES.find((item) => item.id === replyStep.templateFlow?.templateId) || null;
       setCreationMode('templates');
       setCurrentStep('setup');
-      setSelectedTemplate(template || null);
+      setSelectedTemplate(template);
       setTemplateSearch('');
       setGoalFilter('all');
       setIndustryFilter('all');
       setIsTemplateEditing(!!template);
-
-      if (replyStep.templateFlow.templateId === 'sales_concierge') {
-        const config = replyStep.templateFlow.config as any;
-        setSetupData(buildSetupDataFromTemplateConfig('sales_concierge', config, automation.triggerConfig));
-      }
-      if (!template) {
-        setCurrentStep('gallery');
-        setSelectedTemplate(null);
-        setIsTemplateEditing(false);
-      }
-    } else {
-      setIsTemplateEditing(false);
-    }
-    setTestingAutomation(null);
-    setAutomationView('edit');
-  };
-
-  const handleOpenTestModal = (automation: Automation) => {
-    setTestingAutomation(automation);
-    setTestMessages([]);
-    setTestInput('');
-    setTestState(null);
-    setTestTriggerMatched(null);
-    const replyStep = automation.replySteps[0];
-    setTestEditForm({
-      name: automation.name,
-      description: automation.description || '',
-      replyType: replyStep.type,
-      constantMessage: replyStep.constantReply?.message || '',
-      aiGoalType: replyStep.aiReply?.goalType || 'none',
-      aiGoalDescription: replyStep.aiReply?.goalDescription || '',
-      aiKnowledgeIds: replyStep.aiReply?.knowledgeItemIds || [],
-    });
-    if (replyStep.type === 'template_flow' && replyStep.templateFlow) {
-      const template = AUTOMATION_TEMPLATES.find((item) => item.id === replyStep.templateFlow?.templateId) || null;
-      setTestTemplate(template);
-      setTestSetupData(
+      setSetupData(
         buildSetupDataFromTemplateConfig(
           replyStep.templateFlow.templateId,
           replyStep.templateFlow.config as any,
@@ -278,10 +243,14 @@ const Automations: React.FC = () => {
         ),
       );
     } else {
-      setTestTemplate(null);
-      setTestSetupData(getDefaultSetupData());
+      setIsTemplateEditing(false);
+      setCreationMode('templates');
+      setCurrentStep('gallery');
+      setSelectedTemplate(null);
+      setSetupData(getDefaultSetupData());
     }
-    setAutomationView('test');
+
+    setAutomationView('edit');
   };
 
   const handleResetTest = () => {
@@ -617,6 +586,10 @@ const Automations: React.FC = () => {
   };
 
   const handleBackToGallery = () => {
+    if (editingAutomation) {
+      handleCloseCreateView();
+      return;
+    }
     setCurrentStep('gallery');
     setSelectedTemplate(null);
   };
@@ -639,16 +612,6 @@ const Automations: React.FC = () => {
 
   return (
     <div className={`h-full flex flex-col ${isTestView || isCreateSetupView ? 'overflow-hidden' : ''}`}>
-      {/* Header */}
-      {/* <div className="mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Automation Control Center</h1>
-          <p className="text-muted-foreground">
-            Configure playbooks, triggers, routing rules, and AI policies to automate your customer conversations safely and effectively.
-          </p>
-        </div>
-      </div> */}
-
       {/* Main Content - Side Nav + Content Area */}
       <div className={`flex flex-col lg:flex-row gap-6 ${isTestView || isCreateSetupView ? 'flex-1 min-h-0' : ''}`}>
         {/* Left Side Navigation */}
@@ -745,7 +708,7 @@ const Automations: React.FC = () => {
                   automations={automations}
                   loading={loading}
                   onCreate={handleOpenCreateModal}
-                  onOpen={handleOpenTestModal}
+                  onOpen={handleOpenEditAutomation}
                   onToggle={handleToggle}
                   onDelete={handleDelete}
                 />

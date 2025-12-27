@@ -12,7 +12,7 @@ type AutomationsListViewProps = {
   automations: Automation[];
   loading: boolean;
   onCreate: () => void;
-  onOpen: (automation: Automation) => void;
+  onOpen?: (automation: Automation) => void;
   onToggle: (automation: Automation) => void;
   onDelete: (automation: Automation) => void;
 };
@@ -24,8 +24,11 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
   onOpen,
   onToggle,
   onDelete,
-}) => (
-  <>
+}) => {
+  const isOpenEnabled = typeof onOpen === 'function';
+
+  return (
+    <>
     <div className="flex items-center justify-between">
       <h2 className="text-xl font-semibold">Available Automations</h2>
       <Button onClick={onCreate} leftIcon={<Plus className="w-4 h-4" />}>
@@ -57,16 +60,18 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
           return (
             <div
               key={automation._id}
-              onClick={() => onOpen(automation)}
-              onKeyDown={(event) => {
+              onClick={isOpenEnabled ? () => onOpen?.(automation) : undefined}
+              onKeyDown={isOpenEnabled ? (event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
-                  onOpen(automation);
+                  onOpen?.(automation);
                 }
-              }}
-              role="button"
-              tabIndex={0}
-              className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-6 shadow-sm backdrop-blur-sm hover:shadow-lg transition-all relative group cursor-pointer"
+              } : undefined}
+              role={isOpenEnabled ? 'button' : undefined}
+              tabIndex={isOpenEnabled ? 0 : undefined}
+              className={`bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-6 shadow-sm backdrop-blur-sm transition-all relative group ${
+                isOpenEnabled ? 'hover:shadow-lg cursor-pointer' : ''
+              }`}
             >
               {trigger.badge && (
                 <div className="absolute top-4 right-4">
@@ -151,4 +156,5 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
       </div>
     )}
   </>
-);
+  );
+};

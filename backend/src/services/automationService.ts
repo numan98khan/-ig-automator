@@ -11,11 +11,6 @@ import {
   sendMessage as sendInstagramMessage,
   sendButtonMessage,
 } from '../utils/instagram-api';
-import {
-  categorizeMessage,
-  getOrCreateCategory,
-  incrementCategoryCount,
-} from './aiCategorization';
 import { addTicketUpdate, createTicket, getActiveTicket } from './escalationService';
 import { addCountIncrement, trackDailyMetric } from './reportingService';
 import {
@@ -31,11 +26,7 @@ import {
   normalizeFlowState,
   resolveSalesConciergeConfig,
 } from './automation/templateFlows';
-import {
-  AutomationTestContext,
-  AutomationTestHistoryItem,
-  AutomationTestState,
-} from './automation/types';
+import { AutomationTestContext } from './automation/types';
 import {
   AutomationRateLimit,
   AutomationTemplateId,
@@ -290,28 +281,6 @@ async function buildAutomationAiReply(params: {
     tone: aiSettings?.tone,
     maxReplySentences: aiSettings?.maxReplySentences,
   });
-}
-
-async function handoffToTeam(params: {
-  conversation: any;
-  reason: string;
-  customerMessage?: string;
-}): Promise<void> {
-  const { conversation, reason, customerMessage } = params;
-  const ticket = await createTicket({
-    conversationId: conversation._id,
-    topicSummary: reason.slice(0, 140),
-    reason,
-    createdBy: 'system',
-    customerMessage,
-  });
-
-  conversation.humanRequired = true;
-  conversation.humanRequiredReason = reason;
-  conversation.humanTriggeredAt = ticket.createdAt;
-  conversation.humanTriggeredByMessageId = undefined;
-  conversation.humanHoldUntil = new Date(Date.now() + 60 * 60 * 1000);
-  await conversation.save();
 }
 
 async function handoffSalesConcierge(params: {
@@ -723,7 +692,6 @@ export async function executeAutomation(params: {
   instagramAccountId: string;
   platform?: string;
   messageContext?: AutomationTestContext;
-  automationId?: string;
 }): Promise<{ success: boolean; automationExecuted?: string; error?: string }> {
   try {
     const {
@@ -734,7 +702,6 @@ export async function executeAutomation(params: {
       instagramAccountId,
       platform,
       messageContext,
-      automationId,
     } = params;
 
     console.log('🤖 [AUTOMATION] Start', {
@@ -744,7 +711,6 @@ export async function executeAutomation(params: {
       instagramAccountId,
       messageTextPreview: messageText?.slice(0, 50),
       platform,
-      automationId,
     });
 
     const automationQuery: Record<string, any> = {
@@ -752,9 +718,6 @@ export async function executeAutomation(params: {
       triggerType,
       isActive: true,
     };
-    if (automationId) {
-      automationQuery._id = new mongoose.Types.ObjectId(automationId);
-    }
 
     const automations = await Automation.find(automationQuery).sort({ createdAt: 1 });
 
@@ -902,401 +865,6 @@ export async function checkAndExecuteAutomations(params: {
   return {
     executed: result.success,
     automationName: result.automationExecuted,
-  };
-}
-
-function appendTestHistory(history: AutomationTestHistoryItem[], from: 'customer' | 'ai', text: string) {
-  history.push({
-    from,
-    text,
-    createdAt: new Date().toISOString(),
-  });
-}
-
-type AutomationTestMode = 'self_chat' | 'test_user';
-
-const TEST_ACCESS_TOKEN = 'test_preview';
-const TEST_ACCOUNT_NAME = 'Preview Test Account';
-const TEST_ACCOUNT_HANDLE = 'preview.test';
-
-function resolveTestMode(
-  mode?: AutomationTestContext['testMode'],
-  fallback?: AutomationTestState['testMode'],
-): AutomationTestMode {
-  if (mode === 'self_chat' || mode === 'test_user') {
-    return mode;
-  }
-  if (fallback === 'self_chat' || fallback === 'test_user') {
-    return fallback;
-  }
-  return 'test_user';
-}
-
-async function ensureTestInstagramAccount(
-  workspaceId: string,
-  existingAccountId?: string,
-): Promise<any> {
-  let account: any | null = null;
-  if (existingAccountId) {
-    account = await InstagramAccount.findById(existingAccountId).select('+accessToken');
-    if (account?.status !== 'mock') {
-      account = null;
-    }
-  }
-
-  const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
-  const username = `${TEST_ACCOUNT_HANDLE}-${workspaceId}`;
-  if (!account) {
-    account = await InstagramAccount.findOne({
-      workspaceId: workspaceObjectId,
-      status: 'mock',
-      username,
-    }).select('+accessToken');
-  }
-
-  if (!account) {
-    account = await InstagramAccount.create({
-      username,
-      workspaceId: workspaceObjectId,
-      status: 'mock',
-      instagramAccountId: `test_ig_${workspaceId}`,
-      instagramUserId: `test_user_${workspaceId}`,
-      name: TEST_ACCOUNT_NAME,
-      accessToken: TEST_ACCESS_TOKEN,
-      accountType: 'test',
-    });
-  }
-
-  if (!account.instagramAccountId) {
-    account.instagramAccountId = `test_ig_${workspaceId}`;
-  }
-  if (!account.instagramUserId) {
-    account.instagramUserId = `test_user_${workspaceId}`;
-  }
-
-  if (!account.accessToken || !account.accessToken.startsWith('test_')) {
-    account.accessToken = TEST_ACCESS_TOKEN;
-  }
-
-  if (account.isModified()) {
-    await account.save();
-    account = await InstagramAccount.findById(account._id).select('+accessToken');
-  }
-
-  return account;
-}
-
-async function ensureTestConversation(params: {
-  automationId: string;
-  workspaceId: string;
-  instagramAccount: any;
-  state: AutomationTestState;
-  testMode: AutomationTestMode;
-}): Promise<any> {
-  const { automationId, workspaceId, instagramAccount, state, testMode } = params;
-
-  if (state.testConversationId && state.testMode === testMode) {
-    const existing = await Conversation.findById(state.testConversationId);
-    if (
-      existing
-      && existing.workspaceId.toString() === workspaceId
-      && existing.instagramAccountId.toString() === instagramAccount._id.toString()
-    ) {
-      if (!existing.participantInstagramId) {
-        existing.participantInstagramId = testMode === 'self_chat'
-          ? instagramAccount.instagramAccountId || `test_ig_${workspaceId}`
-          : state.testParticipantInstagramId || `test_user_${automationId}`;
-        existing.platform = 'instagram';
-        await existing.save();
-      }
-      return existing;
-    }
-  }
-
-  const participantInstagramId = testMode === 'self_chat'
-    ? instagramAccount.instagramAccountId || `test_ig_${workspaceId}`
-    : state.testParticipantInstagramId || `test_user_${automationId}`;
-  const participantHandle = testMode === 'self_chat'
-    ? instagramAccount.username || TEST_ACCOUNT_HANDLE
-    : 'preview.test.user';
-  const participantName = testMode === 'self_chat'
-    ? instagramAccount.name || instagramAccount.username || TEST_ACCOUNT_NAME
-    : 'Preview Test User';
-
-  return Conversation.create({
-    participantName,
-    participantHandle,
-    workspaceId: new mongoose.Types.ObjectId(workspaceId),
-    instagramAccountId: instagramAccount._id,
-    platform: 'instagram',
-    instagramConversationId: `preview_${automationId}`,
-    participantInstagramId,
-  });
-}
-
-async function recordTestCustomerMessage(
-  conversation: any,
-  messageText: string,
-): Promise<{ message: any; sentAt: Date }> {
-  const sentAt = new Date();
-  const message = await Message.create({
-    conversationId: conversation._id,
-    workspaceId: conversation.workspaceId,
-    text: messageText,
-    from: 'customer',
-    platform: 'instagram',
-    createdAt: sentAt,
-  });
-
-  conversation.lastMessage = messageText;
-  conversation.lastMessageAt = sentAt;
-  conversation.lastCustomerMessageAt = sentAt;
-  await conversation.save();
-
-  return { message, sentAt };
-}
-
-async function applyMessageCategorization(params: {
-  workspaceId: string;
-  conversation: any;
-  message: any;
-  messageText: string;
-}): Promise<{ categoryId: string; categoryName: string }> {
-  const { workspaceId, conversation, message, messageText } = params;
-  const categorization = await categorizeMessage(messageText, workspaceId);
-  const categoryId = await getOrCreateCategory(workspaceId, categorization.categoryName);
-  await incrementCategoryCount(categoryId);
-
-  message.categoryId = categoryId;
-  message.detectedLanguage = categorization.detectedLanguage;
-  if (categorization.translatedText) {
-    message.translatedText = categorization.translatedText;
-  }
-  await message.save();
-
-  conversation.categoryId = categoryId;
-  conversation.categoryConfidence = categorization.confidence;
-  await conversation.save();
-
-  return { categoryId: categoryId.toString(), categoryName: categorization.categoryName };
-}
-
-async function buildTestTemplateState(
-  automationId: mongoose.Types.ObjectId,
-  conversationId: mongoose.Types.ObjectId,
-): Promise<AutomationTestState['template'] | undefined> {
-  const session = await AutomationSession.findOne({
-    automationId,
-    conversationId,
-  }).sort({ createdAt: -1 });
-
-  if (!session) {
-    return undefined;
-  }
-
-  let followup;
-  if (session.followupTaskId) {
-    const task = await FollowupTask.findById(session.followupTaskId);
-    if (task) {
-      const followupStatus = ['scheduled', 'sent', 'cancelled'].includes(task.status)
-        ? (task.status as 'scheduled' | 'sent' | 'cancelled')
-        : 'cancelled';
-      followup = {
-        status: followupStatus,
-        scheduledAt: task.scheduledFollowupAt?.toISOString(),
-        message: task.customMessage || task.followupText,
-      };
-    }
-  }
-
-  return {
-    templateId: session.templateId,
-    step: session.step,
-    status: session.status,
-    questionCount: session.questionCount,
-    collectedFields: session.collectedFields || {},
-    followup,
-    lastCustomerMessageAt: session.lastCustomerMessageAt?.toISOString(),
-    lastBusinessMessageAt: session.lastAutomationMessageAt?.toISOString(),
-  };
-}
-
-async function fetchTestReplies(conversationId: mongoose.Types.ObjectId, since: Date): Promise<string[]> {
-  const messages = await Message.find({
-    conversationId,
-    from: 'ai',
-    createdAt: { $gte: since },
-  }).sort({ createdAt: 1 });
-
-  return messages.map((message) => message.text);
-}
-
-export async function runAutomationTest(params: {
-  automationId: string;
-  workspaceId: string;
-  messageText?: string;
-  state?: AutomationTestState;
-  action?: 'simulate_followup';
-  context?: AutomationTestContext;
-}): Promise<{
-  replies: string[];
-  state: AutomationTestState;
-  meta?: Record<string, any>;
-}> {
-  const { automationId, workspaceId, messageText, action, context } = params;
-  const automation = await Automation.findById(automationId);
-  if (!automation) {
-    throw new Error('Automation not found');
-  }
-
-  console.log('🧪 [AUTOMATION TEST] Run', {
-    automationId,
-    workspaceId,
-    action,
-    messageTextPreview: messageText?.slice(0, 100),
-    triggerConfig: {
-      triggerMode: automation.triggerConfig?.triggerMode,
-      keywordsCount: automation.triggerConfig?.keywords?.length || 0,
-      categoryIdsCount: automation.triggerConfig?.categoryIds?.length || 0,
-      matchOn: automation.triggerConfig?.matchOn,
-      outsideBusinessHours: automation.triggerConfig?.outsideBusinessHours,
-    },
-  });
-
-  const nextState: AutomationTestState = params.state ? { ...params.state } : {};
-  const history = nextState.history ? [...nextState.history] : [];
-  const testMode = resolveTestMode(context?.testMode, nextState.testMode);
-  const instagramAccount = await ensureTestInstagramAccount(workspaceId, nextState.testInstagramAccountId);
-  const conversation = await ensureTestConversation({
-    automationId,
-    workspaceId,
-    instagramAccount,
-    state: nextState,
-    testMode,
-  });
-  if (conversation.instagramAccountId.toString() !== instagramAccount._id.toString()) {
-    conversation.instagramAccountId = instagramAccount._id;
-    await conversation.save();
-  }
-
-  nextState.testConversationId = conversation._id.toString();
-  nextState.testInstagramAccountId = instagramAccount._id.toString();
-  nextState.testParticipantInstagramId = conversation.participantInstagramId;
-  nextState.testMode = testMode;
-
-  if (action === 'simulate_followup') {
-    const followupTask = await FollowupTask.findOne({
-      conversationId: conversation._id,
-      status: 'scheduled',
-    }).sort({ scheduledFollowupAt: 1 });
-
-    if (!followupTask) {
-      return {
-        replies: [],
-        state: {
-          ...nextState,
-          history,
-        },
-        meta: { error: 'No follow-up scheduled' },
-      };
-    }
-
-    followupTask.scheduledFollowupAt = new Date();
-    await followupTask.save();
-
-    const startedAt = new Date();
-    await processDueFollowups({
-      conversationId: conversation._id,
-      now: startedAt,
-    });
-
-    const replies = await fetchTestReplies(conversation._id, startedAt);
-    replies.forEach((reply) => appendTestHistory(history, 'ai', reply));
-
-    const template = await buildTestTemplateState(automation._id, conversation._id);
-    return {
-      replies,
-      state: {
-        ...nextState,
-        history,
-        template,
-      },
-      meta: { action: 'simulate_followup' },
-    };
-  }
-
-  if (!messageText) {
-    throw new Error('messageText is required');
-  }
-
-  appendTestHistory(history, 'customer', messageText);
-
-  await cancelFollowupOnCustomerReply(conversation._id);
-  const { message } = await recordTestCustomerMessage(conversation, messageText);
-  const { categoryId, categoryName } = await applyMessageCategorization({
-    workspaceId,
-    conversation,
-    message,
-    messageText,
-  });
-
-  const linkMatch = messageText.match(/https?:\/\/\S+/i);
-  const messageContext: AutomationTestContext = {
-    ...context,
-    categoryId,
-    categoryName,
-    hasLink: Boolean(linkMatch),
-    linkUrl: linkMatch ? linkMatch[0] : undefined,
-  };
-  const triggerMatched = matchesTriggerConfig(messageText, automation.triggerConfig, messageContext);
-
-  const testTriggerMode = automation.triggerConfig?.triggerMode || 'any';
-  const matchedBy = testTriggerMode === 'categories' && (messageContext.categoryId || messageContext.categoryName)
-    ? 'category'
-    : automation.triggerConfig?.matchOn?.link && messageContext.hasLink
-      ? 'link'
-      : automation.triggerConfig?.matchOn?.attachment && messageContext.hasAttachment
-        ? 'attachment'
-        : 'keyword';
-  console.log('🧪 [AUTOMATION TEST] Trigger', {
-    automationId,
-    triggerMatched,
-    matchedBy,
-    triggerMode: testTriggerMode,
-    categoryName: messageContext.categoryName,
-  });
-
-  if (!conversation.participantInstagramId) {
-    throw new Error('Missing participant Instagram ID for test conversation');
-  }
-
-  const startedAt = new Date();
-  const executionResult = await executeAutomation({
-    workspaceId,
-    triggerType: automation.triggerType,
-    conversationId: conversation._id.toString(),
-    messageText,
-    instagramAccountId: instagramAccount._id.toString(),
-    platform: conversation.platform || 'instagram',
-    messageContext,
-    automationId,
-  });
-
-  const replies = await fetchTestReplies(conversation._id, startedAt);
-  replies.forEach((reply) => appendTestHistory(history, 'ai', reply));
-  const template = await buildTestTemplateState(automation._id, conversation._id);
-
-  return {
-    replies,
-    state: {
-      ...nextState,
-      history,
-      template,
-    },
-    meta: {
-      triggerMatched,
-      error: executionResult.success ? undefined : executionResult.error,
-    },
   };
 }
 

@@ -109,7 +109,7 @@ export const AutomationPreviewPhone: React.FC<AutomationPreviewPhoneProps> = ({
     <div className="p-3 border-t border-white/5 bg-[#0f1215]">
       {mode === 'interactive' ? (
         <form
-          onSubmit={onSubmit}
+          onSubmit={onSubmit} // Submit test messages in templates
           className="flex items-center gap-2 px-3 py-2 rounded-full border border-white/10 bg-[#15181c] text-white/70"
         >
           <button type="button" className="text-white/70 hover:text-white">

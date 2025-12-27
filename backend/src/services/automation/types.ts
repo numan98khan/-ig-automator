@@ -1,5 +1,3 @@
-import { AutomationTemplateId } from '../../types/automation';
-
 export type AutomationTestContext = {
   forceOutsideBusinessHours?: boolean;
   hasLink?: boolean;
@@ -8,7 +6,6 @@ export type AutomationTestContext = {
   attachmentUrls?: string[];
   categoryId?: string;
   categoryName?: string;
-  testMode?: 'self_chat' | 'test_user';
 };
 
 export type TemplateFlowState = {
@@ -34,33 +31,4 @@ export type TemplateFlowActions = {
   handoffSummary?: string;
   handoffTopic?: string;
   recommendedNextAction?: string;
-};
-
-export type AutomationTestHistoryItem = {
-  from: 'customer' | 'ai';
-  text: string;
-  createdAt?: string;
-};
-
-export type AutomationTestState = {
-  history?: AutomationTestHistoryItem[];
-  testConversationId?: string;
-  testInstagramAccountId?: string;
-  testParticipantInstagramId?: string;
-  testMode?: 'self_chat' | 'test_user';
-  template?: {
-    templateId: AutomationTemplateId;
-    step?: string;
-    status?: 'active' | 'completed' | 'handoff' | 'paused';
-    questionCount: number;
-    collectedFields?: Record<string, any>;
-    followup?: {
-      status: 'scheduled' | 'sent' | 'cancelled';
-      scheduledAt?: string;
-      message?: string;
-    };
-    lastCustomerMessageAt?: string;
-    lastBusinessMessageAt?: string;
-  };
-  [key: string]: any;
 };

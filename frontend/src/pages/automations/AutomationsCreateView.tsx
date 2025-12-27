@@ -151,33 +151,55 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
 
         <div className="flex items-center gap-2">
           {currentStep === 'setup' && selectedTemplate ? (
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onBackToGallery}
-                leftIcon={<ArrowLeft className="w-4 h-4" />}
-              >
-                Back
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onClose}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={onContinueToReview}
-                rightIcon={<ArrowRight className="w-4 h-4" />}
-              >
-                Continue to Review
-              </Button>
-            </>
+            editingAutomation ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onClose}
+                  leftIcon={<ArrowLeft className="w-4 h-4" />}
+                >
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => onSubmit()}
+                  isLoading={saving}
+                >
+                  Save Changes
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={onBackToGallery}
+                  leftIcon={<ArrowLeft className="w-4 h-4" />}
+                >
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onClose}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={onContinueToReview}
+                  rightIcon={<ArrowRight className="w-4 h-4" />}
+                >
+                  Continue to Review
+                </Button>
+              </>
+            )
           ) : (
             <Button
               variant="outline"
