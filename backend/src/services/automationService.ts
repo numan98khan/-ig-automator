@@ -863,20 +863,23 @@ async function ensureTestInstagramAccount(
   workspaceId: string,
   existingAccountId?: string,
 ): Promise<any> {
+  let account: any | null = null;
   if (existingAccountId) {
-    const existing = await InstagramAccount.findById(existingAccountId).select('+accessToken');
-    if (existing) {
-      return existing;
+    account = await InstagramAccount.findById(existingAccountId).select('+accessToken');
+    if (account?.status !== 'mock') {
+      account = null;
     }
   }
 
   const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
   const username = `${TEST_ACCOUNT_HANDLE}-${workspaceId}`;
-  let account = await InstagramAccount.findOne({
-    workspaceId: workspaceObjectId,
-    status: 'mock',
-    username,
-  }).select('+accessToken');
+  if (!account) {
+    account = await InstagramAccount.findOne({
+      workspaceId: workspaceObjectId,
+      status: 'mock',
+      username,
+    }).select('+accessToken');
+  }
 
   if (!account) {
     account = await InstagramAccount.create({
