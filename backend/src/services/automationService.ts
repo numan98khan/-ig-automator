@@ -116,8 +116,13 @@ async function sendTemplateMessage(params: {
   buttons?: Array<{ title: string; actionType?: 'postback'; payload?: string }>;
   platform?: string;
   tags?: string[];
+  aiMeta?: {
+    shouldEscalate?: boolean;
+    escalationReason?: string;
+    knowledgeItemIds?: string[];
+  };
 }): Promise<void> {
-  const { conversation, automation, igAccount, recipientId, text, buttons, platform, tags } = params;
+  const { conversation, automation, igAccount, recipientId, text, buttons, platform, tags, aiMeta } = params;
 
   await pauseForTypingIfNeeded(platform);
 
@@ -152,6 +157,9 @@ async function sendTemplateMessage(params: {
     instagramMessageId: result.message_id,
     automationSource: 'template_flow',
     aiTags: tags,
+    aiShouldEscalate: aiMeta?.shouldEscalate,
+    aiEscalationReason: aiMeta?.escalationReason,
+    kbItemIdsUsed: aiMeta?.knowledgeItemIds,
     metadata: buttons ? { buttons } : undefined,
     createdAt: sentAt,
   });
@@ -247,6 +255,47 @@ async function sendAiReplyMessage(params: {
   await trackDailyMetric(conversation.workspaceId, sentAt, increments);
 
   return message;
+}
+
+async function buildAutomationAiReply(params: {
+  conversation: any;
+  messageText: string;
+  messageContext?: AutomationTestContext;
+}) {
+  const { conversation, messageText, messageContext } = params;
+  const settings = await getWorkspaceSettings(conversation.workspaceId);
+  const goalConfigs = getGoalConfigs(settings);
+  const detectedGoal = detectGoalIntent(messageText || '');
+  const goalMatched = goalMatchesWorkspace(
+    detectedGoal,
+    settings?.primaryGoal,
+    settings?.secondaryGoal,
+  )
+    ? detectedGoal
+    : 'none';
+
+  return generateAIReply({
+    conversation,
+    workspaceId: conversation.workspaceId,
+    latestCustomerMessage: messageText,
+    categoryId: messageContext?.categoryId,
+    categorization: messageContext?.categoryName
+      ? { categoryName: messageContext.categoryName }
+      : undefined,
+    historyLimit: 20,
+    goalContext: {
+      workspaceGoals: {
+        primaryGoal: settings?.primaryGoal,
+        secondaryGoal: settings?.secondaryGoal,
+        configs: goalConfigs,
+      },
+      detectedGoal: goalMatched !== 'none' ? goalMatched : 'none',
+      activeGoalType: goalMatched !== 'none' ? goalMatched : undefined,
+      goalState: goalMatched !== 'none' ? 'collecting' : 'idle',
+      collectedFields: conversation.goalCollectedFields || {},
+    },
+    workspaceSettingsOverride: settings,
+  });
 }
 
 async function handoffToTeam(params: {
@@ -361,8 +410,9 @@ async function handleBookingConciergeFlow(params: {
   igAccount: any;
   messageText: string;
   platform?: string;
+  messageContext?: AutomationTestContext;
 }): Promise<{ success: boolean; error?: string }> {
-  const { automation, replyStep, session, conversation, igAccount, messageText, platform } = params;
+  const { automation, replyStep, session, conversation, igAccount, messageText, platform, messageContext } = params;
   const config = replyStep.templateFlow.config as BookingConciergeConfig;
   const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
   const tags = config.tags || ['intent_booking', 'template_booking_concierge'];
@@ -380,9 +430,16 @@ async function handleBookingConciergeFlow(params: {
     messageText,
     config,
   });
+  const aiResponse = replies.length
+    ? await buildAutomationAiReply({ conversation, messageText, messageContext })
+    : null;
+  const combinedTags = [...tags, ...(aiResponse?.tags || [])];
+  const repliesToSend = aiResponse
+    ? [{ ...replies[0], text: aiResponse.replyText }]
+    : replies;
 
   let sentAny = false;
-  for (const reply of replies) {
+  for (const reply of repliesToSend) {
     if (!updateRateLimit(session, rateLimit)) {
       if (!sentAny) {
         return { success: false, error: 'Rate limit exceeded' };
@@ -397,7 +454,14 @@ async function handleBookingConciergeFlow(params: {
       text: reply.text,
       buttons: reply.buttons,
       platform,
-      tags,
+      tags: combinedTags,
+      aiMeta: aiResponse
+        ? {
+            shouldEscalate: aiResponse.shouldEscalate,
+            escalationReason: aiResponse.escalationReason,
+            knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
+          }
+        : undefined,
     });
     sentAny = true;
   }
@@ -458,8 +522,9 @@ async function handleAfterHoursCaptureFlow(params: {
   igAccount: any;
   messageText: string;
   platform?: string;
+  messageContext?: AutomationTestContext;
 }): Promise<{ success: boolean; error?: string }> {
-  const { automation, replyStep, session, conversation, igAccount, messageText, platform } = params;
+  const { automation, replyStep, session, conversation, igAccount, messageText, platform, messageContext } = params;
   const config = replyStep.templateFlow.config as AfterHoursCaptureConfig;
   const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
   const tags = config.tags || ['after_hours_lead', 'template_after_hours_capture'];
@@ -477,9 +542,16 @@ async function handleAfterHoursCaptureFlow(params: {
     messageText,
     config,
   });
+  const aiResponse = replies.length
+    ? await buildAutomationAiReply({ conversation, messageText, messageContext })
+    : null;
+  const combinedTags = [...tags, ...(aiResponse?.tags || [])];
+  const repliesToSend = aiResponse
+    ? [{ ...replies[0], text: aiResponse.replyText }]
+    : replies;
 
   let sentAny = false;
-  for (const reply of replies) {
+  for (const reply of repliesToSend) {
     if (!updateRateLimit(session, rateLimit)) {
       if (!sentAny) {
         return { success: false, error: 'Rate limit exceeded' };
@@ -494,7 +566,14 @@ async function handleAfterHoursCaptureFlow(params: {
       text: reply.text,
       buttons: reply.buttons,
       platform,
-      tags,
+      tags: combinedTags,
+      aiMeta: aiResponse
+        ? {
+            shouldEscalate: aiResponse.shouldEscalate,
+            escalationReason: aiResponse.escalationReason,
+            knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
+          }
+        : undefined,
     });
     sentAny = true;
   }
@@ -600,6 +679,13 @@ async function handleSalesConciergeFlow(params: {
     config,
     context: messageContext,
   });
+  const aiResponse = replies.length
+    ? await buildAutomationAiReply({ conversation, messageText, messageContext })
+    : null;
+  const combinedTags = [...tags, ...(aiResponse?.tags || [])];
+  const repliesToSend = aiResponse
+    ? [{ ...replies[0], text: aiResponse.replyText }]
+    : replies;
 
   let draftId = nextState.collectedFields?.draftId;
   let paymentLink: string | undefined;
@@ -630,7 +716,7 @@ async function handleSalesConciergeFlow(params: {
   }
 
   let sentAny = false;
-  for (const reply of replies) {
+  for (const reply of repliesToSend) {
     if (!updateRateLimit(session, rateLimit)) {
       if (!sentAny) {
         return { success: false, error: 'Rate limit exceeded' };
@@ -646,7 +732,14 @@ async function handleSalesConciergeFlow(params: {
       text,
       buttons: reply.buttons,
       platform,
-      tags,
+      tags: combinedTags,
+      aiMeta: aiResponse
+        ? {
+            shouldEscalate: aiResponse.shouldEscalate,
+            escalationReason: aiResponse.escalationReason,
+            knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
+          }
+        : undefined,
     });
     sentAny = true;
   }
@@ -848,6 +941,7 @@ async function executeTemplateFlow(params: {
       igAccount,
       messageText,
       platform,
+      messageContext,
     });
   }
 
@@ -860,6 +954,7 @@ async function executeTemplateFlow(params: {
       igAccount,
       messageText,
       platform,
+      messageContext,
     });
   }
 
