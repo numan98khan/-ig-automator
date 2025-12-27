@@ -5,8 +5,6 @@ import InstagramAccount from '../models/InstagramAccount';
 import FollowupTask from '../models/FollowupTask';
 import Automation from '../models/Automation';
 import AutomationSession from '../models/AutomationSession';
-import LeadCapture from '../models/LeadCapture';
-import BookingRequest from '../models/BookingRequest';
 import OrderDraft from '../models/OrderDraft';
 import { generateAIReply } from './aiReplyService';
 import {
@@ -28,13 +26,8 @@ import {
 } from './workspaceSettingsService';
 import { pauseForTypingIfNeeded } from './automation/typing';
 import { matchesTriggerConfig } from './automation/triggerMatcher';
-import { getNextOpenTime } from './automation/utils';
 import {
-  advanceAfterHoursCaptureState,
-  advanceBookingConciergeState,
   advanceSalesConciergeState,
-  buildAfterHoursSummary,
-  buildBookingSummary,
   normalizeFlowState,
   resolveSalesConciergeConfig,
 } from './automation/templateFlows';
@@ -44,10 +37,8 @@ import {
   AutomationTestState,
 } from './automation/types';
 import {
-  AfterHoursCaptureConfig,
   AutomationRateLimit,
   AutomationTemplateId,
-  BookingConciergeConfig,
   SalesConciergeConfig,
   TemplateFlowConfig,
   TriggerType,
@@ -405,253 +396,6 @@ async function trackSalesStep(workspaceId: mongoose.Types.ObjectId, step?: strin
   await trackDailyMetric(workspaceId, new Date(), { [`salesConciergeStepCounts.${step}`]: 1 });
 }
 
-async function handleBookingConciergeFlow(params: {
-  automation: any;
-  replyStep: { templateFlow: TemplateFlowConfig };
-  session: any;
-  conversation: any;
-  igAccount: any;
-  messageText: string;
-  platform?: string;
-  messageContext?: AutomationTestContext;
-}): Promise<{ success: boolean; error?: string }> {
-  const { automation, replyStep, session, conversation, igAccount, messageText, platform, messageContext } = params;
-  const config = replyStep.templateFlow.config as BookingConciergeConfig;
-  const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
-  const tags = config.tags || ['intent_booking', 'template_booking_concierge'];
-
-  session.lastCustomerMessageAt = new Date();
-
-  const currentState = normalizeFlowState({
-    step: session.step,
-    status: session.status,
-    questionCount: session.questionCount,
-    collectedFields: session.collectedFields || {},
-  });
-  const { replies, state: nextState, actions } = advanceBookingConciergeState({
-    state: currentState,
-    messageText,
-    config,
-  });
-  const aiResponse = replies.length
-    ? await buildAutomationAiReply({
-        conversation,
-        messageText,
-        messageContext,
-        aiSettings: config.aiSettings,
-      })
-    : null;
-  const combinedTags = [...tags, ...(aiResponse?.tags || [])];
-  const repliesToSend = aiResponse
-    ? [{ ...replies[0], text: aiResponse.replyText }]
-    : replies;
-
-  let sentAny = false;
-  for (const reply of repliesToSend) {
-    if (!updateRateLimit(session, rateLimit)) {
-      if (!sentAny) {
-        return { success: false, error: 'Rate limit exceeded' };
-      }
-      break;
-    }
-    await sendTemplateMessage({
-      conversation,
-      automation,
-      igAccount,
-      recipientId: conversation.participantInstagramId,
-      text: reply.text,
-      buttons: reply.buttons,
-      platform,
-      tags: combinedTags,
-      aiMeta: aiResponse
-        ? {
-            shouldEscalate: aiResponse.shouldEscalate,
-            escalationReason: aiResponse.escalationReason,
-            knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
-          }
-        : undefined,
-    });
-    sentAny = true;
-  }
-
-  if (sentAny) {
-    session.lastAutomationMessageAt = new Date();
-  }
-
-  session.step = nextState.step;
-  session.status = nextState.status;
-  session.questionCount = nextState.questionCount;
-  session.collectedFields = nextState.collectedFields;
-
-  if (actions?.createLead || actions?.createBooking) {
-    const fields = nextState.collectedFields || {};
-    const summary = buildBookingSummary(fields);
-    if (actions.createLead) {
-      const existingLead = await LeadCapture.findOne({ conversationId: conversation._id, goalType: 'capture_lead' });
-      if (!existingLead) {
-        await LeadCapture.create({
-          workspaceId: conversation.workspaceId,
-          conversationId: conversation._id,
-          goalType: 'capture_lead',
-          participantName: conversation.participantName,
-          participantHandle: conversation.participantHandle,
-          name: fields.leadName,
-          phone: fields.phone,
-          customNote: fields.service ? `Service: ${fields.service}. ${fields.preferredDayTime || ''}`.trim() : undefined,
-        });
-      }
-    }
-    if (actions.createBooking) {
-      const existingBooking = await BookingRequest.findOne({ conversationId: conversation._id });
-      if (!existingBooking) {
-        await BookingRequest.create({
-          workspaceId: conversation.workspaceId,
-          conversationId: conversation._id,
-          serviceType: fields.service,
-          summary,
-        });
-      }
-    }
-  }
-
-  if (actions?.handoffReason) {
-    await handoffToTeam({ conversation, reason: actions.handoffReason, customerMessage: messageText });
-  }
-
-  await session.save();
-  return { success: true };
-}
-
-async function handleAfterHoursCaptureFlow(params: {
-  automation: any;
-  replyStep: { templateFlow: TemplateFlowConfig };
-  session: any;
-  conversation: any;
-  igAccount: any;
-  messageText: string;
-  platform?: string;
-  messageContext?: AutomationTestContext;
-}): Promise<{ success: boolean; error?: string }> {
-  const { automation, replyStep, session, conversation, igAccount, messageText, platform, messageContext } = params;
-  const config = replyStep.templateFlow.config as AfterHoursCaptureConfig;
-  const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
-  const tags = config.tags || ['after_hours_lead', 'template_after_hours_capture'];
-
-  session.lastCustomerMessageAt = new Date();
-
-  const currentState = normalizeFlowState({
-    step: session.step,
-    status: session.status,
-    questionCount: session.questionCount,
-    collectedFields: session.collectedFields || {},
-  });
-  const { replies, state: nextState, actions } = advanceAfterHoursCaptureState({
-    state: currentState,
-    messageText,
-    config,
-  });
-  const aiResponse = replies.length
-    ? await buildAutomationAiReply({
-        conversation,
-        messageText,
-        messageContext,
-        aiSettings: config.aiSettings,
-      })
-    : null;
-  const combinedTags = [...tags, ...(aiResponse?.tags || [])];
-  const repliesToSend = aiResponse
-    ? [{ ...replies[0], text: aiResponse.replyText }]
-    : replies;
-
-  let sentAny = false;
-  for (const reply of repliesToSend) {
-    if (!updateRateLimit(session, rateLimit)) {
-      if (!sentAny) {
-        return { success: false, error: 'Rate limit exceeded' };
-      }
-      break;
-    }
-    await sendTemplateMessage({
-      conversation,
-      automation,
-      igAccount,
-      recipientId: conversation.participantInstagramId,
-      text: reply.text,
-      buttons: reply.buttons,
-      platform,
-      tags: combinedTags,
-      aiMeta: aiResponse
-        ? {
-            shouldEscalate: aiResponse.shouldEscalate,
-            escalationReason: aiResponse.escalationReason,
-            knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
-          }
-        : undefined,
-    });
-    sentAny = true;
-  }
-
-  if (sentAny) {
-    session.lastAutomationMessageAt = new Date();
-  }
-
-  session.step = nextState.step;
-  session.status = nextState.status;
-  session.questionCount = nextState.questionCount;
-  session.collectedFields = nextState.collectedFields;
-
-  if (actions?.createLead) {
-    const fields = nextState.collectedFields || {};
-    const existingLead = await LeadCapture.findOne({ conversationId: conversation._id, goalType: 'capture_lead' });
-    if (!existingLead) {
-      const noteParts = [
-        fields.intent ? `Intent: ${fields.intent}` : null,
-        fields.preferredTime ? `Preferred time: ${fields.preferredTime}` : null,
-        fields.message ? `Message: ${fields.message}` : null,
-      ].filter(Boolean);
-      await LeadCapture.create({
-        workspaceId: conversation.workspaceId,
-        conversationId: conversation._id,
-        goalType: 'capture_lead',
-        participantName: conversation.participantName,
-        participantHandle: conversation.participantHandle,
-        name: fields.leadName,
-        phone: fields.phone,
-        customNote: noteParts.length ? noteParts.join(' | ') : undefined,
-      });
-    }
-  }
-
-  if (actions?.handoffReason) {
-    await handoffToTeam({ conversation, reason: actions.handoffReason, customerMessage: messageText });
-  }
-
-  if (actions?.scheduleFollowup) {
-    const nextOpen = getNextOpenTime(config.businessHours);
-    const lastCustomerMessageAt = conversation.lastCustomerMessageAt || new Date();
-    const windowExpiresAt = new Date(lastCustomerMessageAt.getTime() + 24 * 60 * 60 * 1000);
-    if (nextOpen > new Date() && nextOpen <= windowExpiresAt) {
-      const task = await FollowupTask.create({
-        workspaceId: conversation.workspaceId,
-        conversationId: conversation._id,
-        instagramAccountId: conversation.instagramAccountId,
-        participantInstagramId: conversation.participantInstagramId,
-        lastCustomerMessageAt,
-        lastBusinessMessageAt: conversation.lastBusinessMessageAt,
-        windowExpiresAt,
-        scheduledFollowupAt: nextOpen,
-        status: 'scheduled',
-        followupType: 'after_hours',
-        customMessage: config.followupMessage || "We're open now if you'd like to continue. Reply anytime.",
-      });
-      session.followupTaskId = task._id;
-    }
-  }
-
-  await session.save();
-  return { success: true };
-}
-
 async function handleSalesConciergeFlow(params: {
   automation: any;
   replyStep: { templateFlow: TemplateFlowConfig };
@@ -952,32 +696,6 @@ async function executeTemplateFlow(params: {
     return { success: false, error: 'Missing participant Instagram ID' };
   }
 
-  if (templateFlow.templateId === 'booking_concierge') {
-    return handleBookingConciergeFlow({
-      automation,
-      replyStep,
-      session,
-      conversation,
-      igAccount,
-      messageText,
-      platform,
-      messageContext,
-    });
-  }
-
-  if (templateFlow.templateId === 'after_hours_capture') {
-    return handleAfterHoursCaptureFlow({
-      automation,
-      replyStep,
-      session,
-      conversation,
-      igAccount,
-      messageText,
-      platform,
-      messageContext,
-    });
-  }
-
   if (templateFlow.templateId === 'sales_concierge') {
     return handleSalesConciergeFlow({
       automation,
@@ -991,7 +709,7 @@ async function executeTemplateFlow(params: {
     });
   }
 
-  return { success: false, error: 'Unknown template flow' };
+  return { success: false, error: 'Unsupported template flow' };
 }
 
 /**

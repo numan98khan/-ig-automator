@@ -21,7 +21,6 @@ import {
   TRIGGER_METADATA,
   AUTOMATION_TEMPLATES,
   SetupData,
-  BOOKING_TRIGGER_KEYWORDS,
   SALES_TRIGGER_KEYWORDS,
   AI_TONE_OPTIONS,
 } from './constants';
@@ -112,17 +111,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
     onUpdateSetupData((prev) => ({ ...prev, ...updates }));
   };
 
-  const addTriggerKeyword = (keyword: string) => {
-    const current = (setupData.triggerKeywords || '')
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
-    const exists = current.some((item) => item.toLowerCase() === keyword.toLowerCase());
-    if (!exists) {
-      updateSetupData({ triggerKeywords: [...current, keyword].join(', ') });
-    }
-  };
-
   const addSalesTriggerKeyword = (keyword: string) => {
     const current = (setupData.salesTriggerKeywords || '')
       .split(',')
@@ -132,16 +120,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
     if (!exists) {
       updateSetupData({ salesTriggerKeywords: [...current, keyword].join(', ') });
     }
-  };
-
-  const toggleTriggerCategory = (categoryId: string) => {
-    const current = setupData.triggerCategoryIds || [];
-    const exists = current.includes(categoryId);
-    updateSetupData({
-      triggerCategoryIds: exists
-        ? current.filter((id) => id !== categoryId)
-        : [...current, categoryId],
-    });
   };
 
   const toggleSalesTriggerCategory = (categoryId: string) => {
@@ -239,133 +217,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                   className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                 />
               </div>
-
-              {selectedTemplate.setupFields.serviceList && (
-                <Input
-                  label="Services"
-                  value={setupData.serviceList}
-                  onChange={(event) => updateSetupData({ serviceList: event.target.value })}
-                  placeholder="e.g., Facial, Botox, Makeup"
-                />
-              )}
-
-              {selectedTemplate.setupFields.priceRanges && (
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Price Ranges</label>
-                  <textarea
-                    value={setupData.priceRanges}
-                    onChange={(event) => updateSetupData({ priceRanges: event.target.value })}
-                    placeholder="e.g., Facial: $80-$120\nMakeup: $120-$200"
-                    rows={3}
-                    className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                  />
-                </div>
-              )}
-
-              {selectedTemplate.setupFields.locationLink && (
-                <Input
-                  label="Location Link"
-                  value={setupData.locationLink}
-                  onChange={(event) => updateSetupData({ locationLink: event.target.value })}
-                  placeholder="https://maps.google.com/?q=your-business"
-                />
-              )}
-
-              {selectedTemplate.setupFields.locationHours && (
-                <Input
-                  label="Location Hours"
-                  value={setupData.locationHours}
-                  onChange={(event) => updateSetupData({ locationHours: event.target.value })}
-                  placeholder="Mon-Fri 9AM-6PM, Sat 10AM-4PM"
-                />
-              )}
-
-              {selectedTemplate.setupFields.phoneMinLength && (
-                <Input
-                  label="Min Phone Digits"
-                  type="number"
-                  value={setupData.phoneMinLength}
-                  onChange={(event) => updateSetupData({ phoneMinLength: event.target.value })}
-                  placeholder="8"
-                />
-              )}
-
-              {selectedTemplate.setupFields.triggerMatchMode && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">Trigger Mode</label>
-                  <select
-                    value={setupData.triggerMatchMode}
-                    onChange={(event) => updateSetupData({ triggerMatchMode: event.target.value as SetupData['triggerMatchMode'] })}
-                    className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                  >
-                    <option value="any">Any (keywords, categories, links, attachments)</option>
-                    <option value="keywords">Keywords only</option>
-                    <option value="categories">AI categories only</option>
-                  </select>
-                </div>
-              )}
-
-              {selectedTemplate.setupFields.triggerKeywords
-                && (setupData.triggerMatchMode === 'any' || setupData.triggerMatchMode === 'keywords') && (
-                <div className="space-y-3">
-                  <Input
-                    label="Trigger Keywords"
-                    value={setupData.triggerKeywords}
-                    onChange={(event) => updateSetupData({ triggerKeywords: event.target.value })}
-                    placeholder="book, booking, appointment"
-                  />
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5">Match Rule</label>
-                    <select
-                      value={setupData.triggerKeywordMatch}
-                      onChange={(event) => updateSetupData({ triggerKeywordMatch: event.target.value as 'any' | 'all' })}
-                      className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                    >
-                      <option value="any">Match any keyword</option>
-                      <option value="all">Match all keywords</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {BOOKING_TRIGGER_KEYWORDS.map((keyword) => (
-                      <button
-                        key={keyword}
-                        type="button"
-                        onClick={() => addTriggerKeyword(keyword)}
-                        className="px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-                      >
-                        {keyword}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {selectedTemplate.setupFields.triggerCategories
-                && (setupData.triggerMatchMode === 'any' || setupData.triggerMatchMode === 'categories') && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">AI Categories (optional)</label>
-                  <p className="text-xs text-muted-foreground">
-                    Triggers when the message is categorized into any selected category.
-                  </p>
-                  {categories.length > 0 ? (
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {categories.map((category) => (
-                        <label key={category._id} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={(setupData.triggerCategoryIds || []).includes(category._id)}
-                            onChange={() => toggleTriggerCategory(category._id)}
-                            className="rounded border-border"
-                          />
-                          {category.nameEn}
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
-                  )}
-                </div>
-              )}
 
               {selectedTemplate.setupFields.salesTriggerMatchMode && (
                 <div className="space-y-2">
@@ -510,57 +361,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 </div>
               )}
 
-              {selectedTemplate.setupFields.businessHoursTime && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input
-                    label="Open Time"
-                    type="time"
-                    value={setupData.businessHoursStart}
-                    onChange={(event) => updateSetupData({ businessHoursStart: event.target.value })}
-                  />
-                  <Input
-                    label="Close Time"
-                    type="time"
-                    value={setupData.businessHoursEnd}
-                    onChange={(event) => updateSetupData({ businessHoursEnd: event.target.value })}
-                  />
-                </div>
-              )}
-
-              {selectedTemplate.setupFields.businessTimezone && (
-                <Input
-                  label="Timezone"
-                  value={setupData.businessTimezone}
-                  onChange={(event) => updateSetupData({ businessTimezone: event.target.value })}
-                  placeholder="America/New_York"
-                />
-              )}
-
-              {selectedTemplate.setupFields.afterHoursMessage && (
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Closed Message</label>
-                  <textarea
-                    value={setupData.afterHoursMessage}
-                    onChange={(event) => updateSetupData({ afterHoursMessage: event.target.value })}
-                    placeholder="We're closed - leave details, we'll contact you at {next_open_time}."
-                    rows={3}
-                    className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                  />
-                </div>
-              )}
-
-              {selectedTemplate.setupFields.followupMessage && (
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Next-Open Follow-up</label>
-                  <textarea
-                    value={setupData.followupMessage}
-                    onChange={(event) => updateSetupData({ followupMessage: event.target.value })}
-                    placeholder="We're open now if you'd like to continue. Reply anytime."
-                    rows={2}
-                    className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                  />
-                </div>
-              )}
             </div>
 
             <div className="h-full min-h-0 flex flex-col">

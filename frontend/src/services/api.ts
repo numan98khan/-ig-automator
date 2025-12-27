@@ -214,8 +214,6 @@ export type GoalType =
   | 'drive_to_channel';
 
 export type AutomationTemplateId =
-  | 'booking_concierge'
-  | 'after_hours_capture'
   | 'sales_concierge';
 
 export interface BusinessHoursConfig {
@@ -233,41 +231,6 @@ export interface AutomationRateLimit {
 export interface AutomationAiSettings {
   tone?: string;
   maxReplySentences?: number;
-}
-
-export interface BookingConciergeConfig {
-  quickReplies: string[];
-  serviceOptions: string[];
-  priceRanges?: string;
-  locationLink?: string;
-  locationHours?: string;
-  minPhoneLength?: number;
-  maxQuestions?: number;
-  rateLimit?: AutomationRateLimit;
-  handoffTeam?: string;
-  tags?: string[];
-  aiSettings?: AutomationAiSettings;
-  outputs?: {
-    sheetRow?: string;
-    notify?: string[];
-    createContact?: boolean;
-  };
-}
-
-export interface AfterHoursCaptureConfig {
-  businessHours: BusinessHoursConfig;
-  closedMessageTemplate: string;
-  intentOptions: string[];
-  followupMessage?: string;
-  maxQuestions?: number;
-  rateLimit?: AutomationRateLimit;
-  tags?: string[];
-  aiSettings?: AutomationAiSettings;
-  outputs?: {
-    sheetRow?: string;
-    notify?: string[];
-    digestInclude?: boolean;
-  };
 }
 
 export interface SalesCatalogVariantOptions {
@@ -311,7 +274,7 @@ export interface SalesConciergeConfig {
 
 export interface TemplateFlowConfig {
   templateId: AutomationTemplateId;
-  config: BookingConciergeConfig | AfterHoursCaptureConfig | SalesConciergeConfig;
+  config: SalesConciergeConfig;
 }
 
 export interface AutomationTestHistoryItem {
