@@ -8,6 +8,18 @@ import { webhookLogger } from './webhook-logger';
 
 const API_VERSION = 'v24.0';
 const BASE_URL = `https://graph.instagram.com/${API_VERSION}`;
+const TEST_ACCESS_TOKEN_PREFIX = 'test_';
+
+function isTestAccessToken(accessToken?: string): boolean {
+  return !!accessToken && accessToken.startsWith(TEST_ACCESS_TOKEN_PREFIX);
+}
+
+function buildTestResponse(recipientId: string) {
+  return {
+    message_id: `test_msg_${Date.now()}`,
+    recipient_id: recipientId,
+  };
+}
 
 export interface InstagramConversation {
   id: string;
@@ -241,6 +253,18 @@ export async function sendMessage(
 
   webhookLogger.logApiCall(endpoint, 'POST', payload);
 
+  if (isTestAccessToken(accessToken)) {
+    const testResponse = buildTestResponse(recipientId);
+    console.log('🧪 [IG-API] Test send stubbed:', {
+      endpoint,
+      recipientId,
+      messageLength: messageText.length,
+      messagePreview: messageText.slice(0, 100),
+    });
+    webhookLogger.logApiResponse(endpoint, 200, testResponse);
+    return testResponse;
+  }
+
   try {
     const response = await axios.post(endpoint, payload, {
       params: {
@@ -334,6 +358,17 @@ export async function sendMediaMessage(
   };
 
   webhookLogger.logApiCall(endpoint, 'POST', payload);
+
+  if (isTestAccessToken(accessToken)) {
+    const testResponse = buildTestResponse(recipientId);
+    console.log('🧪 [IG-API] Test button send stubbed:', {
+      endpoint,
+      recipientId,
+      buttonCount: limitedButtons.length,
+    });
+    webhookLogger.logApiResponse(endpoint, 200, testResponse);
+    return testResponse;
+  }
 
   try {
     const response = await axios.post(endpoint, payload, {
@@ -467,4 +502,3 @@ export async function markMessageAsRead(
     return false;
   }
 }
-

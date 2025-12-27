@@ -30,7 +30,6 @@ import {
   AutomationTestContext,
   AutomationTestHistoryItem,
   AutomationTestState,
-  TemplateFlowActions,
 } from './automation/types';
 import {
   AfterHoursCaptureConfig,
@@ -704,6 +703,7 @@ export async function executeAutomation(params: {
   instagramAccountId: string;
   platform?: string;
   messageContext?: AutomationTestContext;
+  automationId?: string;
 }): Promise<{ success: boolean; automationExecuted?: string; error?: string }> {
   try {
     const {
@@ -715,6 +715,7 @@ export async function executeAutomation(params: {
       instagramAccountId,
       platform,
       messageContext,
+      automationId,
     } = params;
 
     console.log('🤖 [AUTOMATION] Starting automation execution:', {
@@ -727,11 +728,16 @@ export async function executeAutomation(params: {
       platform,
     });
 
-    const automations = await Automation.find({
+    const automationQuery: Record<string, any> = {
       workspaceId: new mongoose.Types.ObjectId(workspaceId),
       triggerType,
       isActive: true,
-    }).sort({ createdAt: 1 });
+    };
+    if (automationId) {
+      automationQuery._id = new mongoose.Types.ObjectId(automationId);
+    }
+
+    const automations = await Automation.find(automationQuery).sort({ createdAt: 1 });
 
     console.log(`🔍 [AUTOMATION] Found ${automations.length} active automation(s) for trigger: ${triggerType}`);
 
@@ -829,146 +835,187 @@ function appendTestHistory(history: AutomationTestHistoryItem[], from: 'customer
   });
 }
 
-function createTemplateState(templateId: AutomationTemplateId): NonNullable<AutomationTestState['template']> {
-  return {
-    templateId,
-    step: undefined,
-    questionCount: 0,
-    collectedFields: {},
-    status: 'active',
-    followup: undefined,
-    lastCustomerMessageAt: undefined,
-    lastBusinessMessageAt: undefined,
-  };
+type AutomationTestMode = 'self_chat' | 'test_user';
+
+const TEST_ACCESS_TOKEN = 'test_preview';
+const TEST_ACCOUNT_NAME = 'Preview Test Account';
+const TEST_ACCOUNT_HANDLE = 'preview.test';
+
+function resolveTestMode(
+  mode?: AutomationTestContext['testMode'],
+  fallback?: AutomationTestState['testMode'],
+): AutomationTestMode {
+  if (mode === 'self_chat' || mode === 'test_user') {
+    return mode;
+  }
+  if (fallback === 'self_chat' || fallback === 'test_user') {
+    return fallback;
+  }
+  return 'test_user';
 }
 
-function ensureTemplateState(templateId: AutomationTemplateId, state?: AutomationTestState): AutomationTestState['template'] {
-  if (state?.template && state.template.templateId === templateId) {
-    const status = state.template.status || 'active';
-    if (status === 'active') {
-      return {
-        ...state.template,
-        questionCount: state.template.questionCount ?? 0,
-        collectedFields: state.template.collectedFields || {},
-        status,
-        followup: state.template.followup,
-        lastCustomerMessageAt: state.template.lastCustomerMessageAt,
-        lastBusinessMessageAt: state.template.lastBusinessMessageAt,
+async function ensureTestInstagramAccount(
+  workspaceId: string,
+  existingAccountId?: string,
+): Promise<any> {
+  if (existingAccountId) {
+    const existing = await InstagramAccount.findById(existingAccountId).select('+accessToken');
+    if (existing) {
+      return existing;
+    }
+  }
+
+  const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
+  const username = `${TEST_ACCOUNT_HANDLE}-${workspaceId}`;
+  let account = await InstagramAccount.findOne({
+    workspaceId: workspaceObjectId,
+    status: 'mock',
+    username,
+  }).select('+accessToken');
+
+  if (!account) {
+    account = await InstagramAccount.create({
+      username,
+      workspaceId: workspaceObjectId,
+      status: 'mock',
+      instagramAccountId: `test_ig_${workspaceId}`,
+      instagramUserId: `test_user_${workspaceId}`,
+      name: TEST_ACCOUNT_NAME,
+      accessToken: TEST_ACCESS_TOKEN,
+      accountType: 'test',
+    });
+  }
+
+  if (!account.instagramAccountId) {
+    account.instagramAccountId = `test_ig_${workspaceId}`;
+  }
+  if (!account.instagramUserId) {
+    account.instagramUserId = `test_user_${workspaceId}`;
+  }
+
+  if (!account.accessToken || !account.accessToken.startsWith('test_')) {
+    account.accessToken = TEST_ACCESS_TOKEN;
+  }
+
+  if (account.isModified()) {
+    await account.save();
+    account = await InstagramAccount.findById(account._id).select('+accessToken');
+  }
+
+  return account;
+}
+
+async function ensureTestConversation(params: {
+  automationId: string;
+  workspaceId: string;
+  instagramAccount: any;
+  state: AutomationTestState;
+  testMode: AutomationTestMode;
+}): Promise<any> {
+  const { automationId, workspaceId, instagramAccount, state, testMode } = params;
+
+  if (state.testConversationId && state.testMode === testMode) {
+    const existing = await Conversation.findById(state.testConversationId);
+    if (existing && existing.workspaceId.toString() === workspaceId) {
+      if (!existing.participantInstagramId) {
+        existing.participantInstagramId = testMode === 'self_chat'
+          ? instagramAccount.instagramAccountId || `test_ig_${workspaceId}`
+          : state.testParticipantInstagramId || `test_user_${automationId}`;
+        existing.platform = 'instagram';
+        await existing.save();
+      }
+      return existing;
+    }
+  }
+
+  const participantInstagramId = testMode === 'self_chat'
+    ? instagramAccount.instagramAccountId || `test_ig_${workspaceId}`
+    : state.testParticipantInstagramId || `test_user_${automationId}`;
+  const participantHandle = testMode === 'self_chat'
+    ? instagramAccount.username || TEST_ACCOUNT_HANDLE
+    : 'preview.test.user';
+  const participantName = testMode === 'self_chat'
+    ? instagramAccount.name || instagramAccount.username || TEST_ACCOUNT_NAME
+    : 'Preview Test User';
+
+  return Conversation.create({
+    participantName,
+    participantHandle,
+    workspaceId: new mongoose.Types.ObjectId(workspaceId),
+    instagramAccountId: instagramAccount._id,
+    platform: 'instagram',
+    instagramConversationId: `preview_${automationId}`,
+    participantInstagramId,
+  });
+}
+
+async function recordTestCustomerMessage(conversation: any, messageText: string): Promise<Date> {
+  const sentAt = new Date();
+  await Message.create({
+    conversationId: conversation._id,
+    workspaceId: conversation.workspaceId,
+    text: messageText,
+    from: 'customer',
+    platform: 'instagram',
+    createdAt: sentAt,
+  });
+
+  conversation.lastMessage = messageText;
+  conversation.lastMessageAt = sentAt;
+  conversation.lastCustomerMessageAt = sentAt;
+  await conversation.save();
+
+  return sentAt;
+}
+
+async function buildTestTemplateState(
+  automationId: mongoose.Types.ObjectId,
+  conversationId: mongoose.Types.ObjectId,
+): Promise<AutomationTestState['template'] | undefined> {
+  const session = await AutomationSession.findOne({
+    automationId,
+    conversationId,
+  }).sort({ createdAt: -1 });
+
+  if (!session) {
+    return undefined;
+  }
+
+  let followup;
+  if (session.followupTaskId) {
+    const task = await FollowupTask.findById(session.followupTaskId);
+    if (task) {
+      const followupStatus = ['scheduled', 'sent', 'cancelled'].includes(task.status)
+        ? (task.status as 'scheduled' | 'sent' | 'cancelled')
+        : 'cancelled';
+      followup = {
+        status: followupStatus,
+        scheduledAt: task.scheduledFollowupAt?.toISOString(),
+        message: task.customMessage || task.followupText,
       };
     }
   }
-  return createTemplateState(templateId);
-}
-
-function scheduleAfterHoursFollowup(
-  templateState: NonNullable<AutomationTestState['template']>,
-  config: AfterHoursCaptureConfig,
-  now: Date,
-) {
-  const lastCustomerMessageAt = templateState.lastCustomerMessageAt
-    ? new Date(templateState.lastCustomerMessageAt)
-    : now;
-  const windowExpiresAt = new Date(lastCustomerMessageAt.getTime() + 24 * 60 * 60 * 1000);
-  const nextOpen = getNextOpenTime(config.businessHours, now);
-  if (nextOpen > now && nextOpen <= windowExpiresAt) {
-    templateState.followup = {
-      status: 'scheduled',
-      scheduledAt: nextOpen.toISOString(),
-      message: config.followupMessage || "We're open now if you'd like to continue. Reply anytime.",
-    };
-  }
-}
-
-function simulateBookingConciergeTest(
-  messageText: string,
-  templateState: NonNullable<AutomationTestState['template']>,
-  config: BookingConciergeConfig,
-): { replies: string[]; templateState: NonNullable<AutomationTestState['template']>; actions?: TemplateFlowActions } {
-  const currentState = normalizeFlowState({
-    step: templateState.step,
-    status: templateState.status,
-    questionCount: templateState.questionCount,
-    collectedFields: templateState.collectedFields || {},
-  });
-  const { replies, state: nextState, actions } = advanceBookingConciergeState({
-    state: currentState,
-    messageText,
-    config,
-  });
 
   return {
-    replies: replies.map((reply) => reply.text),
-    templateState: {
-      ...templateState,
-      step: nextState.step,
-      status: nextState.status,
-      questionCount: nextState.questionCount,
-      collectedFields: nextState.collectedFields,
-    },
-    actions,
+    templateId: session.templateId,
+    step: session.step,
+    status: session.status,
+    questionCount: session.questionCount,
+    collectedFields: session.collectedFields || {},
+    followup,
+    lastCustomerMessageAt: session.lastCustomerMessageAt?.toISOString(),
+    lastBusinessMessageAt: session.lastAutomationMessageAt?.toISOString(),
   };
 }
 
-function simulateAfterHoursCaptureTest(
-  messageText: string,
-  templateState: NonNullable<AutomationTestState['template']>,
-  config: AfterHoursCaptureConfig,
-): { replies: string[]; templateState: NonNullable<AutomationTestState['template']>; actions?: TemplateFlowActions } {
-  const currentState = normalizeFlowState({
-    step: templateState.step,
-    status: templateState.status,
-    questionCount: templateState.questionCount,
-    collectedFields: templateState.collectedFields || {},
-  });
-  const { replies, state: nextState, actions } = advanceAfterHoursCaptureState({
-    state: currentState,
-    messageText,
-    config,
-  });
+async function fetchTestReplies(conversationId: mongoose.Types.ObjectId, since: Date): Promise<string[]> {
+  const messages = await Message.find({
+    conversationId,
+    from: 'ai',
+    createdAt: { $gte: since },
+  }).sort({ createdAt: 1 });
 
-  return {
-    replies: replies.map((reply) => reply.text),
-    templateState: {
-      ...templateState,
-      step: nextState.step,
-      status: nextState.status,
-      questionCount: nextState.questionCount,
-      collectedFields: nextState.collectedFields,
-    },
-    actions,
-  };
-}
-
-function simulateSalesConciergeTest(
-  messageText: string,
-  templateState: NonNullable<AutomationTestState['template']>,
-  config: SalesConciergeConfig,
-  context?: AutomationTestContext,
-): { replies: string[]; templateState: NonNullable<AutomationTestState['template']>; actions?: TemplateFlowActions } {
-  const currentState = normalizeFlowState({
-    step: templateState.step,
-    status: templateState.status,
-    questionCount: templateState.questionCount,
-    collectedFields: templateState.collectedFields || {},
-  });
-  const { replies, state: nextState, actions } = advanceSalesConciergeState({
-    state: currentState,
-    messageText,
-    config,
-    context,
-  });
-
-  return {
-    replies: replies.map((reply) => reply.text),
-    templateState: {
-      ...templateState,
-      step: nextState.step,
-      status: nextState.status,
-      questionCount: nextState.questionCount,
-      collectedFields: nextState.collectedFields,
-    },
-    actions,
-  };
+  return messages.map((message) => message.text);
 }
 
 export async function runAutomationTest(params: {
@@ -989,26 +1036,39 @@ export async function runAutomationTest(params: {
     throw new Error('Automation not found');
   }
 
-  const replyStep = automation.replySteps[0];
-  if (!replyStep) {
-    throw new Error('No reply step configured');
-  }
-
   console.log('🧪 [AUTOMATION TEST] Run', {
     automationId,
     workspaceId,
     action,
     messageTextPreview: messageText?.slice(0, 160),
-    replyType: replyStep.type,
-    templateId: replyStep.templateFlow?.templateId,
     triggerConfig: automation.triggerConfig,
     context,
   });
 
   const nextState: AutomationTestState = params.state ? { ...params.state } : {};
   const history = nextState.history ? [...nextState.history] : [];
+  const testMode = resolveTestMode(context?.testMode, nextState.testMode);
+  const instagramAccount = await ensureTestInstagramAccount(workspaceId, nextState.testInstagramAccountId);
+  const conversation = await ensureTestConversation({
+    automationId,
+    workspaceId,
+    instagramAccount,
+    state: nextState,
+    testMode,
+  });
+
+  nextState.testConversationId = conversation._id.toString();
+  nextState.testInstagramAccountId = instagramAccount._id.toString();
+  nextState.testParticipantInstagramId = conversation.participantInstagramId;
+  nextState.testMode = testMode;
+
   if (action === 'simulate_followup') {
-    if (!nextState.template?.followup || nextState.template.followup.status !== 'scheduled') {
+    const followupTask = await FollowupTask.findOne({
+      conversationId: conversation._id,
+      status: 'scheduled',
+    }).sort({ scheduledFollowupAt: 1 });
+
+    if (!followupTask) {
       return {
         replies: [],
         state: {
@@ -1019,21 +1079,25 @@ export async function runAutomationTest(params: {
       };
     }
 
-    const followupMessage = nextState.template.followup.message || "We're open now if you'd like to continue. Reply anytime.";
-    appendTestHistory(history, 'ai', followupMessage);
+    followupTask.scheduledFollowupAt = new Date();
+    await followupTask.save();
+
+    const startedAt = new Date();
+    await processDueFollowups({
+      conversationId: conversation._id,
+      now: startedAt,
+    });
+
+    const replies = await fetchTestReplies(conversation._id, startedAt);
+    replies.forEach((reply) => appendTestHistory(history, 'ai', reply));
+
+    const template = await buildTestTemplateState(automation._id, conversation._id);
     return {
-      replies: [followupMessage],
+      replies,
       state: {
         ...nextState,
         history,
-        template: {
-          ...nextState.template,
-          followup: {
-            ...nextState.template.followup,
-            status: 'sent',
-          },
-          lastBusinessMessageAt: new Date().toISOString(),
-        },
+        template,
       },
       meta: { action: 'simulate_followup' },
     };
@@ -1044,135 +1108,48 @@ export async function runAutomationTest(params: {
   }
 
   const triggerMatched = matchesTriggerConfig(messageText, automation.triggerConfig, context);
+  appendTestHistory(history, 'customer', messageText);
+
   console.log('🧪 [AUTOMATION TEST] Trigger match', {
     automationId,
     triggerMatched,
     context,
   });
-  appendTestHistory(history, 'customer', messageText);
 
-  if (replyStep.type !== 'template_flow' || !replyStep.templateFlow) {
-    return {
-      replies: [],
-      state: {
-        ...nextState,
-        history,
-      },
-      meta: {
-        triggerMatched,
-        error: 'Only template_flow automations are supported',
-      },
-    };
+  await cancelFollowupOnCustomerReply(conversation._id);
+  await recordTestCustomerMessage(conversation, messageText);
+
+  if (!conversation.participantInstagramId) {
+    throw new Error('Missing participant Instagram ID for test conversation');
   }
 
-  const templateId = replyStep.templateFlow.templateId;
-  const existingTemplateState = nextState.template?.templateId === templateId
-    ? { ...nextState.template }
-    : undefined;
-  if (existingTemplateState?.followup?.status === 'scheduled') {
-    existingTemplateState.followup = {
-      ...existingTemplateState.followup,
-      status: 'cancelled',
-    };
-  }
-
-  const hasActiveSession = existingTemplateState
-    ? (existingTemplateState.status || 'active') === 'active'
-    : false;
-  const shouldProcess = hasActiveSession || triggerMatched;
-  console.log('🧪 [AUTOMATION TEST] Template routing', {
+  const startedAt = new Date();
+  const executionResult = await executeAutomation({
+    workspaceId,
+    triggerType: automation.triggerType,
+    conversationId: conversation._id.toString(),
+    participantInstagramId: conversation.participantInstagramId,
+    messageText,
+    instagramAccountId: conversation.instagramAccountId.toString(),
+    platform: conversation.platform || 'instagram',
+    messageContext: context,
     automationId,
-    templateId,
-    hasActiveSession,
-    shouldProcess,
   });
 
-  if (!shouldProcess) {
-    return {
-      replies: [],
-      state: {
-        ...nextState,
-        history,
-        template: existingTemplateState,
-      },
-      meta: {
-        triggerMatched: false,
-      },
-    };
-  }
-
-  const templateState = ensureTemplateState(templateId, { ...nextState, template: existingTemplateState });
-  if (templateState.followup?.status === 'scheduled') {
-    templateState.followup.status = 'cancelled';
-  }
-  templateState.lastCustomerMessageAt = new Date().toISOString();
-  let result: { replies: string[]; templateState: NonNullable<AutomationTestState['template']>; actions?: TemplateFlowActions };
-
-  if (templateId === 'booking_concierge') {
-    result = simulateBookingConciergeTest(messageText, templateState, replyStep.templateFlow.config as BookingConciergeConfig);
-  } else if (templateId === 'after_hours_capture') {
-    result = simulateAfterHoursCaptureTest(messageText, templateState, replyStep.templateFlow.config as AfterHoursCaptureConfig);
-    if (
-      (result.actions?.scheduleFollowup || result.templateState.status === 'completed') &&
-      !result.templateState.followup
-    ) {
-      scheduleAfterHoursFollowup(result.templateState, replyStep.templateFlow.config as AfterHoursCaptureConfig, new Date());
-    }
-  } else if (templateId === 'sales_concierge') {
-    const resolvedConfig = await resolveSalesConciergeConfig(
-      workspaceId,
-      replyStep.templateFlow.config as SalesConciergeConfig,
-    );
-    result = simulateSalesConciergeTest(
-      messageText,
-      templateState,
-      resolvedConfig,
-      context,
-    );
-    if (result.actions?.createDraft) {
-      const existingDraftId = result.templateState.collectedFields?.draftId as string | undefined;
-      const draftId = existingDraftId || `draft_${Date.now()}`;
-      result.templateState.collectedFields = {
-        ...result.templateState.collectedFields,
-        draftId,
-      };
-      if (result.actions.paymentLinkRequired) {
-        const paymentLink = createPaymentLink({
-          amountText: result.templateState.collectedFields?.quote?.priceText,
-          draftId,
-        });
-        result.templateState.collectedFields = {
-          ...result.templateState.collectedFields,
-          paymentLink,
-        };
-        result.replies = result.replies.map((reply) => hydratePaymentLink(reply, paymentLink));
-      }
-    }
-  } else {
-    return {
-      replies: [],
-      state: {
-        ...nextState,
-        history,
-      },
-      meta: {
-        triggerMatched: shouldProcess,
-        error: 'Unsupported template flow',
-      },
-    };
-  }
-
-  result.replies.forEach((reply) => appendTestHistory(history, 'ai', reply));
+  const replies = await fetchTestReplies(conversation._id, startedAt);
+  replies.forEach((reply) => appendTestHistory(history, 'ai', reply));
+  const template = await buildTestTemplateState(automation._id, conversation._id);
 
   return {
-    replies: result.replies,
+    replies,
     state: {
       ...nextState,
       history,
-      template: result.templateState,
+      template,
     },
     meta: {
-      triggerMatched: shouldProcess,
+      triggerMatched,
+      error: executionResult.success ? undefined : executionResult.error,
     },
   };
 }
@@ -1181,19 +1158,28 @@ export async function runAutomationTest(params: {
  * Process due follow-up tasks
  * This should be called by a background job
  */
-export async function processDueFollowups(): Promise<{
+export async function processDueFollowups(params?: {
+  conversationId?: mongoose.Types.ObjectId | string;
+  now?: Date;
+}): Promise<{
   processed: number;
   sent: number;
   failed: number;
   cancelled: number;
 }> {
   const stats = { processed: 0, sent: 0, failed: 0, cancelled: 0 };
+  const now = params?.now || new Date();
 
   try {
-    const dueTasks = await FollowupTask.find({
+    const query: Record<string, any> = {
       status: 'scheduled',
-      scheduledFollowupAt: { $lte: new Date() },
-    });
+      scheduledFollowupAt: { $lte: now },
+    };
+    if (params?.conversationId) {
+      query.conversationId = new mongoose.Types.ObjectId(params.conversationId);
+    }
+
+    const dueTasks = await FollowupTask.find(query);
 
     for (const task of dueTasks) {
       stats.processed++;

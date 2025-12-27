@@ -314,14 +314,19 @@ export interface AutomationTestContext {
   hasAttachment?: boolean;
   linkUrl?: string;
   attachmentUrls?: string[];
+  testMode?: 'self_chat' | 'test_user';
 }
 
 export interface AutomationTestState {
   history?: AutomationTestHistoryItem[];
+  testConversationId?: string;
+  testInstagramAccountId?: string;
+  testParticipantInstagramId?: string;
+  testMode?: 'self_chat' | 'test_user';
   template?: {
     templateId: AutomationTemplateId;
     step?: string;
-    status?: 'active' | 'completed' | 'handoff';
+    status?: 'active' | 'completed' | 'handoff' | 'paused';
     questionCount: number;
     collectedFields?: Record<string, any>;
     followup?: {
