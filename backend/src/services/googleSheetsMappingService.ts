@@ -200,7 +200,9 @@ export async function analyzeInventoryMapping(
 
   return {
     fields: mappedFields,
-    summary: payload?.summary || 'Inventory mapping completed.',
+    summary: typeof payload?.summary === 'string'
+      ? payload.summary
+      : 'Inventory mapping completed.',
   };
 }
 
