@@ -198,11 +198,11 @@ export async function analyzeInventoryMapping(
     }
   }
 
+  const summary = typeof payload?.summary === 'string' ? payload.summary : undefined;
+
   return {
     fields: mappedFields,
-    summary: typeof payload?.summary === 'string'
-      ? payload.summary
-      : 'Inventory mapping completed.',
+    summary: summary ?? 'Inventory mapping completed.',
   };
 }
 
