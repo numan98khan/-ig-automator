@@ -558,7 +558,7 @@ async function handleSalesConciergeFlow(params: {
 
 async function handleAiReplyFlow(params: {
   automation: any;
-  replyStep: ReplyStep & { type: 'ai_reply'; aiReply: NonNullable<ReplyStep['aiReply']> };
+  replyStep: ReplyStep;
   conversation: any;
   igAccount: any;
   messageText: string;
@@ -566,6 +566,9 @@ async function handleAiReplyFlow(params: {
   messageContext?: AutomationTestContext;
 }): Promise<{ success: boolean; error?: string }> {
   const { automation, replyStep, conversation, igAccount, messageText, platform, messageContext } = params;
+  if (replyStep.type !== 'ai_reply' || !replyStep.aiReply) {
+    return { success: false, error: 'AI reply configuration missing' };
+  }
   const settingsStart = nowMs();
   const settings = await getWorkspaceSettings(conversation.workspaceId);
   const goalConfigs = getGoalConfigs(settings);
@@ -998,10 +1001,6 @@ export async function executeAutomation(params: {
 
       if (!conversation.participantInstagramId) {
         return finish({ success: false, error: 'Missing participant Instagram ID' });
-      }
-
-      if (!replyStep.aiReply) {
-        return finish({ success: false, error: 'AI reply configuration missing' });
       }
 
       const aiStart = nowMs();

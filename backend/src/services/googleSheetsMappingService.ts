@@ -176,13 +176,19 @@ export async function analyzeInventoryMapping(
 
   const mappedFields = { ...EMPTY_FIELDS };
   if (Array.isArray(payload?.fields)) {
-    for (const item of payload.fields) {
-      if (!item?.field || !isInventoryMappingField(item.field)) continue;
+    for (const item of payload.fields as Array<{
+      field?: unknown;
+      header?: unknown;
+      confidence?: unknown;
+      notes?: unknown;
+    }>) {
+      if (!isInventoryMappingField(item?.field)) continue;
+      const field = item.field;
       const normalizedHeader = item.header?.toString().trim();
       const resolvedHeader = normalizedHeader
         ? headerLookup.get(normalizedHeader.toLowerCase())
         : undefined;
-      mappedFields[item.field] = {
+      mappedFields[field] = {
         header: resolvedHeader,
         confidence: typeof item.confidence === 'number'
           ? Math.max(0, Math.min(1, Number(item.confidence.toFixed(2))))
