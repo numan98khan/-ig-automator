@@ -1096,6 +1096,10 @@ export async function runAutomationTest(params: {
     state: nextState,
     testMode,
   });
+  if (conversation.instagramAccountId.toString() !== instagramAccount._id.toString()) {
+    conversation.instagramAccountId = instagramAccount._id;
+    await conversation.save();
+  }
 
   nextState.testConversationId = conversation._id.toString();
   nextState.testInstagramAccountId = instagramAccount._id.toString();
@@ -1185,7 +1189,7 @@ export async function runAutomationTest(params: {
     conversationId: conversation._id.toString(),
     participantInstagramId: conversation.participantInstagramId,
     messageText,
-    instagramAccountId: conversation.instagramAccountId.toString(),
+    instagramAccountId: instagramAccount._id.toString(),
     platform: conversation.platform || 'instagram',
     messageContext,
     automationId,
