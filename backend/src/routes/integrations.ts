@@ -401,6 +401,15 @@ router.post('/google-sheets/analyze', authenticate, async (req: AuthRequest, res
       sourceRange: preview.range,
       sourceHeaders: preview.headers,
     };
+    console.log('[GoogleSheets] Inventory mapping generated', {
+      workspaceId,
+      spreadsheetId: resolvedConfig.spreadsheetId,
+      sheetName: resolvedConfig.sheetName,
+      headerCount: preview.headers.length,
+      mappedFields: Object.entries(mapping.fields)
+        .filter(([, value]) => value?.header)
+        .map(([key, value]) => `${key}:${value?.header}`),
+    });
 
     await WorkspaceSettings.findOneAndUpdate(
       { workspaceId },
