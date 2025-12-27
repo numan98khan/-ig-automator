@@ -11,8 +11,20 @@ import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
+import AutomationTemplate from '../models/AutomationTemplate';
 import Tier from '../models/Tier';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
+import {
+  getAutomationTemplateConfig,
+  isAutomationTemplateId,
+  listAutomationTemplateConfigs,
+} from '../services/automationTemplateService';
+import {
+  getAutomationDefaults,
+  listAutomationDefaults,
+  updateAutomationDefaults,
+} from '../services/adminAutomationDefaultsService';
+import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
 import {
   GLOBAL_WORKSPACE_KEY,
   deleteKnowledgeEmbedding,
@@ -26,6 +38,32 @@ const router = express.Router();
 const toInt = (value: any, fallback: number) => {
   const n = parseInt(String(value), 10);
   return Number.isNaN(n) ? fallback : n;
+};
+const toOptionalNumber = (value: any) => {
+  if (value === undefined || value === null || value === '') return undefined;
+  const n = Number(value);
+  return Number.isNaN(n) ? undefined : n;
+};
+const toOptionalBoolean = (value: any) => {
+  if (value === true || value === false) return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return undefined;
+};
+const clampNumber = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+const normalizeModel = (value: any) =>
+  typeof value === 'string' && value.trim() ? value.trim() : undefined;
+const REASONING_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+const normalizeReasoningEffort = (value: any) => {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  return REASONING_EFFORTS.has(normalized) ? normalized : undefined;
 };
 const STORAGE_MODES = ['vector', 'text'];
 
@@ -611,6 +649,173 @@ router.put('/assistant/config', authenticate, requireAdmin, async (req, res) => 
     });
   } catch (error) {
     console.error('Admin global assistant config update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Admin log settings (console logging controls)
+router.get('/log-settings', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const settings = await getLogSettings();
+    res.json({ data: settings });
+  } catch (error) {
+    console.error('Admin log settings get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/log-settings', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const aiTimingEnabled = toOptionalBoolean(req.body?.aiTimingEnabled);
+    const automationLogsEnabled = toOptionalBoolean(req.body?.automationLogsEnabled);
+    const automationStepsEnabled = toOptionalBoolean(req.body?.automationStepsEnabled);
+    const openaiApiLogsEnabled = toOptionalBoolean(req.body?.openaiApiLogsEnabled);
+
+    const settings = await updateLogSettings({
+      ...(aiTimingEnabled === undefined ? {} : { aiTimingEnabled }),
+      ...(automationLogsEnabled === undefined ? {} : { automationLogsEnabled }),
+      ...(automationStepsEnabled === undefined ? {} : { automationStepsEnabled }),
+      ...(openaiApiLogsEnabled === undefined ? {} : { openaiApiLogsEnabled }),
+    });
+    res.json({ data: settings });
+  } catch (error) {
+    console.error('Admin log settings update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Automation template configs (global)
+router.get('/automation-templates', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const templates = await listAutomationTemplateConfigs();
+    res.json({ data: templates });
+  } catch (error) {
+    console.error('Admin automation templates list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/automation-templates/:templateId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    if (!isAutomationTemplateId(templateId)) {
+      return res.status(404).json({ error: 'Unknown automation template' });
+    }
+    const template = await getAutomationTemplateConfig(templateId);
+    res.json({ data: template });
+  } catch (error) {
+    console.error('Admin automation template get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/automation-templates/:templateId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    if (!isAutomationTemplateId(templateId)) {
+      return res.status(404).json({ error: 'Unknown automation template' });
+    }
+
+    const aiReply = req.body?.aiReply || {};
+    const categorization = req.body?.categorization || {};
+    const update: Record<string, any> = {};
+    const unset: Record<string, any> = {};
+
+    const replyModel = normalizeModel(aiReply.model);
+    if (replyModel) update['aiReply.model'] = replyModel;
+
+    const replyTemperature = toOptionalNumber(aiReply.temperature);
+    if (replyTemperature !== undefined) {
+      update['aiReply.temperature'] = clampNumber(replyTemperature, 0, 2);
+    }
+
+    const replyMaxTokens = toOptionalNumber(aiReply.maxOutputTokens);
+    if (replyMaxTokens !== undefined) {
+      update['aiReply.maxOutputTokens'] = Math.max(1, Math.round(replyMaxTokens));
+    }
+
+    if (Object.prototype.hasOwnProperty.call(aiReply, 'reasoningEffort')) {
+      const replyReasoning = normalizeReasoningEffort(aiReply.reasoningEffort);
+      if (replyReasoning === null) {
+        unset['aiReply.reasoningEffort'] = '';
+      } else if (replyReasoning) {
+        update['aiReply.reasoningEffort'] = replyReasoning;
+      }
+    }
+
+    const categorizationModel = normalizeModel(categorization.model);
+    if (categorizationModel) update['categorization.model'] = categorizationModel;
+
+    const categorizationTemperature = toOptionalNumber(categorization.temperature);
+    if (categorizationTemperature !== undefined) {
+      update['categorization.temperature'] = clampNumber(categorizationTemperature, 0, 2);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(categorization, 'reasoningEffort')) {
+      const categorizationReasoning = normalizeReasoningEffort(categorization.reasoningEffort);
+      if (categorizationReasoning === null) {
+        unset['categorization.reasoningEffort'] = '';
+      } else if (categorizationReasoning) {
+        update['categorization.reasoningEffort'] = categorizationReasoning;
+      }
+    }
+
+    if (Object.keys(update).length === 0 && Object.keys(unset).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    await AutomationTemplate.findOneAndUpdate(
+      { templateId },
+      {
+        ...(Object.keys(update).length ? { $set: update } : {}),
+        ...(Object.keys(unset).length ? { $unset: unset } : {}),
+      },
+      { new: true, upsert: true },
+    );
+
+    const template = await getAutomationTemplateConfig(templateId);
+    res.json({ data: template });
+  } catch (error) {
+    console.error('Admin automation template update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Automation defaults (admin-level runtime config)
+router.get('/automation-defaults', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const defaults = await listAutomationDefaults();
+    res.json({ data: defaults });
+  } catch (error) {
+    console.error('Admin automation defaults list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/automation-defaults/:templateId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    if (!isAutomationTemplateId(templateId)) {
+      return res.status(404).json({ error: 'Unknown automation template' });
+    }
+    const defaults = await getAutomationDefaults(templateId);
+    res.json({ data: { templateId, ...defaults } });
+  } catch (error) {
+    console.error('Admin automation defaults get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/automation-defaults/:templateId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    if (!isAutomationTemplateId(templateId)) {
+      return res.status(404).json({ error: 'Unknown automation template' });
+    }
+    const defaults = await updateAutomationDefaults(templateId, req.body || {});
+    res.json({ data: { templateId, ...defaults } });
+  } catch (error) {
+    console.error('Admin automation defaults update error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -10,6 +10,16 @@ const router = express.Router();
  * Get workspace settings
  * GET /api/settings/workspace/:workspaceId
  */
+function sanitizeSettings(settings: any) {
+  if (!settings) return settings;
+  const plain = settings.toObject ? settings.toObject() : { ...settings };
+  if (plain.googleSheets) {
+    delete plain.googleSheets.serviceAccountJson;
+    delete plain.googleSheets.oauthRefreshToken;
+  }
+  return plain;
+}
+
 router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId } = req.params;
@@ -35,7 +45,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       await initializeDefaultCategories(workspaceId);
     }
 
-    res.json(settings);
+    res.json(sanitizeSettings(settings));
   } catch (error) {
     console.error('Get settings error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -71,6 +81,7 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       primaryGoal,
       secondaryGoal,
       goalConfigs,
+      googleSheets,
     } = req.body;
 
     // Verify workspace belongs to user
@@ -107,6 +118,11 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     if (primaryGoal !== undefined) updateData.primaryGoal = primaryGoal;
     if (secondaryGoal !== undefined) updateData.secondaryGoal = secondaryGoal;
     if (goalConfigs !== undefined) updateData.goalConfigs = goalConfigs;
+    if (googleSheets !== undefined) {
+      Object.entries(googleSheets as Record<string, any>).forEach(([key, value]) => {
+        updateData[`googleSheets.${key}`] = value;
+      });
+    }
 
     const settings = await WorkspaceSettings.findOneAndUpdate(
       { workspaceId },
@@ -114,7 +130,7 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       { new: true, upsert: true }
     );
 
-    res.json(settings);
+    res.json(sanitizeSettings(settings));
   } catch (error) {
     console.error('Update settings error:', error);
     res.status(500).json({ error: 'Server error' });

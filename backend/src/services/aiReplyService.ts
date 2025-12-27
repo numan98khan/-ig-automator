@@ -8,6 +8,7 @@ import MessageCategory from '../models/MessageCategory';
 import WorkspaceSettings, { IWorkspaceSettings } from '../models/WorkspaceSettings';
 import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
+import { getLogSettingsSnapshot } from './adminLogSettingsService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -33,6 +34,7 @@ export interface AIReplyOptions {
   latestCustomerMessage?: string;
   categoryId?: mongoose.Types.ObjectId | string;
   categorization?: { categoryName?: string; detectedLanguage?: string; translatedText?: string };
+  knowledgeItemIds?: string[];
   historyLimit?: number;
   mode?: 'live' | 'sandbox';
   messageHistory?: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[];
@@ -48,7 +50,108 @@ export interface AIReplyOptions {
     collectedFields?: Record<string, any>;
   };
   workspaceSettingsOverride?: Partial<IWorkspaceSettings>;
+  tone?: string;
+  maxReplySentences?: number;
+  model?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 }
+
+const splitIntoSentences = (text: string): string[] => {
+  const matches = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
+  if (!matches) return [];
+  return matches.map((sentence) => sentence.trim()).filter(Boolean);
+};
+
+const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
+const supportsReasoningEffort = (model?: string): boolean => /^(gpt-5|o)/i.test(model || '');
+const getDurationMs = (startNs: bigint) => Number(process.hrtime.bigint() - startNs) / 1e6;
+const logAiTiming = (label: string, model: string | undefined, startNs: bigint, success: boolean) => {
+  if (!getLogSettingsSnapshot().aiTimingEnabled) return;
+  const ms = getDurationMs(startNs);
+  console.log('[AI] timing', { label, model, ms: Number(ms.toFixed(2)), success });
+};
+const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
+const logAiDebug = (message: string, details?: Record<string, any>) => {
+  if (!shouldLogAutomation()) return;
+  if (details) {
+    console.log('[AI]', message, details);
+    return;
+  }
+  console.log('[AI]', message);
+};
+const shouldLogOpenAiApi = () => getLogSettingsSnapshot().openaiApiLogsEnabled;
+const logOpenAiApi = (message: string, details?: Record<string, any>) => {
+  if (!shouldLogOpenAiApi()) return;
+  if (details) {
+    console.log('[OpenAI]', message, details);
+    return;
+  }
+  console.log('[OpenAI]', message);
+};
+
+const truncateText = (value: any, max = 800): string | undefined => {
+  if (value === undefined || value === null) return undefined;
+  const text = String(value);
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}…`;
+};
+
+const sanitizeOpenAiOutput = (output: any[]) => output.map((item) => {
+  const content = Array.isArray(item?.content) ? item.content : [];
+  const sanitizedContent = content.map((entry: any) => {
+    const base = { type: entry?.type };
+    if (entry?.type === 'output_text') {
+      return { ...base, text: truncateText(entry?.text, 800) };
+    }
+    if (entry?.type === 'refusal') {
+      return { ...base, refusal: truncateText(entry?.refusal, 300) };
+    }
+    if (entry?.type === 'tool_call') {
+      return { ...base, name: entry?.name || entry?.tool_name };
+    }
+    return base;
+  });
+  return {
+    type: item?.type,
+    role: item?.role,
+    content: sanitizedContent,
+  };
+});
+
+const summarizeOpenAiResponse = (response: any) => {
+  const output = Array.isArray(response?.output) ? response.output : [];
+  const outputSummary = output.map((item: any) => {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    const contentTypes = content.map((entry: any) => entry?.type).filter(Boolean);
+    const outputText = content.find((entry: any) => entry?.type === 'output_text')?.text;
+    const refusal = content.find((entry: any) => entry?.type === 'refusal');
+    const toolCall = content.find((entry: any) => entry?.type === 'tool_call');
+    return {
+      type: item?.type,
+      role: item?.role,
+      contentTypes,
+      outputTextPreview: outputText ? String(outputText).slice(0, 200) : undefined,
+      refusal: refusal ? String(refusal?.refusal || '').slice(0, 200) : undefined,
+      toolCall: toolCall ? (toolCall?.name || toolCall?.tool_name || 'tool_call') : undefined,
+    };
+  });
+
+  return {
+    id: response?.id,
+    model: response?.model,
+    status: response?.status,
+    incompleteDetails: response?.incomplete_details,
+    outputTextLength: response?.output_text?.length || 0,
+    outputTextPreview: truncateText(response?.output_text, 200),
+    outputCount: output.length,
+    outputSummary,
+    outputRaw: sanitizeOpenAiOutput(output),
+    usage: response?.usage,
+    error: response?.error,
+  };
+};
 
 /**
  * Centralized AI reply generator used by manual and automated flows.
@@ -65,13 +168,23 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     messageHistory,
   } = options;
 
+  const knowledgeQuery = Array.isArray(options.knowledgeItemIds) && options.knowledgeItemIds.length > 0
+    ? { workspaceId, _id: { $in: options.knowledgeItemIds } }
+    : { workspaceId };
+
   const [knowledgeItems, baseWorkspaceSettings] = await Promise.all([
-    KnowledgeItem.find({ workspaceId }),
+    KnowledgeItem.find(knowledgeQuery),
     options.workspaceSettingsOverride ? null : WorkspaceSettings.findOne({ workspaceId }),
   ]);
 
   const workspaceSettings = options.workspaceSettingsOverride || baseWorkspaceSettings;
 
+  const model = options.model || 'gpt-4o-mini';
+  const temperature = typeof options.temperature === 'number' ? options.temperature : 0.35;
+  const maxOutputTokens = typeof options.maxOutputTokens === 'number'
+    ? options.maxOutputTokens
+    : 420;
+  const reasoningEffort = options.reasoningEffort;
   const messages: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = messageHistory
     ? [...messageHistory].slice(-historyLimit)
     : await Message.find({ conversationId: conversation._id })
@@ -95,8 +208,9 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
   const decisionMode = workspaceSettings?.decisionMode || 'assist';
   const allowHashtags = workspaceSettings?.allowHashtags ?? false;
   const allowEmojis = workspaceSettings?.allowEmojis ?? true;
-  const maxReplySentences = workspaceSettings?.maxReplySentences || 3;
+  const maxReplySentences = (options.maxReplySentences ?? workspaceSettings?.maxReplySentences) || 3;
   const replyLanguage = workspaceSettings?.defaultReplyLanguage || workspaceSettings?.defaultLanguage || categorization?.detectedLanguage || 'en';
+  const tone = options.tone?.trim();
   let knowledgeItemsUsed = knowledgeItems.slice(0, 5).map(item => ({
     id: item._id.toString(),
     title: item.title,
@@ -314,7 +428,8 @@ Voice notes and audio messages are automatically transcribed. The transcribed te
 Global rules that ALWAYS apply:
 - Strictly obey workspace and category policies provided in the context.
 - NEVER promise discounts, prices, contracts, special deals, or commitments unless the business's knowledge base explicitly authorizes you to do so.
-- Keep replies short and natural: 1–3 sentences, maximum 60–80 words.
+- Keep replies short and natural: ${Math.max(1, maxReplySentences)} sentence${maxReplySentences === 1 ? '' : 's'} max, maximum 60–80 words.
+- Use a${tone ? ` ${tone}` : ' professional and friendly'} tone that fits the brand voice.
 - Be helpful and professional, but not overly salesy or full of marketing fluff.
 - Avoid asking the same question twice in the same conversation.
 - Do not repeat the opening phrase from your previous reply if there is one.
@@ -343,6 +458,7 @@ Workspace rules:
 - Hashtags allowed: ${allowHashtags}
 - Emojis allowed: ${allowEmojis}
 - Max sentences: ${maxReplySentences}
+- Desired tone: ${tone || 'professional and friendly'}
 - Default reply language: ${getLanguageName(replyLanguage)}
 ${workspaceSettings?.escalationGuidelines ? `- Escalation guidelines: ${workspaceSettings.escalationGuidelines}` : ''}
 ${workspaceSettings?.escalationExamples?.length ? `- Escalation examples: ${workspaceSettings.escalationExamples.join(' | ')}` : ''}
@@ -388,7 +504,9 @@ Generate a response following all rules above. Return JSON with:
   let parsed: AIReplyResult | null = null;
   let responseContent: string | null = null;
   let usedFallback = false;
+  let requestError: Record<string, any> | null = null;
 
+  let requestStart: bigint | null = null;
   try {
     // Build user message content (text + images if present)
     // Note: Responses API uses 'input_text' and 'input_image' instead of 'text' and 'image_url'
@@ -427,10 +545,9 @@ Generate a response following all rules above. Return JSON with:
       }
     }
 
-    const response = await openai.responses.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.35,
-      max_output_tokens: 220,
+    const requestPayload: any = {
+      model,
+      max_output_tokens: maxOutputTokens,
       input: [
         { role: 'system', content: systemMessage.trim() },
         { role: 'user', content: userContent },
@@ -444,11 +561,51 @@ Generate a response following all rules above. Return JSON with:
         },
       },
       store: true, // Enable stateful context for better multi-turn conversations
+    };
+
+    if (supportsTemperature(model)) {
+      requestPayload.temperature = temperature;
+    }
+    if (supportsReasoningEffort(model) && reasoningEffort) {
+      requestPayload.reasoning = { effort: reasoningEffort };
+    }
+
+    logAiDebug('reply_request', {
+      conversationId: conversation._id?.toString(),
+      workspaceId: workspaceId.toString(),
+      model,
+      temperature: supportsTemperature(model) ? temperature : undefined,
+      temperatureOmitted: !supportsTemperature(model),
+      reasoningEffort: supportsReasoningEffort(model) ? reasoningEffort : undefined,
+      maxOutputTokens,
+      category: categoryName || 'General',
+      aiPolicy,
+      decisionMode,
+      tone: tone || 'default',
+      maxReplySentences,
+      historyCount: messages.length,
+      attachments: recentCustomerAttachments.length,
+      knowledgeItems: knowledgeItems.length,
+      knowledgeItemFilter: options.knowledgeItemIds?.length || 0,
+      ragMatches: vectorContexts.length,
     });
+
+    requestStart = process.hrtime.bigint();
+    const response = await openai.responses.create(requestPayload);
+    logAiTiming('ai_reply', model, requestStart, true);
+    logOpenAiApi('response', summarizeOpenAiResponse(response));
 
     responseContent = response.output_text || '{}';
     const structured = extractStructuredJson<AIReplyResult>(response);
     const raw = structured || safeParseJson(responseContent);
+    logAiDebug('reply_parse', {
+      responseChars: responseContent.length,
+      usedStructured: Boolean(structured),
+      replyPreview: String(raw.replyText || '').trim().slice(0, 160),
+      shouldEscalate: Boolean(raw.shouldEscalate),
+      tagsCount: Array.isArray(raw.tags) ? raw.tags.length : 0,
+      goalStatus: raw.goalProgress?.status || null,
+    });
     const collectedFieldsDefaults = {
       name: null,
       phone: null,
@@ -487,6 +644,9 @@ Generate a response following all rules above. Return JSON with:
         : undefined,
     };
   } catch (error: any) {
+    if (requestStart) {
+      logAiTiming('ai_reply', model, requestStart, false);
+    }
     const details: Record<string, any> = {
       message: error?.message,
       status: error?.status,
@@ -501,6 +661,9 @@ Generate a response following all rules above. Return JSON with:
       details.partialResponse = responseContent.slice(0, 800);
     }
 
+    requestError = details;
+    logOpenAiApi('response_error', details);
+    logAiDebug('reply_error', details);
     console.error('AI reply generation failed:', details);
   }
 
@@ -511,8 +674,19 @@ Generate a response following all rules above. Return JSON with:
     tags: ['escalation', 'ai_error'],
   };
 
+  if (reply.replyText && Number.isFinite(maxReplySentences) && maxReplySentences > 0) {
+    const sentences = splitIntoSentences(reply.replyText);
+    if (sentences.length > maxReplySentences) {
+      reply.replyText = sentences.slice(0, maxReplySentences).join(' ').trim();
+    }
+  }
+
   if (!parsed) {
     usedFallback = true;
+    logAiDebug('reply_fallback', {
+      reason: requestError?.message || 'parse_failed',
+      responsePreview: responseContent ? responseContent.slice(0, 200) : null,
+    });
     console.warn('Falling back to escalation reply after AI generation failure', {
       conversationId: conversation._id?.toString(),
       workspaceId: workspaceId.toString(),
@@ -557,17 +731,26 @@ Generate a response following all rules above. Return JSON with:
 
   const loggedGoalType = reply.goalProgress?.goalType || activeGoalType || detectedGoal;
 
-  console.info('AI reply generated', {
+  logAiDebug('reply_generated', {
     conversationId: conversation._id?.toString(),
     workspaceId: workspaceId.toString(),
     categoryId: categoryId?.toString(),
-    detectedGoal,
-    activeGoalType,
-    repliedGoalType: loggedGoalType,
-    goalStatus: reply.goalProgress?.status,
+    model,
+    replyConfig: {
+      maxReplySentences,
+      tone: tone || 'default',
+      allowHashtags,
+      allowEmojis,
+    },
+    goal: {
+      detected: detectedGoal,
+      active: activeGoalType,
+      replied: loggedGoalType,
+      status: reply.goalProgress?.status,
+    },
     usedFallback,
     shouldEscalate: reply.shouldEscalate,
-    replyPreview: reply.replyText?.slice(0, 140),
+    replyPreview: reply.replyText?.slice(0, 120),
   });
 
   return reply;

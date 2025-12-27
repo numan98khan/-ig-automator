@@ -45,6 +45,31 @@ export interface IWorkspaceSettings extends Document {
   primaryGoal?: GoalType;
   secondaryGoal?: GoalType;
   goalConfigs?: GoalConfigurations;
+  googleSheets?: {
+    enabled?: boolean;
+    spreadsheetId?: string;
+    sheetName?: string;
+    serviceAccountJson?: string;
+    headerRow?: number;
+    inventoryMapping?: {
+      fields?: Record<string, {
+        header?: string;
+        confidence?: number;
+        notes?: string;
+      }>;
+      summary?: string;
+      updatedAt?: Date;
+      sourceRange?: string;
+      sourceHeaders?: string[];
+    };
+    oauthConnected?: boolean;
+    oauthConnectedAt?: Date;
+    oauthEmail?: string;
+    oauthRefreshToken?: string;
+    lastTestedAt?: Date;
+    lastTestStatus?: 'success' | 'failed';
+    lastTestMessage?: string;
+  };
 
   createdAt: Date;
   updatedAt: Date;
@@ -79,6 +104,31 @@ const supportGoalConfigSchema = new Schema<SupportGoalConfig>({
 const driveGoalConfigSchema = new Schema<DriveGoalConfig>({
   targetType: { type: String, enum: ['website', 'WhatsApp', 'store', 'app'], default: 'website' },
   targetLink: { type: String, trim: true },
+}, { _id: false });
+
+const googleSheetsConfigSchema = new Schema({
+  enabled: { type: Boolean, default: false },
+  spreadsheetId: { type: String, trim: true },
+  sheetName: { type: String, trim: true },
+  serviceAccountJson: { type: String },
+  headerRow: { type: Number, min: 1, default: 1 },
+  inventoryMapping: {
+    type: new Schema({
+      fields: { type: Schema.Types.Mixed, default: {} },
+      summary: { type: String, trim: true },
+      updatedAt: { type: Date },
+      sourceRange: { type: String, trim: true },
+      sourceHeaders: { type: [String], default: [] },
+    }, { _id: false }),
+    default: undefined,
+  },
+  oauthConnected: { type: Boolean, default: false },
+  oauthConnectedAt: { type: Date },
+  oauthEmail: { type: String, trim: true },
+  oauthRefreshToken: { type: String },
+  lastTestedAt: { type: Date },
+  lastTestStatus: { type: String, enum: ['success', 'failed'] },
+  lastTestMessage: { type: String, trim: true },
 }, { _id: false });
 
 const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
@@ -210,6 +260,10 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
       support: { type: supportGoalConfigSchema, default: () => ({}) },
       drive: { type: driveGoalConfigSchema, default: () => ({}) },
     }, { _id: false }),
+    default: undefined,
+  },
+  googleSheets: {
+    type: googleSheetsConfigSchema,
     default: undefined,
   },
 }, {

@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import OpenAI from 'openai';
 import KnowledgeItem from '../models/KnowledgeItem';
+import { getLogSettingsSnapshot } from './adminLogSettingsService';
 
 const connectionString = process.env.PGVECTOR_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL;
 const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDINGS_MODEL || 'text-embedding-3-small';
@@ -10,6 +11,13 @@ export const GLOBAL_WORKSPACE_KEY = 'global';
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const getDurationMs = (startNs: bigint) => Number(process.hrtime.bigint() - startNs) / 1e6;
+const logAiTiming = (label: string, model: string | undefined, startNs: bigint, success: boolean) => {
+  if (!getLogSettingsSnapshot().aiTimingEnabled) return;
+  const ms = getDurationMs(startNs);
+  console.log('[AI] timing', { label, model, ms: Number(ms.toFixed(2)), success });
+};
 
 let pool: Pool | null = null;
 let initialized = false;
@@ -68,14 +76,20 @@ const ensureStore = async () => {
 };
 
 const embedText = async (text: string): Promise<number[]> => {
+  let requestStart: bigint | null = null;
   try {
     if (!process.env.OPENAI_API_KEY) return [];
+    requestStart = process.hrtime.bigint();
     const response = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
       input: text,
     });
+    logAiTiming('embeddings', EMBEDDING_MODEL, requestStart, true);
     return response.data[0]?.embedding || [];
   } catch (error) {
+    if (requestStart) {
+      logAiTiming('embeddings', EMBEDDING_MODEL, requestStart, false);
+    }
     console.error('Embedding generation failed:', error);
     return [];
   }

@@ -1,8 +1,17 @@
 import OpenAI from 'openai';
+import { getLogSettingsSnapshot } from './adminLogSettingsService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
+const getDurationMs = (startNs: bigint) => Number(process.hrtime.bigint() - startNs) / 1e6;
+const logAiTiming = (label: string, model: string | undefined, startNs: bigint, success: boolean) => {
+  if (!getLogSettingsSnapshot().aiTimingEnabled) return;
+  const ms = getDurationMs(startNs);
+  console.log('[AI] timing', { label, model, ms: Number(ms.toFixed(2)), success });
+};
 
 const SYSTEM_PROMPT = `You are SendFx Assistant, a concise in-app guide for SendFx (Instagram DM automation with guardrails).
 - Audience: prospects on the marketing site and authenticated customers in the product.
@@ -57,8 +66,9 @@ export async function askAssistant(request: AssistantRequest): Promise<Assistant
       .join('\n')}`
     : 'No workspace knowledge available.';
 
-  const completion = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const requestPayload: any = {
+    model,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       {
@@ -66,9 +76,22 @@ export async function askAssistant(request: AssistantRequest): Promise<Assistant
         content: `${contextBlock}\n${knowledgeSection}\nQuestion: ${question}`,
       },
     ],
-    temperature: 0.4,
     max_tokens: 320,
-  });
+  };
+
+  if (supportsTemperature(model)) {
+    requestPayload.temperature = 0.4;
+  }
+
+  const requestStart = process.hrtime.bigint();
+  let completion;
+  try {
+    completion = await openai.chat.completions.create(requestPayload);
+    logAiTiming('assistant', model, requestStart, true);
+  } catch (error) {
+    logAiTiming('assistant', model, requestStart, false);
+    throw error;
+  }
 
   const answer = completion.choices[0]?.message?.content?.trim() || 'Sorry, I could not generate a response right now.';
 

@@ -7,6 +7,7 @@ import {
   Users,
   BarChart3,
   Bot,
+  Settings,
   Menu,
   LogOut,
   X,
@@ -30,6 +31,7 @@ export default function Layout({ children }: LayoutProps) {
     { name: 'Users', href: '/users', icon: Users },
     { name: 'Tiers', href: '/tiers', icon: Bug },
     { name: 'AI Assistant', href: '/ai-assistant', icon: Bot },
+    { name: 'Automations', href: '/automations', icon: Settings },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Debug', href: '/debug', icon: Bug },
   ]

@@ -71,7 +71,10 @@ export interface InstagramAccount {
   username: string;
   workspaceId: string;
   status: 'connected' | 'mock';
+  name?: string;
   profilePictureUrl?: string;
+  tokenExpiresAt?: string;
+  lastSyncedAt?: string;
   createdAt: string;
 }
 
@@ -142,6 +145,66 @@ export interface KnowledgeItem {
   createdAt: string;
 }
 
+// Automation types
+export type TriggerType =
+  | 'post_comment'      // Post or Reel Comments
+  | 'story_reply'       // Story Reply
+  | 'dm_message'        // Instagram Message
+  | 'story_share'       // User shares your Post or Reel as a Story (NEW)
+  | 'instagram_ads'     // Instagram Ads (PRO)
+  | 'live_comment'      // Live Comments
+  | 'ref_url';          // Instagram Ref URL
+
+export interface ReplyStep {
+  type: 'constant_reply' | 'ai_reply' | 'template_flow';
+  constantReply?: {
+    message: string;
+  };
+  aiReply?: {
+    goalType: GoalType;
+    goalDescription?: string;
+    knowledgeItemIds: string[];
+    tone?: string;
+    maxReplySentences?: number;
+  };
+  templateFlow?: TemplateFlowConfig;
+}
+
+export interface TriggerConfig {
+  keywords?: string[];
+  excludeKeywords?: string[];
+  keywordMatch?: 'any' | 'all';
+  categoryIds?: string[];
+  triggerMode?: 'keywords' | 'categories' | 'any';
+  outsideBusinessHours?: boolean;
+  businessHours?: BusinessHoursConfig;
+  matchOn?: {
+    link?: boolean;
+    attachment?: boolean;
+  };
+}
+
+export interface AutomationStats {
+  totalTriggered: number;
+  totalRepliesSent: number;
+  lastTriggeredAt?: string;
+  lastReplySentAt?: string;
+}
+
+export interface Automation {
+  _id: string;
+  name: string;
+  description?: string;
+  workspaceId: string;
+  triggerType: TriggerType;
+  triggerConfig?: TriggerConfig;
+  replySteps: ReplyStep[];
+  isActive: boolean;
+  stats: AutomationStats;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type GoalType =
   | 'none'
   | 'capture_lead'
@@ -149,6 +212,133 @@ export type GoalType =
   | 'start_order'
   | 'handle_support'
   | 'drive_to_channel';
+
+export type AutomationTemplateId =
+  | 'sales_concierge';
+
+export interface BusinessHoursConfig {
+  startTime: string;
+  endTime: string;
+  timezone?: string;
+  daysOfWeek?: number[];
+}
+
+export interface AutomationRateLimit {
+  maxMessages: number;
+  perMinutes: number;
+}
+
+export interface AutomationAiSettings {
+  tone?: string;
+  maxReplySentences?: number;
+}
+
+export interface SalesCatalogVariantOptions {
+  size?: string[];
+  color?: string[];
+}
+
+export interface SalesCatalogItem {
+  sku: string;
+  name: string;
+  keywords?: string[];
+  price?: number | { min: number; max: number };
+  currency?: string;
+  stock?: 'in' | 'low' | 'out' | 'unknown';
+  variants?: SalesCatalogVariantOptions;
+}
+
+export interface SalesShippingRule {
+  city: string;
+  fee: number;
+  eta: string;
+  codAllowed: boolean;
+}
+
+export interface SalesConciergeConfig {
+  catalog?: SalesCatalogItem[];
+  shippingRules?: SalesShippingRule[];
+  cityAliases?: Record<string, string>;
+  minPhoneLength?: number;
+  useGoogleSheets?: boolean;
+  knowledgeItemIds?: string[];
+  lockMode?: 'none' | 'session_only';
+  lockTtlMinutes?: number;
+  releaseKeywords?: string[];
+  faqInterruptEnabled?: boolean;
+  faqIntentKeywords?: string[];
+  faqResponseSuffix?: string;
+  maxQuestions?: number;
+  rateLimit?: AutomationRateLimit;
+  tags?: string[];
+  aiSettings?: AutomationAiSettings;
+  outputs?: {
+    notify?: string[];
+    createContact?: boolean;
+  };
+}
+
+export interface TemplateFlowConfig {
+  templateId: AutomationTemplateId;
+  config: SalesConciergeConfig;
+}
+
+export interface AutomationTestHistoryItem {
+  from: 'customer' | 'ai';
+  text: string;
+  createdAt?: string;
+}
+
+export interface AutomationTestContext {
+  forceOutsideBusinessHours?: boolean;
+  hasLink?: boolean;
+  hasAttachment?: boolean;
+  linkUrl?: string;
+  attachmentUrls?: string[];
+  categoryId?: string;
+  categoryName?: string;
+  testMode?: 'self_chat' | 'test_user';
+}
+
+export interface AutomationTestState {
+  history?: AutomationTestHistoryItem[];
+  testConversationId?: string;
+  testInstagramAccountId?: string;
+  testParticipantInstagramId?: string;
+  testMode?: 'self_chat' | 'test_user';
+  template?: {
+    templateId: AutomationTemplateId;
+    step?: string;
+    status?: 'active' | 'completed' | 'handoff' | 'paused';
+    questionCount: number;
+    collectedFields?: Record<string, any>;
+    followup?: {
+      status: 'scheduled' | 'sent' | 'cancelled';
+      scheduledAt?: string;
+      message?: string;
+    };
+    lastCustomerMessageAt?: string;
+    lastBusinessMessageAt?: string;
+  };
+  ai?: {
+    activeGoalType?: GoalType;
+    goalState?: 'idle' | 'collecting' | 'completed';
+    collectedFields?: Record<string, any>;
+  };
+}
+
+export interface AutomationTestResponse {
+  replies: string[];
+  state: AutomationTestState;
+  meta?: {
+    triggerMatched?: boolean;
+    detectedLanguage?: string;
+    categoryName?: string;
+    shouldEscalate?: boolean;
+    escalationReason?: string;
+    tags?: string[];
+  };
+}
 
 export interface TierLimits {
   aiMessages?: number;
@@ -260,8 +450,53 @@ export interface WorkspaceSettings {
   primaryGoal?: GoalType;
   secondaryGoal?: GoalType;
   goalConfigs?: GoalConfigs;
+  googleSheets?: GoogleSheetsIntegration;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GoogleSheetsIntegration {
+  enabled?: boolean;
+  spreadsheetId?: string;
+  sheetName?: string;
+  serviceAccountJson?: string;
+  headerRow?: number;
+  inventoryMapping?: InventoryMapping;
+  oauthConnected?: boolean;
+  oauthConnectedAt?: string;
+  oauthEmail?: string;
+  lastTestedAt?: string;
+  lastTestStatus?: 'success' | 'failed';
+  lastTestMessage?: string;
+}
+
+export type InventoryMappingField =
+  | 'productName'
+  | 'sku'
+  | 'description'
+  | 'price'
+  | 'quantity'
+  | 'variant'
+  | 'category'
+  | 'brand'
+  | 'imageUrl'
+  | 'location'
+  | 'status'
+  | 'cost'
+  | 'barcode';
+
+export interface InventoryMappingEntry {
+  header?: string;
+  confidence?: number;
+  notes?: string;
+}
+
+export interface InventoryMapping {
+  fields?: Record<InventoryMappingField, InventoryMappingEntry>;
+  summary?: string;
+  updatedAt?: string;
+  sourceRange?: string;
+  sourceHeaders?: string[];
 }
 
 export interface MessageCategory {
@@ -564,6 +799,58 @@ export const knowledgeAPI = {
   },
 };
 
+// Automation API
+export const automationAPI = {
+  getByWorkspace: async (workspaceId: string): Promise<Automation[]> => {
+    const { data } = await api.get(`/api/automations/workspace/${workspaceId}`);
+    return data;
+  },
+
+  getById: async (id: string): Promise<Automation> => {
+    const { data } = await api.get(`/api/automations/${id}`);
+    return data;
+  },
+
+  create: async (automation: Omit<Automation, '_id' | 'stats' | 'createdAt' | 'updatedAt'>): Promise<Automation> => {
+    const { data } = await api.post('/api/automations', automation);
+    return data;
+  },
+
+  update: async (id: string, updates: Partial<Omit<Automation, '_id' | 'workspaceId' | 'stats' | 'createdAt' | 'updatedAt'>>): Promise<Automation> => {
+    const { data } = await api.put(`/api/automations/${id}`, updates);
+    return data;
+  },
+
+  toggle: async (id: string): Promise<Automation> => {
+    const { data } = await api.patch(`/api/automations/${id}/toggle`);
+    return data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/api/automations/${id}`);
+  },
+
+  test: async (
+    id: string,
+    messageText: string,
+    state?: AutomationTestState,
+    context?: AutomationTestContext
+  ): Promise<AutomationTestResponse> => {
+    const { data } = await api.post(`/api/automations/${id}/test`, { messageText, state, context });
+    return data;
+  },
+
+  testAction: async (
+    id: string,
+    action: 'simulate_followup',
+    state?: AutomationTestState,
+    context?: AutomationTestContext
+  ): Promise<AutomationTestResponse> => {
+    const { data } = await api.post(`/api/automations/${id}/test`, { action, state, context });
+    return data;
+  },
+};
+
 // Instagram Sync API
 export const instagramSyncAPI = {
   syncMessages: async (workspaceId: string, conversationId?: string): Promise<{
@@ -627,6 +914,40 @@ export const settingsAPI = {
 
   getStats: async (workspaceId: string): Promise<AutomationStats> => {
     const { data } = await api.get(`/api/settings/workspace/${workspaceId}/stats`);
+    return data;
+  },
+};
+
+// Integrations API
+export const integrationsAPI = {
+  testGoogleSheets: async (
+    workspaceId: string,
+    config: GoogleSheetsIntegration,
+  ): Promise<{ success: boolean; preview?: { headers: string[]; rows: string[][]; range: string } }> => {
+    const { data } = await api.post('/api/integrations/google-sheets/test', { workspaceId, config });
+    return data;
+  },
+  getGoogleSheetsAuthUrl: async (workspaceId: string): Promise<{ url: string }> => {
+    const { data } = await api.get('/api/integrations/google-sheets/oauth/start', { params: { workspaceId } });
+    return data;
+  },
+  disconnectGoogleSheets: async (workspaceId: string): Promise<{ success: boolean }> => {
+    const { data } = await api.post('/api/integrations/google-sheets/oauth/disconnect', { workspaceId });
+    return data;
+  },
+  listGoogleSheetsFiles: async (workspaceId: string): Promise<{ files: Array<{ id: string; name: string }> }> => {
+    const { data } = await api.get('/api/integrations/google-sheets/files', { params: { workspaceId } });
+    return data;
+  },
+  listGoogleSheetsTabs: async (workspaceId: string, spreadsheetId: string): Promise<{ tabs: string[] }> => {
+    const { data } = await api.get('/api/integrations/google-sheets/tabs', { params: { workspaceId, spreadsheetId } });
+    return data;
+  },
+  analyzeGoogleSheets: async (
+    workspaceId: string,
+    config: GoogleSheetsIntegration,
+  ): Promise<{ success: boolean; preview?: { headers: string[]; rows: string[][]; range: string }; mapping?: InventoryMapping }> => {
+    const { data } = await api.post('/api/integrations/google-sheets/analyze', { workspaceId, config });
     return data;
   },
 };

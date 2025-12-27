@@ -195,8 +195,8 @@ export default function Categories() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8">
-      <div className="mb-8">
+    <div className="h-full flex flex-col">
+      <div className="mb-6">
         <h1 className="text-3xl font-bold text-foreground flex items-center gap-2 mb-2">
           Categories
         </h1>

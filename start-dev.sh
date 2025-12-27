@@ -133,6 +133,10 @@ BACKEND_PID=$!
 (cd frontend && VITE_API_URL=$NGROK_URL npm run dev) &
 FRONTEND_PID=$!
 
+# Start admin-console (telling it API is on Ngrok URL)
+(cd sf-admin-console && VITE_API_URL=$NGROK_URL npm run dev) &
+ADMIN_PID=$!
+
 echo -e "${GREEN}✨ Development environment is running!${NC}"
 echo -e "   Backend: $NGROK_URL (Public)"
 echo -e "   Frontend: http://localhost:3000"

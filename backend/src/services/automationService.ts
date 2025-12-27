@@ -1,773 +1,1095 @@
 import mongoose from 'mongoose';
-import WorkspaceSettings from '../models/WorkspaceSettings';
-import MessageCategory from '../models/MessageCategory';
-import Message, { IMessage } from '../models/Message';
+import Message from '../models/Message';
 import Conversation from '../models/Conversation';
 import InstagramAccount from '../models/InstagramAccount';
-import CommentDMLog from '../models/CommentDMLog';
 import FollowupTask from '../models/FollowupTask';
+import Automation from '../models/Automation';
+import AutomationSession from '../models/AutomationSession';
+import { generateAIReply } from './aiReplyService';
+import { getAutomationTemplateConfig } from './automationTemplateService';
 import {
   sendMessage as sendInstagramMessage,
-  sendCommentReply,
+  sendButtonMessage,
 } from '../utils/instagram-api';
+import { addTicketUpdate, createTicket, getActiveTicket } from './escalationService';
+import { addCountIncrement, trackDailyMetric } from './reportingService';
 import {
-  categorizeMessage,
-  getOrCreateCategory,
-  incrementCategoryCount,
-} from './aiCategorization';
-import { generateAIReply } from './aiReplyService';
-import { getActiveTicket, createTicket, addTicketUpdate } from './escalationService';
-import { addCountIncrement, mapGoalKey, trackDailyMetric } from './reportingService';
-import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
-import LeadCapture from '../models/LeadCapture';
-import BookingRequest from '../models/BookingRequest';
-import OrderIntent from '../models/OrderIntent';
-import SupportTicketStub from '../models/SupportTicketStub';
-import ChannelDriveEvent from '../models/ChannelDriveEvent';
+  detectGoalIntent,
+  getGoalConfigs,
+  getWorkspaceSettings,
+  goalMatchesWorkspace,
+} from './workspaceSettingsService';
+import { pauseForTypingIfNeeded } from './automation/typing';
+import { matchesTriggerConfig } from './automation/triggerMatcher';
+import {
+  advanceSalesConciergeState,
+  normalizeFlowState,
+  resolveSalesConciergeConfig,
+} from './automation/templateFlows';
+import { AutomationTestContext } from './automation/types';
+import { getLogSettingsSnapshot } from './adminLogSettingsService';
+import { getAutomationDefaults } from './adminAutomationDefaultsService';
+import { normalizeText } from './automation/utils';
+import {
+  AutomationRateLimit,
+  AutomationAiSettings,
+  AutomationTemplateId,
+  ReplyStep,
+  SalesConciergeConfig,
+  TemplateFlowConfig,
+  TriggerType,
+} from '../types/automation';
 
-const HUMAN_TYPING_PAUSE_MS = 3500; // Small pause to mimic human response timing
-const SKIP_TYPING_PAUSE_IN_SANDBOX =
-  process.env.SANDBOX_SKIP_TYPING_PAUSE === 'true' || process.env.SANDBOX_SKIP_TYPING_PAUSE === '1';
-
-function wait(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-export function shouldPauseForTyping(
-  platform?: string,
-  settings?: { skipTypingPauseInSandbox?: boolean }
-): boolean {
-  const isSandboxMock = platform === 'mock';
-  const skipTypingPause = isSandboxMock && (SKIP_TYPING_PAUSE_IN_SANDBOX || settings?.skipTypingPauseInSandbox);
-
-  return HUMAN_TYPING_PAUSE_MS > 0 && !skipTypingPause;
-}
-
-export async function pauseForTypingIfNeeded(
-  platform?: string,
-  settings?: { skipTypingPauseInSandbox?: boolean }
-): Promise<void> {
-  if (shouldPauseForTyping(platform, settings)) {
-    await wait(HUMAN_TYPING_PAUSE_MS);
-  }
-}
-
-const DEFAULT_GOAL_CONFIGS: GoalConfigurations = {
-  leadCapture: {
-    collectName: true,
-    collectPhone: true,
-    collectEmail: false,
-    collectCustomNote: false,
-  },
-  booking: {
-    bookingLink: '',
-    collectDate: true,
-    collectTime: true,
-    collectServiceType: false,
-  },
-  order: {
-    catalogUrl: '',
-    collectProductName: true,
-    collectQuantity: true,
-    collectVariant: false,
-  },
-  support: {
-    askForOrderId: true,
-    askForPhoto: false,
-  },
-  drive: {
-    targetType: 'website',
-    targetLink: '',
-  },
+const DEFAULT_RATE_LIMIT: AutomationRateLimit = {
+  maxMessages: 5,
+  perMinutes: 1,
 };
 
-export function getGoalConfigs(settings: any): GoalConfigurations {
-  return {
-    leadCapture: { ...DEFAULT_GOAL_CONFIGS.leadCapture, ...(settings?.goalConfigs?.leadCapture || {}) },
-    booking: { ...DEFAULT_GOAL_CONFIGS.booking, ...(settings?.goalConfigs?.booking || {}) },
-    order: { ...DEFAULT_GOAL_CONFIGS.order, ...(settings?.goalConfigs?.order || {}) },
-    support: { ...DEFAULT_GOAL_CONFIGS.support, ...(settings?.goalConfigs?.support || {}) },
-    drive: { ...DEFAULT_GOAL_CONFIGS.drive, ...(settings?.goalConfigs?.drive || {}) },
+const nowMs = () => Date.now();
+
+const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
+const shouldLogAutomationSteps = () => getLogSettingsSnapshot().automationStepsEnabled;
+
+const logAutomation = (message: string, details?: Record<string, any>) => {
+  if (!shouldLogAutomation()) return;
+  if (details) {
+    console.log(message, details);
+    return;
+  }
+  console.log(message);
+};
+
+const logAutomationStep = (step: string, startMs: number, details?: Record<string, any>) => {
+  if (!shouldLogAutomationSteps()) return;
+  const ms = Math.max(0, Math.round(nowMs() - startMs));
+  console.log('⏱️ [AUTOMATION] Step', { step, ms, ...(details || {}) });
+};
+
+const normalizeKeywordList = (values?: string[]): string[] => (
+  (values || [])
+    .map((value) => normalizeText(String(value || '')))
+    .filter(Boolean)
+);
+
+const messageHasKeyword = (messageText: string, keywords: string[]): boolean => {
+  if (!keywords.length) return false;
+  const normalized = normalizeText(messageText);
+  return keywords.some((keyword) => normalized.includes(keyword));
+};
+
+const isSessionExpired = (session: any, ttlMinutes?: number): boolean => {
+  if (!ttlMinutes || ttlMinutes <= 0) return false;
+  const lastMessageAt = session.lastCustomerMessageAt || session.updatedAt;
+  if (!lastMessageAt) return false;
+  const elapsedMs = Date.now() - new Date(lastMessageAt).getTime();
+  return elapsedMs > ttlMinutes * 60 * 1000;
+};
+
+const shouldHandleFaqInterrupt = (messageText: string, config: SalesConciergeConfig): boolean => {
+  if (config.faqInterruptEnabled === false) return false;
+  const keywords = normalizeKeywordList(config.faqIntentKeywords);
+  if (!keywords.length) return false;
+  const normalized = normalizeText(messageText);
+  const hasQuestion = normalized.startsWith('what ')
+    || normalized.startsWith('when ')
+    || normalized.startsWith('where ')
+    || normalized.startsWith('how ')
+    || messageText.includes('?');
+  return hasQuestion && messageHasKeyword(messageText, keywords);
+};
+
+async function getTemplateSession(params: {
+  automationId: mongoose.Types.ObjectId;
+  conversationId: mongoose.Types.ObjectId;
+  workspaceId: mongoose.Types.ObjectId;
+  templateId: AutomationTemplateId;
+}): Promise<any | null> {
+  const latest = await AutomationSession.findOne({
+    automationId: params.automationId,
+    conversationId: params.conversationId,
+  }).sort({ createdAt: -1 });
+
+  if (latest && latest.status === 'paused') {
+    return null;
+  }
+
+  if (latest && latest.status === 'active') {
+    return latest;
+  }
+
+  return AutomationSession.create({
+    workspaceId: params.workspaceId,
+    conversationId: params.conversationId,
+    automationId: params.automationId,
+    templateId: params.templateId,
+    status: 'active',
+    questionCount: 0,
+    collectedFields: {},
+  });
+}
+
+function updateRateLimit(session: any, rateLimit: AutomationRateLimit): boolean {
+  const now = new Date();
+  const windowMs = rateLimit.perMinutes * 60 * 1000;
+  const windowStart = session.rateLimit?.windowStart ? new Date(session.rateLimit.windowStart) : null;
+  const elapsed = windowStart ? now.getTime() - windowStart.getTime() : windowMs + 1;
+
+  if (!windowStart || elapsed > windowMs) {
+    session.rateLimit = { windowStart: now, count: 1 };
+    return true;
+  }
+
+  if (session.rateLimit.count >= rateLimit.maxMessages) {
+    return false;
+  }
+
+  session.rateLimit.count += 1;
+  return true;
+}
+
+async function sendTemplateMessage(params: {
+  conversation: any;
+  automation: any;
+  igAccount: any;
+  recipientId: string;
+  text: string;
+  buttons?: Array<{ title: string; actionType?: 'postback'; payload?: string }>;
+  platform?: string;
+  tags?: string[];
+  aiMeta?: {
+    shouldEscalate?: boolean;
+    escalationReason?: string;
+    knowledgeItemIds?: string[];
   };
-}
+}): Promise<void> {
+  const { conversation, automation, igAccount, recipientId, text, buttons, platform, tags, aiMeta } = params;
 
-export function detectGoalIntent(text: string): GoalType {
-  const lower = text.toLowerCase();
+  await pauseForTypingIfNeeded(platform);
 
-  if (/(book|appointment|schedule|reserve|reservation)/.test(lower)) return 'book_appointment';
-  if (/(buy|price|order|purchase|checkout|cart|start order|place order)/.test(lower)) return 'start_order';
-  if (/(interested|contact me|reach out|quote|more info|call me|email me)/.test(lower)) return 'capture_lead';
-  if (/(late|broken|refund|problem|issue|support|help with order|cancel)/.test(lower)) return 'handle_support';
-  if (/(where are you|location|address|website|site|link|whatsapp|app|store)/.test(lower)) return 'drive_to_channel';
-  return 'none';
-}
-
-export function goalMatchesWorkspace(goal: GoalType, primary?: GoalType, secondary?: GoalType): boolean {
-  if (!goal || goal === 'none') return false;
-  return goal === primary || goal === secondary;
-}
-
-function mergeGoalFields(existing: Record<string, any> = {}, incoming?: Record<string, any>): Record<string, any> {
-  if (!incoming) return existing;
-  return { ...existing, ...incoming };
-}
-
-/**
- * Get or create workspace settings
- */
-export async function getWorkspaceSettings(
-  workspaceId: mongoose.Types.ObjectId | string
-): Promise<any> {
-  let settings = await WorkspaceSettings.findOne({ workspaceId });
-
-  if (!settings) {
-    settings = await WorkspaceSettings.create({ workspaceId });
+  let result;
+  if (buttons && buttons.length > 0 && igAccount.instagramAccountId) {
+    result = await sendButtonMessage(
+      igAccount.instagramAccountId,
+      recipientId,
+      text,
+      buttons.map((button) => ({
+        type: 'postback',
+        title: button.title,
+        payload: button.payload || `button_${button.title}`,
+      })),
+      igAccount.accessToken,
+    );
+  } else {
+    result = await sendInstagramMessage(recipientId, text, igAccount.accessToken);
   }
 
-  return settings;
+  if (!result || (!result.message_id && !result.recipient_id)) {
+    throw new Error('Instagram API did not return a valid response.');
+  }
+
+  const sentAt = new Date();
+  await Message.create({
+    conversationId: conversation._id,
+    workspaceId: conversation.workspaceId,
+    text,
+    from: 'ai',
+    platform: platform || 'instagram',
+    instagramMessageId: result.message_id,
+    automationSource: 'template_flow',
+    aiTags: tags,
+    aiShouldEscalate: aiMeta?.shouldEscalate,
+    aiEscalationReason: aiMeta?.escalationReason,
+    kbItemIdsUsed: aiMeta?.knowledgeItemIds,
+    metadata: buttons ? { buttons } : undefined,
+    createdAt: sentAt,
+  });
+
+  conversation.lastMessage = text;
+  conversation.lastMessageAt = sentAt;
+  conversation.lastBusinessMessageAt = sentAt;
+  await conversation.save();
+
+  automation.stats.totalTriggered += 1;
+  automation.stats.totalRepliesSent += 1;
+  automation.stats.lastTriggeredAt = sentAt;
+  automation.stats.lastReplySentAt = sentAt;
+  await automation.save();
+
+  const increments: Record<string, number> = {
+    outboundMessages: 1,
+    aiReplies: 1,
+  };
+
+  if (tags && tags.length > 0) {
+    tags.forEach(tag => addCountIncrement(increments, 'tagCounts', tag));
+  }
+
+  const responseMetrics = calculateResponseTime(conversation, sentAt);
+  Object.assign(increments, responseMetrics);
+
+  await trackDailyMetric(conversation.workspaceId, sentAt, increments);
 }
 
-async function saveGoalOutcome(
-  goalType: GoalType,
-  conversation: any,
-  fields: Record<string, any>,
-  configs: GoalConfigurations,
-  summary?: string,
-  targetLink?: string,
-): Promise<void> {
-  if (goalType === 'capture_lead') {
-    const existing = await LeadCapture.findOne({ conversationId: conversation._id });
-    if (existing) return;
+async function sendAiReplyMessage(params: {
+  conversation: any;
+  automation: any;
+  igAccount: any;
+  recipientId: string;
+  text: string;
+  platform?: string;
+  tags?: string[];
+  aiMeta?: {
+    shouldEscalate?: boolean;
+    escalationReason?: string;
+    knowledgeItemIds?: string[];
+  };
+}): Promise<any> {
+  const { conversation, automation, igAccount, recipientId, text, platform, tags, aiMeta } = params;
 
-    await LeadCapture.create({
-      workspaceId: conversation.workspaceId,
-      conversationId: conversation._id,
-      goalType,
-      participantName: conversation.participantName,
-      participantHandle: conversation.participantHandle,
-      name: fields.name || fields.fullName,
-      phone: fields.phone,
-      email: fields.email,
-      customNote: fields.customNote || fields.note,
+  await pauseForTypingIfNeeded(platform);
+
+  const result = await sendInstagramMessage(recipientId, text, igAccount.accessToken);
+  if (!result || (!result.message_id && !result.recipient_id)) {
+    throw new Error('Instagram API did not return a valid response.');
+  }
+
+  const sentAt = new Date();
+  const message = await Message.create({
+    conversationId: conversation._id,
+    workspaceId: conversation.workspaceId,
+    text,
+    from: 'ai',
+    platform: platform || 'instagram',
+    instagramMessageId: result.message_id,
+    automationSource: 'ai_reply',
+    aiTags: tags,
+    aiShouldEscalate: aiMeta?.shouldEscalate,
+    aiEscalationReason: aiMeta?.escalationReason,
+    kbItemIdsUsed: aiMeta?.knowledgeItemIds,
+    createdAt: sentAt,
+  });
+
+  conversation.lastMessage = text;
+  conversation.lastMessageAt = sentAt;
+  conversation.lastBusinessMessageAt = sentAt;
+  await conversation.save();
+
+  automation.stats.totalTriggered += 1;
+  automation.stats.totalRepliesSent += 1;
+  automation.stats.lastTriggeredAt = sentAt;
+  automation.stats.lastReplySentAt = sentAt;
+  await automation.save();
+
+  const increments: Record<string, number> = {
+    outboundMessages: 1,
+    aiReplies: 1,
+  };
+
+  if (tags && tags.length > 0) {
+    tags.forEach(tag => addCountIncrement(increments, 'tagCounts', tag));
+  }
+
+  const responseMetrics = calculateResponseTime(conversation, sentAt);
+  Object.assign(increments, responseMetrics);
+
+  await trackDailyMetric(conversation.workspaceId, sentAt, increments);
+
+  return message;
+}
+
+async function buildAutomationAiReply(params: {
+  conversation: any;
+  messageText: string;
+  messageContext?: AutomationTestContext;
+  aiSettings?: AutomationAiSettings;
+  knowledgeItemIds?: string[];
+}) {
+  const { conversation, messageText, messageContext, aiSettings, knowledgeItemIds } = params;
+  const settings = await getWorkspaceSettings(conversation.workspaceId);
+  const goalConfigs = getGoalConfigs(settings);
+  const detectedGoal = detectGoalIntent(messageText || '');
+  const goalMatched = goalMatchesWorkspace(
+    detectedGoal,
+    settings?.primaryGoal,
+    settings?.secondaryGoal,
+  )
+    ? detectedGoal
+    : 'none';
+
+  return generateAIReply({
+    conversation,
+    workspaceId: conversation.workspaceId,
+    latestCustomerMessage: messageText,
+    categoryId: messageContext?.categoryId,
+    categorization: messageContext?.categoryName
+      ? { categoryName: messageContext.categoryName }
+      : undefined,
+    historyLimit: 20,
+    goalContext: {
+      workspaceGoals: {
+        primaryGoal: settings?.primaryGoal,
+        secondaryGoal: settings?.secondaryGoal,
+        configs: goalConfigs,
+      },
+      detectedGoal: goalMatched !== 'none' ? goalMatched : 'none',
+      activeGoalType: goalMatched !== 'none' ? goalMatched : undefined,
+      goalState: goalMatched !== 'none' ? 'collecting' : 'idle',
+      collectedFields: conversation.goalCollectedFields || {},
+    },
+    workspaceSettingsOverride: settings,
+    tone: aiSettings?.tone,
+    maxReplySentences: aiSettings?.maxReplySentences,
+    model: aiSettings?.model,
+    temperature: aiSettings?.temperature,
+    maxOutputTokens: aiSettings?.maxOutputTokens,
+    reasoningEffort: aiSettings?.reasoningEffort,
+    knowledgeItemIds,
+  });
+}
+
+async function handoffSalesConcierge(params: {
+  conversation: any;
+  topic: string;
+  summary: string;
+  recommendedNextAction?: string;
+  customerMessage?: string;
+}): Promise<void> {
+  const { conversation, topic, summary, recommendedNextAction, customerMessage } = params;
+  const details = [summary, recommendedNextAction ? `Next: ${recommendedNextAction}` : null]
+    .filter(Boolean)
+    .join('\n');
+
+  await createTicket({
+    conversationId: conversation._id,
+    topicSummary: topic.slice(0, 140),
+    reason: details,
+    createdBy: 'system',
+    customerMessage,
+  });
+
+  conversation.humanRequired = true;
+  conversation.humanRequiredReason = topic;
+  conversation.humanTriggeredAt = new Date();
+  conversation.humanTriggeredByMessageId = undefined;
+  conversation.humanHoldUntil = new Date(Date.now() + 60 * 60 * 1000);
+  await conversation.save();
+}
+
+async function trackSalesStep(workspaceId: mongoose.Types.ObjectId, step?: string) {
+  if (!step) return;
+  await trackDailyMetric(workspaceId, new Date(), { [`salesConciergeStepCounts.${step}`]: 1 });
+}
+
+async function handleSalesConciergeFlow(params: {
+  automation: any;
+  replyStep: { templateFlow: TemplateFlowConfig };
+  session: any;
+  conversation: any;
+  igAccount: any;
+  messageText: string;
+  platform?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{ success: boolean; error?: string }> {
+  const {
+    automation,
+    replyStep,
+    session,
+    conversation,
+    igAccount,
+    messageText,
+    platform,
+    messageContext,
+  } = params;
+  const configStart = nowMs();
+  const adminDefaults = await getAutomationDefaults('sales_concierge');
+  const baseConfig = {
+    ...adminDefaults,
+    ...(replyStep.templateFlow.config as SalesConciergeConfig),
+  };
+  const config = await resolveSalesConciergeConfig(conversation.workspaceId, baseConfig);
+  const templateConfig = await getAutomationTemplateConfig('sales_concierge');
+  logAutomationStep('sales_config', configStart, { templateId: 'sales_concierge' });
+  const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
+  const tags = config.tags || ['intent_purchase', 'template_sales_concierge'];
+
+  session.lastCustomerMessageAt = new Date();
+
+  const currentState = normalizeFlowState({
+    step: session.step,
+    status: session.status,
+    questionCount: session.questionCount,
+    collectedFields: session.collectedFields || {},
+  });
+
+  if (shouldHandleFaqInterrupt(messageText, config)) {
+    const faqStart = nowMs();
+    const aiSettings = {
+      ...(config.aiSettings || {}),
+      ...templateConfig.aiReply,
+    };
+    const faqResponse = await buildAutomationAiReply({
+      conversation,
+      messageText,
+      messageContext,
+      aiSettings,
+      knowledgeItemIds: config.knowledgeItemIds,
     });
-  }
+    logAutomationStep('sales_faq_interrupt', faqStart, { answered: Boolean(faqResponse) });
 
-  if (goalType === 'book_appointment') {
-    const existing = await BookingRequest.findOne({ conversationId: conversation._id });
-    if (existing) return;
+    const suffix = (config.faqResponseSuffix || '').trim();
+    const replyText = suffix ? `${faqResponse.replyText} ${suffix}` : faqResponse.replyText;
 
-    await BookingRequest.create({
-      workspaceId: conversation.workspaceId,
-      conversationId: conversation._id,
-      bookingLink: targetLink || configs.booking.bookingLink,
-      date: fields.date,
-      time: fields.time,
-      serviceType: fields.serviceType,
-      summary,
-    });
-  }
-
-  if (goalType === 'start_order') {
-    const existing = await OrderIntent.findOne({ conversationId: conversation._id });
-    if (existing) return;
-
-    await OrderIntent.create({
-      workspaceId: conversation.workspaceId,
-      conversationId: conversation._id,
-      catalogUrl: targetLink || configs.order.catalogUrl,
-      productName: fields.productName,
-      quantity: fields.quantity,
-      variant: fields.variant,
-      summary,
-    });
-  }
-
-  if (goalType === 'handle_support') {
-    const existing = await SupportTicketStub.findOne({ conversationId: conversation._id });
-    if (existing) return;
-
-    await SupportTicketStub.create({
-      workspaceId: conversation.workspaceId,
-      conversationId: conversation._id,
-      orderId: fields.orderId || fields.ticketId,
-      photoUrl: fields.photoUrl,
-      summary,
-    });
-  }
-
-  if (goalType === 'drive_to_channel') {
-    const existing = await ChannelDriveEvent.findOne({ conversationId: conversation._id });
-    if (existing) return;
-
-    await ChannelDriveEvent.create({
-      workspaceId: conversation.workspaceId,
-      conversationId: conversation._id,
-      targetType: configs.drive.targetType,
-      targetLink: targetLink || configs.drive.targetLink,
-      note: summary,
-    });
-  }
-
-  const completionIncrement: Record<string, number> = {};
-  addCountIncrement(completionIncrement, 'goalCompletions', mapGoalKey(goalType));
-  await trackDailyMetric(conversation.workspaceId, new Date(), completionIncrement);
-}
-
-/**
- * Feature 1: Comment → DM Automation
- * Send DM to user who commented on a post
- */
-export async function processCommentDMAutomation(
-  comment: {
-    commentId: string;
-    commenterId: string;
-    commenterUsername?: string;
-    commentText: string;
-    mediaId: string;
-  },
-  instagramAccountId: mongoose.Types.ObjectId | string,
-  workspaceId: mongoose.Types.ObjectId | string
-): Promise<{ success: boolean; message: string; dmMessageId?: string }> {
-  try {
-    // Check if comment was already processed
-    const existingLog = await CommentDMLog.findOne({ commentId: comment.commentId });
-    if (existingLog) {
-      return { success: false, message: 'Comment already processed' };
+    if (!updateRateLimit(session, rateLimit)) {
+      return { success: false, error: 'Rate limit exceeded' };
     }
 
-    // Get workspace settings
-    const settings = await getWorkspaceSettings(workspaceId);
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: replyText,
+      platform,
+      tags: [...tags, ...(faqResponse.tags || [])],
+      aiMeta: {
+        shouldEscalate: faqResponse.shouldEscalate,
+        escalationReason: faqResponse.escalationReason,
+        knowledgeItemIds: faqResponse.knowledgeItemsUsed?.map((item) => item.id),
+      },
+    });
 
-    // Check if comment DM automation is enabled
-    if (!settings.commentDmEnabled) {
-      // Log as skipped
-      await CommentDMLog.create({
+    session.lastAutomationMessageAt = new Date();
+    await session.save();
+    return { success: true };
+  }
+
+  const stateStart = nowMs();
+  const { replies, state: nextState, actions } = advanceSalesConciergeState({
+    state: currentState,
+    messageText,
+    config,
+    context: messageContext,
+  });
+  logAutomationStep('sales_state', stateStart, { replies: replies.length, step: nextState.step });
+  const aiSettings = {
+    ...(config.aiSettings || {}),
+    ...templateConfig.aiReply,
+  };
+  const aiStart = nowMs();
+  const aiResponse = replies.length
+    ? await buildAutomationAiReply({
+        conversation,
+        messageText,
+        messageContext,
+        aiSettings,
+      })
+    : null;
+  logAutomationStep('sales_ai_reply', aiStart, { generated: Boolean(aiResponse) });
+  const combinedTags = [...tags, ...(aiResponse?.tags || [])];
+  const repliesToSend = aiResponse
+    ? [{ ...replies[0], text: aiResponse.replyText }]
+    : replies;
+
+  let sentAny = false;
+  let sentCount = 0;
+  const sendStart = nowMs();
+  for (const reply of repliesToSend) {
+    if (!updateRateLimit(session, rateLimit)) {
+      if (!sentAny) {
+        return { success: false, error: 'Rate limit exceeded' };
+      }
+      break;
+    }
+    await sendTemplateMessage({
+      conversation,
+      automation,
+      igAccount,
+      recipientId: conversation.participantInstagramId,
+      text: reply.text,
+      buttons: reply.buttons,
+      platform,
+      tags: combinedTags,
+      aiMeta: aiResponse
+        ? {
+            shouldEscalate: aiResponse.shouldEscalate,
+            escalationReason: aiResponse.escalationReason,
+            knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
+          }
+        : undefined,
+    });
+    sentAny = true;
+    sentCount += 1;
+  }
+  logAutomationStep('sales_send_replies', sendStart, {
+    attempted: repliesToSend.length,
+    sent: sentCount,
+    rateLimited: sentCount < repliesToSend.length,
+  });
+
+  if (sentAny) {
+    session.lastAutomationMessageAt = new Date();
+  }
+
+  session.step = nextState.step;
+  session.status = nextState.status;
+  session.questionCount = nextState.questionCount;
+  session.collectedFields = nextState.collectedFields;
+
+  if (actions?.handoffReason && actions?.handoffSummary) {
+    const handoffStart = nowMs();
+    await handoffSalesConcierge({
+      conversation,
+      topic: actions.handoffTopic || actions.handoffReason,
+      summary: actions.handoffSummary,
+      recommendedNextAction: actions.recommendedNextAction,
+      customerMessage: messageText,
+    });
+    logAutomationStep('sales_handoff', handoffStart);
+  }
+
+  const trackStart = nowMs();
+  await trackSalesStep(conversation.workspaceId, nextState.step);
+  logAutomationStep('sales_track_step', trackStart, { step: nextState.step });
+  const saveStart = nowMs();
+  await session.save();
+  logAutomationStep('sales_session_save', saveStart);
+  return { success: true };
+}
+
+async function handleAiReplyFlow(params: {
+  automation: any;
+  replyStep: ReplyStep;
+  conversation: any;
+  igAccount: any;
+  messageText: string;
+  platform?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{ success: boolean; error?: string }> {
+  const { automation, replyStep, conversation, igAccount, messageText, platform, messageContext } = params;
+  if (replyStep.type !== 'ai_reply' || !replyStep.aiReply) {
+    return { success: false, error: 'AI reply configuration missing' };
+  }
+  const settingsStart = nowMs();
+  const settings = await getWorkspaceSettings(conversation.workspaceId);
+  const goalConfigs = getGoalConfigs(settings);
+  logAutomationStep('ai_settings', settingsStart);
+  const explicitGoal = replyStep.aiReply?.goalType;
+  const detectedGoal = explicitGoal && explicitGoal !== 'none'
+    ? explicitGoal
+    : detectGoalIntent(messageText || '');
+  const goalMatched = goalMatchesWorkspace(
+    detectedGoal,
+    settings?.primaryGoal,
+    settings?.secondaryGoal,
+  )
+    ? detectedGoal
+    : 'none';
+
+  const replyStart = nowMs();
+  const aiResponse = await generateAIReply({
+    conversation,
+    workspaceId: conversation.workspaceId,
+    latestCustomerMessage: messageText,
+    categoryId: messageContext?.categoryId,
+    categorization: messageContext?.categoryName
+      ? { categoryName: messageContext.categoryName }
+      : undefined,
+    historyLimit: 20,
+    goalContext: {
+      workspaceGoals: {
+        primaryGoal: settings?.primaryGoal,
+        secondaryGoal: settings?.secondaryGoal,
+        configs: goalConfigs,
+      },
+      detectedGoal: goalMatched !== 'none' ? goalMatched : 'none',
+      activeGoalType: goalMatched !== 'none' ? goalMatched : undefined,
+      goalState: goalMatched !== 'none' ? 'collecting' : 'idle',
+      collectedFields: conversation.goalCollectedFields || {},
+    },
+    workspaceSettingsOverride: settings,
+    tone: replyStep.aiReply?.tone,
+    maxReplySentences: replyStep.aiReply?.maxReplySentences,
+  });
+  logAutomationStep('ai_reply_generate', replyStart);
+
+  const activeTicket = await getActiveTicket(conversation._id);
+  if (activeTicket && aiResponse.shouldEscalate) {
+    aiResponse.replyText = buildFollowupResponse(activeTicket.followUpCount || 0, aiResponse.replyText);
+  } else if (activeTicket && !aiResponse.shouldEscalate) {
+    aiResponse.replyText = `${aiResponse.replyText} Your earlier request is with a human teammate and they will confirm that separately.`;
+  } else if (aiResponse.shouldEscalate) {
+    aiResponse.replyText = buildInitialEscalationReply(aiResponse.replyText);
+  }
+
+  const sendStart = nowMs();
+  const message = await sendAiReplyMessage({
+    conversation,
+    automation,
+    igAccount,
+    recipientId: conversation.participantInstagramId,
+    text: aiResponse.replyText,
+    platform,
+    tags: aiResponse.tags,
+    aiMeta: {
+      shouldEscalate: aiResponse.shouldEscalate,
+      escalationReason: aiResponse.escalationReason,
+      knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
+    },
+  });
+  logAutomationStep('ai_reply_send', sendStart);
+
+  let ticketId = activeTicket?._id;
+  if (aiResponse.shouldEscalate && !ticketId) {
+    const ticketStart = nowMs();
+    const ticket = await createTicket({
+      conversationId: conversation._id,
+      topicSummary: (aiResponse.escalationReason || aiResponse.replyText).slice(0, 140),
+      reason: aiResponse.escalationReason || 'Escalated by AI',
+      createdBy: 'ai',
+    });
+    logAutomationStep('ai_create_ticket', ticketStart, { ticketId: ticket._id?.toString() });
+    ticketId = ticket._id;
+    conversation.humanRequired = true;
+    conversation.humanRequiredReason = ticket.reason;
+    conversation.humanTriggeredAt = ticket.createdAt;
+    conversation.humanTriggeredByMessageId = message._id;
+    conversation.humanHoldUntil = settings?.humanEscalationBehavior === 'ai_silent'
+      ? new Date(Date.now() + (settings?.humanHoldMinutes || 60) * 60 * 1000)
+      : undefined;
+  }
+
+  if (ticketId) {
+    const updateStart = nowMs();
+    await addTicketUpdate(ticketId, { from: 'ai', text: aiResponse.replyText, messageId: message._id });
+    logAutomationStep('ai_ticket_update', updateStart, { ticketId: ticketId.toString() });
+  }
+
+  if (aiResponse.shouldEscalate) {
+    const holdMinutes = settings?.humanHoldMinutes || 60;
+    const behavior = settings?.humanEscalationBehavior || 'ai_silent';
+    conversation.humanRequired = true;
+    conversation.humanRequiredReason = aiResponse.escalationReason || 'Escalation requested by AI';
+    conversation.humanTriggeredAt = new Date();
+    conversation.humanTriggeredByMessageId = message._id;
+    conversation.humanHoldUntil = behavior === 'ai_silent'
+      ? new Date(Date.now() + holdMinutes * 60 * 1000)
+      : undefined;
+    const saveStart = nowMs();
+    await conversation.save();
+    logAutomationStep('ai_conversation_save', saveStart);
+  }
+
+  return { success: true };
+}
+
+async function executeTemplateFlow(params: {
+  automation: any;
+  replyStep: any;
+  conversationId: string;
+  workspaceId: string;
+  instagramAccountId: string;
+  messageText: string;
+  platform?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{ success: boolean; error?: string }> {
+  const {
+    automation,
+    replyStep,
+    conversationId,
+    workspaceId,
+    instagramAccountId,
+    messageText,
+    platform,
+    messageContext,
+  } = params;
+
+  const templateFlow = replyStep.templateFlow as TemplateFlowConfig | undefined;
+  if (!templateFlow) {
+    return { success: false, error: 'Template flow configuration missing' };
+  }
+
+  const conversationStart = nowMs();
+  const conversation = await Conversation.findById(conversationId);
+  logAutomationStep('template_load_conversation', conversationStart, { conversationId });
+  if (!conversation) {
+    return { success: false, error: 'Conversation not found' };
+  }
+
+  if (conversation.humanHoldUntil && new Date(conversation.humanHoldUntil) > new Date()) {
+    return { success: false, error: 'Conversation is on human hold' };
+  }
+
+  const sessionStart = nowMs();
+  const session = await getTemplateSession({
+    automationId: automation._id,
+    conversationId: conversation._id,
+    workspaceId: new mongoose.Types.ObjectId(workspaceId),
+    templateId: templateFlow.templateId,
+  });
+  logAutomationStep('template_load_session', sessionStart, { templateId: templateFlow.templateId });
+
+  if (!session) {
+    return { success: false, error: 'Automation paused for human response' };
+  }
+
+  const igStart = nowMs();
+  const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
+  logAutomationStep('template_load_ig_account', igStart, { instagramAccountId });
+  if (!igAccount || !igAccount.accessToken) {
+    return { success: false, error: 'Instagram account not found or not connected' };
+  }
+
+  if (!conversation.participantInstagramId) {
+    return { success: false, error: 'Missing participant Instagram ID' };
+  }
+
+  if (templateFlow.templateId === 'sales_concierge') {
+    const flowStart = nowMs();
+    const result = await handleSalesConciergeFlow({
+      automation,
+      replyStep,
+      session,
+      conversation,
+      igAccount,
+      messageText,
+      platform,
+      messageContext,
+    });
+    logAutomationStep('template_sales_concierge', flowStart, { success: result.success });
+    return result;
+  }
+
+  return { success: false, error: 'Unsupported template flow' };
+}
+
+/**
+ * Execute an automation based on trigger type
+ */
+export async function executeAutomation(params: {
+  workspaceId: string;
+  triggerType: TriggerType;
+  conversationId: string;
+  messageText?: string;
+  instagramAccountId: string;
+  platform?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{ success: boolean; automationExecuted?: string; error?: string }> {
+  const totalStart = nowMs();
+  const finish = (result: { success: boolean; automationExecuted?: string; error?: string }) => {
+    logAutomationStep('automation_total', totalStart, {
+      success: result.success,
+      automation: result.automationExecuted,
+      error: result.error,
+    });
+    return result;
+  };
+  try {
+    const {
+      workspaceId,
+      triggerType,
+      conversationId,
+      messageText,
+      instagramAccountId,
+      platform,
+      messageContext,
+    } = params;
+
+    logAutomation('🤖 [AUTOMATION] Start', {
+      workspaceId,
+      triggerType,
+      conversationId,
+      instagramAccountId,
+      messageTextPreview: messageText?.slice(0, 50),
+      platform,
+    });
+
+    const normalizedMessage = messageText || '';
+    const activeSession = await AutomationSession.findOne({
+      conversationId: new mongoose.Types.ObjectId(conversationId),
+      status: 'active',
+    }).sort({ updatedAt: -1 });
+
+    if (activeSession) {
+      const automation = await Automation.findById(activeSession.automationId);
+      const replyStep = automation?.replySteps?.[0];
+      if (automation && replyStep?.type === 'template_flow') {
+        if (replyStep.templateFlow?.templateId === 'sales_concierge') {
+          const defaults = await getAutomationDefaults('sales_concierge');
+          const mergedConfig: SalesConciergeConfig = {
+            ...defaults,
+            ...(replyStep.templateFlow.config as SalesConciergeConfig),
+          };
+          const lockMode = mergedConfig.lockMode || 'session_only';
+          const releaseKeywords = normalizeKeywordList(mergedConfig.releaseKeywords);
+
+          if (releaseKeywords.length && messageHasKeyword(normalizedMessage, releaseKeywords)) {
+            activeSession.status = 'paused';
+            await activeSession.save();
+            logAutomation('🔓 [AUTOMATION] Session released by keyword', {
+              automationId: automation._id?.toString(),
+              templateId: replyStep.templateFlow.templateId,
+            });
+          } else if (isSessionExpired(activeSession, mergedConfig.lockTtlMinutes)) {
+            activeSession.status = 'paused';
+            await activeSession.save();
+            logAutomation('⌛ [AUTOMATION] Session expired', {
+              automationId: automation._id?.toString(),
+              templateId: replyStep.templateFlow.templateId,
+              ttlMinutes: mergedConfig.lockTtlMinutes,
+            });
+          } else if (lockMode !== 'none') {
+            logAutomation('🔒 [AUTOMATION] Active session lock', {
+              automationId: automation._id?.toString(),
+              templateId: replyStep.templateFlow.templateId,
+            });
+            const templateResult = await executeTemplateFlow({
+              automation,
+              replyStep,
+              conversationId,
+              workspaceId,
+              instagramAccountId,
+              messageText: normalizedMessage,
+              platform,
+              messageContext,
+            });
+            return templateResult.success
+              ? finish({ success: true, automationExecuted: automation.name })
+              : finish({ success: false, error: templateResult.error || 'Template flow not executed' });
+          }
+        } else {
+          logAutomation('🔒 [AUTOMATION] Active session lock', {
+            automationId: automation._id?.toString(),
+            templateId: replyStep.templateFlow?.templateId,
+          });
+          const templateResult = await executeTemplateFlow({
+            automation,
+            replyStep,
+            conversationId,
+            workspaceId,
+            instagramAccountId,
+            messageText: normalizedMessage,
+            platform,
+            messageContext,
+          });
+          return templateResult.success
+            ? finish({ success: true, automationExecuted: automation.name })
+            : finish({ success: false, error: templateResult.error || 'Template flow not executed' });
+        }
+      }
+    }
+
+    const automationQuery: Record<string, any> = {
+      workspaceId: new mongoose.Types.ObjectId(workspaceId),
+      triggerType,
+      isActive: true,
+    };
+
+    const fetchStart = nowMs();
+    const automations = await Automation.find(automationQuery).sort({ createdAt: 1 });
+    logAutomationStep('fetch_automations', fetchStart, { count: automations.length, triggerType });
+
+    logAutomation('🔍 [AUTOMATION] Active', {
+      count: automations.length,
+      triggerType,
+    });
+
+    if (automations.length === 0) {
+      logAutomation('⚠️  [AUTOMATION] No active automations found');
+      return finish({ success: false, error: 'No active automations found for this trigger' });
+    }
+
+    const matchingAutomations: typeof automations = [];
+
+    const matchStart = nowMs();
+    for (const candidate of automations) {
+      const replyStep = candidate.replySteps[0];
+      if (replyStep?.type === 'template_flow') {
+        const activeSession = await AutomationSession.findOne({
+          automationId: candidate._id,
+          conversationId: new mongoose.Types.ObjectId(conversationId),
+          status: 'active',
+        });
+        if (activeSession) {
+          matchingAutomations.push(candidate);
+          continue;
+        }
+      }
+
+      if (matchesTriggerConfig(normalizedMessage, candidate.triggerConfig, messageContext)) {
+        const triggerMode = candidate.triggerConfig?.triggerMode || 'any';
+        const matchedBy = triggerMode === 'categories' && (messageContext?.categoryId || messageContext?.categoryName)
+          ? 'category'
+          : candidate.triggerConfig?.matchOn?.link && messageContext?.hasLink
+            ? 'link'
+            : candidate.triggerConfig?.matchOn?.attachment && messageContext?.hasAttachment
+              ? 'attachment'
+              : 'keyword';
+        logAutomation('✅ [AUTOMATION] Match', {
+          automationId: candidate._id?.toString(),
+          name: candidate.name,
+          triggerType,
+          triggerMode,
+          matchedBy,
+          categoryName: messageContext?.categoryName,
+        });
+        matchingAutomations.push(candidate);
+      }
+    }
+    logAutomationStep('match_triggers', matchStart, {
+      matched: matchingAutomations.length,
+      evaluated: automations.length,
+      triggerType,
+    });
+
+    if (matchingAutomations.length === 0) {
+      logAutomation('⚠️  [AUTOMATION] No automations matched trigger filters');
+      return finish({ success: false, error: 'No automations matched trigger filters' });
+    }
+
+    const automation = matchingAutomations[0];
+    logAutomation('✅ [AUTOMATION] Execute', {
+      automationId: automation._id?.toString(),
+      name: automation.name,
+      replyType: automation.replySteps[0]?.type,
+    });
+
+    const replyStep = automation.replySteps[0];
+
+    if (!replyStep) {
+      logAutomation('❌ [AUTOMATION] No reply step configured');
+      return finish({ success: false, error: 'No reply step configured' });
+    }
+
+    if (replyStep.type === 'template_flow') {
+      const templateStart = nowMs();
+      const templateResult = await executeTemplateFlow({
+        automation,
+        replyStep,
+        conversationId,
         workspaceId,
         instagramAccountId,
-        commentId: comment.commentId,
-        commenterId: comment.commenterId,
-        commenterUsername: comment.commenterUsername,
-        commentText: comment.commentText,
-        mediaId: comment.mediaId,
-        status: 'skipped',
-        processedAt: new Date(),
+        messageText: normalizedMessage,
+        platform,
+        messageContext,
       });
-      return { success: false, message: 'Comment DM automation is disabled' };
-    }
-
-    // Get Instagram account with access token
-    const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
-    if (!igAccount || !igAccount.accessToken) {
-      throw new Error('Instagram account not found or no access token');
-    }
-
-    // Create log entry as pending
-    const logEntry = await CommentDMLog.create({
-      workspaceId,
-      instagramAccountId,
-      commentId: comment.commentId,
-      commenterId: comment.commenterId,
-      commenterUsername: comment.commenterUsername,
-      commentText: comment.commentText,
-      mediaId: comment.mediaId,
-      status: 'pending',
-    });
-
-    try {
-      // Send DM using comment reply API (this works for comment DMs)
-      const result = await sendCommentReply(
-        igAccount.instagramAccountId!,
-        comment.commentId,
-        settings.commentDmTemplate,
-        igAccount.accessToken!
-      );
-
-      // Update log entry with success
-      logEntry.dmSent = true;
-      logEntry.dmMessageId = result.message_id;
-      logEntry.dmText = settings.commentDmTemplate;
-      logEntry.status = 'sent';
-      logEntry.processedAt = new Date();
-      await logEntry.save();
-
-      // Get or create conversation with commenter and save the DM as a message
-      let conversation = await Conversation.findOne({
-        instagramAccountId: igAccount._id,
-        participantInstagramId: comment.commenterId,
+      logAutomationStep('execute_template_flow', templateStart, {
+        success: templateResult.success,
+        templateId: replyStep.templateFlow?.templateId,
       });
 
+      if (templateResult.success) {
+        return finish({ success: true, automationExecuted: automation.name });
+      }
+
+      return finish({ success: false, error: templateResult.error || 'Template flow not executed' });
+    }
+
+    if (replyStep.type === 'ai_reply') {
+      const conversationStart = nowMs();
+      const conversation = await Conversation.findById(conversationId);
+      logAutomationStep('ai_load_conversation', conversationStart, { conversationId });
       if (!conversation) {
-        conversation = await Conversation.create({
-          workspaceId,
-          instagramAccountId: igAccount._id,
-          participantName: comment.commenterUsername || 'Unknown User',
-          participantHandle: `@${comment.commenterUsername || 'unknown'}`,
-          participantInstagramId: comment.commenterId,
-          instagramConversationId: `${igAccount.instagramAccountId}_${comment.commenterId}`,
-          platform: 'instagram',
-          lastMessageAt: new Date(),
-          lastMessage: settings.commentDmTemplate,
-          lastBusinessMessageAt: new Date(),
-        });
-      } else {
-        conversation.lastMessageAt = new Date();
-        conversation.lastMessage = settings.commentDmTemplate;
-        conversation.lastBusinessMessageAt = new Date();
-        await conversation.save();
+        return finish({ success: false, error: 'Conversation not found' });
       }
 
-      // Save the DM as a message in the conversation
-      const sentAt = new Date();
-      await Message.create({
-        conversationId: conversation._id,
-        workspaceId,
-        text: settings.commentDmTemplate,
-        from: 'ai',
-        platform: 'instagram',
-        instagramMessageId: result.message_id,
-        automationSource: 'comment_dm',
-        createdAt: sentAt,
+      const igStart = nowMs();
+      const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
+      logAutomationStep('ai_load_ig_account', igStart, { instagramAccountId });
+      if (!igAccount || !igAccount.accessToken) {
+        return finish({ success: false, error: 'Instagram account not found or not connected' });
+      }
+
+      if (!conversation.participantInstagramId) {
+        return finish({ success: false, error: 'Missing participant Instagram ID' });
+      }
+
+      const aiStart = nowMs();
+      const aiResult = await handleAiReplyFlow({
+        automation,
+        replyStep,
+        conversation,
+        igAccount,
+        messageText: normalizedMessage,
+        platform,
+        messageContext,
       });
+      logAutomationStep('execute_ai_reply', aiStart, { success: aiResult.success });
 
-      await trackDailyMetric(workspaceId, sentAt, {
-        outboundMessages: 1,
-        aiReplies: 1,
-      });
+      if (aiResult.success) {
+        return finish({ success: true, automationExecuted: automation.name });
+      }
 
-      return {
-        success: true,
-        message: 'DM sent successfully',
-        dmMessageId: result.message_id,
-      };
-    } catch (sendError: any) {
-      // Update log entry with failure
-      logEntry.status = 'failed';
-      logEntry.errorMessage = sendError.message;
-      logEntry.processedAt = new Date();
-      await logEntry.save();
-
-      throw sendError;
+      return finish({ success: false, error: aiResult.error || 'AI reply not sent' });
     }
+
+    logAutomation('❌ [AUTOMATION] Only template_flow and ai_reply automations are supported');
+    return finish({ success: false, error: 'Only template_flow and ai_reply automations are supported' });
   } catch (error: any) {
-    console.error('Error processing comment DM automation:', error);
-    return {
-      success: false,
-      message: `Failed to send DM: ${error.message}`,
-    };
+    console.error('❌ [AUTOMATION] Error executing automation:', error);
+    console.error('❌ [AUTOMATION] Error stack:', error.stack);
+    return finish({ success: false, error: `Failed to execute automation: ${error.message}` });
   }
 }
 
 /**
- * Feature 2: Inbound DM Auto-Reply
- * Process incoming DM and send AI-generated reply
+ * Check and execute automations for a specific trigger type
+ * This is a helper function that can be called from webhook handlers
  */
-export async function processAutoReply(
-  conversationId: mongoose.Types.ObjectId | string,
-  latestMessage: IMessage,
-  messageText: string,
-  workspaceId: mongoose.Types.ObjectId | string
-): Promise<{
-  success: boolean;
-  message: string;
-  reply?: string;
-  categoryId?: mongoose.Types.ObjectId;
-  detectedLanguage?: string;
-}> {
-  try {
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return { success: false, message: 'Conversation not found' };
-    }
-
-    // Check if auto-reply is disabled for this conversation
-    if (conversation.autoReplyDisabled) {
-      return { success: false, message: 'Auto-reply disabled for this conversation' };
-    }
-
-    // Get workspace settings
-    const settings = await getWorkspaceSettings(workspaceId);
-    const goalConfigs = getGoalConfigs(settings);
-
-    const detectedGoal = detectGoalIntent(messageText || '');
-    const matchesWorkspaceGoal = goalMatchesWorkspace(detectedGoal, settings.primaryGoal, settings.secondaryGoal);
-
-    if (matchesWorkspaceGoal && (!conversation.activeGoalType || conversation.activeGoalType === detectedGoal)) {
-      conversation.activeGoalType = detectedGoal;
-      conversation.goalState = conversation.goalState || 'collecting';
-    }
-
-    // Check if DM auto-reply is enabled
-    if (!settings.dmAutoReplyEnabled) {
-      return { success: false, message: 'DM auto-reply is disabled' };
-    }
-
-    // Get Instagram account
-    const igAccount = await InstagramAccount.findById(conversation.instagramAccountId).select('+accessToken');
-    if (!igAccount || !igAccount.accessToken) {
-      return { success: false, message: 'Instagram account not found' };
-    }
-
-    // Wait briefly to see if the customer is still typing/adding more context
-    await pauseForTypingIfNeeded(conversation.platform, settings);
-
-    // If a newer customer message arrived during the pause, skip so the freshest message can drive the reply
-    const newestCustomerMessage = await Message.findOne({
-      conversationId,
-      from: 'customer',
-    }).sort({ createdAt: -1 });
-
-    if (!newestCustomerMessage) {
-      return { success: false, message: 'No customer messages found for auto-reply' };
-    }
-
-    if (newestCustomerMessage._id.toString() !== latestMessage._id.toString()) {
-      return { success: false, message: 'A newer customer message arrived; deferring auto-reply' };
-    }
-
-    // Combine all customer messages since the last business/AI response to keep context together
-    const lastBusinessMessage = await Message.findOne({
-      conversationId,
-      from: { $in: ['ai', 'user'] },
-    }).sort({ createdAt: -1 });
-
-    const messageWindowStart = lastBusinessMessage?.createdAt || conversation.createdAt || new Date(0);
-    const recentCustomerMessages = await Message.find({
-      conversationId,
-      from: 'customer',
-      createdAt: { $gt: messageWindowStart },
-    })
-      .sort({ createdAt: 1 });
-
-    if (recentCustomerMessages.length > 0) {
-      messageText = recentCustomerMessages.map(msg => msg.text).join('\n');
-    }
-
-    // Categorize the (possibly combined) message
-    const categorization = await categorizeMessage(messageText, workspaceId);
-
-    // Get or create category
-    const categoryId = await getOrCreateCategory(workspaceId, categorization.categoryName);
-
-    // Increment category count
-    await incrementCategoryCount(categoryId);
-
-    const activeTicket = await getActiveTicket(conversation._id);
-    const sameTopicTicket =
-      activeTicket &&
-      activeTicket.categoryId &&
-      categoryId &&
-      activeTicket.categoryId.toString() === categoryId.toString();
-
-    // Check if auto-reply is enabled for this category
-    const category = await MessageCategory.findById(categoryId);
-    if (category && !category.autoReplyEnabled) {
-      return {
-        success: false,
-        message: 'Auto-reply disabled for this category',
-        categoryId,
-        detectedLanguage: categorization.detectedLanguage,
-      };
-    }
-
-    // Build AI context
-    const aiReply = await generateAIReply({
-      conversation,
-      workspaceId,
-      latestCustomerMessage: messageText,
-      categoryId,
-      categorization,
-      historyLimit: 10,
-      goalContext: {
-        workspaceGoals: {
-          primaryGoal: settings.primaryGoal,
-          secondaryGoal: settings.secondaryGoal,
-          configs: goalConfigs,
-        },
-        detectedGoal: matchesWorkspaceGoal ? detectedGoal : 'none',
-        activeGoalType: conversation.activeGoalType,
-        goalState: conversation.goalState,
-        collectedFields: conversation.goalCollectedFields,
-      },
-    });
-
-    if (!aiReply) {
-      console.error('generateAIReply returned null', {
-        conversationId: conversation._id,
-        workspaceId,
-        categoryId,
-        detectedGoal,
-      });
-      return {
-        success: false,
-        message: 'Failed to generate reply',
-        categoryId,
-        detectedLanguage: categorization.detectedLanguage,
-      };
-    }
-
-    // If existing ticket for same topic, keep helping but add a light reminder without blocking the conversation
-    if (sameTopicTicket) {
-      aiReply.shouldEscalate = false; // avoid spamming escalation replies when a ticket is already open
-      aiReply.escalationReason = aiReply.escalationReason || activeTicket.reason || 'Escalation pending';
-      aiReply.replyText = appendPendingNote(aiReply.replyText);
-      await addTicketUpdate(activeTicket._id, { from: 'customer', text: messageText });
-    } else if (activeTicket && !sameTopicTicket) {
-      // New topic while escalation pending: keep helping but remind briefly
-      aiReply.replyText = appendPendingNote(aiReply.replyText);
-    } else if (aiReply.shouldEscalate) {
-      aiReply.replyText = buildInitialEscalationReply(aiReply.replyText);
-    }
-
-    const goalProgress = aiReply.goalProgress as GoalProgressState | undefined;
-    const goalType = (goalProgress?.goalType && goalProgress.goalType !== 'none'
-      ? goalProgress.goalType
-      : conversation.activeGoalType || (matchesWorkspaceGoal ? detectedGoal : undefined)) as GoalType | undefined;
-
-    const goalIncrements: Record<string, number> = {};
-
-    if (goalType && goalType !== 'none') {
-      const mergedFields = mergeGoalFields(conversation.goalCollectedFields, goalProgress?.collectedFields);
-      conversation.goalCollectedFields = mergedFields;
-      conversation.goalState = goalProgress?.status || conversation.goalState || 'collecting';
-      conversation.goalSummary = goalProgress?.summary || conversation.goalSummary;
-      conversation.goalLastInteractionAt = new Date();
-      conversation.activeGoalType = goalType;
-
-      addCountIncrement(goalIncrements, 'goalAttempts', mapGoalKey(goalType));
-
-      if (goalProgress?.status === 'completed' || goalProgress?.shouldCreateRecord) {
-        await saveGoalOutcome(goalType, conversation, mergedFields, goalConfigs, goalProgress?.summary, goalProgress?.targetLink);
-        conversation.goalState = 'completed';
-        addCountIncrement(goalIncrements, 'goalCompletions', mapGoalKey(goalType));
-      }
-
-      if (conversation.markModified) {
-        conversation.markModified('goalCollectedFields');
-      }
-    }
-
-    // If AI wants escalation and no ticket exists, create one
-    let escalationId: mongoose.Types.ObjectId | undefined;
-    if (aiReply.shouldEscalate && !sameTopicTicket) {
-      const ticket = await createTicket({
-        conversationId: conversation._id,
-        categoryId,
-        topicSummary: (aiReply.escalationReason || messageText).slice(0, 140),
-        reason: aiReply.escalationReason || 'Escalated by AI',
-        createdBy: 'ai',
-        customerMessage: messageText,
-      });
-      escalationId = ticket._id as mongoose.Types.ObjectId;
-      conversation.humanRequired = true;
-      conversation.humanRequiredReason = ticket.reason;
-      conversation.humanTriggeredAt = ticket.createdAt;
-      conversation.humanTriggeredByMessageId = undefined;
-      conversation.humanHoldUntil = settings.humanEscalationBehavior === 'ai_silent'
-        ? new Date(Date.now() + (settings.humanHoldMinutes || 60) * 60 * 1000)
-        : undefined;
-    }
-
-    // Send the reply via Instagram API
-    console.info('Sending AI Instagram reply', {
-      conversationId: conversation._id,
-      workspaceId,
-      categoryId,
-      goalType,
-      goalStatus: aiReply.goalProgress?.status,
-      shouldEscalate: aiReply.shouldEscalate,
-      replyPreview: aiReply.replyText?.slice(0, 140),
-    });
-
-    const result = await sendInstagramMessage(
-      conversation.participantInstagramId!,
-      aiReply.replyText,
-      igAccount.accessToken
-    );
-
-    if (!result || (!result.message_id && !result.recipient_id)) {
-      console.error('Failed to send Instagram reply', {
-        conversationId: conversation._id,
-        result,
-      });
-      return {
-        success: false,
-        message: 'Failed to send reply to Instagram',
-        categoryId,
-        detectedLanguage: categorization.detectedLanguage,
-      };
-    }
-
-    console.info('Instagram reply sent', {
-      conversationId: conversation._id,
-      messageId: result.message_id,
-      recipientId: result.recipient_id,
-      goalType,
-      shouldEscalate: aiReply.shouldEscalate,
-    });
-
-    // Save the reply as a message
-    const kbItemIdsUsed = (aiReply.knowledgeItemsUsed || []).map(item => item.id);
-    const sentAt = new Date();
-    const savedMessage = await Message.create({
-      conversationId: conversation._id,
-      workspaceId,
-      text: aiReply.replyText,
-      from: 'ai',
-      platform: 'instagram',
-      instagramMessageId: result.message_id,
-      automationSource: 'auto_reply',
-      aiTags: aiReply.tags,
-      aiShouldEscalate: aiReply.shouldEscalate,
-      aiEscalationReason: aiReply.escalationReason,
-      kbItemIdsUsed,
-      createdAt: sentAt,
-    });
-
-    if (sameTopicTicket && activeTicket) {
-      await addTicketUpdate(activeTicket._id, { from: 'ai', text: aiReply.replyText, messageId: savedMessage._id });
-    } else if (escalationId) {
-      await addTicketUpdate(escalationId, { from: 'ai', text: aiReply.replyText, messageId: savedMessage._id });
-    }
-
-    // Update conversation
-    conversation.lastMessageAt = new Date();
-    conversation.lastMessage = aiReply.replyText;
-    conversation.lastBusinessMessageAt = new Date();
-    if (aiReply.shouldEscalate) {
-      const holdMinutes = settings.humanHoldMinutes || 60;
-      conversation.humanRequired = true;
-      conversation.humanRequiredReason = aiReply.escalationReason || 'Escalation requested by AI';
-      conversation.humanTriggeredAt = new Date();
-      conversation.humanTriggeredByMessageId = savedMessage._id;
-      conversation.humanHoldUntil =
-        settings.humanEscalationBehavior === 'ai_silent'
-          ? new Date(Date.now() + holdMinutes * 60 * 1000)
-          : undefined;
-    }
-    await conversation.save();
-
-    const increments: Record<string, number> = { outboundMessages: 1, aiReplies: 1, ...goalIncrements };
-    if (aiReply.tags && aiReply.tags.length > 0) {
-      aiReply.tags.forEach(tag => addCountIncrement(increments, 'tagCounts', tag));
-    }
-    if (aiReply.escalationReason) {
-      addCountIncrement(increments, 'escalationReasonCounts', aiReply.escalationReason);
-    }
-    if (kbItemIdsUsed.length > 0) {
-      increments.kbBackedReplies = 1;
-      kbItemIdsUsed.forEach(itemId => addCountIncrement(increments, 'kbArticleCounts', itemId));
-    }
-
-    const responseMetrics = calculateResponseTime(conversation, sentAt);
-    Object.assign(increments, responseMetrics);
-
-    await trackDailyMetric(workspaceId, sentAt, increments);
-
-    return {
-      success: true,
-      message: 'Auto-reply sent successfully',
-      reply: aiReply.replyText,
-      categoryId,
-      detectedLanguage: categorization.detectedLanguage,
-    };
-  } catch (error: any) {
-    console.error('Error processing auto-reply:', error);
-    return {
-      success: false,
-      message: `Auto-reply failed: ${error.message}`,
-    };
-  }
-}
-
-/**
- * Feature 3: 24h Follow-up Automation
- * Schedule or send follow-up messages
- */
-export async function scheduleFollowup(
-  conversationId: mongoose.Types.ObjectId | string,
-  workspaceId: mongoose.Types.ObjectId | string
-): Promise<{ success: boolean; message: string; taskId?: mongoose.Types.ObjectId }> {
-  try {
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return { success: false, message: 'Conversation not found' };
-    }
-
-    // Get workspace settings
-    const settings = await getWorkspaceSettings(workspaceId);
-
-    if (!settings.followupEnabled) {
-      return { success: false, message: 'Follow-up automation is disabled' };
-    }
-
-    // Cancel any existing scheduled follow-ups for this conversation
-    await FollowupTask.updateMany(
-      {
-        conversationId,
-        status: 'scheduled',
-      },
-      { status: 'cancelled' }
-    );
-
-    // Calculate timing
-    const lastCustomerMessageAt = conversation.lastCustomerMessageAt || conversation.createdAt;
-    const windowExpiresAt = new Date(lastCustomerMessageAt.getTime() + 24 * 60 * 60 * 1000);
-    const hoursBeforeExpiry = settings.followupHoursBeforeExpiry || 2;
-    const scheduledFollowupAt = new Date(windowExpiresAt.getTime() - hoursBeforeExpiry * 60 * 60 * 1000);
-
-    // Don't schedule if follow-up time is in the past
-    if (scheduledFollowupAt <= new Date()) {
-      return { success: false, message: 'Follow-up time would be in the past' };
-    }
-
-    // Create follow-up task
-    const task = await FollowupTask.create({
-      workspaceId,
-      conversationId: conversation._id,
-      instagramAccountId: conversation.instagramAccountId,
-      participantInstagramId: conversation.participantInstagramId,
-      lastCustomerMessageAt,
-      lastBusinessMessageAt: conversation.lastBusinessMessageAt,
-      windowExpiresAt,
-      scheduledFollowupAt,
-      status: 'scheduled',
-    });
-
-    return {
-      success: true,
-      message: `Follow-up scheduled for ${scheduledFollowupAt.toISOString()}`,
-      taskId: task._id as mongoose.Types.ObjectId,
-    };
-  } catch (error: any) {
-    console.error('Error scheduling follow-up:', error);
-    return { success: false, message: `Failed to schedule follow-up: ${error.message}` };
-  }
+export async function checkAndExecuteAutomations(params: {
+  workspaceId: string;
+  triggerType: TriggerType;
+  conversationId: string;
+  messageText?: string;
+  instagramAccountId: string;
+  platform?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{ executed: boolean; automationName?: string }> {
+  const result = await executeAutomation(params);
+  return {
+    executed: result.success,
+    automationName: result.automationExecuted,
+  };
 }
 
 /**
  * Process due follow-up tasks
  * This should be called by a background job
  */
-export async function processDueFollowups(): Promise<{
+export async function processDueFollowups(params?: {
+  conversationId?: mongoose.Types.ObjectId | string;
+  now?: Date;
+}): Promise<{
   processed: number;
   sent: number;
   failed: number;
   cancelled: number;
 }> {
   const stats = { processed: 0, sent: 0, failed: 0, cancelled: 0 };
+  const now = params?.now || new Date();
 
   try {
-    // Find all scheduled follow-ups that are due
-    const dueTasks = await FollowupTask.find({
+    const query: Record<string, any> = {
       status: 'scheduled',
-      scheduledFollowupAt: { $lte: new Date() },
-    });
+      scheduledFollowupAt: { $lte: now },
+    };
+    if (params?.conversationId) {
+      query.conversationId = new mongoose.Types.ObjectId(params.conversationId);
+    }
+
+    const dueTasks = await FollowupTask.find(query);
 
     for (const task of dueTasks) {
       stats.processed++;
 
+      if (task.followupType !== 'after_hours') {
+        task.status = 'cancelled';
+        task.errorMessage = 'Deprecated follow-up type';
+        await task.save();
+        stats.cancelled++;
+        continue;
+      }
+
       try {
-        // Get conversation to check if customer replied
         const conversation = await Conversation.findById(task.conversationId);
         if (!conversation) {
           task.status = 'cancelled';
@@ -777,7 +1099,6 @@ export async function processDueFollowups(): Promise<{
           continue;
         }
 
-        // Check if customer replied since we scheduled
         const customerMessageSince = await Message.findOne({
           conversationId: task.conversationId,
           from: 'customer',
@@ -791,7 +1112,20 @@ export async function processDueFollowups(): Promise<{
           continue;
         }
 
-        // Check if window expired
+        const businessMessageSince = await Message.findOne({
+          conversationId: task.conversationId,
+          from: 'user',
+          createdAt: { $gt: task.lastBusinessMessageAt || task.createdAt },
+        });
+
+        if (businessMessageSince) {
+          task.status = 'cancelled';
+          task.errorMessage = 'Staff replied';
+          await task.save();
+          stats.cancelled++;
+          continue;
+        }
+
         if (new Date() > task.windowExpiresAt) {
           task.status = 'expired';
           await task.save();
@@ -799,10 +1133,6 @@ export async function processDueFollowups(): Promise<{
           continue;
         }
 
-        // Get workspace settings for template
-        const settings = await getWorkspaceSettings(task.workspaceId);
-
-        // Get Instagram account
         const igAccount = await InstagramAccount.findById(task.instagramAccountId).select('+accessToken');
         if (!igAccount || !igAccount.accessToken) {
           task.status = 'cancelled';
@@ -812,11 +1142,12 @@ export async function processDueFollowups(): Promise<{
           continue;
         }
 
-        // Send follow-up message
+        const followupText = task.customMessage || "We're open now if you'd like to continue. Reply anytime.";
+
         const result = await sendInstagramMessage(
           task.participantInstagramId,
-          settings.followupTemplate,
-          igAccount.accessToken
+          followupText,
+          igAccount.accessToken,
         );
 
         if (!result || (!result.message_id && !result.recipient_id)) {
@@ -827,12 +1158,11 @@ export async function processDueFollowups(): Promise<{
           continue;
         }
 
-        // Save the follow-up as a message
         const sentAt = new Date();
         await Message.create({
           conversationId: conversation._id,
           workspaceId: conversation.workspaceId,
-          text: settings.followupTemplate,
+          text: followupText,
           from: 'ai',
           platform: 'instagram',
           instagramMessageId: result.message_id,
@@ -840,16 +1170,14 @@ export async function processDueFollowups(): Promise<{
           createdAt: sentAt,
         });
 
-        // Update conversation
         conversation.lastMessageAt = new Date();
-        conversation.lastMessage = settings.followupTemplate;
+        conversation.lastMessage = followupText;
         conversation.lastBusinessMessageAt = new Date();
         await conversation.save();
 
-        // Update task
         task.status = 'sent';
         task.followupMessageId = result.message_id;
-        task.followupText = settings.followupTemplate;
+        task.followupText = followupText;
         task.sentAt = new Date();
         await task.save();
 
@@ -869,7 +1197,7 @@ export async function processDueFollowups(): Promise<{
       }
     }
 
-    console.log(`Follow-up processing complete: ${JSON.stringify(stats)}`);
+    logAutomation(`Follow-up processing complete: ${JSON.stringify(stats)}`);
     return stats;
   } catch (error) {
     console.error('Error processing due follow-ups:', error);
@@ -881,38 +1209,30 @@ export async function processDueFollowups(): Promise<{
  * Cancel follow-up when customer replies
  */
 export async function cancelFollowupOnCustomerReply(
-  conversationId: mongoose.Types.ObjectId | string
+  conversationId: mongoose.Types.ObjectId | string,
 ): Promise<void> {
   await FollowupTask.updateMany(
     {
       conversationId,
       status: 'scheduled',
     },
-    { status: 'customer_replied' }
+    { status: 'customer_replied' },
   );
 }
 
-/**
- * Generate varied responses for follow-up messages on the same escalated topic
- * Uses different phrasing each time to avoid sounding robotic
- */
 function buildFollowupResponse(followUpCount: number, base: string): string {
-  // If the AI generated a specific response, use it
-  if (base && base.trim().length > 20) {
-    return base;
-  }
-
-  // Otherwise, use varied templates that acknowledge the wait without making commitments
   const templates = [
-    'I understand you\'re waiting on this. The request is with the team and they\'ll respond with the specific details. In the meantime, I can help clarify anything or answer other questions.',
-    'Your request is still being reviewed by the team. They\'re the ones who can give you a definitive answer on this. Is there any additional information I can note for them?',
-    'The team has this flagged and will get back to you. I can\'t make commitments on their behalf, but I\'m here if you have other questions or want to add more details for them to consider.',
-    'Still with the team for review. They\'ll reach out directly about this specific matter. Let me know if there\'s anything else I can help with in the meantime.',
+    'I’ve flagged this to the team and they’ll handle it directly. I can’t confirm on their behalf, but I can gather any details they need.',
+    'Your request is with the team. I cannot make promises here, but I can note your urgency and pass along details.',
+    'Thanks for your patience. This needs a human to finalize. I’m here to help with any other questions meanwhile.',
   ];
-
-  // Rotate through templates based on follow-up count
   const variant = templates[followUpCount % templates.length];
-  return variant;
+  return base && base.trim().length > 0 ? base : variant;
+}
+
+function buildInitialEscalationReply(base: string): string {
+  if (base && base.trim().length > 0) return base;
+  return 'This needs a teammate to review personally, so I’ve flagged it for them. I won’t make commitments here, but I can help with other questions meanwhile.';
 }
 
 function calculateResponseTime(conversation: any, sentAt: Date): Record<string, number> {
@@ -930,50 +1250,4 @@ function calculateResponseTime(conversation: any, sentAt: Date): Record<string, 
   }
 
   return {};
-}
-
-/**
- * Generate initial escalation message - varies based on context
- */
-function buildInitialEscalationReply(base: string): string {
-  // If AI generated a good escalation response, use it
-  if (base && base.trim().length > 20) {
-    return base;
-  }
-
-  // Generic fallback if AI didn't provide one
-  const templates = [
-    'This is something a team member needs to review personally, so I\'ve flagged it for them. They\'ll get back to you with the exact details. I\'m here to help with any general questions in the meantime.',
-    'I\'ve forwarded this to the team for review. They\'ll be able to give you a proper answer on this. Feel free to ask me anything else while you wait.',
-    'A team member will handle this one directly and follow up with you. I can\'t make decisions on this, but I can help with other questions if you have any.',
-  ];
-
-  // Random selection for variety
-  const index = Math.floor(Math.random() * templates.length);
-  return templates[index];
-}
-
-/**
- * Append a brief note about pending escalation when customer asks about a different topic
- */
-function appendPendingNote(reply: string): string {
-  const notes = [
-    'Your earlier request is still with the team and they\'ll respond separately.',
-    'By the way, the team is still reviewing your other question and will get back to you.',
-    'Just so you know, your previous request is with a team member who will follow up.',
-  ];
-
-  // Check if reply already mentions the pending item
-  const mentionsPending = reply.toLowerCase().includes('earlier') ||
-                         reply.toLowerCase().includes('previous') ||
-                         reply.toLowerCase().includes('other question') ||
-                         reply.toLowerCase().includes('team');
-
-  if (mentionsPending) {
-    return reply; // Don't add redundant note
-  }
-
-  // Add a brief note
-  const note = notes[0]; // Use first variant for consistency
-  return `${reply} ${note}`.trim();
 }

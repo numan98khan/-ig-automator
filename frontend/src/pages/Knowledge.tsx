@@ -122,9 +122,9 @@ const Knowledge: React.FC = () => {
   if (!currentWorkspace) return null;
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 min-h-screen flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-2">
             <BookOpen className="w-8 h-8" />

@@ -2,10 +2,18 @@ import OpenAI from 'openai';
 import axios from 'axios';
 import FormData from 'form-data';
 import { Readable } from 'stream';
+import { getLogSettingsSnapshot } from './adminLogSettingsService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const getDurationMs = (startNs: bigint) => Number(process.hrtime.bigint() - startNs) / 1e6;
+const logAiTiming = (label: string, model: string | undefined, startNs: bigint, success: boolean) => {
+  if (!getLogSettingsSnapshot().aiTimingEnabled) return;
+  const ms = getDurationMs(startNs);
+  console.log('[AI] timing', { label, model, ms: Number(ms.toFixed(2)), success });
+};
 
 export interface TranscriptionOptions {
   model?: 'gpt-4o-transcribe' | 'gpt-4o-mini-transcribe' | 'whisper-1';
@@ -25,12 +33,15 @@ export async function transcribeAudioFromUrl(
   audioUrl: string,
   options: TranscriptionOptions = {}
 ): Promise<string> {
+  let requestStart: bigint | null = null;
+  let modelUsed: string | undefined;
   try {
     const {
       model = 'gpt-4o-mini-transcribe', // Best cost/latency for mixed languages
       prompt = 'This audio may contain multiple languages including English, Arabic, Urdu, and others. Please transcribe exactly as spoken, preserving all languages.',
       temperature = 0.0, // Use 0 for most accurate transcription
     } = options;
+    modelUsed = model;
 
     console.log(`🎤 Transcribing audio from: ${audioUrl.substring(0, 100)}...`);
 
@@ -70,6 +81,7 @@ export async function transcribeAudioFromUrl(
     console.log(`🔄 Sending to OpenAI (model: ${model})...`);
 
     // Call OpenAI's transcription API
+    requestStart = process.hrtime.bigint();
     const transcription = await openai.audio.transcriptions.create({
       file: audioFile,
       model: model,
@@ -77,6 +89,7 @@ export async function transcribeAudioFromUrl(
       temperature: temperature,
       response_format: 'text', // Get plain text response
     });
+    logAiTiming('transcription', model, requestStart, true);
 
     const transcribedText = typeof transcription === 'string'
       ? transcription
@@ -86,6 +99,9 @@ export async function transcribeAudioFromUrl(
 
     return transcribedText.trim();
   } catch (error: any) {
+    if (requestStart) {
+      logAiTiming('transcription', modelUsed || 'unknown', requestStart, false);
+    }
     console.error('❌ Transcription failed:', error.message);
 
     // Return a fallback message if transcription fails
@@ -109,6 +125,7 @@ export async function transcribeAudioFromUrl(
 export async function transcribeAndTranslate(
   audioUrl: string
 ): Promise<{ transcription: string; translation?: string; detectedLanguage?: string }> {
+  let requestStart: bigint | null = null;
   try {
     // First, transcribe the audio
     const transcription = await transcribeAudioFromUrl(audioUrl, {
@@ -122,6 +139,7 @@ export async function transcribeAndTranslate(
     }
 
     // Use OpenAI to detect language and translate if needed
+    requestStart = process.hrtime.bigint();
     const response = await openai.responses.create({
       model: 'gpt-4o-mini',
       input: `Analyze this transcribed text and:
@@ -152,6 +170,7 @@ Return JSON with: { "detectedLanguage": "xx", "translation": "..." or null }`,
       max_output_tokens: 500,
       store: false,
     });
+    logAiTiming('transcribe_translate', 'gpt-4o-mini', requestStart, true);
 
     const structured = extractStructuredJson<{ detectedLanguage?: string; translation?: string | null }>(response);
     const result = structured || safeParseJson(response.output_text || '{}');
@@ -162,6 +181,9 @@ Return JSON with: { "detectedLanguage": "xx", "translation": "..." or null }`,
       detectedLanguage: result.detectedLanguage || 'en',
     };
   } catch (error: any) {
+    if (requestStart) {
+      logAiTiming('transcribe_translate', 'gpt-4o-mini', requestStart, false);
+    }
     console.error('Error in transcribeAndTranslate:', error.message);
     throw error;
   }

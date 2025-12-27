@@ -20,6 +20,8 @@ export interface IFollowupTask extends Document {
   followupText?: string;          // Text that was sent
   sentAt?: Date;                  // When follow-up was actually sent
   errorMessage?: string;          // Error if failed
+  followupType?: 'standard' | 'after_hours';
+  customMessage?: string;
 
   createdAt: Date;
   updatedAt: Date;
@@ -76,6 +78,15 @@ const followupTaskSchema = new Schema<IFollowupTask>({
   },
   followupText: {
     type: String,
+  },
+  followupType: {
+    type: String,
+    enum: ['standard', 'after_hours'],
+    default: 'standard',
+  },
+  customMessage: {
+    type: String,
+    trim: true,
   },
   sentAt: {
     type: Date,

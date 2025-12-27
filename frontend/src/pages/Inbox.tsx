@@ -409,9 +409,8 @@ const Inbox: React.FC = () => {
 
   // Render Main Inbox
   return (
-    <div className="h-full">
-      <div className="max-w-[1400px] mx-auto h-full flex flex-col">
-        <div className="flex h-full min-h-0 gap-3 md:gap-4 px-0">
+    <div className="h-full flex flex-col">
+        <div className="flex h-full min-h-0 gap-3 md:gap-4">
           {/* Conversation List */}
           <div
             className={`w-full md:w-[340px] lg:w-[360px] flex-shrink-0 flex flex-col rounded-xl border border-border glass-panel shadow-sm min-h-0 ${selectedConversation ? 'hidden md:flex' : 'flex'}`}
@@ -839,7 +838,6 @@ const Inbox: React.FC = () => {
             </aside>
           )}
         </div>
-      </div>
     </div>
   );
 };

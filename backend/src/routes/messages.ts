@@ -4,6 +4,7 @@ import Conversation from '../models/Conversation';
 import Workspace from '../models/Workspace';
 import InstagramAccount from '../models/InstagramAccount';
 import WorkspaceSettings from '../models/WorkspaceSettings';
+import AutomationSession from '../models/AutomationSession';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { sendMessage as sendInstagramMessage } from '../utils/instagram-api';
@@ -162,6 +163,11 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       ...responseMetrics,
     };
     await trackDailyMetric(conversation.workspaceId, sentAt, increments);
+
+    await AutomationSession.updateMany(
+      { conversationId: conversation._id, status: 'active' },
+      { status: 'paused', pausedAt: sentAt, pauseReason: 'human_reply' }
+    );
 
     res.status(201).json(message);
   } catch (error) {

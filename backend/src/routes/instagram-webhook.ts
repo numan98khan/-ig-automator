@@ -5,10 +5,8 @@ import Message from '../models/Message';
 import { fetchUserDetails } from '../utils/instagram-api';
 import { webhookLogger } from '../utils/webhook-logger';
 import {
-  processCommentDMAutomation,
-  processAutoReply,
-  scheduleFollowup,
   cancelFollowupOnCustomerReply,
+  checkAndExecuteAutomations,
 } from '../services/automationService';
 import {
   categorizeMessage,
@@ -17,8 +15,14 @@ import {
 } from '../services/aiCategorization';
 import { transcribeAudioFromUrl } from '../services/transcriptionService';
 import { trackDailyMetric } from '../services/reportingService';
+import { getLogSettingsSnapshot } from '../services/adminLogSettingsService';
 
 const router = express.Router();
+
+const logAutomation = (message: string) => {
+  if (!getLogSettingsSnapshot().automationLogsEnabled) return;
+  console.log(message);
+};
 
 const WEBHOOK_VERIFY_TOKEN = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN || 'your-verify-token';
 
@@ -106,10 +110,13 @@ async function processWebhookPayload(payload: any) {
  */
 async function handleMessagingEvent(messaging: any) {
   try {
-    if (!messaging.message) return;
+    const hasMessage = Boolean(messaging.message);
+    const hasPostback = Boolean(messaging.postback);
+
+    if (!hasMessage && !hasPostback) return;
 
     // Check if this is an echo (outbound message)
-    const isEcho = messaging.message.is_echo === true;
+    const isEcho = messaging.message?.is_echo === true;
     if (isEcho) {
       console.log('📤 Skipping outbound message echo');
       return; // Don't process our own sent messages
@@ -117,8 +124,10 @@ async function handleMessagingEvent(messaging: any) {
 
     const senderId = messaging.sender.id;
     const recipientId = messaging.recipient.id; // Your Instagram business account ID
-    const messageText = messaging.message.text || '[Media message]';
-    const messageId = messaging.message.mid;
+    const messageText = messaging.message?.text
+      || messaging.postback?.title
+      || '[Postback]';
+    const messageId = messaging.message?.mid || messaging.postback?.mid;
     const timestamp = new Date(messaging.timestamp);
 
     console.log(`📨 Processing message from ${senderId} to ${recipientId}`);
@@ -137,10 +146,12 @@ async function handleMessagingEvent(messaging: any) {
     console.log(`✅ Found Instagram account: @${igAccount.username}`);
 
     // Check if message already exists (prevent duplicates)
-    const existingMessage = await Message.findOne({ instagramMessageId: messageId });
-    if (existingMessage) {
-      console.log(`⏭️ Message ${messageId} already processed`);
-      return;
+    if (messageId) {
+      const existingMessage = await Message.findOne({ instagramMessageId: messageId });
+      if (existingMessage) {
+        console.log(`⏭️ Message ${messageId} already processed`);
+        return;
+      }
     }
 
     // Get or create conversation
@@ -186,7 +197,7 @@ async function handleMessagingEvent(messaging: any) {
 
     // Handle attachments with rich metadata
     const attachments = [];
-    if (messaging.message.attachments) {
+    if (messaging.message?.attachments) {
       for (const attachment of messaging.message.attachments) {
         if (attachment.payload?.url) {
           const attachmentData: any = {
@@ -247,6 +258,13 @@ async function handleMessagingEvent(messaging: any) {
       instagramMessageId: messageId,
       platform: 'instagram',
       attachments: attachments.length > 0 ? attachments : undefined,
+      metadata: messaging.postback
+        ? {
+            type: 'postback',
+            title: messaging.postback.title,
+            payload: messaging.postback.payload,
+          }
+        : undefined,
       createdAt: timestamp,
     });
 
@@ -311,7 +329,6 @@ async function handleMessagingEvent(messaging: any) {
       savedMessage,
       finalMessageText,
       igAccount.workspaceId.toString(),
-      isNewConversation
     ).catch(error => {
       console.error('❌ Error processing message automations:', error);
       webhookLogger.logWebhookError(error, { eventType: 'automation', conversationId: conversation._id });
@@ -380,21 +397,20 @@ async function transcribeVoiceNotes(message: any): Promise<void> {
 }
 
 /**
- * Process message automations (categorization, auto-reply, follow-up scheduling)
+ * Process message automations (categorization and automation execution)
  */
 async function processMessageAutomations(
   conversation: any,
   savedMessage: any,
   messageText: string,
   workspaceId: string,
-  isNewConversation: boolean
 ) {
   try {
-    console.log(`🤖 Processing automations for conversation ${conversation._id}`);
+    logAutomation(`🤖 Processing automations for conversation ${conversation._id}`);
 
     // 1. Categorize the message
     const categorization = await categorizeMessage(messageText, workspaceId);
-    console.log(`📋 Message categorized as: ${categorization.categoryName} (${categorization.detectedLanguage})`);
+    logAutomation(`📋 Message categorized as: ${categorization.categoryName} (${categorization.detectedLanguage})`);
 
     // 2. Get or create category and update message
     const categoryId = await getOrCreateCategory(workspaceId, categorization.categoryName);
@@ -408,26 +424,32 @@ async function processMessageAutomations(
     }
     await savedMessage.save();
 
-    // 3. Process auto-reply if enabled
-    const autoReplyResult = await processAutoReply(
-      conversation._id,
-      savedMessage,
+    const messageContext = {
+      hasLink: Boolean(savedMessage.linkPreview?.url || /https?:\/\/\S+/i.test(messageText)),
+      hasAttachment: Array.isArray(savedMessage.attachments) && savedMessage.attachments.length > 0,
+      linkUrl: savedMessage.linkPreview?.url,
+      attachmentUrls: Array.isArray(savedMessage.attachments)
+        ? savedMessage.attachments.map((attachment: any) => attachment.url).filter(Boolean)
+        : undefined,
+      categoryId: categoryId.toString(),
+      categoryName: categorization.categoryName,
+    };
+
+    // 3. Check for active automations
+    const automationResult = await checkAndExecuteAutomations({
+      workspaceId,
+      triggerType: 'dm_message',
+      conversationId: conversation._id.toString(),
       messageText,
-      workspaceId
-    );
+      instagramAccountId: conversation.instagramAccountId.toString(),
+      platform: conversation.platform || 'instagram',
+      messageContext,
+    });
 
-    if (autoReplyResult.success) {
-      console.log(`✅ Auto-reply sent`);
+    if (automationResult.executed) {
+      logAutomation(`✅ Automation executed: ${automationResult.automationName}`);
     } else {
-      console.log(`⏭️ Auto-reply skipped: ${autoReplyResult.message}`);
-    }
-
-    // 4. Schedule follow-up if auto-reply was sent
-    if (autoReplyResult.success) {
-      const followupResult = await scheduleFollowup(conversation._id, workspaceId);
-      if (followupResult.success) {
-        console.log(`⏰ Follow-up scheduled: ${followupResult.message}`);
-      }
+      logAutomation('ℹ️ No active automations found for this trigger');
     }
 
   } catch (error) {
@@ -527,29 +549,6 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
     await trackDailyMetric(conversation.workspaceId, commentDate, {
       inboundMessages: 1,
       ...(isNewConversation ? { newConversations: 1 } : {}),
-    });
-
-    // === PHASE 2: COMMENT → DM AUTOMATION ===
-    // Process Comment → DM automation asynchronously
-    processCommentDMAutomation(
-      {
-        commentId,
-        commenterId,
-        commenterUsername: comment.from?.username,
-        commentText,
-        mediaId,
-      },
-      igAccount._id,
-      igAccount.workspaceId
-    ).then(result => {
-      if (result.success) {
-        console.log(`✅ Comment DM automation sent: ${result.dmMessageId}`);
-      } else {
-        console.log(`⏭️ Comment DM automation skipped: ${result.message}`);
-      }
-    }).catch(error => {
-      console.error('❌ Error in comment DM automation:', error);
-      webhookLogger.logWebhookError(error, { eventType: 'comment_dm_automation', commentId });
     });
 
   } catch (error) {
