@@ -103,7 +103,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
   const decisionMode = workspaceSettings?.decisionMode || 'assist';
   const allowHashtags = workspaceSettings?.allowHashtags ?? false;
   const allowEmojis = workspaceSettings?.allowEmojis ?? true;
-  const maxReplySentences = options.maxReplySentences ?? workspaceSettings?.maxReplySentences || 3;
+  const maxReplySentences = (options.maxReplySentences ?? workspaceSettings?.maxReplySentences) || 3;
   const replyLanguage = workspaceSettings?.defaultReplyLanguage || workspaceSettings?.defaultLanguage || categorization?.detectedLanguage || 'en';
   const tone = options.tone?.trim();
   let knowledgeItemsUsed = knowledgeItems.slice(0, 5).map(item => ({
