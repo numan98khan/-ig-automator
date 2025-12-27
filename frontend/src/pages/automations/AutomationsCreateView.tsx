@@ -51,6 +51,7 @@ type AutomationsCreateViewProps = {
   setupData: SetupData;
   saving: boolean;
   knowledgeItems: KnowledgeItem[];
+  categories: Array<{ _id: string; nameEn: string }>;
   accountDisplayName: string;
   accountHandle: string;
   accountAvatarUrl?: string;
@@ -84,6 +85,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   setupData,
   saving,
   knowledgeItems,
+  categories,
   accountDisplayName,
   accountHandle,
   accountAvatarUrl,
@@ -129,6 +131,26 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
     if (!exists) {
       updateSetupData({ salesTriggerKeywords: [...current, keyword].join(', ') });
     }
+  };
+
+  const toggleTriggerCategory = (categoryId: string) => {
+    const current = setupData.triggerCategoryIds || [];
+    const exists = current.includes(categoryId);
+    updateSetupData({
+      triggerCategoryIds: exists
+        ? current.filter((id) => id !== categoryId)
+        : [...current, categoryId],
+    });
+  };
+
+  const toggleSalesTriggerCategory = (categoryId: string) => {
+    const current = setupData.salesTriggerCategoryIds || [];
+    const exists = current.includes(categoryId);
+    updateSetupData({
+      salesTriggerCategoryIds: exists
+        ? current.filter((id) => id !== categoryId)
+        : [...current, categoryId],
+    });
   };
 
   return (
@@ -301,6 +323,32 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 </div>
               )}
 
+              {selectedTemplate.setupFields.triggerCategories && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">AI Categories (optional)</label>
+                  <p className="text-xs text-muted-foreground">
+                    Triggers when the message is categorized into any selected category.
+                  </p>
+                  {categories.length > 0 ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {categories.map((category) => (
+                        <label key={category._id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={(setupData.triggerCategoryIds || []).includes(category._id)}
+                            onChange={() => toggleTriggerCategory(category._id)}
+                            className="rounded border-border"
+                          />
+                          {category.nameEn}
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
+                  )}
+                </div>
+              )}
+
               {selectedTemplate.setupFields.salesTriggerKeywords && (
                 <div className="space-y-3">
                   <Input
@@ -332,6 +380,32 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {selectedTemplate.setupFields.salesTriggerCategories && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">AI Categories (optional)</label>
+                  <p className="text-xs text-muted-foreground">
+                    Triggers when the message is categorized into any selected category.
+                  </p>
+                  {categories.length > 0 ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {categories.map((category) => (
+                        <label key={category._id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={(setupData.salesTriggerCategoryIds || []).includes(category._id)}
+                            onChange={() => toggleSalesTriggerCategory(category._id)}
+                            className="rounded border-border"
+                          />
+                          {category.nameEn}
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
+                  )}
                 </div>
               )}
 

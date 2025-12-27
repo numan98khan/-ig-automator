@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
 import {
   automationAPI,
+  categoriesAPI,
   knowledgeAPI,
   Automation,
   KnowledgeItem,
@@ -70,6 +71,7 @@ const Automations: React.FC = () => {
   const [testSending, setTestSending] = useState(false);
   const [testTriggerMatched, setTestTriggerMatched] = useState<boolean | null>(null);
   const [testForceOutsideHours, setTestForceOutsideHours] = useState(false);
+  const [categories, setCategories] = useState<Array<{ _id: string; nameEn: string }>>([]);
   const [testEditForm, setTestEditForm] = useState({
     name: '',
     description: '',
@@ -127,12 +129,14 @@ const Automations: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const [automationsData, knowledgeData] = await Promise.all([
+      const [automationsData, knowledgeData, categoriesData] = await Promise.all([
         automationAPI.getByWorkspace(currentWorkspace._id),
         knowledgeAPI.getByWorkspace(currentWorkspace._id),
+        categoriesAPI.getByWorkspace(currentWorkspace._id),
       ]);
       setAutomations(automationsData);
       setKnowledgeItems(knowledgeData);
+      setCategories(categoriesData);
     } catch (err) {
       console.error('Error loading data:', err);
       setError('Failed to load automations');
@@ -197,6 +201,9 @@ const Automations: React.FC = () => {
         phoneMinLength: String(safeConfig.minPhoneLength || base.phoneMinLength),
         triggerKeywords,
         triggerKeywordMatch: triggerConfig?.keywordMatch || base.triggerKeywordMatch,
+        triggerCategoryIds: Array.isArray(triggerConfig?.categoryIds)
+          ? triggerConfig?.categoryIds
+          : base.triggerCategoryIds,
       };
     }
     if (templateId === 'sales_concierge') {
@@ -209,6 +216,9 @@ const Automations: React.FC = () => {
         ...base,
         salesTriggerKeywords: triggerKeywords || base.salesTriggerKeywords,
         salesTriggerKeywordMatch: triggerConfig?.keywordMatch || base.salesTriggerKeywordMatch,
+        salesTriggerCategoryIds: Array.isArray(triggerConfig?.categoryIds)
+          ? triggerConfig?.categoryIds
+          : base.salesTriggerCategoryIds,
         salesPhoneMinLength: String(safeConfig.minPhoneLength || base.salesPhoneMinLength),
         salesUseGoogleSheets: safeConfig.useGoogleSheets ?? base.salesUseGoogleSheets,
         salesKnowledgeItemIds: Array.isArray(safeConfig.knowledgeItemIds)
@@ -563,10 +573,12 @@ const Automations: React.FC = () => {
         .split(',')
         .map((keyword) => keyword.trim())
         .filter(Boolean);
+      const categoryIds = (data.triggerCategoryIds || []).filter(Boolean);
       return {
         ...baseConfig,
         keywordMatch: data.triggerKeywordMatch || baseConfig.keywordMatch || 'any',
         keywords: keywordList,
+        ...(categoryIds.length ? { categoryIds } : {}),
       };
     }
     if (flow.templateId === 'sales_concierge') {
@@ -574,10 +586,12 @@ const Automations: React.FC = () => {
         .split(',')
         .map((keyword) => keyword.trim())
         .filter(Boolean);
+      const categoryIds = (data.salesTriggerCategoryIds || []).filter(Boolean);
       return {
         ...baseConfig,
         keywordMatch: data.salesTriggerKeywordMatch || baseConfig.keywordMatch || 'any',
         keywords: keywordList,
+        ...(categoryIds.length ? { categoryIds } : {}),
         matchOn: {
           link: true,
           attachment: true,
@@ -787,6 +801,7 @@ const Automations: React.FC = () => {
                   testTemplate={testTemplate}
                   testSetupData={testSetupData}
                   testSaving={testSaving}
+                  categories={categories}
                   onClose={handleCloseTestView}
                   onReset={handleResetTest}
                   onSimulateFollowup={handleSimulateFollowup}
@@ -813,6 +828,7 @@ const Automations: React.FC = () => {
                   setupData={setupData}
                   saving={saving}
                   knowledgeItems={knowledgeItems}
+                  categories={categories}
                   accountDisplayName={accountDisplayName}
                   accountHandle={accountHandle}
                   accountAvatarUrl={accountAvatarUrl}

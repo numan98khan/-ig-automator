@@ -12,6 +12,11 @@ import {
   sendMessage as sendInstagramMessage,
   sendButtonMessage,
 } from '../utils/instagram-api';
+import {
+  categorizeMessage,
+  getOrCreateCategory,
+  incrementCategoryCount,
+} from './aiCategorization';
 import { createTicket } from './escalationService';
 import { addCountIncrement, trackDailyMetric } from './reportingService';
 import { pauseForTypingIfNeeded } from './automation/typing';
@@ -949,9 +954,12 @@ async function ensureTestConversation(params: {
   });
 }
 
-async function recordTestCustomerMessage(conversation: any, messageText: string): Promise<Date> {
+async function recordTestCustomerMessage(
+  conversation: any,
+  messageText: string,
+): Promise<{ message: any; sentAt: Date }> {
   const sentAt = new Date();
-  await Message.create({
+  const message = await Message.create({
     conversationId: conversation._id,
     workspaceId: conversation.workspaceId,
     text: messageText,
@@ -965,7 +973,32 @@ async function recordTestCustomerMessage(conversation: any, messageText: string)
   conversation.lastCustomerMessageAt = sentAt;
   await conversation.save();
 
-  return sentAt;
+  return { message, sentAt };
+}
+
+async function applyMessageCategorization(params: {
+  workspaceId: string;
+  conversation: any;
+  message: any;
+  messageText: string;
+}): Promise<{ categoryId: string; categoryName: string }> {
+  const { workspaceId, conversation, message, messageText } = params;
+  const categorization = await categorizeMessage(messageText, workspaceId);
+  const categoryId = await getOrCreateCategory(workspaceId, categorization.categoryName);
+  await incrementCategoryCount(categoryId);
+
+  message.categoryId = categoryId;
+  message.detectedLanguage = categorization.detectedLanguage;
+  if (categorization.translatedText) {
+    message.translatedText = categorization.translatedText;
+  }
+  await message.save();
+
+  conversation.categoryId = categoryId;
+  conversation.categoryConfidence = categorization.confidence;
+  await conversation.save();
+
+  return { categoryId: categoryId.toString(), categoryName: categorization.categoryName };
 }
 
 async function buildTestTemplateState(
@@ -1117,7 +1150,22 @@ export async function runAutomationTest(params: {
   });
 
   await cancelFollowupOnCustomerReply(conversation._id);
-  await recordTestCustomerMessage(conversation, messageText);
+  const { message } = await recordTestCustomerMessage(conversation, messageText);
+  const { categoryId, categoryName } = await applyMessageCategorization({
+    workspaceId,
+    conversation,
+    message,
+    messageText,
+  });
+
+  const linkMatch = messageText.match(/https?:\/\/\S+/i);
+  const messageContext: AutomationTestContext = {
+    ...context,
+    categoryId,
+    categoryName,
+    hasLink: Boolean(linkMatch),
+    linkUrl: linkMatch ? linkMatch[0] : undefined,
+  };
 
   if (!conversation.participantInstagramId) {
     throw new Error('Missing participant Instagram ID for test conversation');
@@ -1132,7 +1180,7 @@ export async function runAutomationTest(params: {
     messageText,
     instagramAccountId: conversation.instagramAccountId.toString(),
     platform: conversation.platform || 'instagram',
-    messageContext: context,
+    messageContext,
     automationId,
   });
 

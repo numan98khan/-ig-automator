@@ -172,6 +172,7 @@ export interface TriggerConfig {
   keywords?: string[];
   excludeKeywords?: string[];
   keywordMatch?: 'any' | 'all';
+  categoryIds?: string[];
   outsideBusinessHours?: boolean;
   businessHours?: BusinessHoursConfig;
   matchOn?: {
@@ -314,6 +315,8 @@ export interface AutomationTestContext {
   hasAttachment?: boolean;
   linkUrl?: string;
   attachmentUrls?: string[];
+  categoryId?: string;
+  categoryName?: string;
   testMode?: 'self_chat' | 'test_user';
 }
 

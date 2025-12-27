@@ -23,10 +23,17 @@ export function matchesTriggerConfig(
   ) {
     return false;
   }
+  const categoryIds = triggerConfig.categoryIds || [];
+  const categoryMatched = categoryIds.length > 0
+    ? Boolean(context?.categoryId && categoryIds.includes(context.categoryId))
+    : false;
   const linkMatched = !!triggerConfig.matchOn?.link && !!context?.hasLink;
   const attachmentMatched = !!triggerConfig.matchOn?.attachment && !!context?.hasAttachment;
-  if (linkMatched || attachmentMatched) {
+  if (categoryMatched || linkMatched || attachmentMatched) {
     return true;
+  }
+  if (categoryIds.length > 0 && !categoryMatched) {
+    return false;
   }
   if (triggerConfig.keywords && !matchesKeywords(messageText, triggerConfig.keywords, keywordMatch)) {
     return false;

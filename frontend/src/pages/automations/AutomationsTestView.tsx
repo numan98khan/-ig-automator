@@ -44,6 +44,7 @@ type AutomationsTestViewProps = {
   testTemplate: AutomationTemplate | null;
   testSetupData: SetupData;
   testSaving: boolean;
+  categories: Array<{ _id: string; nameEn: string }>;
   onClose: () => void;
   onReset: () => void;
   onSimulateFollowup: () => void;
@@ -72,6 +73,7 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
   testTemplate,
   testSetupData,
   testSaving,
+  categories,
   onClose,
   onReset,
   onSimulateFollowup,
@@ -110,6 +112,26 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
     if (!exists) {
       updateTestSetupData({ salesTriggerKeywords: [...current, keyword].join(', ') });
     }
+  };
+
+  const toggleTriggerCategory = (categoryId: string) => {
+    const current = testSetupData.triggerCategoryIds || [];
+    const exists = current.includes(categoryId);
+    updateTestSetupData({
+      triggerCategoryIds: exists
+        ? current.filter((id) => id !== categoryId)
+        : [...current, categoryId],
+    });
+  };
+
+  const toggleSalesTriggerCategory = (categoryId: string) => {
+    const current = testSetupData.salesTriggerCategoryIds || [];
+    const exists = current.includes(categoryId);
+    updateTestSetupData({
+      salesTriggerCategoryIds: exists
+        ? current.filter((id) => id !== categoryId)
+        : [...current, categoryId],
+    });
   };
 
   return (
@@ -258,6 +280,29 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                         ))}
                       </div>
                     </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium">AI Categories (optional)</label>
+                      <p className="text-xs text-muted-foreground">
+                        Triggers when the message is categorized into any selected category.
+                      </p>
+                      {categories.length > 0 ? (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {categories.map((category) => (
+                            <label key={category._id} className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={(testSetupData.triggerCategoryIds || []).includes(category._id)}
+                                onChange={() => toggleTriggerCategory(category._id)}
+                                className="rounded border-border"
+                              />
+                              {category.nameEn}
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
+                      )}
+                    </div>
                   </>
                 )}
 
@@ -293,6 +338,29 @@ export const AutomationsTestView: React.FC<AutomationsTestViewProps> = ({
                           </button>
                         ))}
                       </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium">AI Categories (optional)</label>
+                      <p className="text-xs text-muted-foreground">
+                        Triggers when the message is categorized into any selected category.
+                      </p>
+                      {categories.length > 0 ? (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {categories.map((category) => (
+                            <label key={category._id} className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={(testSetupData.salesTriggerCategoryIds || []).includes(category._id)}
+                                onChange={() => toggleSalesTriggerCategory(category._id)}
+                                className="rounded border-border"
+                              />
+                              {category.nameEn}
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
+                      )}
                     </div>
 
                     <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">

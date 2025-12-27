@@ -425,6 +425,8 @@ async function processMessageAutomations(
       attachmentUrls: Array.isArray(savedMessage.attachments)
         ? savedMessage.attachments.map((attachment: any) => attachment.url).filter(Boolean)
         : undefined,
+      categoryId: categoryId.toString(),
+      categoryName: categorization.categoryName,
     };
 
     // 3. Check for active automations

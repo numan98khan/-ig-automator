@@ -6,6 +6,8 @@ export type AutomationTestContext = {
   hasAttachment?: boolean;
   linkUrl?: string;
   attachmentUrls?: string[];
+  categoryId?: string;
+  categoryName?: string;
   testMode?: 'self_chat' | 'test_user';
 };
 
