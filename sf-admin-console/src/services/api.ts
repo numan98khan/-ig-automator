@@ -105,12 +105,14 @@ export const adminApi = {
 
   // Automations + Sessions
   getAutomations: (params?: { workspaceId?: string }) => api.get('/automations', { params }),
-  getAutomationSessions: (params: { automationId: string; status?: string }) =>
-    api.get('/automation-sessions', { params }),
-  pauseAutomationSessions: (payload: { automationId?: string; sessionIds?: string[]; reason?: string }) =>
-    api.post('/automation-sessions/pause', payload),
-  stopAutomationSessions: (payload: { automationId?: string; sessionIds?: string[]; reason?: string }) =>
-    api.post('/automation-sessions/stop', payload),
+  getAutomationSessions: (params?: {
+    automationId?: string
+    workspaceId?: string
+    templateId?: string
+    status?: string
+  }) => api.get('/automation-sessions', { params }),
+  deleteAutomationSessions: (payload: { automationId?: string; sessionIds?: string[] }) =>
+    api.delete('/automation-sessions', { data: payload }),
 
   // Log settings
   getLogSettings: () => api.get('/log-settings'),

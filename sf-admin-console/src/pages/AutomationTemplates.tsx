@@ -42,38 +42,6 @@ type DefaultsState = {
   faqResponseSuffix: string
 }
 
-type WorkspaceOption = {
-  _id: string
-  name: string
-}
-
-type AutomationOption = {
-  _id: string
-  name: string
-  workspaceId: string
-  replySteps?: Array<{ type?: string; templateFlow?: { templateId?: string } }>
-  triggerType?: string
-  isActive?: boolean
-}
-
-type AutomationSessionRow = {
-  _id: string
-  status: string
-  step?: string
-  questionCount?: number
-  automationId: string
-  conversationId: string
-  updatedAt?: string
-  lastCustomerMessageAt?: string
-  lastAutomationMessageAt?: string
-  pauseReason?: string
-  conversation?: {
-    participantInstagramId?: string
-    lastMessageAt?: string
-    lastMessage?: string
-    lastCustomerMessageAt?: string
-  } | null
-}
 
 const DEFAULTS = {
   aiReply: {
@@ -122,8 +90,6 @@ const toNumberOrDefault = (value: any, fallback: number) =>
 export default function AutomationTemplates() {
   const queryClient = useQueryClient()
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('sales_concierge')
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('')
-  const [selectedAutomationId, setSelectedAutomationId] = useState<string>('')
   const [formState, setFormState] = useState<FormState>({
     aiReplyModel: DEFAULTS.aiReply.model,
     aiReplyTemperature: DEFAULTS.aiReply.temperature,
@@ -154,44 +120,10 @@ export default function AutomationTemplates() {
     enabled: Boolean(selectedTemplateId),
   })
 
-  const { data: workspaceData } = useQuery({
-    queryKey: ['admin-workspaces'],
-    queryFn: () => adminApi.getWorkspaces({ page: 1, limit: 200 }),
-  })
-
-  const { data: automationsData } = useQuery({
-    queryKey: ['admin-automations', selectedWorkspaceId],
-    queryFn: () => adminApi.getAutomations({ workspaceId: selectedWorkspaceId || undefined }),
-    enabled: Boolean(selectedWorkspaceId),
-  })
-
-  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
-    queryKey: ['admin-automation-sessions', selectedAutomationId],
-    queryFn: () => adminApi.getAutomationSessions({ automationId: selectedAutomationId }),
-    enabled: Boolean(selectedAutomationId),
-  })
-
   const templates = useMemo(() => {
     const payload = unwrapData<any>(data)
     return Array.isArray(payload) ? (payload as TemplateConfig[]) : []
   }, [data])
-
-  const workspaces = useMemo(() => {
-    const payload = unwrapData<any>(workspaceData)
-    if (Array.isArray(payload)) return payload as WorkspaceOption[]
-    if (Array.isArray(payload?.workspaces)) return payload.workspaces as WorkspaceOption[]
-    return []
-  }, [workspaceData])
-
-  const automations = useMemo(() => {
-    const payload = unwrapData<any>(automationsData)
-    return Array.isArray(payload) ? (payload as AutomationOption[]) : []
-  }, [automationsData])
-
-  const sessions = useMemo(() => {
-    const payload = unwrapData<any>(sessionsData)
-    return Array.isArray(payload) ? (payload as AutomationSessionRow[]) : []
-  }, [sessionsData])
 
   useEffect(() => {
     if (!templates.length) return
@@ -199,23 +131,6 @@ export default function AutomationTemplates() {
       setSelectedTemplateId(templates[0].templateId)
     }
   }, [templates, selectedTemplateId])
-
-  useEffect(() => {
-    if (!workspaces.length) return
-    if (!selectedWorkspaceId) {
-      setSelectedWorkspaceId(workspaces[0]._id)
-    }
-  }, [workspaces, selectedWorkspaceId])
-
-  useEffect(() => {
-    if (!automations.length) {
-      setSelectedAutomationId('')
-      return
-    }
-    if (!automations.find((automation) => automation._id === selectedAutomationId)) {
-      setSelectedAutomationId(automations[0]._id)
-    }
-  }, [automations, selectedAutomationId])
 
   const currentTemplate = templates.find((template) => template.templateId === selectedTemplateId)
 
@@ -280,22 +195,6 @@ export default function AutomationTemplates() {
     },
   })
 
-  const pauseSessionsMutation = useMutation({
-    mutationFn: (payload: { automationId?: string; sessionIds?: string[] }) =>
-      adminApi.pauseAutomationSessions(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-automation-sessions', selectedAutomationId] })
-    },
-  })
-
-  const stopSessionsMutation = useMutation({
-    mutationFn: (payload: { automationId?: string; sessionIds?: string[] }) =>
-      adminApi.stopAutomationSessions(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-automation-sessions', selectedAutomationId] })
-    },
-  })
-
   const handleSave = () => {
     if (!selectedTemplateId) return
     setIsSaving(true)
@@ -357,15 +256,6 @@ export default function AutomationTemplates() {
     })
   }
 
-  const handlePauseAllSessions = () => {
-    if (!selectedAutomationId) return
-    pauseSessionsMutation.mutate({ automationId: selectedAutomationId })
-  }
-
-  const handleStopAllSessions = () => {
-    if (!selectedAutomationId) return
-    stopSessionsMutation.mutate({ automationId: selectedAutomationId })
-  }
 
   return (
     <div className="space-y-6">
@@ -680,132 +570,6 @@ export default function AutomationTemplates() {
                 </div>
               </div>
 
-              <div className="border-t border-border pt-6 space-y-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-foreground">Active Sessions</h2>
-                    <p className="text-sm text-muted-foreground">
-                      View and control active automation sessions.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="btn btn-secondary"
-                      onClick={handlePauseAllSessions}
-                      disabled={!selectedAutomationId || pauseSessionsMutation.isPending}
-                    >
-                      Pause all
-                    </button>
-                    <button
-                      className="btn btn-destructive"
-                      onClick={handleStopAllSessions}
-                      disabled={!selectedAutomationId || stopSessionsMutation.isPending}
-                    >
-                      Stop all
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm text-muted-foreground">Workspace</label>
-                    <select
-                      className="select w-full"
-                      value={selectedWorkspaceId}
-                      onChange={(event) => setSelectedWorkspaceId(event.target.value)}
-                    >
-                      {workspaces.map((workspace) => (
-                        <option key={workspace._id} value={workspace._id}>
-                          {workspace.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm text-muted-foreground">Automation</label>
-                    <select
-                      className="select w-full"
-                      value={selectedAutomationId}
-                      onChange={(event) => setSelectedAutomationId(event.target.value)}
-                    >
-                      {automations.map((automation) => (
-                        <option key={automation._id} value={automation._id}>
-                          {automation.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {sessionsLoading ? (
-                  <div className="text-sm text-muted-foreground">Loading sessions...</div>
-                ) : sessions.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No active sessions for this automation.</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                      <thead>
-                        <tr className="border-b border-border text-muted-foreground">
-                          <th className="py-2 pr-4">Conversation</th>
-                          <th className="py-2 pr-4">Status</th>
-                          <th className="py-2 pr-4">Step</th>
-                          <th className="py-2 pr-4">Updated</th>
-                          <th className="py-2 pr-4">Last message</th>
-                          <th className="py-2 pr-4">Pause reason</th>
-                          <th className="py-2">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sessions.map((session) => (
-                          <tr key={session._id} className="border-b border-border/60">
-                            <td className="py-3 pr-4">
-                              <div className="text-foreground">
-                                {session.conversation?.participantInstagramId || session.conversationId}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {session.conversationId}
-                              </div>
-                            </td>
-                            <td className="py-3 pr-4">
-                              <span className="badge badge-secondary">{session.status}</span>
-                            </td>
-                            <td className="py-3 pr-4">{session.step || '—'}</td>
-                            <td className="py-3 pr-4">
-                              {session.updatedAt ? new Date(session.updatedAt).toLocaleString() : '—'}
-                            </td>
-                            <td className="py-3 pr-4 max-w-[220px] truncate">
-                              {session.conversation?.lastMessage || '—'}
-                            </td>
-                            <td className="py-3 pr-4">{session.pauseReason || '—'}</td>
-                            <td className="py-3">
-                              <div className="flex items-center gap-2">
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={() =>
-                                    pauseSessionsMutation.mutate({ automationId: selectedAutomationId, sessionIds: [session._id] })
-                                  }
-                                  disabled={session.status !== 'active' || pauseSessionsMutation.isPending}
-                                >
-                                  Pause
-                                </button>
-                                <button
-                                  className="btn btn-destructive btn-sm"
-                                  onClick={() =>
-                                    stopSessionsMutation.mutate({ automationId: selectedAutomationId, sessionIds: [session._id] })
-                                  }
-                                  disabled={session.status === 'completed' || stopSessionsMutation.isPending}
-                                >
-                                  Stop
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
             </>
           )}
         </div>

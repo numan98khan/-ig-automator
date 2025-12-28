@@ -843,17 +843,24 @@ router.get('/automations', authenticate, requireAdmin, async (req, res) => {
 
 router.get('/automation-sessions', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { automationId, status } = req.query;
-    if (!automationId) {
-      return res.status(400).json({ error: 'automationId is required' });
-    }
+    const { automationId, status, workspaceId, templateId } = req.query;
     const statusFilter = typeof status === 'string'
       ? status.split(',').map((value) => value.trim()).filter(Boolean)
       : ['active', 'paused', 'handoff'];
-    const sessions = await AutomationSession.find({
-      automationId: new mongoose.Types.ObjectId(String(automationId)),
+    const sessionQuery: Record<string, any> = {
       status: { $in: statusFilter.length ? statusFilter : ['active', 'paused', 'handoff'] },
-    })
+    };
+    if (automationId) {
+      sessionQuery.automationId = new mongoose.Types.ObjectId(String(automationId));
+    }
+    if (workspaceId) {
+      sessionQuery.workspaceId = new mongoose.Types.ObjectId(String(workspaceId));
+    }
+    if (templateId) {
+      sessionQuery.templateId = String(templateId);
+    }
+
+    const sessions = await AutomationSession.find(sessionQuery)
       .sort({ updatedAt: -1 })
       .lean();
 
@@ -877,66 +884,23 @@ router.get('/automation-sessions', authenticate, requireAdmin, async (req, res) 
   }
 });
 
-router.post('/automation-sessions/pause', authenticate, requireAdmin, async (req, res) => {
+router.delete('/automation-sessions', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { automationId, sessionIds, reason } = req.body || {};
+    const { automationId, sessionIds } = req.body || {};
     if (!automationId && (!Array.isArray(sessionIds) || sessionIds.length === 0)) {
       return res.status(400).json({ error: 'automationId or sessionIds required' });
     }
-    const query: Record<string, any> = {
-      status: { $in: ['active', 'handoff'] },
-    };
+    const query: Record<string, any> = {};
     if (automationId) {
       query.automationId = new mongoose.Types.ObjectId(String(automationId));
     }
     if (Array.isArray(sessionIds) && sessionIds.length > 0) {
       query._id = { $in: sessionIds.map((id: string) => new mongoose.Types.ObjectId(id)) };
     }
-    const result = await AutomationSession.updateMany(
-      query,
-      {
-        $set: {
-          status: 'paused',
-          pausedAt: new Date(),
-          pauseReason: reason || 'Paused by admin',
-        },
-      },
-    );
-    res.json({ data: { updated: result.modifiedCount || 0 } });
+    const result = await AutomationSession.deleteMany(query);
+    res.json({ data: { deleted: result.deletedCount || 0 } });
   } catch (error) {
-    console.error('Admin automation sessions pause error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-router.post('/automation-sessions/stop', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const { automationId, sessionIds, reason } = req.body || {};
-    if (!automationId && (!Array.isArray(sessionIds) || sessionIds.length === 0)) {
-      return res.status(400).json({ error: 'automationId or sessionIds required' });
-    }
-    const query: Record<string, any> = {
-      status: { $in: ['active', 'paused', 'handoff'] },
-    };
-    if (automationId) {
-      query.automationId = new mongoose.Types.ObjectId(String(automationId));
-    }
-    if (Array.isArray(sessionIds) && sessionIds.length > 0) {
-      query._id = { $in: sessionIds.map((id: string) => new mongoose.Types.ObjectId(id)) };
-    }
-    const result = await AutomationSession.updateMany(
-      query,
-      {
-        $set: {
-          status: 'completed',
-          pausedAt: new Date(),
-          pauseReason: reason || 'Stopped by admin',
-        },
-      },
-    );
-    res.json({ data: { updated: result.modifiedCount || 0 } });
-  } catch (error) {
-    console.error('Admin automation sessions stop error:', error);
+    console.error('Admin automation sessions delete error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

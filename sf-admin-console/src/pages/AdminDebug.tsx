@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { adminApi, unwrapData } from '../services/api'
 import {
@@ -35,6 +35,11 @@ export default function AdminDebug() {
     queryFn: () => adminApi.getLogSettings(),
   })
 
+  const { data: automationSessionsData, isLoading: sessionsLoading } = useQuery({
+    queryKey: ['admin-automation-sessions'],
+    queryFn: () => adminApi.getAutomationSessions(),
+  })
+
   const adminToken = localStorage.getItem('admin_token')
 
   useEffect(() => {
@@ -55,6 +60,18 @@ export default function AdminDebug() {
       queryClient.invalidateQueries({ queryKey: ['admin-log-settings'] })
     },
   })
+
+  const deleteSessionsMutation = useMutation({
+    mutationFn: (payload: { sessionIds: string[] }) => adminApi.deleteAutomationSessions(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-automation-sessions'] })
+    },
+  })
+
+  const sessions = useMemo(() => {
+    const payload = unwrapData<any>(automationSessionsData)
+    return Array.isArray(payload) ? payload : []
+  }, [automationSessionsData])
 
   const toggleLogSetting = (key: keyof typeof logSettings) => {
     const nextValue = !logSettings[key]
@@ -82,6 +99,7 @@ export default function AdminDebug() {
   const userCount = getUserCount()
 
   const isSavingLogSettings = updateLogsMutation.isPending
+  const isDeletingSessions = deleteSessionsMutation.isPending
 
   return (
     <div className="space-y-6">
@@ -168,6 +186,77 @@ export default function AdminDebug() {
         </div>
         {isSavingLogSettings && (
           <p className="text-xs text-muted-foreground mt-3">Saving log settings...</p>
+        )}
+      </div>
+
+      {/* Automation Sessions */}
+      <div className="card">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-foreground">🧩 Active Automation Sessions</h3>
+            <p className="text-sm text-muted-foreground">
+              View and delete active automation sessions across all workspaces.
+            </p>
+          </div>
+          <button
+            className="btn btn-destructive"
+            onClick={() => deleteSessionsMutation.mutate({ sessionIds: sessions.map((session: any) => session._id) })}
+            disabled={sessions.length === 0 || isDeletingSessions}
+          >
+            Delete all sessions
+          </button>
+        </div>
+        {sessionsLoading ? (
+          <div className="text-sm text-muted-foreground">Loading sessions...</div>
+        ) : sessions.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No active sessions found.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-muted-foreground">
+                  <th className="py-2 pr-4">Automation</th>
+                  <th className="py-2 pr-4">Conversation</th>
+                  <th className="py-2 pr-4">Status</th>
+                  <th className="py-2 pr-4">Step</th>
+                  <th className="py-2 pr-4">Updated</th>
+                  <th className="py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((session: any) => (
+                  <tr key={session._id} className="border-b border-border/60">
+                    <td className="py-3 pr-4">
+                      <div className="text-foreground">{session.automationId}</div>
+                      <div className="text-xs text-muted-foreground">{session.templateId}</div>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <div className="text-foreground">
+                        {session.conversation?.participantInstagramId || session.conversationId}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{session.conversationId}</div>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className="badge badge-secondary">{session.status}</span>
+                    </td>
+                    <td className="py-3 pr-4">{session.step || '—'}</td>
+                    <td className="py-3 pr-4">
+                      {session.updatedAt ? new Date(session.updatedAt).toLocaleString() : '—'}
+                    </td>
+                    <td className="py-3">
+                      <button
+                        className="btn btn-destructive btn-sm"
+                        onClick={() => deleteSessionsMutation.mutate({ sessionIds: [session._id] })}
+                        disabled={isDeletingSessions}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
