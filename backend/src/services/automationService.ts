@@ -26,6 +26,10 @@ import {
   normalizeFlowState,
   resolveSalesConciergeConfig,
 } from './automation/templateFlows';
+import {
+  interpretSalesConciergeMessage,
+  rephraseSalesConciergePrompt,
+} from './automation/salesConciergeAi';
 import { AutomationTestContext } from './automation/types';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { getAutomationDefaults } from './adminAutomationDefaultsService';
@@ -492,32 +496,47 @@ async function handleSalesConciergeFlow(params: {
     collectedFields: session.collectedFields || {},
   });
 
+  const aiSettings = {
+    ...(config.aiSettings || {}),
+    ...templateConfig.aiReply,
+  };
+  const interpretationStart = nowMs();
+  const aiInterpretation = config.aiInterpretationEnabled
+    ? await interpretSalesConciergeMessage({
+        conversationId: conversation._id.toString(),
+        messageText,
+        state: currentState,
+        config,
+        aiSettings,
+      })
+    : null;
+  logAutomationStep('sales_ai_interpret', interpretationStart, {
+    enabled: config.aiInterpretationEnabled,
+    interpreted: Boolean(aiInterpretation),
+  });
+
   const stateStart = nowMs();
   const { replies, state: nextState, actions } = advanceSalesConciergeState({
     state: currentState,
     messageText,
     config,
     context: messageContext,
+    aiInterpretation,
   });
   logAutomationStep('sales_state', stateStart, { replies: replies.length, step: nextState.step });
-  const aiSettings = {
-    ...(config.aiSettings || {}),
-    ...templateConfig.aiReply,
-  };
-  const aiStart = nowMs();
-  const aiResponse = replies.length
-    ? await buildAutomationAiReply({
-        conversation,
-        messageText,
-        messageContext,
+
+  const repliesToSend = config.aiRephraseEnabled
+    ? await Promise.all(replies.map(async (reply) => ({
+      ...reply,
+      text: await rephraseSalesConciergePrompt({
+        originalPrompt: reply.text,
+        conversationId: conversation._id.toString(),
+        state: nextState,
         aiSettings,
-      })
-    : null;
-  logAutomationStep('sales_ai_reply', aiStart, { generated: Boolean(aiResponse) });
-  const combinedTags = [...tags, ...(aiResponse?.tags || [])];
-  const repliesToSend = aiResponse
-    ? [{ ...replies[0], text: aiResponse.replyText }]
+      }),
+    })))
     : replies;
+  const combinedTags = tags;
 
   let sentAny = false;
   let sentCount = 0;
@@ -538,13 +557,6 @@ async function handleSalesConciergeFlow(params: {
       buttons: reply.buttons,
       platform,
       tags: combinedTags,
-      aiMeta: aiResponse
-        ? {
-            shouldEscalate: aiResponse.shouldEscalate,
-            escalationReason: aiResponse.escalationReason,
-            knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
-          }
-        : undefined,
     });
     sentAny = true;
     sentCount += 1;

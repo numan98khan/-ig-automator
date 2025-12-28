@@ -9,6 +9,16 @@ export interface IAdminAutomationDefaults extends Document {
   faqInterruptEnabled: boolean;
   faqIntentKeywords: string[];
   faqResponseSuffix: string;
+  aiInterpretationEnabled: boolean;
+  aiRephraseEnabled: boolean;
+  aiConfidenceThresholds: {
+    intent?: number;
+    productRef?: number;
+    sku?: number;
+    variant?: number;
+    quantity?: number;
+    city?: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,6 +38,16 @@ const adminAutomationDefaultsSchema = new Schema<IAdminAutomationDefaults>(
       type: String,
       default: 'Want to continue with the product details?',
       trim: true,
+    },
+    aiInterpretationEnabled: { type: Boolean, default: true },
+    aiRephraseEnabled: { type: Boolean, default: true },
+    aiConfidenceThresholds: {
+      intent: { type: Number, default: 0.55 },
+      productRef: { type: Number, default: 0.6 },
+      sku: { type: Number, default: 0.65 },
+      variant: { type: Number, default: 0.6 },
+      quantity: { type: Number, default: 0.6 },
+      city: { type: Number, default: 0.6 },
     },
   },
   { timestamps: true },

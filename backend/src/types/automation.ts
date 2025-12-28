@@ -74,6 +74,16 @@ export interface SalesConciergeConfig {
   faqInterruptEnabled?: boolean;
   faqIntentKeywords?: string[];
   faqResponseSuffix?: string;
+  aiInterpretationEnabled?: boolean;
+  aiRephraseEnabled?: boolean;
+  aiConfidenceThresholds?: {
+    intent?: number;
+    productRef?: number;
+    sku?: number;
+    variant?: number;
+    quantity?: number;
+    city?: number;
+  };
   maxQuestions?: number;
   rateLimit?: AutomationRateLimit;
   tags?: string[];

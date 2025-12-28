@@ -9,6 +9,7 @@ import {
 import { AutomationTestContext, TemplateFlowActions, TemplateFlowReply, TemplateFlowState } from './types';
 import { normalizeText } from './utils';
 import { getLogSettingsSnapshot } from '../adminLogSettingsService';
+import { SalesConciergeAiResult } from './salesConciergeAi';
 
 type SalesIntent = 'price' | 'availability' | 'delivery' | 'order' | 'support' | 'other';
 
@@ -581,13 +582,43 @@ export function advanceSalesConciergeState(params: {
   messageText: string;
   config: SalesConciergeConfig;
   context?: AutomationTestContext;
+  aiInterpretation?: SalesConciergeAiResult | null;
 }): { replies: TemplateFlowReply[]; state: TemplateFlowState; actions?: TemplateFlowActions } {
-  const { messageText, config, context } = params;
+  const { messageText, config, context, aiInterpretation } = params;
   const nextState = normalizeFlowState(params.state);
   const replies: TemplateFlowReply[] = [];
   const actions: TemplateFlowActions = {};
   const maxQuestions = config.maxQuestions ?? 6;
   const fields = nextState.collectedFields || {};
+  const thresholds = config.aiConfidenceThresholds || {};
+
+  const applyAiValue = (
+    key: string,
+    value: any,
+    confidence?: number | null,
+    threshold?: number,
+  ) => {
+    if (value === null || value === undefined) return;
+    const minConfidence = typeof threshold === 'number' ? threshold : 0.6;
+    if (typeof confidence === 'number' && confidence < minConfidence) return;
+    if (fields[key]) return;
+    fields[key] = value;
+  };
+
+  if (aiInterpretation) {
+    applyAiValue('intent', aiInterpretation.intent, aiInterpretation.confidences?.intent, thresholds.intent);
+    applyAiValue('productRef', aiInterpretation.productRef, aiInterpretation.confidences?.productRef, thresholds.productRef);
+    applyAiValue('sku', aiInterpretation.sku, aiInterpretation.confidences?.sku, thresholds.sku);
+    if (aiInterpretation.variant && !fields.variant) {
+      const variantConfidence = aiInterpretation.confidences?.variant;
+      const minConfidence = typeof thresholds.variant === 'number' ? thresholds.variant : 0.6;
+      if (typeof variantConfidence !== 'number' || variantConfidence >= minConfidence) {
+        fields.variant = aiInterpretation.variant;
+      }
+    }
+    applyAiValue('quantity', aiInterpretation.quantity, aiInterpretation.confidences?.quantity, thresholds.quantity);
+    applyAiValue('city', aiInterpretation.city, aiInterpretation.confidences?.city, thresholds.city);
+  }
 
   if (nextState.status && nextState.status !== 'active') {
     replies.push({ text: 'This flow is complete. Reset to start again.' });

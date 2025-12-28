@@ -8,6 +8,16 @@ export type AutomationDefaultsConfig = {
   faqInterruptEnabled: boolean;
   faqIntentKeywords: string[];
   faqResponseSuffix: string;
+  aiInterpretationEnabled: boolean;
+  aiRephraseEnabled: boolean;
+  aiConfidenceThresholds: {
+    intent?: number;
+    productRef?: number;
+    sku?: number;
+    variant?: number;
+    quantity?: number;
+    city?: number;
+  };
 };
 
 export type AutomationDefaultsSnapshot = AutomationDefaultsConfig & { templateId: AutomationTemplateId };
@@ -30,6 +40,16 @@ const DEFAULTS: Record<AutomationTemplateId, AutomationDefaultsConfig> = {
       'location',
     ],
     faqResponseSuffix: 'Want to continue with the product details?',
+    aiInterpretationEnabled: true,
+    aiRephraseEnabled: true,
+    aiConfidenceThresholds: {
+      intent: 0.55,
+      productRef: 0.6,
+      sku: 0.65,
+      variant: 0.6,
+      quantity: 0.6,
+      city: 0.6,
+    },
   },
 };
 
@@ -48,6 +68,8 @@ const normalizeDefaults = (
   doc: any,
 ): AutomationDefaultsConfig => {
   const base = DEFAULTS[templateId];
+  const defaultThresholds = base.aiConfidenceThresholds || {};
+  const inputThresholds = doc?.aiConfidenceThresholds || {};
   return {
     lockMode: doc?.lockMode === 'none'
       ? 'none'
@@ -67,6 +89,20 @@ const normalizeDefaults = (
     faqResponseSuffix: typeof doc?.faqResponseSuffix === 'string' && doc.faqResponseSuffix.trim()
       ? doc.faqResponseSuffix.trim()
       : base.faqResponseSuffix,
+    aiInterpretationEnabled: typeof doc?.aiInterpretationEnabled === 'boolean'
+      ? doc.aiInterpretationEnabled
+      : base.aiInterpretationEnabled,
+    aiRephraseEnabled: typeof doc?.aiRephraseEnabled === 'boolean'
+      ? doc.aiRephraseEnabled
+      : base.aiRephraseEnabled,
+    aiConfidenceThresholds: {
+      intent: typeof inputThresholds.intent === 'number' ? inputThresholds.intent : defaultThresholds.intent,
+      productRef: typeof inputThresholds.productRef === 'number' ? inputThresholds.productRef : defaultThresholds.productRef,
+      sku: typeof inputThresholds.sku === 'number' ? inputThresholds.sku : defaultThresholds.sku,
+      variant: typeof inputThresholds.variant === 'number' ? inputThresholds.variant : defaultThresholds.variant,
+      quantity: typeof inputThresholds.quantity === 'number' ? inputThresholds.quantity : defaultThresholds.quantity,
+      city: typeof inputThresholds.city === 'number' ? inputThresholds.city : defaultThresholds.city,
+    },
   };
 };
 
@@ -124,6 +160,18 @@ export const updateAutomationDefaults = async (
   }
   if (typeof updates.faqResponseSuffix === 'string') {
     updatePayload.faqResponseSuffix = updates.faqResponseSuffix.trim();
+  }
+  if (typeof updates.aiInterpretationEnabled === 'boolean') {
+    updatePayload.aiInterpretationEnabled = updates.aiInterpretationEnabled;
+  }
+  if (typeof updates.aiRephraseEnabled === 'boolean') {
+    updatePayload.aiRephraseEnabled = updates.aiRephraseEnabled;
+  }
+  if (updates.aiConfidenceThresholds && typeof updates.aiConfidenceThresholds === 'object') {
+    updatePayload.aiConfidenceThresholds = {
+      ...DEFAULTS[templateId].aiConfidenceThresholds,
+      ...updates.aiConfidenceThresholds,
+    };
   }
 
   const base = DEFAULTS[templateId];
