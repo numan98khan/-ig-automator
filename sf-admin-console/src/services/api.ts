@@ -103,6 +103,15 @@ export const adminApi = {
   updateAutomationDefaults: (templateId: string, payload: any) =>
     api.put(`/automation-defaults/${templateId}`, payload),
 
+  // Automations + Sessions
+  getAutomations: (params?: { workspaceId?: string }) => api.get('/automations', { params }),
+  getAutomationSessions: (params: { automationId: string; status?: string }) =>
+    api.get('/automation-sessions', { params }),
+  pauseAutomationSessions: (payload: { automationId?: string; sessionIds?: string[]; reason?: string }) =>
+    api.post('/automation-sessions/pause', payload),
+  stopAutomationSessions: (payload: { automationId?: string; sessionIds?: string[]; reason?: string }) =>
+    api.post('/automation-sessions/stop', payload),
+
   // Log settings
   getLogSettings: () => api.get('/log-settings'),
   updateLogSettings: (payload: any) => api.put('/log-settings', payload),

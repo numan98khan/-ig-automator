@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { authenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import Workspace from '../models/Workspace';
@@ -12,6 +13,8 @@ import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
 import AutomationTemplate from '../models/AutomationTemplate';
+import Automation from '../models/Automation';
+import AutomationSession from '../models/AutomationSession';
 import Tier from '../models/Tier';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import {
@@ -816,6 +819,124 @@ router.put('/automation-defaults/:templateId', authenticate, requireAdmin, async
     res.json({ data: { templateId, ...defaults } });
   } catch (error) {
     console.error('Admin automation defaults update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Automations (admin)
+router.get('/automations', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { workspaceId } = req.query;
+    const query: Record<string, any> = {};
+    if (workspaceId) {
+      query.workspaceId = new mongoose.Types.ObjectId(String(workspaceId));
+    }
+    const automations = await Automation.find(query)
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ data: automations });
+  } catch (error) {
+    console.error('Admin automations list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/automation-sessions', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { automationId, status } = req.query;
+    if (!automationId) {
+      return res.status(400).json({ error: 'automationId is required' });
+    }
+    const statusFilter = typeof status === 'string'
+      ? status.split(',').map((value) => value.trim()).filter(Boolean)
+      : ['active', 'paused', 'handoff'];
+    const sessions = await AutomationSession.find({
+      automationId: new mongoose.Types.ObjectId(String(automationId)),
+      status: { $in: statusFilter.length ? statusFilter : ['active', 'paused', 'handoff'] },
+    })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    const conversationIds = sessions.map((session) => session.conversationId);
+    const conversations = await Conversation.find({ _id: { $in: conversationIds } })
+      .select('participantInstagramId lastMessageAt lastMessage lastCustomerMessageAt')
+      .lean();
+    const conversationMap = new Map(
+      conversations.map((conversation) => [conversation._id.toString(), conversation]),
+    );
+
+    const payload = sessions.map((session) => ({
+      ...session,
+      conversation: conversationMap.get(session.conversationId.toString()) || null,
+    }));
+
+    res.json({ data: payload });
+  } catch (error) {
+    console.error('Admin automation sessions list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/automation-sessions/pause', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { automationId, sessionIds, reason } = req.body || {};
+    if (!automationId && (!Array.isArray(sessionIds) || sessionIds.length === 0)) {
+      return res.status(400).json({ error: 'automationId or sessionIds required' });
+    }
+    const query: Record<string, any> = {
+      status: { $in: ['active', 'handoff'] },
+    };
+    if (automationId) {
+      query.automationId = new mongoose.Types.ObjectId(String(automationId));
+    }
+    if (Array.isArray(sessionIds) && sessionIds.length > 0) {
+      query._id = { $in: sessionIds.map((id: string) => new mongoose.Types.ObjectId(id)) };
+    }
+    const result = await AutomationSession.updateMany(
+      query,
+      {
+        $set: {
+          status: 'paused',
+          pausedAt: new Date(),
+          pauseReason: reason || 'Paused by admin',
+        },
+      },
+    );
+    res.json({ data: { updated: result.modifiedCount || 0 } });
+  } catch (error) {
+    console.error('Admin automation sessions pause error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/automation-sessions/stop', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { automationId, sessionIds, reason } = req.body || {};
+    if (!automationId && (!Array.isArray(sessionIds) || sessionIds.length === 0)) {
+      return res.status(400).json({ error: 'automationId or sessionIds required' });
+    }
+    const query: Record<string, any> = {
+      status: { $in: ['active', 'paused', 'handoff'] },
+    };
+    if (automationId) {
+      query.automationId = new mongoose.Types.ObjectId(String(automationId));
+    }
+    if (Array.isArray(sessionIds) && sessionIds.length > 0) {
+      query._id = { $in: sessionIds.map((id: string) => new mongoose.Types.ObjectId(id)) };
+    }
+    const result = await AutomationSession.updateMany(
+      query,
+      {
+        $set: {
+          status: 'completed',
+          pausedAt: new Date(),
+          pauseReason: reason || 'Stopped by admin',
+        },
+      },
+    );
+    res.json({ data: { updated: result.modifiedCount || 0 } });
+  } catch (error) {
+    console.error('Admin automation sessions stop error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
