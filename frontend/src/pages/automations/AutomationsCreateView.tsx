@@ -10,6 +10,7 @@ import {
   AutomationInstance,
   FlowExposedField,
   FlowTemplate,
+  TriggerConfig,
 } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -66,6 +67,41 @@ const formatConfigValue = (value: any) => {
   return String(value);
 };
 
+const formatTriggerConfigSummary = (config?: TriggerConfig) => {
+  if (!config) return '';
+  const parts: string[] = [];
+
+  if (config.triggerMode && config.triggerMode !== 'any') {
+    parts.push(`Mode: ${config.triggerMode}`);
+  }
+  if (config.keywordMatch) {
+    parts.push(`Keyword match: ${config.keywordMatch}`);
+  }
+  if (config.keywords && config.keywords.length > 0) {
+    parts.push(`Keywords: ${config.keywords.join(', ')}`);
+  }
+  if (config.excludeKeywords && config.excludeKeywords.length > 0) {
+    parts.push(`Exclude: ${config.excludeKeywords.join(', ')}`);
+  }
+  if (config.categoryIds && config.categoryIds.length > 0) {
+    parts.push('Category filters');
+  }
+  if (config.outsideBusinessHours) {
+    parts.push('Outside business hours');
+  }
+  const matchOn: string[] = [];
+  if (config.matchOn?.link) matchOn.push('links');
+  if (config.matchOn?.attachment) matchOn.push('attachments');
+  if (matchOn.length > 0) {
+    parts.push(`Match on: ${matchOn.join(', ')}`);
+  }
+  if (config.businessHours) {
+    parts.push('Business hours');
+  }
+
+  return parts.join(' | ');
+};
+
 export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   createViewTitle,
   isCreateSetupView,
@@ -108,6 +144,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   const version = selectedTemplate?.currentVersion;
   const display = version?.display;
   const previewMessages = display?.previewConversation || [];
+  const triggers = version?.triggers || [];
 
   const sortedFields = [...exposedFields].sort((a, b) => {
     const orderA = a.ui?.order ?? 999;
@@ -330,6 +367,47 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                   rows={2}
                   className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                 />
+              </div>
+
+              <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Triggers
+                </div>
+                {triggers.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">
+                    Triggers are defined in the template.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {triggers.map((trigger, index) => {
+                      const meta = TRIGGER_METADATA[trigger.type];
+                      const summary = formatTriggerConfigSummary(trigger.config);
+                      return (
+                        <div
+                          key={`${trigger.type}-${index}`}
+                          className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/60 p-2"
+                        >
+                          <div className="p-2 bg-primary/10 text-primary rounded-lg">
+                            {meta?.icon || <Sparkles className="w-5 h-5" />}
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-foreground">
+                              {trigger.label || meta?.label || trigger.type}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {trigger.description || meta?.description || 'Trigger configured in the template.'}
+                            </div>
+                            {summary && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {summary}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {Object.entries(groupedFields).map(([group, fields]) => (

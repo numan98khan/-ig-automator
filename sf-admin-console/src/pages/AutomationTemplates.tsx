@@ -18,6 +18,7 @@ import {
   Eraser,
   Maximize2,
   Zap,
+  Search,
 } from 'lucide-react'
 import {
   ReactFlow,
@@ -109,7 +110,7 @@ type FlowTemplate = {
   currentVersionId?: string
 }
 
-type FlowNodeType = 'trigger' | 'send_message' | 'ai_reply' | 'handoff'
+type FlowNodeType = 'trigger' | 'detect_intent' | 'send_message' | 'ai_reply' | 'handoff'
 
 type FlowAiSettings = {
   tone?: string
@@ -196,16 +197,6 @@ type DraftForm = {
     previewText: string
   }
 }
-
-const TRIGGER_OPTIONS: Array<{ value: TriggerType; label: string }> = [
-  { value: 'post_comment', label: 'Post or Reel Comments' },
-  { value: 'story_reply', label: 'Story Reply' },
-  { value: 'dm_message', label: 'Instagram Message' },
-  { value: 'story_share', label: 'Story Share' },
-  { value: 'instagram_ads', label: 'Instagram Ads' },
-  { value: 'live_comment', label: 'Live Comments' },
-  { value: 'ref_url', label: 'Instagram Ref URL' },
-]
 
 const FIELD_TYPES: FlowField['type'][] = [
   'string',
@@ -295,6 +286,12 @@ const FLOW_NODE_LIBRARY: Array<{
     icon: Zap,
   },
   {
+    type: 'detect_intent',
+    label: 'Detect intent',
+    description: 'Analyze the latest message and capture intent.',
+    icon: Search,
+  },
+  {
     type: 'send_message',
     label: 'Message',
     description: 'Send a static message.',
@@ -316,6 +313,7 @@ const FLOW_NODE_LIBRARY: Array<{
 
 const FLOW_NODE_LABELS: Record<FlowNodeType, string> = {
   trigger: 'Trigger',
+  detect_intent: 'Detect intent',
   send_message: 'Message',
   ai_reply: 'AI Reply',
   handoff: 'Handoff',
@@ -366,6 +364,9 @@ const buildNodeSubtitle = (node: FlowNode) => {
   }
   if (node.type === 'trigger') {
     return 'Entry trigger for this flow'
+  }
+  if (node.type === 'detect_intent') {
+    return 'Detects intent from the latest message'
   }
   if (node.type === 'ai_reply') {
     const tone = node.aiSettings?.tone
@@ -561,6 +562,16 @@ const TriggerNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
   />
 )
 
+const DetectIntentNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
+  <NodeShell
+    title={data.label || FLOW_NODE_LABELS.detect_intent}
+    subtitle={data.subtitle}
+    icon={Search}
+    selected={selected}
+    isStart={data.isStart}
+  />
+)
+
 const AiReplyNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
   <NodeShell
     title={data.label || FLOW_NODE_LABELS.ai_reply}
@@ -607,6 +618,7 @@ export default function AutomationTemplates() {
   const nodeTypes = useMemo(
     () => ({
       trigger: TriggerNode,
+      detect_intent: DetectIntentNode,
       send_message: MessageNode,
       ai_reply: AiReplyNode,
       handoff: HandoffNode,
@@ -1117,6 +1129,7 @@ export default function AutomationTemplates() {
             zoomable
             nodeColor={(node) => {
               if (node.type === 'trigger') return '#2FB16B'
+              if (node.type === 'detect_intent') return '#6B7FD6'
               if (node.type === 'ai_reply') return '#7C8EA4'
               if (node.type === 'handoff') return '#C96A4A'
               return '#4B9AD5'
@@ -1220,7 +1233,7 @@ export default function AutomationTemplates() {
                 ))}
               </select>
             </div>
-            {selectedNode.type !== 'trigger' && (
+            {selectedNode.type !== 'trigger' && selectedNode.type !== 'detect_intent' && (
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Wait for reply</label>
                 <select
@@ -1799,130 +1812,6 @@ export default function AutomationTemplates() {
                     />
                   </div>
                 </div>
-              </div>
-
-              <div className="border-t border-border pt-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-semibold text-foreground">Triggers</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Define how this flow is triggered. Expose settings via fields if needed.
-                    </p>
-                  </div>
-                  <button
-                    className="btn btn-secondary flex items-center gap-2"
-                    onClick={() =>
-                      setDraftForm((prev) => ({
-                        ...prev,
-                        triggers: [...prev.triggers, buildTriggerForm()],
-                      }))
-                    }
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add trigger
-                  </button>
-                </div>
-                {draftForm.triggers.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No triggers configured yet.</div>
-                ) : (
-                  <div className="space-y-4">
-                    {draftForm.triggers.map((trigger, index) => (
-                      <div key={trigger.id} className="rounded-lg border border-border p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-medium">Trigger {index + 1}</div>
-                          <button
-                            className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
-                            onClick={() =>
-                              setDraftForm((prev) => ({
-                                ...prev,
-                                triggers: prev.triggers.filter((item) => item.id !== trigger.id),
-                              }))
-                            }
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            Remove
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Type</label>
-                            <select
-                              className="input w-full"
-                              value={trigger.type}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  triggers: prev.triggers.map((item) =>
-                                    item.id === trigger.id
-                                      ? { ...item, type: event.target.value as TriggerType }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            >
-                              {TRIGGER_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Label</label>
-                            <input
-                              className="input w-full"
-                              value={trigger.label}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  triggers: prev.triggers.map((item) =>
-                                    item.id === trigger.id
-                                      ? { ...item, label: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2 md:col-span-2">
-                            <label className="text-sm text-muted-foreground">Description</label>
-                            <input
-                              className="input w-full"
-                              value={trigger.description}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  triggers: prev.triggers.map((item) =>
-                                    item.id === trigger.id
-                                      ? { ...item, description: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2 md:col-span-2">
-                            <label className="text-sm text-muted-foreground">Config (JSON)</label>
-                            <textarea
-                              className="input w-full h-24 font-mono text-xs"
-                              value={trigger.configText}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  triggers: prev.triggers.map((item) =>
-                                    item.id === trigger.id
-                                      ? { ...item, configText: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div className="border-t border-border pt-6 space-y-4">

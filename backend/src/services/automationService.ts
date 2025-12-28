@@ -294,7 +294,7 @@ const buildExecutionPlan = (graph: FlowRuntimeGraph): ExecutionPlan | null => {
 
 const normalizeStepType = (
   step?: FlowRuntimeStep,
-): 'send_message' | 'ai_reply' | 'handoff' | 'trigger' | 'unknown' => {
+): 'send_message' | 'ai_reply' | 'handoff' | 'trigger' | 'detect_intent' | 'unknown' => {
   const raw = (step?.type || '').toLowerCase();
   if (raw === 'send_message' || raw === 'message' || raw === 'send' || raw === 'reply') {
     return 'send_message';
@@ -307,6 +307,9 @@ const normalizeStepType = (
   }
   if (raw === 'trigger' || raw === 'start' || raw === 'entry') {
     return 'trigger';
+  }
+  if (raw === 'detect_intent' || raw === 'intent' || raw === 'intent_detection') {
+    return 'detect_intent';
   }
   return 'unknown';
 };
@@ -681,9 +684,15 @@ async function executeFlowPlan(params: {
     triggered = true;
     await markAutomationTriggered(instance._id, new Date());
   };
+  const buildNextState = (nextState: Record<string, any>) => {
+    if (session.state?.vars) {
+      return { ...nextState, vars: session.state.vars };
+    }
+    return nextState;
+  };
   const completeWithError = async (error: string) => {
     session.status = 'completed';
-    session.state = {};
+    session.state = buildNextState({});
     await session.save();
     return { success: false, error, sentCount, executedSteps };
   };
@@ -787,6 +796,18 @@ async function executeFlowPlan(params: {
         });
         sentCount += 1;
       }
+    } else if (stepType === 'detect_intent') {
+      const intentStart = nowMs();
+      const detectedIntent = detectGoalIntent(messageText || '');
+      await markTriggeredOnce();
+      session.state = {
+        ...(session.state || {}),
+        vars: {
+          ...(session.state?.vars || {}),
+          detectedIntent,
+        },
+      };
+      logAutomationStep('flow_detect_intent', intentStart, { detectedIntent });
     } else if (stepType === 'trigger') {
       // Triggers are metadata-only anchors and do not execute at runtime.
     } else {
@@ -810,9 +831,10 @@ async function executeFlowPlan(params: {
         ? (nextStepIndex !== undefined && Boolean(plan.steps[nextStepIndex]))
         : (Boolean(nextNodeId)
           && Boolean(plan.nodeMap?.get(nextNodeId as string) || plan.steps.find(candidate => candidate.id === nextNodeId)));
-      session.state = hasNext
+      const nextState = hasNext
         ? (plan.mode === 'steps' ? { stepIndex: nextStepIndex } : { nodeId: nextNodeId })
         : {};
+      session.state = buildNextState(nextState);
       session.status = hasNext ? 'active' : 'completed';
       break;
     }
@@ -820,14 +842,14 @@ async function executeFlowPlan(params: {
     if (plan.mode === 'steps') {
       if (nextStepIndex === undefined || !plan.steps[nextStepIndex]) {
         session.status = 'completed';
-        session.state = {};
+        session.state = buildNextState({});
         break;
       }
       stepIndex = nextStepIndex;
     } else {
       if (!nextNodeId) {
         session.status = 'completed';
-        session.state = {};
+        session.state = buildNextState({});
         break;
       }
       nodeId = nextNodeId;
