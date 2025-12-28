@@ -212,9 +212,9 @@ export default function AdminDebug() {
           <div className="text-sm text-muted-foreground">No active sessions found.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-left text-sm text-foreground">
               <thead>
-                <tr className="border-b border-border text-muted-foreground">
+                <tr className="border-b border-border text-foreground/80">
                   <th className="py-2 pr-4">Automation</th>
                   <th className="py-2 pr-4">Conversation</th>
                   <th className="py-2 pr-4">Status</th>
@@ -225,7 +225,7 @@ export default function AdminDebug() {
               </thead>
               <tbody>
                 {sessions.map((session: any) => (
-                  <tr key={session._id} className="border-b border-border/60">
+                  <tr key={session._id} className="border-b border-border/60 text-foreground">
                     <td className="py-3 pr-4">
                       <div className="text-foreground">{session.automationId}</div>
                       <div className="text-xs text-muted-foreground">{session.templateId}</div>
