@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import Workspace from '../models/Workspace';
@@ -42,6 +43,7 @@ const toOptionalBoolean = (value: any) => {
   return undefined;
 };
 const STORAGE_MODES = ['vector', 'text'];
+const toObjectId = (value?: string) => (value ? new mongoose.Types.ObjectId(value) : undefined);
 
 // Tiers CRUD
 router.get('/tiers', authenticate, requireAdmin, async (req, res) => {
@@ -700,8 +702,8 @@ router.post('/flow-drafts', authenticate, requireAdmin, async (req: AuthRequest,
       triggers: Array.isArray(triggers) ? triggers : [],
       exposedFields: Array.isArray(exposedFields) ? exposedFields : [],
       display: display || undefined,
-      createdBy: req.userId,
-      updatedBy: req.userId,
+      createdBy: toObjectId(req.userId),
+      updatedBy: toObjectId(req.userId),
     });
 
     res.status(201).json({ data: draft });
@@ -763,7 +765,7 @@ router.put('/flow-drafts/:draftId', authenticate, requireAdmin, async (req: Auth
       }
     }
 
-    draft.updatedBy = req.userId;
+    draft.updatedBy = toObjectId(req.userId);
     await draft.save();
     res.json({ data: draft });
   } catch (error: any) {
@@ -811,8 +813,8 @@ router.post('/flow-drafts/:draftId/publish', authenticate, requireAdmin, async (
         name: draft.name,
         description: draft.description,
         status: 'active',
-        createdBy: req.userId,
-        updatedBy: req.userId,
+        createdBy: toObjectId(req.userId),
+        updatedBy: toObjectId(req.userId),
       });
     }
 
@@ -832,16 +834,16 @@ router.post('/flow-drafts/:draftId/publish', authenticate, requireAdmin, async (
       exposedFields: Array.isArray(exposedFields) ? exposedFields : (draft.exposedFields || []),
       display: display || draft.display,
       publishedAt: new Date(),
-      createdBy: req.userId,
+      createdBy: toObjectId(req.userId),
     });
 
     template.currentVersionId = version._id;
     template.status = 'active';
-    template.updatedBy = req.userId;
+    template.updatedBy = toObjectId(req.userId);
     await template.save();
 
     draft.templateId = template._id;
-    draft.updatedBy = req.userId;
+    draft.updatedBy = toObjectId(req.userId);
     await draft.save();
 
     res.status(201).json({ data: { template, version } });
@@ -889,8 +891,8 @@ router.post('/flow-templates', authenticate, requireAdmin, async (req: AuthReque
       name: String(name).trim(),
       description: typeof description === 'string' ? description.trim() : undefined,
       status: status === 'archived' ? 'archived' : 'active',
-      createdBy: req.userId,
-      updatedBy: req.userId,
+      createdBy: toObjectId(req.userId),
+      updatedBy: toObjectId(req.userId),
     });
 
     res.status(201).json({ data: template });
@@ -952,7 +954,7 @@ router.put('/flow-templates/:templateId', authenticate, requireAdmin, async (req
       }
     }
 
-    template.updatedBy = req.userId;
+    template.updatedBy = toObjectId(req.userId);
     await template.save();
     res.json({ data: template });
   } catch (error: any) {
