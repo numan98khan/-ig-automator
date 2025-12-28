@@ -13,9 +13,6 @@ import { getLogSettingsSnapshot } from '../adminLogSettingsService';
 type SalesIntent = 'price' | 'availability' | 'delivery' | 'order' | 'support' | 'other';
 
 const SALES_INTENT_OPTIONS = ['Price', 'Availability', 'Delivery', 'Order', 'Support'];
-const SALES_NEGOTIATION_PATTERNS = /(discount|cheaper|too expensive|drop price|lower price|deal|offer)/i;
-const SALES_ANGER_PATTERNS = /(angry|scam|fraud|bad service|terrible|worst|refund|complain|hate)/i;
-const SALES_SPAM_PATTERNS = /(http.*free money|crypto|click here|earn \$)/i;
 const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670\u0640]/g;
 const ARABIC_CHAR_MAP: Record<string, string> = {
   'أ': 'ا',
@@ -54,31 +51,6 @@ function extractQuantity(text: string): number | undefined {
   const qty = Number(match[1]);
   if (Number.isNaN(qty) || qty <= 0) return undefined;
   return qty;
-}
-
-function normalizeCityName(input: string, config: SalesConciergeConfig): string | undefined {
-  if (!input) return undefined;
-  const normalized = normalizeText(input);
-  const aliasMap = {
-    riyadh: 'Riyadh',
-    jeddah: 'Jeddah',
-    dammam: 'Dammam',
-    ...(config.cityAliases || {}),
-  } as Record<string, string>;
-
-  if (aliasMap[normalized]) {
-    return aliasMap[normalized];
-  }
-
-  const cityRules = config.shippingRules || [];
-  for (const rule of cityRules) {
-    const cityNormalized = normalizeText(rule.city);
-    if (normalized === cityNormalized || normalized.includes(cityNormalized) || cityNormalized.includes(normalized)) {
-      return rule.city;
-    }
-  }
-
-  return undefined;
 }
 
 type CatalogIndexItem = {
@@ -552,18 +524,12 @@ function formatStock(stock?: SalesCatalogItem['stock']): string | undefined {
   return 'Confirming';
 }
 
-function buildSalesQuote(item: SalesCatalogItem, city: string, config: SalesConciergeConfig) {
+function buildSalesQuote(item: SalesCatalogItem) {
   const currency = item.currency || 'SAR';
-  const shippingRule = (config.shippingRules || []).find(
-    (rule) => normalizeText(rule.city) === normalizeText(city),
-  );
   return {
     priceText: formatPrice(item.price, currency),
     stockText: formatStock(item.stock),
-    shippingFee: shippingRule?.fee,
-    eta: shippingRule?.eta,
     currency,
-    codAllowed: shippingRule?.codAllowed ?? false,
   };
 }
 
@@ -575,13 +541,8 @@ function buildSalesSummary(fields: Record<string, any>) {
     fields.variant?.size ? `Size: ${fields.variant.size}` : null,
     fields.variant?.color ? `Color: ${fields.variant.color}` : null,
     fields.quantity ? `Qty: ${fields.quantity}` : null,
-    fields.city ? `City: ${fields.city}` : null,
-    fields.address ? `Address: ${fields.address}` : null,
-    fields.phone ? `Phone: ${fields.phone}` : null,
     fields.quote?.priceText ? `Price: ${fields.quote.priceText}` : null,
     fields.quote?.stockText ? `Stock: ${fields.quote.stockText}` : null,
-    fields.quote?.shippingFee !== undefined ? `Shipping: ${fields.quote.shippingFee}` : null,
-    fields.quote?.eta ? `ETA: ${fields.quote.eta}` : null,
   ].filter(Boolean).join('\n');
 }
 
@@ -637,13 +598,7 @@ export function advanceSalesConciergeState(params: {
   if (intent && !fields.intent) {
     fields.intent = intent;
   }
-  fields.flags = {
-    isAngry: SALES_ANGER_PATTERNS.test(messageText),
-    isNegotiation: SALES_NEGOTIATION_PATTERNS.test(messageText),
-    isSpam: SALES_SPAM_PATTERNS.test(messageText),
-  };
-
-  if (fields.flags.isSpam || fields.flags.isAngry || fields.flags.isNegotiation || intent === 'support') {
+  if (intent === 'support') {
     nextState.status = 'handoff';
     actions.handoffReason = 'Sales concierge handoff requested';
     actions.handoffTopic = 'Sales concierge handoff';
@@ -706,9 +661,9 @@ export function advanceSalesConciergeState(params: {
       : findCatalogCandidates(config, searchQuery);
     if (!candidates.length) {
       const attempt = incrementAttempt(fields, 'sku');
-      if (attempt > 2) {
+      if (attempt > 1) {
         nextState.status = 'handoff';
-        actions.handoffReason = 'Sales concierge handoff (product unclear)';
+        actions.handoffReason = 'Sales concierge handoff requested';
         actions.handoffTopic = 'Sales concierge handoff';
         actions.handoffSummary = buildSalesSummary(fields);
         actions.recommendedNextAction = 'Clarify product reference.';
@@ -727,9 +682,9 @@ export function advanceSalesConciergeState(params: {
       const selected = selectCatalogCandidate(messageText, candidates);
       if (!selected) {
         const attempt = incrementAttempt(fields, 'sku');
-        if (attempt > 2) {
+        if (attempt > 1) {
           nextState.status = 'handoff';
-          actions.handoffReason = 'Sales concierge handoff (low SKU confidence)';
+          actions.handoffReason = 'Sales concierge handoff requested';
           actions.handoffTopic = 'Sales concierge handoff';
           actions.handoffSummary = buildSalesSummary(fields);
           actions.recommendedNextAction = 'Confirm SKU with customer.';
@@ -759,10 +714,10 @@ export function advanceSalesConciergeState(params: {
   const item = (config.catalog || []).find((catalogItem) => catalogItem.sku === fields.sku);
   if (!item) {
     nextState.status = 'handoff';
-    actions.handoffReason = 'Sales concierge handoff (missing SKU)';
+    actions.handoffReason = 'Sales concierge handoff requested';
     actions.handoffTopic = 'Sales concierge handoff';
     actions.handoffSummary = buildSalesSummary(fields);
-    actions.recommendedNextAction = 'Confirm SKU in catalog.';
+    actions.recommendedNextAction = 'Confirm product details.';
     replies.push({ text: "We're checking the product details and will follow up shortly." });
     nextState.collectedFields = fields;
     return { replies, state: nextState, actions };
@@ -777,9 +732,9 @@ export function advanceSalesConciergeState(params: {
 
     if (needsSize || needsColor) {
       const attempt = incrementAttempt(fields, 'variant');
-      if (attempt > 2) {
+      if (attempt > 1) {
         nextState.status = 'handoff';
-        actions.handoffReason = 'Sales concierge handoff (variant unclear)';
+        actions.handoffReason = 'Sales concierge handoff requested';
         actions.handoffTopic = 'Sales concierge handoff';
         actions.handoffSummary = buildSalesSummary(fields);
         actions.recommendedNextAction = 'Confirm size/color options.';
@@ -809,48 +764,14 @@ export function advanceSalesConciergeState(params: {
     }
   }
 
-  if (!fields.city) {
-    const city = normalizeCityName(messageText, config);
-    if (city) {
-      fields.city = city;
-    } else {
-      const attempt = incrementAttempt(fields, 'city');
-      if (attempt > 2) {
-        nextState.status = 'handoff';
-        actions.handoffReason = 'Sales concierge handoff (city unclear)';
-        actions.handoffTopic = 'Sales concierge handoff';
-        actions.handoffSummary = buildSalesSummary(fields);
-        actions.recommendedNextAction = 'Confirm delivery city.';
-        replies.push({ text: "We'll have our team confirm delivery details with you." });
-        nextState.collectedFields = fields;
-        return { replies, state: nextState, actions };
-      }
-      nextState.questionCount += 1;
-      replies.push({ text: 'Which city for delivery?' });
-      nextState.step = 'NEED_CITY';
-      nextState.collectedFields = fields;
-      return { replies, state: nextState };
-    }
-  }
-
-  fields.quote = buildSalesQuote(item, fields.city, config);
-  if (fields.quote.stockText === 'Out of stock') {
+  fields.quote = buildSalesQuote(item);
+  if (!fields.quote.priceText) {
     nextState.status = 'handoff';
-    actions.handoffReason = 'Sales concierge handoff (out of stock)';
-    actions.handoffTopic = 'Sales concierge out of stock';
-    actions.handoffSummary = buildSalesSummary(fields);
-    actions.recommendedNextAction = 'Offer alternatives or restock timeline.';
-    replies.push({ text: "That item is currently out of stock. We'll have our team share alternatives." });
-    nextState.collectedFields = fields;
-    return { replies, state: nextState, actions };
-  }
-  if (!fields.quote.priceText || fields.quote.shippingFee === undefined || !fields.quote.eta) {
-    nextState.status = 'handoff';
-    actions.handoffReason = 'Sales concierge handoff (quote missing)';
+    actions.handoffReason = 'Sales concierge handoff requested';
     actions.handoffTopic = 'Sales concierge handoff';
     actions.handoffSummary = buildSalesSummary(fields);
-    actions.recommendedNextAction = 'Provide price or shipping details.';
-    replies.push({ text: "We're confirming pricing and delivery details with our team." });
+    actions.recommendedNextAction = 'Provide pricing details.';
+    replies.push({ text: "We're confirming pricing details with our team." });
     nextState.collectedFields = fields;
     return { replies, state: nextState, actions };
   }
@@ -859,7 +780,6 @@ export function advanceSalesConciergeState(params: {
   const quoteLines = [
     `Price: ${fields.quote.priceText}`,
     `Availability: ${fields.quote.stockText || 'Confirming'}`,
-    `Delivery: ${fields.quote.shippingFee} ${currency}, ${fields.quote.eta}`,
   ];
   replies.push({
     text: `${quoteLines.join(' • ')}\n\nIf you'd like to place an order, a teammate can follow up.`,

@@ -90,19 +90,6 @@ const isSessionExpired = (session: any, ttlMinutes?: number): boolean => {
   return elapsedMs > ttlMinutes * 60 * 1000;
 };
 
-const shouldHandleFaqInterrupt = (messageText: string, config: SalesConciergeConfig): boolean => {
-  if (config.faqInterruptEnabled === false) return false;
-  const keywords = normalizeKeywordList(config.faqIntentKeywords);
-  if (!keywords.length) return false;
-  const normalized = normalizeText(messageText);
-  const hasQuestion = normalized.startsWith('what ')
-    || normalized.startsWith('when ')
-    || normalized.startsWith('where ')
-    || normalized.startsWith('how ')
-    || messageText.includes('?');
-  return hasQuestion && messageHasKeyword(messageText, keywords);
-};
-
 async function getTemplateSession(params: {
   automationId: mongoose.Types.ObjectId;
   conversationId: mongoose.Types.ObjectId;
@@ -504,48 +491,6 @@ async function handleSalesConciergeFlow(params: {
     questionCount: session.questionCount,
     collectedFields: session.collectedFields || {},
   });
-
-  if (shouldHandleFaqInterrupt(messageText, config)) {
-    const faqStart = nowMs();
-    const aiSettings = {
-      ...(config.aiSettings || {}),
-      ...templateConfig.aiReply,
-    };
-    const faqResponse = await buildAutomationAiReply({
-      conversation,
-      messageText,
-      messageContext,
-      aiSettings,
-      knowledgeItemIds: config.knowledgeItemIds,
-    });
-    logAutomationStep('sales_faq_interrupt', faqStart, { answered: Boolean(faqResponse) });
-
-    const suffix = (config.faqResponseSuffix || '').trim();
-    const replyText = suffix ? `${faqResponse.replyText} ${suffix}` : faqResponse.replyText;
-
-    if (!updateRateLimit(session, rateLimit)) {
-      return { success: false, error: 'Rate limit exceeded' };
-    }
-
-    await sendTemplateMessage({
-      conversation,
-      automation,
-      igAccount,
-      recipientId: conversation.participantInstagramId,
-      text: replyText,
-      platform,
-      tags: [...tags, ...(faqResponse.tags || [])],
-      aiMeta: {
-        shouldEscalate: faqResponse.shouldEscalate,
-        escalationReason: faqResponse.escalationReason,
-        knowledgeItemIds: faqResponse.knowledgeItemsUsed?.map((item) => item.id),
-      },
-    });
-
-    session.lastAutomationMessageAt = new Date();
-    await session.save();
-    return { success: true };
-  }
 
   const stateStart = nowMs();
   const { replies, state: nextState, actions } = advanceSalesConciergeState({
