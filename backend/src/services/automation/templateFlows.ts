@@ -67,6 +67,11 @@ type CatalogIndex = {
   synonyms: Map<string, string[]>;
 };
 
+type CatalogCandidateResult = {
+  items: SalesCatalogItem[];
+  lowConfidence: boolean;
+};
+
 const catalogIndexCache = new WeakMap<SalesConciergeConfig, CatalogIndex>();
 
 function normalizeForMatch(text: string): string {
@@ -174,8 +179,12 @@ function getCatalogIndex(config: SalesConciergeConfig): CatalogIndex {
   return index;
 }
 
-function findCatalogCandidates(config: SalesConciergeConfig, query: string): SalesCatalogItem[] {
-  if (!query) return [];
+function findCatalogCandidates(
+  config: SalesConciergeConfig,
+  query: string,
+  options?: { allowLowConfidence?: boolean; lowConfidenceLimit?: number },
+): CatalogCandidateResult {
+  if (!query) return { items: [], lowConfidence: false };
   const threshold = typeof config.matchThreshold === 'number' ? config.matchThreshold : 0.65;
   const ambiguityGap = 0.15;
   const queryNormalized = normalizeForMatch(query);
@@ -209,7 +218,7 @@ function findCatalogCandidates(config: SalesConciergeConfig, query: string): Sal
 
   if (!scored.length) {
     logAutomation('[SalesConcierge] Match', { query: queryNormalized, matched: 0, threshold });
-    return [];
+    return { items: [], lowConfidence: false };
   }
 
   const topScore = scored[0].score;
@@ -234,14 +243,18 @@ function findCatalogCandidates(config: SalesConciergeConfig, query: string): Sal
   });
 
   if (topScore < threshold) {
-    return [];
+    if (options?.allowLowConfidence) {
+      const limit = options.lowConfidenceLimit ?? 3;
+      return { items: topMatches.slice(0, limit).map((entry) => entry.item), lowConfidence: true };
+    }
+    return { items: [], lowConfidence: false };
   }
 
   if (!ambiguous) {
-    return [topMatches[0].item];
+    return { items: [topMatches[0].item], lowConfidence: false };
   }
 
-  return topMatches.map((entry) => entry.item);
+  return { items: topMatches.map((entry) => entry.item), lowConfidence: false };
 }
 
 function normalizeSheetHeader(value: string): string {
@@ -658,10 +671,11 @@ export function advanceSalesConciergeState(params: {
   }
 
   if (!fields.productRef) {
-    const candidates = findCatalogCandidates(config, messageText);
-    if (candidates.length > 0) {
+    const candidateResult = findCatalogCandidates(config, messageText, { allowLowConfidence: true });
+    if (candidateResult.items.length > 0) {
       fields.productRef = { type: 'text', value: messageText };
-      fields.skuCandidates = candidates;
+      fields.skuCandidates = candidateResult.items;
+      fields.skuCandidatesLowConfidence = candidateResult.lowConfidence;
     }
   }
 
@@ -686,10 +700,17 @@ export function advanceSalesConciergeState(params: {
   }
 
   if (!fields.sku) {
-    const searchQuery = [fields.productRef?.value, messageText].filter(Boolean).join(' ');
-    const candidates = Array.isArray(fields.skuCandidates) && fields.skuCandidates.length > 0
+    const aiProductRef = aiInterpretation?.productRef?.type === 'text'
+      ? aiInterpretation?.productRef?.value
+      : null;
+    const searchQuery = [aiProductRef, fields.productRef?.value, messageText].filter(Boolean).join(' ');
+    const storedCandidates = Array.isArray(fields.skuCandidates) && fields.skuCandidates.length > 0
       ? fields.skuCandidates
-      : findCatalogCandidates(config, searchQuery);
+      : null;
+    const candidateResult = storedCandidates
+      ? { items: storedCandidates, lowConfidence: Boolean(fields.skuCandidatesLowConfidence) }
+      : findCatalogCandidates(config, searchQuery, { allowLowConfidence: true });
+    const candidates = candidateResult.items;
     if (!candidates.length) {
       const attempt = incrementAttempt(fields, 'sku');
       if (attempt > 1) {
@@ -709,8 +730,8 @@ export function advanceSalesConciergeState(params: {
       return { replies, state: nextState };
     }
 
-    if (candidates.length > 1) {
-      const selected = selectCatalogCandidate(messageText, candidates);
+    if (candidates.length > 1 || candidateResult.lowConfidence) {
+      const selected = candidateResult.lowConfidence ? undefined : selectCatalogCandidate(messageText, candidates);
       if (!selected) {
         const attempt = incrementAttempt(fields, 'sku');
         if (attempt > 1) {
@@ -729,16 +750,22 @@ export function advanceSalesConciergeState(params: {
           buttons: candidates.map((candidate) => ({ title: candidate.name })),
         });
         nextState.step = 'NEED_PRODUCT_REF';
-        nextState.collectedFields = { ...fields, skuCandidates: candidates };
+        nextState.collectedFields = {
+          ...fields,
+          skuCandidates: candidates,
+          skuCandidatesLowConfidence: candidateResult.lowConfidence,
+        };
         return { replies, state: nextState };
       }
       fields.sku = selected.sku;
       fields.productName = selected.name;
       fields.skuCandidates = undefined;
+      fields.skuCandidatesLowConfidence = undefined;
     } else {
       fields.sku = candidates[0].sku;
       fields.productName = candidates[0].name;
       fields.skuCandidates = undefined;
+      fields.skuCandidatesLowConfidence = undefined;
     }
   }
 
