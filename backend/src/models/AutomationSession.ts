@@ -1,15 +1,17 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { AutomationTemplateId } from '../types/automation';
 
 export interface IAutomationSession extends Document {
   workspaceId: mongoose.Types.ObjectId;
   conversationId: mongoose.Types.ObjectId;
-  automationId: mongoose.Types.ObjectId;
-  templateId: AutomationTemplateId;
+  automationInstanceId: mongoose.Types.ObjectId;
+  templateId: mongoose.Types.ObjectId;
+  templateVersionId: mongoose.Types.ObjectId;
   status: 'active' | 'paused' | 'completed' | 'handoff';
-  step?: string;
-  questionCount: number;
-  collectedFields?: Record<string, any>;
+  state?: {
+    stepIndex?: number;
+    nodeId?: string;
+    vars?: Record<string, any>;
+  };
   rateLimit?: {
     windowStart: Date;
     count: number;
@@ -26,20 +28,15 @@ export interface IAutomationSession extends Document {
 const automationSessionSchema = new Schema<IAutomationSession>({
   workspaceId: { type: Schema.Types.ObjectId, ref: 'Workspace', required: true },
   conversationId: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true },
-  automationId: { type: Schema.Types.ObjectId, ref: 'Automation', required: true },
-  templateId: {
-    type: String,
-    enum: ['sales_concierge'],
-    required: true,
-  },
+  automationInstanceId: { type: Schema.Types.ObjectId, ref: 'AutomationInstance', required: true },
+  templateId: { type: Schema.Types.ObjectId, ref: 'FlowTemplate', required: true },
+  templateVersionId: { type: Schema.Types.ObjectId, ref: 'FlowTemplateVersion', required: true },
   status: {
     type: String,
     enum: ['active', 'paused', 'completed', 'handoff'],
     default: 'active',
   },
-  step: { type: String },
-  questionCount: { type: Number, default: 0 },
-  collectedFields: { type: Schema.Types.Mixed },
+  state: { type: Schema.Types.Mixed, default: {} },
   rateLimit: {
     windowStart: { type: Date },
     count: { type: Number, default: 0 },
@@ -53,7 +50,7 @@ const automationSessionSchema = new Schema<IAutomationSession>({
   timestamps: true,
 });
 
-automationSessionSchema.index({ workspaceId: 1, conversationId: 1, automationId: 1 });
+automationSessionSchema.index({ workspaceId: 1, conversationId: 1, automationInstanceId: 1 });
 automationSessionSchema.index({ conversationId: 1, status: 1, updatedAt: -1 });
 
 export default mongoose.model<IAutomationSession>('AutomationSession', automationSessionSchema);

@@ -3,10 +3,10 @@ import Message from '../models/Message';
 import Conversation from '../models/Conversation';
 import InstagramAccount from '../models/InstagramAccount';
 import FollowupTask from '../models/FollowupTask';
-import Automation from '../models/Automation';
+import AutomationInstance from '../models/AutomationInstance';
 import AutomationSession from '../models/AutomationSession';
+import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import { generateAIReply } from './aiReplyService';
-import { getAutomationTemplateConfig } from './automationTemplateService';
 import {
   sendMessage as sendInstagramMessage,
   sendButtonMessage,
@@ -21,28 +21,56 @@ import {
 } from './workspaceSettingsService';
 import { pauseForTypingIfNeeded } from './automation/typing';
 import { matchesTriggerConfig } from './automation/triggerMatcher';
-import {
-  advanceSalesConciergeState,
-  normalizeFlowState,
-  resolveSalesConciergeConfig,
-} from './automation/templateFlows';
-import { AutomationTestContext } from './automation/types';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
-import { getAutomationDefaults } from './adminAutomationDefaultsService';
-import { normalizeText } from './automation/utils';
-import {
-  AutomationRateLimit,
-  AutomationAiSettings,
-  AutomationTemplateId,
-  ReplyStep,
-  SalesConciergeConfig,
-  TemplateFlowConfig,
-  TriggerType,
-} from '../types/automation';
+import { AutomationAiSettings, AutomationRateLimit, TriggerType } from '../types/automation';
+import { FlowExposedField, FlowTriggerDefinition } from '../types/flow';
+import { AutomationTestContext } from './automation/types';
 
-const DEFAULT_RATE_LIMIT: AutomationRateLimit = {
-  maxMessages: 5,
-  perMinutes: 1,
+type FlowRuntimeEdge = {
+  from: string;
+  to: string;
+  condition?: Record<string, any>;
+};
+
+type FlowRuntimeStep = {
+  id?: string;
+  type?: string;
+  text?: string;
+  message?: string;
+  buttons?: Array<{ title: string; payload?: string } | string>;
+  tags?: string[];
+  aiSettings?: AutomationAiSettings;
+  knowledgeItemIds?: string[];
+  waitForReply?: boolean;
+  next?: string;
+  handoff?: {
+    topic?: string;
+    summary?: string;
+    recommendedNextAction?: string;
+    message?: string;
+  };
+  rateLimit?: AutomationRateLimit;
+};
+
+type FlowRuntimeGraph = {
+  steps?: FlowRuntimeStep[];
+  nodes?: FlowRuntimeStep[];
+  edges?: FlowRuntimeEdge[];
+  startNodeId?: string;
+  start?: string;
+  response?: FlowRuntimeStep;
+  rateLimit?: AutomationRateLimit;
+  aiSettings?: AutomationAiSettings;
+};
+
+type ExecutionPlan = {
+  mode: 'steps' | 'nodes';
+  steps: FlowRuntimeStep[];
+  startIndex?: number;
+  startNodeId?: string;
+  nodeMap?: Map<string, FlowRuntimeStep>;
+  edges?: FlowRuntimeEdge[];
+  graph: FlowRuntimeGraph;
 };
 
 const nowMs = () => Date.now();
@@ -65,70 +93,245 @@ const logAutomationStep = (step: string, startMs: number, details?: Record<strin
   console.log('⏱️ [AUTOMATION] Step', { step, ms, ...(details || {}) });
 };
 
-const normalizeKeywordList = (values?: string[]): string[] => (
-  (values || [])
-    .map((value) => normalizeText(String(value || '')))
-    .filter(Boolean)
-);
-
-const messageHasKeyword = (messageText: string, keywords: string[]): boolean => {
-  if (!keywords.length) return false;
-  const normalized = normalizeText(messageText);
-  return keywords.some((keyword) => normalized.includes(keyword));
-};
-
-const isSessionExpired = (session: any, ttlMinutes?: number): boolean => {
-  if (!ttlMinutes || ttlMinutes <= 0) return false;
-  const lastMessageAt = session.lastCustomerMessageAt || session.updatedAt;
-  if (!lastMessageAt) return false;
-  const elapsedMs = Date.now() - new Date(lastMessageAt).getTime();
-  return elapsedMs > ttlMinutes * 60 * 1000;
-};
-
-const shouldHandleFaqInterrupt = (messageText: string, config: SalesConciergeConfig): boolean => {
-  if (config.faqInterruptEnabled === false) return false;
-  const keywords = normalizeKeywordList(config.faqIntentKeywords);
-  if (!keywords.length) return false;
-  const normalized = normalizeText(messageText);
-  const hasQuestion = normalized.startsWith('what ')
-    || normalized.startsWith('when ')
-    || normalized.startsWith('where ')
-    || normalized.startsWith('how ')
-    || messageText.includes('?');
-  return hasQuestion && messageHasKeyword(messageText, keywords);
-};
-
-async function getTemplateSession(params: {
-  automationId: mongoose.Types.ObjectId;
-  conversationId: mongoose.Types.ObjectId;
-  workspaceId: mongoose.Types.ObjectId;
-  templateId: AutomationTemplateId;
-}): Promise<any | null> {
-  const latest = await AutomationSession.findOne({
-    automationId: params.automationId,
-    conversationId: params.conversationId,
-  }).sort({ createdAt: -1 });
-
-  if (latest && latest.status === 'paused') {
-    return null;
+const deepClone = <T>(value: T): T => {
+  if (value === undefined) {
+    return value;
   }
+  return JSON.parse(JSON.stringify(value)) as T;
+};
 
-  if (latest && latest.status === 'active') {
-    return latest;
+function buildEffectiveUserConfig(
+  exposedFields: FlowExposedField[] | undefined,
+  userConfig: Record<string, any> | undefined,
+): Record<string, any> {
+  const config: Record<string, any> = {};
+  if (Array.isArray(exposedFields)) {
+    exposedFields.forEach((field) => {
+      if (!field?.key) return;
+      if (Object.prototype.hasOwnProperty.call(field, 'defaultValue')) {
+        config[field.key] = field.defaultValue;
+      }
+    });
   }
-
-  return AutomationSession.create({
-    workspaceId: params.workspaceId,
-    conversationId: params.conversationId,
-    automationId: params.automationId,
-    templateId: params.templateId,
-    status: 'active',
-    questionCount: 0,
-    collectedFields: {},
-  });
+  if (userConfig && typeof userConfig === 'object') {
+    Object.keys(userConfig).forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(userConfig, key)) {
+        config[key] = userConfig[key];
+      }
+    });
+  }
+  return config;
 }
 
-function updateRateLimit(session: any, rateLimit: AutomationRateLimit): boolean {
+const TOKEN_REGEX = /\{\{\s*([^}]+)\s*\}\}/g;
+
+const stringifyConfigValue = (value: any): string => {
+  if (value === undefined || value === null) return '';
+  if (Array.isArray(value)) return value.map(item => String(item)).join(', ');
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+};
+
+const PATH_INDEX_REGEX = /\[(\d+)\]/g;
+
+const parsePath = (path: string): Array<string | number> => {
+  return path
+    .replace(PATH_INDEX_REGEX, '.$1')
+    .split('.')
+    .map(segment => segment.trim())
+    .filter(Boolean)
+    .map(segment => (segment.match(/^\d+$/) ? Number(segment) : segment));
+};
+
+const getConfigValue = (config: Record<string, any>, path: string): any => {
+  const parts = parsePath(path);
+  return parts.reduce((acc, part) => {
+    if (acc === null || acc === undefined) return acc;
+    return acc[part as keyof typeof acc];
+  }, config as any);
+};
+
+const resolveTemplateString = (value: string, config: Record<string, any>): any => {
+  if (!value.includes('{{')) return value;
+  const matches = Array.from(value.matchAll(TOKEN_REGEX));
+  if (matches.length === 0) return value;
+  if (matches.length === 1 && value === matches[0][0]) {
+    const raw = getConfigValue(config, matches[0][1].trim());
+    return raw === undefined ? '' : raw;
+  }
+  return value.replace(TOKEN_REGEX, (_match, key) => stringifyConfigValue(getConfigValue(config, key.trim())));
+};
+
+const interpolateObject = (value: any, config: Record<string, any>): any => {
+  if (typeof value === 'string') {
+    return resolveTemplateString(value, config);
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => interpolateObject(item, config));
+  }
+  if (value && typeof value === 'object') {
+    const output: Record<string, any> = {};
+    Object.entries(value).forEach(([key, entry]) => {
+      output[key] = interpolateObject(entry, config);
+    });
+    return output;
+  }
+  return value;
+};
+
+const setByPath = (target: any, path: string, value: any) => {
+  if (!path) return;
+  const parts = parsePath(path);
+  if (parts.length === 0) return;
+
+  let cursor = target;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    const key = parts[i];
+    if (cursor[key] === undefined) {
+      const next = parts[i + 1];
+      cursor[key] = typeof next === 'number' ? [] : {};
+    }
+    cursor = cursor[key];
+    if (!cursor) return;
+  }
+
+  cursor[parts[parts.length - 1]] = value;
+};
+
+const findNodeById = (graph: any, nodeId: string): any | null => {
+  const nodes = graph?.nodes;
+  if (!Array.isArray(nodes)) return null;
+  return nodes.find((node: any) => node?.id === nodeId || node?.nodeId === nodeId) || null;
+};
+
+const applyExposedFields = (params: {
+  graph: any;
+  triggers: FlowTriggerDefinition[];
+  exposedFields?: FlowExposedField[];
+  config: Record<string, any>;
+}) => {
+  const { graph, triggers, exposedFields, config } = params;
+  if (!Array.isArray(exposedFields)) return;
+
+  const triggerRoot = { triggers };
+
+  exposedFields.forEach((field) => {
+    if (!field?.key || !field?.source?.path) return;
+    if (!Object.prototype.hasOwnProperty.call(config, field.key)) return;
+    const rawPath = field.source.path.trim();
+    if (!rawPath) return;
+
+    const normalizedPath = rawPath.replace(/^graph\./, '');
+
+    if (/^triggers(\.|\[|$)/.test(normalizedPath)) {
+      setByPath(triggerRoot, normalizedPath, config[field.key]);
+      return;
+    }
+
+    let target = graph;
+    if (field.source.nodeId) {
+      const node = findNodeById(graph, field.source.nodeId);
+      if (node) {
+        target = node;
+      }
+    }
+
+    setByPath(target, normalizedPath, config[field.key]);
+  });
+};
+
+const resolveFlowRuntime = (version: any, instance: any) => {
+  const config = buildEffectiveUserConfig(version?.exposedFields, instance?.userConfig);
+  const compiledClone = deepClone(version?.compiled || {});
+  const graph = compiledClone?.graph ?? compiledClone;
+  if (!graph || typeof graph !== 'object') {
+    return null;
+  }
+  const triggers = deepClone(version?.triggers || []);
+  applyExposedFields({
+    graph,
+    triggers,
+    exposedFields: version?.exposedFields,
+    config,
+  });
+
+  const resolvedGraph = interpolateObject(graph, config);
+  const resolvedTriggers = interpolateObject(triggers, config) as FlowTriggerDefinition[];
+
+  return {
+    graph: resolvedGraph as FlowRuntimeGraph,
+    triggers: resolvedTriggers,
+    config,
+  };
+};
+
+const buildExecutionPlan = (graph: FlowRuntimeGraph): ExecutionPlan | null => {
+  if (Array.isArray(graph.steps) && graph.steps.length > 0) {
+    return { mode: 'steps', steps: graph.steps, startIndex: 0, graph };
+  }
+  if (graph.response && typeof graph.response === 'object') {
+    return { mode: 'steps', steps: [graph.response], startIndex: 0, graph };
+  }
+  if (Array.isArray(graph.nodes) && graph.nodes.length > 0) {
+    const nodeMap = new Map<string, FlowRuntimeStep>();
+    graph.nodes.forEach((node) => {
+      if (node?.id) {
+        nodeMap.set(node.id, node);
+      }
+    });
+    const startNodeId = graph.startNodeId || graph.start || graph.nodes[0]?.id;
+    return {
+      mode: 'nodes',
+      steps: graph.nodes,
+      startNodeId,
+      nodeMap,
+      edges: graph.edges,
+      graph,
+    };
+  }
+  return null;
+};
+
+const normalizeStepType = (step?: FlowRuntimeStep): 'send_message' | 'ai_reply' | 'handoff' | 'unknown' => {
+  const raw = (step?.type || '').toLowerCase();
+  if (raw === 'send_message' || raw === 'message' || raw === 'send' || raw === 'reply') {
+    return 'send_message';
+  }
+  if (raw === 'ai_reply' || raw === 'ai' || raw === 'ai_message') {
+    return 'ai_reply';
+  }
+  if (raw === 'handoff' || raw === 'escalate') {
+    return 'handoff';
+  }
+  return 'unknown';
+};
+
+const normalizeButtons = (buttons?: Array<{ title: string; payload?: string } | string>) => {
+  if (!Array.isArray(buttons)) return [];
+  return buttons
+    .map((button) => {
+      if (typeof button === 'string') {
+        return { title: button, payload: `button_${button}` };
+      }
+      if (!button?.title) return null;
+      return { title: button.title, payload: button.payload || `button_${button.title}` };
+    })
+    .filter(Boolean) as Array<{ title: string; payload?: string }>;
+};
+
+const resolveRateLimit = (
+  stepLimit?: AutomationRateLimit,
+  graphLimit?: AutomationRateLimit,
+): AutomationRateLimit | null => {
+  const limit = stepLimit || graphLimit;
+  if (!limit) return null;
+  const maxMessages = Number(limit.maxMessages);
+  const perMinutes = Number(limit.perMinutes);
+  if (!maxMessages || !perMinutes) return null;
+  return { maxMessages, perMinutes };
+};
+
+const updateRateLimit = (session: any, rateLimit: AutomationRateLimit): boolean => {
   const now = new Date();
   const windowMs = rateLimit.perMinutes * 60 * 1000;
   const windowStart = session.rateLimit?.windowStart ? new Date(session.rateLimit.windowStart) : null;
@@ -145,34 +348,91 @@ function updateRateLimit(session: any, rateLimit: AutomationRateLimit): boolean 
 
   session.rateLimit.count += 1;
   return true;
+};
+
+async function ensureAutomationSession(params: {
+  instance: any;
+  conversationId: mongoose.Types.ObjectId;
+  workspaceId: mongoose.Types.ObjectId;
+  templateVersionId: mongoose.Types.ObjectId;
+}): Promise<any | null> {
+  const latest = await AutomationSession.findOne({
+    automationInstanceId: params.instance._id,
+    conversationId: params.conversationId,
+  }).sort({ createdAt: -1 });
+
+  if (latest && latest.status === 'paused') {
+    return null;
+  }
+
+  if (latest && latest.status === 'active') {
+    return latest;
+  }
+
+  return AutomationSession.create({
+    workspaceId: params.workspaceId,
+    conversationId: params.conversationId,
+    automationInstanceId: params.instance._id,
+    templateId: params.instance.templateId,
+    templateVersionId: params.templateVersionId,
+    status: 'active',
+    state: {},
+  });
 }
 
-async function sendTemplateMessage(params: {
+async function markAutomationTriggered(instanceId: mongoose.Types.ObjectId, timestamp: Date) {
+  await AutomationInstance.findByIdAndUpdate(instanceId, {
+    $inc: { 'stats.totalTriggered': 1 },
+    $set: { 'stats.lastTriggeredAt': timestamp },
+  });
+}
+
+async function markAutomationReplySent(instanceId: mongoose.Types.ObjectId, timestamp: Date) {
+  await AutomationInstance.findByIdAndUpdate(instanceId, {
+    $inc: { 'stats.totalRepliesSent': 1 },
+    $set: { 'stats.lastReplySentAt': timestamp },
+  });
+}
+
+async function sendFlowMessage(params: {
   conversation: any;
-  automation: any;
+  instance: any;
   igAccount: any;
   recipientId: string;
   text: string;
-  buttons?: Array<{ title: string; actionType?: 'postback'; payload?: string }>;
+  buttons?: Array<{ title: string; payload?: string } | string>;
   platform?: string;
   tags?: string[];
+  source?: 'template_flow' | 'ai_reply';
   aiMeta?: {
     shouldEscalate?: boolean;
     escalationReason?: string;
     knowledgeItemIds?: string[];
   };
-}): Promise<void> {
-  const { conversation, automation, igAccount, recipientId, text, buttons, platform, tags, aiMeta } = params;
+}): Promise<any> {
+  const {
+    conversation,
+    instance,
+    igAccount,
+    recipientId,
+    text,
+    buttons,
+    platform,
+    tags,
+    source,
+    aiMeta,
+  } = params;
 
-  await pauseForTypingIfNeeded(platform);
+  await pauseForTypingIfNeeded(platform || conversation.platform);
 
+  const normalizedButtons = normalizeButtons(buttons);
   let result;
-  if (buttons && buttons.length > 0 && igAccount.instagramAccountId) {
+  if (normalizedButtons.length > 0 && igAccount.instagramAccountId) {
     result = await sendButtonMessage(
       igAccount.instagramAccountId,
       recipientId,
       text,
-      buttons.map((button) => ({
+      normalizedButtons.map((button) => ({
         type: 'postback',
         title: button.title,
         payload: button.payload || `button_${button.title}`,
@@ -188,84 +448,19 @@ async function sendTemplateMessage(params: {
   }
 
   const sentAt = new Date();
-  await Message.create({
-    conversationId: conversation._id,
-    workspaceId: conversation.workspaceId,
-    text,
-    from: 'ai',
-    platform: platform || 'instagram',
-    instagramMessageId: result.message_id,
-    automationSource: 'template_flow',
-    aiTags: tags,
-    aiShouldEscalate: aiMeta?.shouldEscalate,
-    aiEscalationReason: aiMeta?.escalationReason,
-    kbItemIdsUsed: aiMeta?.knowledgeItemIds,
-    metadata: buttons ? { buttons } : undefined,
-    createdAt: sentAt,
-  });
-
-  conversation.lastMessage = text;
-  conversation.lastMessageAt = sentAt;
-  conversation.lastBusinessMessageAt = sentAt;
-  await conversation.save();
-
-  automation.stats.totalTriggered += 1;
-  automation.stats.totalRepliesSent += 1;
-  automation.stats.lastTriggeredAt = sentAt;
-  automation.stats.lastReplySentAt = sentAt;
-  await automation.save();
-
-  const increments: Record<string, number> = {
-    outboundMessages: 1,
-    aiReplies: 1,
-  };
-
-  if (tags && tags.length > 0) {
-    tags.forEach(tag => addCountIncrement(increments, 'tagCounts', tag));
-  }
-
-  const responseMetrics = calculateResponseTime(conversation, sentAt);
-  Object.assign(increments, responseMetrics);
-
-  await trackDailyMetric(conversation.workspaceId, sentAt, increments);
-}
-
-async function sendAiReplyMessage(params: {
-  conversation: any;
-  automation: any;
-  igAccount: any;
-  recipientId: string;
-  text: string;
-  platform?: string;
-  tags?: string[];
-  aiMeta?: {
-    shouldEscalate?: boolean;
-    escalationReason?: string;
-    knowledgeItemIds?: string[];
-  };
-}): Promise<any> {
-  const { conversation, automation, igAccount, recipientId, text, platform, tags, aiMeta } = params;
-
-  await pauseForTypingIfNeeded(platform);
-
-  const result = await sendInstagramMessage(recipientId, text, igAccount.accessToken);
-  if (!result || (!result.message_id && !result.recipient_id)) {
-    throw new Error('Instagram API did not return a valid response.');
-  }
-
-  const sentAt = new Date();
   const message = await Message.create({
     conversationId: conversation._id,
     workspaceId: conversation.workspaceId,
     text,
     from: 'ai',
-    platform: platform || 'instagram',
+    platform: platform || conversation.platform || 'instagram',
     instagramMessageId: result.message_id,
-    automationSource: 'ai_reply',
+    automationSource: source || 'template_flow',
     aiTags: tags,
     aiShouldEscalate: aiMeta?.shouldEscalate,
     aiEscalationReason: aiMeta?.escalationReason,
     kbItemIdsUsed: aiMeta?.knowledgeItemIds,
+    metadata: normalizedButtons.length > 0 ? { buttons: normalizedButtons } : undefined,
     createdAt: sentAt,
   });
 
@@ -274,11 +469,7 @@ async function sendAiReplyMessage(params: {
   conversation.lastBusinessMessageAt = sentAt;
   await conversation.save();
 
-  automation.stats.totalTriggered += 1;
-  automation.stats.totalRepliesSent += 1;
-  automation.stats.lastTriggeredAt = sentAt;
-  automation.stats.lastReplySentAt = sentAt;
-  await automation.save();
+  await markAutomationReplySent(instance._id, sentAt);
 
   const increments: Record<string, number> = {
     outboundMessages: 1,
@@ -303,9 +494,10 @@ async function buildAutomationAiReply(params: {
   messageContext?: AutomationTestContext;
   aiSettings?: AutomationAiSettings;
   knowledgeItemIds?: string[];
+  workspaceSettings?: any;
 }) {
   const { conversation, messageText, messageContext, aiSettings, knowledgeItemIds } = params;
-  const settings = await getWorkspaceSettings(conversation.workspaceId);
+  const settings = params.workspaceSettings || await getWorkspaceSettings(conversation.workspaceId);
   const goalConfigs = getGoalConfigs(settings);
   const detectedGoal = detectGoalIntent(messageText || '');
   const goalMatched = goalMatchesWorkspace(
@@ -347,270 +539,33 @@ async function buildAutomationAiReply(params: {
   });
 }
 
-async function handoffSalesConcierge(params: {
+async function handleAiReplyStep(params: {
+  step: FlowRuntimeStep;
+  graph: FlowRuntimeGraph;
   conversation: any;
-  topic: string;
-  summary: string;
-  recommendedNextAction?: string;
-  customerMessage?: string;
-}): Promise<void> {
-  const { conversation, topic, summary, recommendedNextAction, customerMessage } = params;
-  const details = [summary, recommendedNextAction ? `Next: ${recommendedNextAction}` : null]
-    .filter(Boolean)
-    .join('\n');
-
-  await createTicket({
-    conversationId: conversation._id,
-    topicSummary: topic.slice(0, 140),
-    reason: details,
-    createdBy: 'system',
-    customerMessage,
-  });
-
-  conversation.humanRequired = true;
-  conversation.humanRequiredReason = topic;
-  conversation.humanTriggeredAt = new Date();
-  conversation.humanTriggeredByMessageId = undefined;
-  conversation.humanHoldUntil = new Date(Date.now() + 60 * 60 * 1000);
-  await conversation.save();
-}
-
-async function trackSalesStep(workspaceId: mongoose.Types.ObjectId, step?: string) {
-  if (!step) return;
-  await trackDailyMetric(workspaceId, new Date(), { [`salesConciergeStepCounts.${step}`]: 1 });
-}
-
-async function handleSalesConciergeFlow(params: {
-  automation: any;
-  replyStep: { templateFlow: TemplateFlowConfig };
-  session: any;
-  conversation: any;
+  instance: any;
   igAccount: any;
   messageText: string;
   platform?: string;
   messageContext?: AutomationTestContext;
 }): Promise<{ success: boolean; error?: string }> {
-  const {
-    automation,
-    replyStep,
-    session,
-    conversation,
-    igAccount,
-    messageText,
-    platform,
-    messageContext,
-  } = params;
-  const configStart = nowMs();
-  const adminDefaults = await getAutomationDefaults('sales_concierge');
-  const baseConfig = {
-    ...adminDefaults,
-    ...(replyStep.templateFlow.config as SalesConciergeConfig),
-  };
-  const config = await resolveSalesConciergeConfig(conversation.workspaceId, baseConfig);
-  const templateConfig = await getAutomationTemplateConfig('sales_concierge');
-  logAutomationStep('sales_config', configStart, { templateId: 'sales_concierge' });
-  const rateLimit = config.rateLimit || DEFAULT_RATE_LIMIT;
-  const tags = config.tags || ['intent_purchase', 'template_sales_concierge'];
-
-  session.lastCustomerMessageAt = new Date();
-
-  const currentState = normalizeFlowState({
-    step: session.step,
-    status: session.status,
-    questionCount: session.questionCount,
-    collectedFields: session.collectedFields || {},
-  });
-
-  if (shouldHandleFaqInterrupt(messageText, config)) {
-    const faqStart = nowMs();
-    const aiSettings = {
-      ...(config.aiSettings || {}),
-      ...templateConfig.aiReply,
-    };
-    const faqResponse = await buildAutomationAiReply({
-      conversation,
-      messageText,
-      messageContext,
-      aiSettings,
-      knowledgeItemIds: config.knowledgeItemIds,
-    });
-    logAutomationStep('sales_faq_interrupt', faqStart, { answered: Boolean(faqResponse) });
-
-    const suffix = (config.faqResponseSuffix || '').trim();
-    const replyText = suffix ? `${faqResponse.replyText} ${suffix}` : faqResponse.replyText;
-
-    if (!updateRateLimit(session, rateLimit)) {
-      return { success: false, error: 'Rate limit exceeded' };
-    }
-
-    await sendTemplateMessage({
-      conversation,
-      automation,
-      igAccount,
-      recipientId: conversation.participantInstagramId,
-      text: replyText,
-      platform,
-      tags: [...tags, ...(faqResponse.tags || [])],
-      aiMeta: {
-        shouldEscalate: faqResponse.shouldEscalate,
-        escalationReason: faqResponse.escalationReason,
-        knowledgeItemIds: faqResponse.knowledgeItemsUsed?.map((item) => item.id),
-      },
-    });
-
-    session.lastAutomationMessageAt = new Date();
-    await session.save();
-    return { success: true };
-  }
-
-  const stateStart = nowMs();
-  const { replies, state: nextState, actions } = advanceSalesConciergeState({
-    state: currentState,
-    messageText,
-    config,
-    context: messageContext,
-  });
-  logAutomationStep('sales_state', stateStart, { replies: replies.length, step: nextState.step });
-  const aiSettings = {
-    ...(config.aiSettings || {}),
-    ...templateConfig.aiReply,
-  };
-  const aiStart = nowMs();
-  const aiResponse = replies.length
-    ? await buildAutomationAiReply({
-        conversation,
-        messageText,
-        messageContext,
-        aiSettings,
-      })
-    : null;
-  logAutomationStep('sales_ai_reply', aiStart, { generated: Boolean(aiResponse) });
-  const combinedTags = [...tags, ...(aiResponse?.tags || [])];
-  const repliesToSend = aiResponse
-    ? [{ ...replies[0], text: aiResponse.replyText }]
-    : replies;
-
-  let sentAny = false;
-  let sentCount = 0;
-  const sendStart = nowMs();
-  for (const reply of repliesToSend) {
-    if (!updateRateLimit(session, rateLimit)) {
-      if (!sentAny) {
-        return { success: false, error: 'Rate limit exceeded' };
-      }
-      break;
-    }
-    await sendTemplateMessage({
-      conversation,
-      automation,
-      igAccount,
-      recipientId: conversation.participantInstagramId,
-      text: reply.text,
-      buttons: reply.buttons,
-      platform,
-      tags: combinedTags,
-      aiMeta: aiResponse
-        ? {
-            shouldEscalate: aiResponse.shouldEscalate,
-            escalationReason: aiResponse.escalationReason,
-            knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
-          }
-        : undefined,
-    });
-    sentAny = true;
-    sentCount += 1;
-  }
-  logAutomationStep('sales_send_replies', sendStart, {
-    attempted: repliesToSend.length,
-    sent: sentCount,
-    rateLimited: sentCount < repliesToSend.length,
-  });
-
-  if (sentAny) {
-    session.lastAutomationMessageAt = new Date();
-  }
-
-  session.step = nextState.step;
-  session.status = nextState.status;
-  session.questionCount = nextState.questionCount;
-  session.collectedFields = nextState.collectedFields;
-
-  if (actions?.handoffReason && actions?.handoffSummary) {
-    const handoffStart = nowMs();
-    await handoffSalesConcierge({
-      conversation,
-      topic: actions.handoffTopic || actions.handoffReason,
-      summary: actions.handoffSummary,
-      recommendedNextAction: actions.recommendedNextAction,
-      customerMessage: messageText,
-    });
-    logAutomationStep('sales_handoff', handoffStart);
-  }
-
-  const trackStart = nowMs();
-  await trackSalesStep(conversation.workspaceId, nextState.step);
-  logAutomationStep('sales_track_step', trackStart, { step: nextState.step });
-  const saveStart = nowMs();
-  await session.save();
-  logAutomationStep('sales_session_save', saveStart);
-  return { success: true };
-}
-
-async function handleAiReplyFlow(params: {
-  automation: any;
-  replyStep: ReplyStep;
-  conversation: any;
-  igAccount: any;
-  messageText: string;
-  platform?: string;
-  messageContext?: AutomationTestContext;
-}): Promise<{ success: boolean; error?: string }> {
-  const { automation, replyStep, conversation, igAccount, messageText, platform, messageContext } = params;
-  if (replyStep.type !== 'ai_reply' || !replyStep.aiReply) {
-    return { success: false, error: 'AI reply configuration missing' };
-  }
-  const settingsStart = nowMs();
+  const { step, graph, conversation, instance, igAccount, messageText, platform, messageContext } = params;
   const settings = await getWorkspaceSettings(conversation.workspaceId);
-  const goalConfigs = getGoalConfigs(settings);
-  logAutomationStep('ai_settings', settingsStart);
-  const explicitGoal = replyStep.aiReply?.goalType;
-  const detectedGoal = explicitGoal && explicitGoal !== 'none'
-    ? explicitGoal
-    : detectGoalIntent(messageText || '');
-  const goalMatched = goalMatchesWorkspace(
-    detectedGoal,
-    settings?.primaryGoal,
-    settings?.secondaryGoal,
-  )
-    ? detectedGoal
-    : 'none';
+  const aiSettings = {
+    ...(graph.aiSettings || {}),
+    ...(step.aiSettings || {}),
+  };
 
   const replyStart = nowMs();
-  const aiResponse = await generateAIReply({
+  const aiResponse = await buildAutomationAiReply({
     conversation,
-    workspaceId: conversation.workspaceId,
-    latestCustomerMessage: messageText,
-    categoryId: messageContext?.categoryId,
-    categorization: messageContext?.categoryName
-      ? { categoryName: messageContext.categoryName }
-      : undefined,
-    historyLimit: 20,
-    goalContext: {
-      workspaceGoals: {
-        primaryGoal: settings?.primaryGoal,
-        secondaryGoal: settings?.secondaryGoal,
-        configs: goalConfigs,
-      },
-      detectedGoal: goalMatched !== 'none' ? goalMatched : 'none',
-      activeGoalType: goalMatched !== 'none' ? goalMatched : undefined,
-      goalState: goalMatched !== 'none' ? 'collecting' : 'idle',
-      collectedFields: conversation.goalCollectedFields || {},
-    },
-    workspaceSettingsOverride: settings,
-    tone: replyStep.aiReply?.tone,
-    maxReplySentences: replyStep.aiReply?.maxReplySentences,
+    messageText,
+    messageContext,
+    aiSettings,
+    knowledgeItemIds: step.knowledgeItemIds,
+    workspaceSettings: settings,
   });
-  logAutomationStep('ai_reply_generate', replyStart);
+  logAutomationStep('flow_ai_reply_generate', replyStart);
 
   const activeTicket = await getActiveTicket(conversation._id);
   if (activeTicket && aiResponse.shouldEscalate) {
@@ -622,21 +577,22 @@ async function handleAiReplyFlow(params: {
   }
 
   const sendStart = nowMs();
-  const message = await sendAiReplyMessage({
+  const message = await sendFlowMessage({
     conversation,
-    automation,
+    instance,
     igAccount,
     recipientId: conversation.participantInstagramId,
     text: aiResponse.replyText,
     platform,
     tags: aiResponse.tags,
+    source: 'ai_reply',
     aiMeta: {
       shouldEscalate: aiResponse.shouldEscalate,
       escalationReason: aiResponse.escalationReason,
       knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
     },
   });
-  logAutomationStep('ai_reply_send', sendStart);
+  logAutomationStep('flow_ai_reply_send', sendStart);
 
   let ticketId = activeTicket?._id;
   if (aiResponse.shouldEscalate && !ticketId) {
@@ -647,7 +603,7 @@ async function handleAiReplyFlow(params: {
       reason: aiResponse.escalationReason || 'Escalated by AI',
       createdBy: 'ai',
     });
-    logAutomationStep('ai_create_ticket', ticketStart, { ticketId: ticket._id?.toString() });
+    logAutomationStep('flow_ai_create_ticket', ticketStart, { ticketId: ticket._id?.toString() });
     ticketId = ticket._id;
     conversation.humanRequired = true;
     conversation.humanRequiredReason = ticket.reason;
@@ -661,7 +617,7 @@ async function handleAiReplyFlow(params: {
   if (ticketId) {
     const updateStart = nowMs();
     await addTicketUpdate(ticketId, { from: 'ai', text: aiResponse.replyText, messageId: message._id });
-    logAutomationStep('ai_ticket_update', updateStart, { ticketId: ticketId.toString() });
+    logAutomationStep('flow_ai_ticket_update', updateStart, { ticketId: ticketId.toString() });
   }
 
   if (aiResponse.shouldEscalate) {
@@ -676,25 +632,230 @@ async function handleAiReplyFlow(params: {
       : undefined;
     const saveStart = nowMs();
     await conversation.save();
-    logAutomationStep('ai_conversation_save', saveStart);
+    logAutomationStep('flow_ai_conversation_save', saveStart);
   }
 
   return { success: true };
 }
 
-async function executeTemplateFlow(params: {
-  automation: any;
-  replyStep: any;
+const resolveNextNodeId = (step: FlowRuntimeStep, plan: ExecutionPlan): string | undefined => {
+  if (step.next) return step.next;
+  if (!step.id || !plan.edges) return undefined;
+  const edge = plan.edges.find((candidate) => candidate.from === step.id);
+  return edge?.to;
+};
+
+async function executeFlowPlan(params: {
+  plan: ExecutionPlan;
+  session: any;
+  instance: any;
+  conversation: any;
+  igAccount: any;
+  messageText: string;
+  platform?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{ success: boolean; error?: string; sentCount: number; executedSteps: number }> {
+  const {
+    plan,
+    session,
+    instance,
+    conversation,
+    igAccount,
+    messageText,
+    platform,
+    messageContext,
+  } = params;
+
+  const maxSteps = 12;
+  let sentCount = 0;
+  let executedSteps = 0;
+  let triggered = false;
+
+  const markTriggeredOnce = async () => {
+    if (triggered) return;
+    triggered = true;
+    await markAutomationTriggered(instance._id, new Date());
+  };
+  const completeWithError = async (error: string) => {
+    session.status = 'completed';
+    session.state = {};
+    await session.save();
+    return { success: false, error, sentCount, executedSteps };
+  };
+
+  let stepIndex = 0;
+  let nodeId: string | undefined;
+
+  if (plan.mode === 'steps') {
+    stepIndex = typeof session.state?.stepIndex === 'number'
+      ? session.state.stepIndex
+      : (plan.startIndex || 0);
+  } else {
+    nodeId = session.state?.nodeId || plan.startNodeId;
+  }
+
+  for (let i = 0; i < maxSteps; i += 1) {
+    let step: FlowRuntimeStep | undefined;
+    if (plan.mode === 'steps') {
+      step = plan.steps[stepIndex];
+    } else if (nodeId && plan.nodeMap) {
+      step = plan.nodeMap.get(nodeId) || plan.steps.find(candidate => candidate.id === nodeId);
+    }
+
+    if (!step) {
+      break;
+    }
+
+    const stepType = normalizeStepType(step);
+    const rateLimit = resolveRateLimit(step.rateLimit, plan.graph.rateLimit);
+
+    if (stepType === 'send_message') {
+      const text = step.text || step.message || '';
+      if (!text) {
+        return completeWithError('Missing message text for step');
+      }
+      if (rateLimit && !updateRateLimit(session, rateLimit)) {
+        return { success: false, error: 'Rate limit exceeded', sentCount, executedSteps };
+      }
+      await markTriggeredOnce();
+      await sendFlowMessage({
+        conversation,
+        instance,
+        igAccount,
+        recipientId: conversation.participantInstagramId,
+        text,
+        buttons: step.buttons,
+        platform,
+        tags: step.tags,
+        source: 'template_flow',
+      });
+      sentCount += 1;
+    } else if (stepType === 'ai_reply') {
+      if (rateLimit && !updateRateLimit(session, rateLimit)) {
+        return { success: false, error: 'Rate limit exceeded', sentCount, executedSteps };
+      }
+      await markTriggeredOnce();
+      const aiResult = await handleAiReplyStep({
+        step,
+        graph: plan.graph,
+        conversation,
+        instance,
+        igAccount,
+        messageText,
+        platform,
+        messageContext,
+      });
+      if (!aiResult.success) {
+        return { success: false, error: aiResult.error || 'AI reply failed', sentCount, executedSteps };
+      }
+      sentCount += 1;
+    } else if (stepType === 'handoff') {
+      await markTriggeredOnce();
+      const topic = step.handoff?.topic || 'Handoff requested';
+      const summary = step.handoff?.summary || 'Flow requested handoff to a teammate.';
+      const handoffStart = nowMs();
+      await createTicket({
+        conversationId: conversation._id,
+        topicSummary: topic.slice(0, 140),
+        reason: summary,
+        createdBy: 'system',
+        customerMessage: messageText,
+      });
+      logAutomationStep('flow_handoff', handoffStart);
+
+      conversation.humanRequired = true;
+      conversation.humanRequiredReason = topic;
+      conversation.humanTriggeredAt = new Date();
+      conversation.humanTriggeredByMessageId = undefined;
+      conversation.humanHoldUntil = new Date(Date.now() + 60 * 60 * 1000);
+      await conversation.save();
+
+      if (step.handoff?.message) {
+        await sendFlowMessage({
+          conversation,
+          instance,
+          igAccount,
+          recipientId: conversation.participantInstagramId,
+          text: step.handoff.message,
+          platform,
+          source: 'template_flow',
+        });
+        sentCount += 1;
+      }
+    } else {
+      logAutomation('⚠️ [AUTOMATION] Unsupported flow step', { stepId: step.id, type: step.type });
+      return completeWithError('Unsupported flow step');
+    }
+
+    executedSteps += 1;
+
+    let nextStepIndex: number | undefined;
+    let nextNodeId: string | undefined;
+
+    if (plan.mode === 'steps') {
+      nextStepIndex = stepIndex + 1;
+    } else {
+      nextNodeId = resolveNextNodeId(step, plan);
+    }
+
+    if (step.waitForReply) {
+      const hasNext = plan.mode === 'steps'
+        ? (nextStepIndex !== undefined && Boolean(plan.steps[nextStepIndex]))
+        : (Boolean(nextNodeId)
+          && Boolean(plan.nodeMap?.get(nextNodeId as string) || plan.steps.find(candidate => candidate.id === nextNodeId)));
+      session.state = hasNext
+        ? (plan.mode === 'steps' ? { stepIndex: nextStepIndex } : { nodeId: nextNodeId })
+        : {};
+      session.status = hasNext ? 'active' : 'completed';
+      break;
+    }
+
+    if (plan.mode === 'steps') {
+      if (nextStepIndex === undefined || !plan.steps[nextStepIndex]) {
+        session.status = 'completed';
+        session.state = {};
+        break;
+      }
+      stepIndex = nextStepIndex;
+    } else {
+      if (!nextNodeId) {
+        session.status = 'completed';
+        session.state = {};
+        break;
+      }
+      nodeId = nextNodeId;
+    }
+  }
+
+  if (sentCount > 0) {
+    session.lastAutomationMessageAt = new Date();
+  }
+
+  await session.save();
+
+  if (executedSteps === 0) {
+    return { success: false, error: 'Flow has no runnable steps', sentCount, executedSteps };
+  }
+
+  return { success: true, sentCount, executedSteps };
+}
+
+async function executeFlowForInstance(params: {
+  instance: any;
+  version: any;
+  session?: any;
   conversationId: string;
   workspaceId: string;
   instagramAccountId: string;
   messageText: string;
   platform?: string;
   messageContext?: AutomationTestContext;
+  runtime?: { graph: FlowRuntimeGraph; triggers: FlowTriggerDefinition[] } | null;
 }): Promise<{ success: boolean; error?: string }> {
   const {
-    automation,
-    replyStep,
+    instance,
+    version,
+    session,
     conversationId,
     workspaceId,
     instagramAccountId,
@@ -703,14 +864,9 @@ async function executeTemplateFlow(params: {
     messageContext,
   } = params;
 
-  const templateFlow = replyStep.templateFlow as TemplateFlowConfig | undefined;
-  if (!templateFlow) {
-    return { success: false, error: 'Template flow configuration missing' };
-  }
-
   const conversationStart = nowMs();
   const conversation = await Conversation.findById(conversationId);
-  logAutomationStep('template_load_conversation', conversationStart, { conversationId });
+  logAutomationStep('flow_load_conversation', conversationStart, { conversationId });
   if (!conversation) {
     return { success: false, error: 'Conversation not found' };
   }
@@ -719,22 +875,36 @@ async function executeTemplateFlow(params: {
     return { success: false, error: 'Conversation is on human hold' };
   }
 
+  if (conversation.autoReplyDisabled) {
+    return { success: false, error: 'Auto replies disabled' };
+  }
+
+  const resolvedRuntime = params.runtime || resolveFlowRuntime(version, instance);
+  if (!resolvedRuntime) {
+    return { success: false, error: 'Flow runtime unavailable' };
+  }
+
+  const plan = buildExecutionPlan(resolvedRuntime.graph);
+  if (!plan) {
+    return { success: false, error: 'Flow graph missing runnable steps' };
+  }
+
   const sessionStart = nowMs();
-  const session = await getTemplateSession({
-    automationId: automation._id,
+  const activeSession = session || await ensureAutomationSession({
+    instance,
     conversationId: conversation._id,
     workspaceId: new mongoose.Types.ObjectId(workspaceId),
-    templateId: templateFlow.templateId,
+    templateVersionId: version._id,
   });
-  logAutomationStep('template_load_session', sessionStart, { templateId: templateFlow.templateId });
+  logAutomationStep('flow_load_session', sessionStart, { instanceId: instance._id?.toString() });
 
-  if (!session) {
+  if (!activeSession) {
     return { success: false, error: 'Automation paused for human response' };
   }
 
   const igStart = nowMs();
   const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
-  logAutomationStep('template_load_ig_account', igStart, { instagramAccountId });
+  logAutomationStep('flow_load_ig_account', igStart, { instagramAccountId });
   if (!igAccount || !igAccount.accessToken) {
     return { success: false, error: 'Instagram account not found or not connected' };
   }
@@ -743,23 +913,24 @@ async function executeTemplateFlow(params: {
     return { success: false, error: 'Missing participant Instagram ID' };
   }
 
-  if (templateFlow.templateId === 'sales_concierge') {
-    const flowStart = nowMs();
-    const result = await handleSalesConciergeFlow({
-      automation,
-      replyStep,
-      session,
-      conversation,
-      igAccount,
-      messageText,
-      platform,
-      messageContext,
-    });
-    logAutomationStep('template_sales_concierge', flowStart, { success: result.success });
-    return result;
-  }
+  activeSession.lastCustomerMessageAt = new Date();
 
-  return { success: false, error: 'Unsupported template flow' };
+  const runStart = nowMs();
+  const result = await executeFlowPlan({
+    plan,
+    session: activeSession,
+    instance,
+    conversation,
+    igAccount,
+    messageText,
+    platform,
+    messageContext,
+  });
+  logAutomationStep('flow_execute', runStart, { success: result.success, steps: result.executedSteps });
+
+  return result.success
+    ? { success: true }
+    : { success: false, error: result.error || 'Flow execution failed' };
 }
 
 /**
@@ -783,6 +954,7 @@ export async function executeAutomation(params: {
     });
     return result;
   };
+
   try {
     const {
       workspaceId,
@@ -810,60 +982,18 @@ export async function executeAutomation(params: {
     }).sort({ updatedAt: -1 });
 
     if (activeSession) {
-      const automation = await Automation.findById(activeSession.automationId);
-      const replyStep = automation?.replySteps?.[0];
-      if (automation && replyStep?.type === 'template_flow') {
-        if (replyStep.templateFlow?.templateId === 'sales_concierge') {
-          const defaults = await getAutomationDefaults('sales_concierge');
-          const mergedConfig: SalesConciergeConfig = {
-            ...defaults,
-            ...(replyStep.templateFlow.config as SalesConciergeConfig),
-          };
-          const lockMode = mergedConfig.lockMode || 'session_only';
-          const releaseKeywords = normalizeKeywordList(mergedConfig.releaseKeywords);
-
-          if (releaseKeywords.length && messageHasKeyword(normalizedMessage, releaseKeywords)) {
-            activeSession.status = 'paused';
-            await activeSession.save();
-            logAutomation('🔓 [AUTOMATION] Session released by keyword', {
-              automationId: automation._id?.toString(),
-              templateId: replyStep.templateFlow.templateId,
-            });
-          } else if (isSessionExpired(activeSession, mergedConfig.lockTtlMinutes)) {
-            activeSession.status = 'paused';
-            await activeSession.save();
-            logAutomation('⌛ [AUTOMATION] Session expired', {
-              automationId: automation._id?.toString(),
-              templateId: replyStep.templateFlow.templateId,
-              ttlMinutes: mergedConfig.lockTtlMinutes,
-            });
-          } else if (lockMode !== 'none') {
-            logAutomation('🔒 [AUTOMATION] Active session lock', {
-              automationId: automation._id?.toString(),
-              templateId: replyStep.templateFlow.templateId,
-            });
-            const templateResult = await executeTemplateFlow({
-              automation,
-              replyStep,
-              conversationId,
-              workspaceId,
-              instagramAccountId,
-              messageText: normalizedMessage,
-              platform,
-              messageContext,
-            });
-            return templateResult.success
-              ? finish({ success: true, automationExecuted: automation.name })
-              : finish({ success: false, error: templateResult.error || 'Template flow not executed' });
-          }
-        } else {
-          logAutomation('🔒 [AUTOMATION] Active session lock', {
-            automationId: automation._id?.toString(),
-            templateId: replyStep.templateFlow?.templateId,
-          });
-          const templateResult = await executeTemplateFlow({
-            automation,
-            replyStep,
+      const instance = await AutomationInstance.findById(activeSession.automationInstanceId);
+      if (instance && instance.isActive) {
+        const version = await FlowTemplateVersion.findById(
+          activeSession.templateVersionId || instance.templateVersionId,
+        ).lean();
+        if (version) {
+          const runtime = resolveFlowRuntime(version, instance);
+          const result = await executeFlowForInstance({
+            instance,
+            version,
+            runtime,
+            session: activeSession,
             conversationId,
             workspaceId,
             instagramAccountId,
@@ -871,100 +1001,61 @@ export async function executeAutomation(params: {
             platform,
             messageContext,
           });
-          return templateResult.success
-            ? finish({ success: true, automationExecuted: automation.name })
-            : finish({ success: false, error: templateResult.error || 'Template flow not executed' });
+          return result.success
+            ? finish({ success: true, automationExecuted: instance.name })
+            : finish({ success: false, error: result.error || 'Flow execution failed' });
         }
       }
     }
 
-    const automationQuery: Record<string, any> = {
-      workspaceId: new mongoose.Types.ObjectId(workspaceId),
-      triggerType,
-      isActive: true,
-    };
-
     const fetchStart = nowMs();
-    const automations = await Automation.find(automationQuery).sort({ createdAt: 1 });
-    logAutomationStep('fetch_automations', fetchStart, { count: automations.length, triggerType });
+    const instances = await AutomationInstance.find({
+      workspaceId: new mongoose.Types.ObjectId(workspaceId),
+      isActive: true,
+    }).sort({ createdAt: 1 });
+    logAutomationStep('fetch_instances', fetchStart, { count: instances.length, triggerType });
 
-    logAutomation('🔍 [AUTOMATION] Active', {
-      count: automations.length,
-      triggerType,
-    });
-
-    if (automations.length === 0) {
+    if (instances.length === 0) {
       logAutomation('⚠️  [AUTOMATION] No active automations found');
       return finish({ success: false, error: 'No active automations found for this trigger' });
     }
 
-    const matchingAutomations: typeof automations = [];
+    const versionIds = instances.map(instance => instance.templateVersionId);
+    const versions = await FlowTemplateVersion.find({
+      _id: { $in: versionIds },
+      status: 'published',
+    }).lean();
+    const versionMap = new Map(versions.map(version => [version._id.toString(), version]));
 
     const matchStart = nowMs();
-    for (const candidate of automations) {
-      const replyStep = candidate.replySteps[0];
-      if (replyStep?.type === 'template_flow') {
-        const activeSession = await AutomationSession.findOne({
-          automationId: candidate._id,
-          conversationId: new mongoose.Types.ObjectId(conversationId),
-          status: 'active',
-        });
-        if (activeSession) {
-          matchingAutomations.push(candidate);
-          continue;
-        }
+    for (const instance of instances) {
+      const version = versionMap.get(instance.templateVersionId.toString());
+      if (!version) continue;
+
+      const runtime = resolveFlowRuntime(version, instance);
+      if (!runtime) continue;
+      const triggers = runtime.triggers || [];
+      if (triggers.length === 0) continue;
+
+      const matchedTrigger = triggers.find((trigger) => {
+        if (trigger.type !== triggerType) return false;
+        return matchesTriggerConfig(normalizedMessage, trigger.config, messageContext);
+      });
+
+      if (!matchedTrigger) {
+        continue;
       }
 
-      if (matchesTriggerConfig(normalizedMessage, candidate.triggerConfig, messageContext)) {
-        const triggerMode = candidate.triggerConfig?.triggerMode || 'any';
-        const matchedBy = triggerMode === 'categories' && (messageContext?.categoryId || messageContext?.categoryName)
-          ? 'category'
-          : candidate.triggerConfig?.matchOn?.link && messageContext?.hasLink
-            ? 'link'
-            : candidate.triggerConfig?.matchOn?.attachment && messageContext?.hasAttachment
-              ? 'attachment'
-              : 'keyword';
-        logAutomation('✅ [AUTOMATION] Match', {
-          automationId: candidate._id?.toString(),
-          name: candidate.name,
-          triggerType,
-          triggerMode,
-          matchedBy,
-          categoryName: messageContext?.categoryName,
-        });
-        matchingAutomations.push(candidate);
-      }
-    }
-    logAutomationStep('match_triggers', matchStart, {
-      matched: matchingAutomations.length,
-      evaluated: automations.length,
-      triggerType,
-    });
+      logAutomation('✅ [AUTOMATION] Match', {
+        instanceId: instance._id?.toString(),
+        name: instance.name,
+        triggerType,
+      });
 
-    if (matchingAutomations.length === 0) {
-      logAutomation('⚠️  [AUTOMATION] No automations matched trigger filters');
-      return finish({ success: false, error: 'No automations matched trigger filters' });
-    }
-
-    const automation = matchingAutomations[0];
-    logAutomation('✅ [AUTOMATION] Execute', {
-      automationId: automation._id?.toString(),
-      name: automation.name,
-      replyType: automation.replySteps[0]?.type,
-    });
-
-    const replyStep = automation.replySteps[0];
-
-    if (!replyStep) {
-      logAutomation('❌ [AUTOMATION] No reply step configured');
-      return finish({ success: false, error: 'No reply step configured' });
-    }
-
-    if (replyStep.type === 'template_flow') {
-      const templateStart = nowMs();
-      const templateResult = await executeTemplateFlow({
-        automation,
-        replyStep,
+      const result = await executeFlowForInstance({
+        instance,
+        version,
+        runtime,
         conversationId,
         workspaceId,
         instagramAccountId,
@@ -972,58 +1063,25 @@ export async function executeAutomation(params: {
         platform,
         messageContext,
       });
-      logAutomationStep('execute_template_flow', templateStart, {
-        success: templateResult.success,
-        templateId: replyStep.templateFlow?.templateId,
+
+      logAutomationStep('execute_flow', matchStart, {
+        success: result.success,
+        templateVersionId: instance.templateVersionId?.toString(),
       });
 
-      if (templateResult.success) {
-        return finish({ success: true, automationExecuted: automation.name });
-      }
-
-      return finish({ success: false, error: templateResult.error || 'Template flow not executed' });
+      return result.success
+        ? finish({ success: true, automationExecuted: instance.name })
+        : finish({ success: false, error: result.error || 'Flow execution failed' });
     }
 
-    if (replyStep.type === 'ai_reply') {
-      const conversationStart = nowMs();
-      const conversation = await Conversation.findById(conversationId);
-      logAutomationStep('ai_load_conversation', conversationStart, { conversationId });
-      if (!conversation) {
-        return finish({ success: false, error: 'Conversation not found' });
-      }
+    logAutomationStep('match_triggers', matchStart, {
+      matched: 0,
+      evaluated: instances.length,
+      triggerType,
+    });
 
-      const igStart = nowMs();
-      const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
-      logAutomationStep('ai_load_ig_account', igStart, { instagramAccountId });
-      if (!igAccount || !igAccount.accessToken) {
-        return finish({ success: false, error: 'Instagram account not found or not connected' });
-      }
-
-      if (!conversation.participantInstagramId) {
-        return finish({ success: false, error: 'Missing participant Instagram ID' });
-      }
-
-      const aiStart = nowMs();
-      const aiResult = await handleAiReplyFlow({
-        automation,
-        replyStep,
-        conversation,
-        igAccount,
-        messageText: normalizedMessage,
-        platform,
-        messageContext,
-      });
-      logAutomationStep('execute_ai_reply', aiStart, { success: aiResult.success });
-
-      if (aiResult.success) {
-        return finish({ success: true, automationExecuted: automation.name });
-      }
-
-      return finish({ success: false, error: aiResult.error || 'AI reply not sent' });
-    }
-
-    logAutomation('❌ [AUTOMATION] Only template_flow and ai_reply automations are supported');
-    return finish({ success: false, error: 'Only template_flow and ai_reply automations are supported' });
+    logAutomation('⚠️  [AUTOMATION] No automations matched trigger filters');
+    return finish({ success: false, error: 'No automations matched trigger filters' });
   } catch (error: any) {
     console.error('❌ [AUTOMATION] Error executing automation:', error);
     console.error('❌ [AUTOMATION] Error stack:', error.stack);

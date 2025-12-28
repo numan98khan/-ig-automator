@@ -92,17 +92,6 @@ export const adminApi = {
   deleteGlobalKnowledgeItem: (id: string) => api.delete(`/knowledge/${id}`),
   reindexGlobalKnowledge: () => api.post('/knowledge/reindex-vector'),
 
-  // Automation Templates
-  getAutomationTemplates: () => api.get('/automation-templates'),
-  getAutomationTemplate: (templateId: string) => api.get(`/automation-templates/${templateId}`),
-  updateAutomationTemplate: (templateId: string, payload: any) =>
-    api.put(`/automation-templates/${templateId}`, payload),
-
-  // Automation Defaults
-  getAutomationDefaults: (templateId: string) => api.get(`/automation-defaults/${templateId}`),
-  updateAutomationDefaults: (templateId: string, payload: any) =>
-    api.put(`/automation-defaults/${templateId}`, payload),
-
   // Flow drafts & templates
   getFlowDrafts: (params?: { templateId?: string; status?: string }) =>
     api.get('/flow-drafts', { params }),
