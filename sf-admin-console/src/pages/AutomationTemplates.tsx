@@ -1,7 +1,37 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { adminApi, unwrapData } from '../services/api'
-import { Plus, Save, RefreshCw, UploadCloud, Trash2 } from 'lucide-react'
+import {
+  Plus,
+  Save,
+  RefreshCw,
+  UploadCloud,
+  Trash2,
+  MessageSquare,
+  Sparkles,
+  Flag,
+  Play,
+  Network,
+  Copy,
+  Eraser,
+} from 'lucide-react'
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  addEdge,
+  useEdgesState,
+  useNodesState,
+  Handle,
+  Position,
+  type Connection,
+  type Edge,
+  type Node,
+  type NodeProps,
+  type ReactFlowInstance,
+} from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
 
 type TriggerType =
   | 'post_comment'
@@ -74,6 +104,47 @@ type FlowTemplate = {
   status: 'active' | 'archived'
   currentVersionId?: string
 }
+
+type FlowNodeType = 'send_message' | 'ai_reply' | 'handoff'
+
+type FlowAiSettings = {
+  tone?: string
+  maxReplySentences?: number
+  model?: string
+  temperature?: number
+  maxOutputTokens?: number
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+}
+
+type FlowButton = {
+  title: string
+  payload?: string
+}
+
+type FlowNodeData = {
+  label: string
+  subtitle?: string
+  isStart?: boolean
+}
+
+type FlowNode = Node<FlowNodeData> & {
+  type: FlowNodeType
+  text?: string
+  message?: string
+  buttons?: FlowButton[]
+  tags?: string[]
+  aiSettings?: FlowAiSettings
+  knowledgeItemIds?: string[]
+  handoff?: {
+    topic?: string
+    summary?: string
+    recommendedNextAction?: string
+    message?: string
+  }
+  waitForReply?: boolean
+}
+
+type FlowEdge = Edge
 
 type TriggerForm = {
   id: string
@@ -207,6 +278,173 @@ const parseDefaultValue = (field: FieldForm) => {
   return raw
 }
 
+const FLOW_NODE_LIBRARY: Array<{
+  type: FlowNodeType
+  label: string
+  description: string
+  icon: typeof MessageSquare
+}> = [
+  {
+    type: 'send_message',
+    label: 'Message',
+    description: 'Send a static message.',
+    icon: MessageSquare,
+  },
+  {
+    type: 'ai_reply',
+    label: 'AI Reply',
+    description: 'Generate a response with AI.',
+    icon: Sparkles,
+  },
+  {
+    type: 'handoff',
+    label: 'Handoff',
+    description: 'Escalate to a human teammate.',
+    icon: Flag,
+  },
+]
+
+const FLOW_NODE_LABELS: Record<FlowNodeType, string> = {
+  send_message: 'Message',
+  ai_reply: 'AI Reply',
+  handoff: 'Handoff',
+}
+
+const formatButtonList = (buttons?: FlowButton[]) => {
+  if (!buttons || buttons.length === 0) return ''
+  return buttons
+    .map((button) => (button.payload ? `${button.title}|${button.payload}` : button.title))
+    .join('\n')
+}
+
+const parseButtonList = (value: string): FlowButton[] => {
+  if (!value.trim()) return []
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [titlePart, payloadPart] = line.includes('|') ? line.split('|') : line.split(':')
+      const title = (titlePart || '').trim()
+      const payload = payloadPart ? payloadPart.trim() : undefined
+      return title ? { title, payload } : null
+    })
+    .filter(Boolean) as FlowButton[]
+}
+
+const formatTags = (tags?: string[]) => (tags || []).join(', ')
+
+const parseTags = (value: string) =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+const formatKnowledgeIds = (ids?: string[]) => (ids || []).join(', ')
+
+const parseKnowledgeIds = (value: string) =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+const buildNodeSubtitle = (node: FlowNode) => {
+  if (node.type === 'send_message') {
+    const text = node.text || node.message || ''
+    return text ? text.slice(0, 80) : 'No message yet'
+  }
+  if (node.type === 'ai_reply') {
+    const tone = node.aiSettings?.tone
+    return tone ? `Tone: ${tone}` : 'Uses AI defaults'
+  }
+  if (node.type === 'handoff') {
+    return node.handoff?.topic ? `Topic: ${node.handoff.topic}` : 'No topic set'
+  }
+  return ''
+}
+
+const buildNodeData = (node: FlowNode): FlowNodeData => ({
+  label: node.data?.label || FLOW_NODE_LABELS[node.type] || 'Node',
+  subtitle: buildNodeSubtitle(node),
+  isStart: node.data?.isStart,
+})
+
+const normalizeFlowNode = (node: any, index: number): FlowNode => {
+  const id = node?.id || `node-${index + 1}`
+  const rawType = node?.type as FlowNodeType | undefined
+  const type = rawType && FLOW_NODE_LABELS[rawType] ? rawType : 'send_message'
+  const position = node?.position || { x: 120 + index * 60, y: 80 + index * 40 }
+  const normalized: FlowNode = {
+    id,
+    type,
+    position,
+    data: {
+      ...(node?.data || {}),
+      label: node?.data?.label || node?.label || FLOW_NODE_LABELS[type] || 'Node',
+    },
+    text: node?.text,
+    message: node?.message,
+    buttons: node?.buttons,
+    tags: node?.tags,
+    aiSettings: node?.aiSettings,
+    knowledgeItemIds: node?.knowledgeItemIds,
+    handoff: node?.handoff,
+    waitForReply: node?.waitForReply,
+  }
+  normalized.data = buildNodeData(normalized)
+  return normalized
+}
+
+const normalizeFlowEdge = (edge: any, index: number): FlowEdge | null => {
+  if (!edge?.source || !edge?.target) {
+    return null
+  }
+  return {
+    id: edge?.id || `edge-${index + 1}-${edge?.source}-${edge?.target}`,
+    source: edge.source,
+    target: edge.target,
+    type: edge?.type || 'smoothstep',
+    label: edge?.label,
+  }
+}
+
+const parseFlowDsl = (dsl: any) => {
+  const base = dsl && typeof dsl === 'object' ? dsl : { nodes: [], edges: [] }
+  const nodes = Array.isArray(base.nodes) ? base.nodes.map(normalizeFlowNode) : []
+  const edges = Array.isArray(base.edges)
+    ? base.edges.map(normalizeFlowEdge).filter(Boolean) as FlowEdge[]
+    : []
+  const startNodeId = typeof base.startNodeId === 'string'
+    ? base.startNodeId
+    : nodes[0]?.id || ''
+  return { nodes, edges, startNodeId }
+}
+
+const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?: string) => ({
+  nodes: nodes.map((node) => ({
+    id: node.id,
+    type: node.type,
+    position: node.position,
+    data: node.data,
+    text: node.text,
+    message: node.message,
+    buttons: node.buttons,
+    tags: node.tags,
+    aiSettings: node.aiSettings,
+    knowledgeItemIds: node.knowledgeItemIds,
+    handoff: node.handoff,
+    waitForReply: node.waitForReply,
+  })),
+  edges: edges.map((edge) => ({
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    type: edge.type,
+    label: edge.label,
+  })),
+  ...(startNodeId ? { startNodeId } : {}),
+})
+
 const buildEmptyDraftForm = (): DraftForm => ({
   name: '',
   description: '',
@@ -256,6 +494,69 @@ const buildTriggerForm = (trigger?: FlowTrigger): TriggerForm => ({
   configText: formatJson(trigger?.config),
 })
 
+const NodeShell = ({
+  title,
+  subtitle,
+  icon: Icon,
+  selected,
+  isStart,
+}: {
+  title: string
+  subtitle?: string
+  icon: typeof MessageSquare
+  selected?: boolean
+  isStart?: boolean
+}) => (
+  <div
+    className={`rounded-lg border bg-card px-3 py-2 shadow-sm min-w-[190px] ${
+      selected ? 'ring-2 ring-primary/50 border-primary/70' : 'border-border'
+    }`}
+  >
+    <Handle type="target" position={Position.Top} className="!bg-primary !border-primary" />
+    <Handle type="source" position={Position.Bottom} className="!bg-primary !border-primary" />
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-primary" />
+        <span className="text-sm font-semibold text-foreground">{title}</span>
+      </div>
+      {isStart && (
+        <span className="text-[10px] rounded-full bg-primary/10 px-2 py-0.5 text-primary">Start</span>
+      )}
+    </div>
+    <div className="mt-1 text-xs text-muted-foreground">{subtitle || 'No details yet.'}</div>
+  </div>
+)
+
+const MessageNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
+  <NodeShell
+    title={data.label || FLOW_NODE_LABELS.send_message}
+    subtitle={data.subtitle}
+    icon={MessageSquare}
+    selected={selected}
+    isStart={data.isStart}
+  />
+)
+
+const AiReplyNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
+  <NodeShell
+    title={data.label || FLOW_NODE_LABELS.ai_reply}
+    subtitle={data.subtitle}
+    icon={Sparkles}
+    selected={selected}
+    isStart={data.isStart}
+  />
+)
+
+const HandoffNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
+  <NodeShell
+    title={data.label || FLOW_NODE_LABELS.handoff}
+    subtitle={data.subtitle}
+    icon={Flag}
+    selected={selected}
+    isStart={data.isStart}
+  />
+)
+
 export default function AutomationTemplates() {
   const queryClient = useQueryClient()
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null)
@@ -266,6 +567,23 @@ export default function AutomationTemplates() {
   const [newDraftName, setNewDraftName] = useState('')
   const [newDraftDescription, setNewDraftDescription] = useState('')
   const [newDraftTemplateId, setNewDraftTemplateId] = useState('')
+  const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<FlowNode>([])
+  const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState<FlowEdge>([])
+  const [startNodeId, setStartNodeId] = useState('')
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [dslEditorText, setDslEditorText] = useState('')
+  const [dslEditorDirty, setDslEditorDirty] = useState(false)
+  const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<FlowNode, FlowEdge> | null>(null)
+  const syncingRef = useRef(false)
+
+  const nodeTypes = useMemo(
+    () => ({
+      send_message: MessageNode,
+      ai_reply: AiReplyNode,
+      handoff: HandoffNode,
+    }),
+    [],
+  )
 
   const { data: draftData, isLoading } = useQuery({
     queryKey: ['flow-drafts'],
@@ -294,6 +612,19 @@ export default function AutomationTemplates() {
   }, [templates])
 
   const selectedDraft = drafts.find((draft) => draft._id === selectedDraftId) || null
+  const selectedNode = useMemo(
+    () => flowNodes.find((node) => node.id === selectedNodeId) || null,
+    [flowNodes, selectedNodeId],
+  )
+  const flowStats = useMemo(
+    () => ({ nodes: flowNodes.length, edges: flowEdges.length }),
+    [flowNodes.length, flowEdges.length],
+  )
+  const startNodeLabel = useMemo(() => {
+    if (!startNodeId) return ''
+    const node = flowNodes.find((item) => item.id === startNodeId)
+    return node?.data.label || startNodeId
+  }, [flowNodes, startNodeId])
 
   useEffect(() => {
     if (!selectedDraftId && drafts.length > 0) {
@@ -303,6 +634,14 @@ export default function AutomationTemplates() {
 
   useEffect(() => {
     if (!selectedDraft) return
+    const { nodes, edges, startNodeId: parsedStart } = parseFlowDsl(selectedDraft.dsl || {})
+    const hydratedNodes = nodes.map((node) => ({
+      ...node,
+      data: {
+        ...buildNodeData(node),
+        isStart: node.id === parsedStart,
+      },
+    }))
     setDraftForm({
       name: selectedDraft.name || '',
       description: selectedDraft.description || '',
@@ -321,9 +660,43 @@ export default function AutomationTemplates() {
         previewText: formatJson(selectedDraft.display?.previewConversation || []),
       },
     })
+    syncingRef.current = true
+    setFlowNodes(hydratedNodes)
+    setFlowEdges(edges)
+    setStartNodeId(parsedStart)
+    setSelectedNodeId(null)
+    setDslEditorText(formatJson(selectedDraft.dsl || {}))
+    setDslEditorDirty(false)
     setVersionLabel('')
     setError(null)
   }, [selectedDraft])
+
+  useEffect(() => {
+    if (!selectedDraft) return
+    if (syncingRef.current) {
+      syncingRef.current = false
+      return
+    }
+    const dsl = buildFlowDsl(flowNodes, flowEdges, startNodeId)
+    const nextText = formatJson(dsl)
+    setDraftForm((prev) => ({ ...prev, dslText: nextText }))
+    if (!dslEditorDirty) {
+      setDslEditorText(nextText)
+    }
+  }, [flowNodes, flowEdges, startNodeId, selectedDraft, dslEditorDirty])
+
+  useEffect(() => {
+    if (!startNodeId) return
+    setFlowNodes((nodes) =>
+      nodes.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          isStart: node.id === startNodeId,
+        },
+      })),
+    )
+  }, [startNodeId, setFlowNodes])
 
   const createMutation = useMutation({
     mutationFn: (payload: any) => adminApi.createFlowDraft(payload),
@@ -527,6 +900,130 @@ export default function AutomationTemplates() {
       dslSnapshot: result.payload.dsl,
       versionLabel: versionLabel.trim() || undefined,
     })
+  }
+
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      setFlowEdges((edges) =>
+        addEdge(
+          {
+            ...connection,
+            id: `edge-${connection.source}-${connection.target}-${Date.now()}`,
+            type: 'smoothstep',
+          },
+          edges,
+        ),
+      )
+    },
+    [setFlowEdges],
+  )
+
+  const handleAddNode = useCallback(
+    (type: FlowNodeType) => {
+      const id = `node-${Date.now()}-${Math.random().toString(16).slice(2)}`
+      const position = { x: 120 + flowNodes.length * 40, y: 100 + flowNodes.length * 40 }
+      const node: FlowNode = {
+        id,
+        type,
+        position,
+        data: { label: FLOW_NODE_LABELS[type] || 'Node' },
+      }
+
+      if (type === 'send_message') {
+        node.text = ''
+      }
+      if (type === 'ai_reply') {
+        node.aiSettings = {}
+      }
+      if (type === 'handoff') {
+        node.handoff = {
+          topic: '',
+          summary: '',
+        }
+      }
+
+      node.data = buildNodeData(node)
+
+      setFlowNodes((nodes) => [...nodes, node])
+      if (!startNodeId) {
+        setStartNodeId(id)
+      }
+      setSelectedNodeId(id)
+      if (flowInstance?.viewportInitialized) {
+        setTimeout(() => flowInstance.fitView({ padding: 0.2, duration: 200 }), 0)
+      }
+    },
+    [flowNodes.length, flowInstance, setFlowNodes, startNodeId],
+  )
+
+  const updateNode = useCallback(
+    (nodeId: string, updater: (node: FlowNode) => FlowNode) => {
+      setFlowNodes((nodes) =>
+        nodes.map((node) => {
+          if (node.id !== nodeId) return node
+          const updated = updater(node)
+          return {
+            ...updated,
+            data: buildNodeData(updated),
+          }
+        }),
+      )
+    },
+    [setFlowNodes],
+  )
+
+  const handleDeleteNode = useCallback(() => {
+    if (!selectedNode) return
+    const nodeId = selectedNode.id
+    setFlowNodes((nodes) => nodes.filter((node) => node.id !== nodeId))
+    setFlowEdges((edges) => edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId))
+    if (startNodeId === nodeId) {
+      const nextNode = flowNodes.find((node) => node.id !== nodeId)
+      setStartNodeId(nextNode?.id || '')
+    }
+    setSelectedNodeId(null)
+  }, [flowNodes, selectedNode, setFlowEdges, setFlowNodes, startNodeId])
+
+  const handleSelectionChange = useCallback(
+    ({ nodes }: { nodes: FlowNode[] }) => {
+      setSelectedNodeId(nodes[0]?.id || null)
+    },
+    [setSelectedNodeId],
+  )
+
+  const handleApplyDsl = () => {
+    try {
+      const parsed = JSON.parse(dslEditorText || '{}')
+      const { nodes, edges, startNodeId: parsedStart } = parseFlowDsl(parsed)
+      const hydratedNodes = nodes.map((node) => ({
+        ...node,
+        data: {
+          ...buildNodeData(node),
+          isStart: node.id === parsedStart,
+        },
+      }))
+      setFlowNodes(hydratedNodes)
+      setFlowEdges(edges)
+      setStartNodeId(parsedStart)
+      setDraftForm((prev) => ({ ...prev, dslText: formatJson(parsed) }))
+      setDslEditorText(formatJson(parsed))
+      setDslEditorDirty(false)
+      setError(null)
+    } catch {
+      setError('Flow DSL must be valid JSON to apply.')
+    }
+  }
+
+  const handleResetDsl = () => {
+    setDslEditorText(draftForm.dslText)
+    setDslEditorDirty(false)
+  }
+
+  const handleClearFlow = () => {
+    setFlowNodes([])
+    setFlowEdges([])
+    setStartNodeId('')
+    setSelectedNodeId(null)
   }
 
   return (
@@ -1311,19 +1808,397 @@ export default function AutomationTemplates() {
               </div>
 
               <div className="border-t border-border pt-6 space-y-4">
-                <div>
-                  <h3 className="text-base font-semibold text-foreground">Flow DSL</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Store the draft graph JSON for the internal builder.
-                  </p>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-foreground">Flow Builder</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Design the flow visually, then publish a compiled template version.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="btn btn-secondary flex items-center gap-2"
+                      onClick={() => flowInstance?.fitView({ padding: 0.2, duration: 200 })}
+                    >
+                      <Network className="w-4 h-4" />
+                      Fit view
+                    </button>
+                    <button
+                      className="btn btn-secondary flex items-center gap-2"
+                      onClick={handleClearFlow}
+                    >
+                      <Eraser className="w-4 h-4" />
+                      Clear
+                    </button>
+                  </div>
                 </div>
-                <textarea
-                  className="input w-full h-64 font-mono text-xs"
-                  value={draftForm.dslText}
-                  onChange={(event) =>
-                    setDraftForm((prev) => ({ ...prev, dslText: event.target.value }))
-                  }
-                />
+
+                {!startNodeId && (
+                  <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700">
+                    Choose a start node to define where the flow begins.
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 xl:grid-cols-[220px_minmax(0,1fr)_320px] gap-4">
+                  <div className="space-y-3">
+                    <div className="text-sm font-semibold text-foreground">Node palette</div>
+                    <div className="space-y-2">
+                      {FLOW_NODE_LIBRARY.map((item) => (
+                        <button
+                          key={item.type}
+                          className="w-full rounded-lg border border-border bg-card px-3 py-2 text-left transition hover:border-primary/50"
+                          onClick={() => handleAddNode(item.type)}
+                        >
+                          <div className="flex items-start gap-2">
+                            <item.icon className="h-4 w-4 text-primary mt-0.5" />
+                            <div>
+                              <div className="text-sm font-medium text-foreground">{item.label}</div>
+                              <div className="text-xs text-muted-foreground">{item.description}</div>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Play className="w-3 h-3" />
+                        Start node: {startNodeId ? startNodeLabel : 'Not set'}
+                      </div>
+                      <div className="mt-1">Drag nodes to reposition and connect handles to define flow.</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                      Flow stats: {flowStats.nodes} nodes · {flowStats.edges} connections
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-background overflow-hidden">
+                    <div className="h-[520px]">
+                      <ReactFlow
+                        nodes={flowNodes}
+                        edges={flowEdges}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        onConnect={handleConnect}
+                        onSelectionChange={handleSelectionChange}
+                        onInit={setFlowInstance}
+                        nodeTypes={nodeTypes}
+                        fitView
+                        defaultEdgeOptions={{ type: 'smoothstep' }}
+                        minZoom={0.2}
+                        maxZoom={1.5}
+                      >
+                        <Background gap={18} size={1} color="rgba(16, 107, 163, 0.15)" />
+                        <MiniMap
+                          pannable
+                          zoomable
+                          nodeColor={(node) => {
+                            if (node.type === 'ai_reply') return '#7C8EA4'
+                            if (node.type === 'handoff') return '#C96A4A'
+                            return '#4B9AD5'
+                          }}
+                          maskColor="rgba(0,0,0,0.08)"
+                        />
+                        <Controls position="bottom-right" />
+                      </ReactFlow>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="text-sm font-semibold text-foreground">Inspector</div>
+                    {!selectedNode ? (
+                      <div className="rounded-lg border border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
+                        Select a node to edit its settings.
+                      </div>
+                    ) : (
+                      <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+                        <div className="space-y-2">
+                          <label className="text-sm text-muted-foreground">Label</label>
+                          <input
+                            className="input w-full"
+                            value={selectedNode.data.label || ''}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => ({
+                                ...node,
+                                data: { ...node.data, label: event.target.value },
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm text-muted-foreground">Type</label>
+                          <select
+                            className="input w-full"
+                            value={selectedNode.type}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextType = event.target.value as FlowNodeType
+                                const next: FlowNode = { ...node, type: nextType }
+                                if (nextType === 'send_message' && !next.text) {
+                                  next.text = ''
+                                }
+                                if (nextType === 'ai_reply' && !next.aiSettings) {
+                                  next.aiSettings = {}
+                                }
+                                if (nextType === 'handoff' && !next.handoff) {
+                                  next.handoff = { topic: '', summary: '' }
+                                }
+                                return next
+                              })
+                            }
+                          >
+                            {FLOW_NODE_LIBRARY.map((item) => (
+                              <option key={item.type} value={item.type}>
+                                {item.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm text-muted-foreground">Wait for reply</label>
+                          <select
+                            className="input w-full"
+                            value={selectedNode.waitForReply ? 'yes' : 'no'}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => ({
+                                ...node,
+                                waitForReply: event.target.value === 'yes',
+                              }))
+                            }
+                          >
+                            <option value="no">No</option>
+                            <option value="yes">Pause after this step</option>
+                          </select>
+                        </div>
+
+                        {selectedNode.type === 'send_message' && (
+                          <>
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground">Message text</label>
+                              <textarea
+                                className="input w-full h-24 text-sm"
+                                value={selectedNode.text || ''}
+                                onChange={(event) =>
+                                  updateNode(selectedNode.id, (node) => ({
+                                    ...node,
+                                    text: event.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground">Buttons (one per line)</label>
+                              <textarea
+                                className="input w-full h-24 text-xs font-mono"
+                                value={formatButtonList(selectedNode.buttons)}
+                                onChange={(event) =>
+                                  updateNode(selectedNode.id, (node) => ({
+                                    ...node,
+                                    buttons: parseButtonList(event.target.value),
+                                  }))
+                                }
+                              />
+                              <div className="text-[11px] text-muted-foreground">
+                                Use <code>label|payload</code> for custom payloads.
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground">Tags (comma-separated)</label>
+                              <input
+                                className="input w-full"
+                                value={formatTags(selectedNode.tags)}
+                                onChange={(event) =>
+                                  updateNode(selectedNode.id, (node) => ({
+                                    ...node,
+                                    tags: parseTags(event.target.value),
+                                  }))
+                                }
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {selectedNode.type === 'ai_reply' && (
+                          <>
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground">Tone</label>
+                              <input
+                                className="input w-full"
+                                value={selectedNode.aiSettings?.tone || ''}
+                                onChange={(event) =>
+                                  updateNode(selectedNode.id, (node) => ({
+                                    ...node,
+                                    aiSettings: {
+                                      ...(node.aiSettings || {}),
+                                      tone: event.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground">Max reply sentences</label>
+                              <input
+                                className="input w-full"
+                                value={selectedNode.aiSettings?.maxReplySentences ?? ''}
+                                onChange={(event) =>
+                                  updateNode(selectedNode.id, (node) => ({
+                                    ...node,
+                                    aiSettings: {
+                                      ...(node.aiSettings || {}),
+                                      maxReplySentences: event.target.value
+                                        ? Number(event.target.value)
+                                        : undefined,
+                                    },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground">Model</label>
+                              <input
+                                className="input w-full"
+                                value={selectedNode.aiSettings?.model || ''}
+                                onChange={(event) =>
+                                  updateNode(selectedNode.id, (node) => ({
+                                    ...node,
+                                    aiSettings: {
+                                      ...(node.aiSettings || {}),
+                                      model: event.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground">Knowledge item IDs</label>
+                              <input
+                                className="input w-full"
+                                value={formatKnowledgeIds(selectedNode.knowledgeItemIds)}
+                                onChange={(event) =>
+                                  updateNode(selectedNode.id, (node) => ({
+                                    ...node,
+                                    knowledgeItemIds: parseKnowledgeIds(event.target.value),
+                                  }))
+                                }
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {selectedNode.type === 'handoff' && (
+                          <>
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground">Topic</label>
+                              <input
+                                className="input w-full"
+                                value={selectedNode.handoff?.topic || ''}
+                                onChange={(event) =>
+                                  updateNode(selectedNode.id, (node) => ({
+                                    ...node,
+                                    handoff: {
+                                      ...(node.handoff || {}),
+                                      topic: event.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground">Summary</label>
+                              <textarea
+                                className="input w-full h-20 text-sm"
+                                value={selectedNode.handoff?.summary || ''}
+                                onChange={(event) =>
+                                  updateNode(selectedNode.id, (node) => ({
+                                    ...node,
+                                    handoff: {
+                                      ...(node.handoff || {}),
+                                      summary: event.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm text-muted-foreground">Customer message (optional)</label>
+                              <textarea
+                                className="input w-full h-20 text-sm"
+                                value={selectedNode.handoff?.message || ''}
+                                onChange={(event) =>
+                                  updateNode(selectedNode.id, (node) => ({
+                                    ...node,
+                                    handoff: {
+                                      ...(node.handoff || {}),
+                                      message: event.target.value,
+                                    },
+                                  }))
+                                }
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-2 pt-2">
+                          <button
+                            className="btn btn-secondary flex items-center gap-2"
+                            onClick={() => setStartNodeId(selectedNode.id)}
+                          >
+                            <Play className="w-4 h-4" />
+                            Set as start
+                          </button>
+                          <button
+                            className="btn btn-secondary flex items-center gap-2 text-red-500"
+                            onClick={handleDeleteNode}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete node
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <details className="rounded-lg border border-border bg-muted/20 p-4">
+                  <summary className="cursor-pointer text-sm font-semibold text-foreground">
+                    Advanced: Flow DSL JSON
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    <textarea
+                      className="input w-full h-64 font-mono text-xs"
+                      value={dslEditorText}
+                      onChange={(event) => {
+                        setDslEditorText(event.target.value)
+                        setDslEditorDirty(true)
+                      }}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        className="btn btn-secondary flex items-center gap-2"
+                        onClick={handleApplyDsl}
+                        disabled={!dslEditorDirty}
+                      >
+                        <UploadCloud className="w-4 h-4" />
+                        Apply JSON
+                      </button>
+                      <button
+                        className="btn btn-secondary flex items-center gap-2"
+                        onClick={handleResetDsl}
+                        disabled={!dslEditorDirty}
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Reset
+                      </button>
+                      <button
+                        className="btn btn-secondary flex items-center gap-2"
+                        onClick={() => navigator.clipboard.writeText(dslEditorText)}
+                      >
+                        <Copy className="w-4 h-4" />
+                        Copy JSON
+                      </button>
+                    </div>
+                  </div>
+                </details>
               </div>
 
               <div className="border-t border-border pt-6 space-y-3">
