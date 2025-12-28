@@ -12,6 +12,9 @@ import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
 import AutomationTemplate from '../models/AutomationTemplate';
+import FlowDraft from '../models/FlowDraft';
+import FlowTemplate from '../models/FlowTemplate';
+import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import Tier from '../models/Tier';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import {
@@ -25,6 +28,7 @@ import {
   updateAutomationDefaults,
 } from '../services/adminAutomationDefaultsService';
 import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
+import { compileFlow } from '../services/flowCompiler';
 import {
   GLOBAL_WORKSPACE_KEY,
   deleteKnowledgeEmbedding,
@@ -680,6 +684,336 @@ router.put('/log-settings', authenticate, requireAdmin, async (req, res) => {
     res.json({ data: settings });
   } catch (error) {
     console.error('Admin log settings update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Flow drafts (internal builder)
+router.get('/flow-drafts', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const templateId = typeof req.query.templateId === 'string' ? req.query.templateId.trim() : undefined;
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : undefined;
+    const filter: Record<string, any> = {};
+    if (templateId) filter.templateId = templateId;
+    if (status) filter.status = status;
+    const drafts = await FlowDraft.find(filter).sort({ updatedAt: -1 }).lean();
+    res.json({ data: drafts });
+  } catch (error) {
+    console.error('Admin flow drafts list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/flow-drafts', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, description, templateId, dsl, triggers, exposedFields, status, display } = req.body || {};
+    if (!name || !dsl) {
+      return res.status(400).json({ error: 'name and dsl are required' });
+    }
+
+    let resolvedTemplateId = templateId;
+    if (resolvedTemplateId) {
+      const template = await FlowTemplate.findById(resolvedTemplateId).lean();
+      if (!template) {
+        return res.status(400).json({ error: 'Template not found for templateId' });
+      }
+    }
+
+    const draft = await FlowDraft.create({
+      name: String(name).trim(),
+      description: typeof description === 'string' ? description.trim() : undefined,
+      status: status === 'archived' ? 'archived' : 'draft',
+      templateId: resolvedTemplateId || undefined,
+      dsl,
+      triggers: Array.isArray(triggers) ? triggers : [],
+      exposedFields: Array.isArray(exposedFields) ? exposedFields : [],
+      display: display || undefined,
+      createdBy: req.userId,
+      updatedBy: req.userId,
+    });
+
+    res.status(201).json({ data: draft });
+  } catch (error: any) {
+    console.error('Admin flow drafts create error:', error);
+    res.status(400).json({ error: error.message || 'Failed to create flow draft' });
+  }
+});
+
+router.get('/flow-drafts/:draftId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { draftId } = req.params;
+    const draft = await FlowDraft.findById(draftId).lean();
+    if (!draft) {
+      return res.status(404).json({ error: 'Flow draft not found' });
+    }
+    res.json({ data: draft });
+  } catch (error) {
+    console.error('Admin flow drafts get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/flow-drafts/:draftId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { draftId } = req.params;
+    const draft = await FlowDraft.findById(draftId);
+    if (!draft) {
+      return res.status(404).json({ error: 'Flow draft not found' });
+    }
+
+    const { name, description, templateId, dsl, triggers, exposedFields, status, display } = req.body || {};
+    if (name !== undefined) {
+      const normalized = String(name).trim();
+      if (!normalized) {
+        return res.status(400).json({ error: 'name cannot be empty' });
+      }
+      draft.name = normalized;
+    }
+    if (description !== undefined) {
+      const normalized = typeof description === 'string' ? description.trim() : '';
+      draft.description = normalized || undefined;
+    }
+    if (dsl !== undefined) draft.dsl = dsl;
+    if (Array.isArray(triggers)) draft.triggers = triggers;
+    if (Array.isArray(exposedFields)) draft.exposedFields = exposedFields;
+    if (display !== undefined) draft.display = display;
+    if (status === 'archived' || status === 'draft') draft.status = status;
+
+    if (templateId !== undefined) {
+      if (!templateId) {
+        draft.templateId = undefined;
+      } else {
+        const template = await FlowTemplate.findById(templateId).lean();
+        if (!template) {
+          return res.status(400).json({ error: 'Template not found for templateId' });
+        }
+        draft.templateId = template._id;
+      }
+    }
+
+    draft.updatedBy = req.userId;
+    await draft.save();
+    res.json({ data: draft });
+  } catch (error: any) {
+    console.error('Admin flow drafts update error:', error);
+    res.status(400).json({ error: error.message || 'Failed to update flow draft' });
+  }
+});
+
+router.post('/flow-drafts/:draftId/publish', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { draftId } = req.params;
+    const draft = await FlowDraft.findById(draftId);
+    if (!draft) {
+      return res.status(404).json({ error: 'Flow draft not found' });
+    }
+
+    const {
+      compiled,
+      dslSnapshot,
+      triggers,
+      exposedFields,
+      templateId,
+      versionLabel,
+      display,
+    } = req.body || {};
+
+    const snapshot = dslSnapshot || draft.dsl;
+    if (!snapshot && !compiled) {
+      return res.status(400).json({ error: 'dslSnapshot or compiled artifact is required to publish' });
+    }
+
+    const compiledArtifact = compiled || compileFlow(snapshot);
+
+    let template: any = null;
+    const resolvedTemplateId = templateId || draft.templateId;
+    if (resolvedTemplateId) {
+      template = await FlowTemplate.findById(resolvedTemplateId);
+      if (!template) {
+        return res.status(400).json({ error: 'Template not found for templateId' });
+      }
+    }
+
+    if (!template) {
+      template = await FlowTemplate.create({
+        name: draft.name,
+        description: draft.description,
+        status: 'active',
+        createdBy: req.userId,
+        updatedBy: req.userId,
+      });
+    }
+
+    const latestVersion = await FlowTemplateVersion.findOne({ templateId: template._id })
+      .sort({ version: -1 })
+      .lean();
+    const nextVersion = latestVersion ? latestVersion.version + 1 : 1;
+
+    const version = await FlowTemplateVersion.create({
+      templateId: template._id,
+      version: nextVersion,
+      versionLabel: typeof versionLabel === 'string' ? versionLabel.trim() : undefined,
+      status: 'published',
+      compiled: compiledArtifact,
+      dslSnapshot: snapshot,
+      triggers: Array.isArray(triggers) ? triggers : (draft.triggers || []),
+      exposedFields: Array.isArray(exposedFields) ? exposedFields : (draft.exposedFields || []),
+      display: display || draft.display,
+      publishedAt: new Date(),
+      createdBy: req.userId,
+    });
+
+    template.currentVersionId = version._id;
+    template.status = 'active';
+    template.updatedBy = req.userId;
+    await template.save();
+
+    draft.templateId = template._id;
+    draft.updatedBy = req.userId;
+    await draft.save();
+
+    res.status(201).json({ data: { template, version } });
+  } catch (error: any) {
+    console.error('Admin flow drafts publish error:', error);
+    res.status(400).json({ error: error.message || 'Failed to publish flow draft' });
+  }
+});
+
+// Flow templates (published)
+router.get('/flow-templates', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const templates = await FlowTemplate.find({}).sort({ updatedAt: -1 }).lean();
+    const versionIds = templates
+      .map((template) => template.currentVersionId)
+      .filter(Boolean);
+
+    const versions = versionIds.length
+      ? await FlowTemplateVersion.find({ _id: { $in: versionIds } }).lean()
+      : [];
+    const versionMap = new Map(versions.map((version: any) => [version._id.toString(), version]));
+
+    const payload = templates.map((template: any) => ({
+      ...template,
+      currentVersion: template.currentVersionId
+        ? versionMap.get(template.currentVersionId.toString()) || null
+        : null,
+    }));
+
+    res.json({ data: payload });
+  } catch (error) {
+    console.error('Admin flow templates list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/flow-templates', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, description, status } = req.body || {};
+    if (!name) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    const template = await FlowTemplate.create({
+      name: String(name).trim(),
+      description: typeof description === 'string' ? description.trim() : undefined,
+      status: status === 'archived' ? 'archived' : 'active',
+      createdBy: req.userId,
+      updatedBy: req.userId,
+    });
+
+    res.status(201).json({ data: template });
+  } catch (error: any) {
+    console.error('Admin flow templates create error:', error);
+    res.status(400).json({ error: error.message || 'Failed to create flow template' });
+  }
+});
+
+router.get('/flow-templates/:templateId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    const template = await FlowTemplate.findById(templateId).lean();
+    if (!template) {
+      return res.status(404).json({ error: 'Flow template not found' });
+    }
+    let currentVersion = null;
+    if (template.currentVersionId) {
+      currentVersion = await FlowTemplateVersion.findById(template.currentVersionId).lean();
+    }
+    res.json({ data: { ...template, currentVersion } });
+  } catch (error) {
+    console.error('Admin flow templates get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/flow-templates/:templateId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    const template = await FlowTemplate.findById(templateId);
+    if (!template) {
+      return res.status(404).json({ error: 'Flow template not found' });
+    }
+
+    const { name, description, status, currentVersionId } = req.body || {};
+    if (name !== undefined) {
+      const normalized = String(name).trim();
+      if (!normalized) {
+        return res.status(400).json({ error: 'name cannot be empty' });
+      }
+      template.name = normalized;
+    }
+    if (description !== undefined) {
+      const normalized = typeof description === 'string' ? description.trim() : '';
+      template.description = normalized || undefined;
+    }
+    if (status === 'archived' || status === 'active') template.status = status;
+
+    if (currentVersionId !== undefined) {
+      if (!currentVersionId) {
+        template.currentVersionId = undefined;
+      } else {
+        const version = await FlowTemplateVersion.findOne({ _id: currentVersionId, templateId }).lean();
+        if (!version) {
+          return res.status(400).json({ error: 'Version not found for template' });
+        }
+        template.currentVersionId = version._id;
+      }
+    }
+
+    template.updatedBy = req.userId;
+    await template.save();
+    res.json({ data: template });
+  } catch (error: any) {
+    console.error('Admin flow templates update error:', error);
+    res.status(400).json({ error: error.message || 'Failed to update flow template' });
+  }
+});
+
+router.get('/flow-templates/:templateId/versions', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    const template = await FlowTemplate.findById(templateId).lean();
+    if (!template) {
+      return res.status(404).json({ error: 'Flow template not found' });
+    }
+    const versions = await FlowTemplateVersion.find({ templateId }).sort({ version: -1 }).lean();
+    res.json({ data: versions });
+  } catch (error) {
+    console.error('Admin flow templates versions list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/flow-templates/:templateId/versions/:versionId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { templateId, versionId } = req.params;
+    const version = await FlowTemplateVersion.findOne({ _id: versionId, templateId }).lean();
+    if (!version) {
+      return res.status(404).json({ error: 'Flow template version not found' });
+    }
+    res.json({ data: version });
+  } catch (error) {
+    console.error('Admin flow templates version get error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

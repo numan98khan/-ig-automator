@@ -29,6 +29,8 @@ import assistantRoutes from './routes/assistant';
 import adminRoutes from './routes/admin';
 import tierRoutes from './routes/tiers';
 import automationRoutes from './routes/automations';
+import flowTemplateRoutes from './routes/flow-templates';
+import automationInstanceRoutes from './routes/automation-instances';
 import integrationsRoutes from './routes/integrations';
 import { ensureDefaultAdmin } from './utils/defaultAdmin';
 
@@ -71,6 +73,8 @@ app.use('/api/assistant', assistantRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/tiers', tierRoutes);
 app.use('/api/automations', automationRoutes);
+app.use('/api/flow-templates', flowTemplateRoutes);
+app.use('/api/automation-instances', automationInstanceRoutes);
 app.use('/api/integrations', integrationsRoutes);
 
 // Health check

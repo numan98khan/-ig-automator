@@ -103,6 +103,23 @@ export const adminApi = {
   updateAutomationDefaults: (templateId: string, payload: any) =>
     api.put(`/automation-defaults/${templateId}`, payload),
 
+  // Flow drafts & templates
+  getFlowDrafts: (params?: { templateId?: string; status?: string }) =>
+    api.get('/flow-drafts', { params }),
+  getFlowDraft: (draftId: string) => api.get(`/flow-drafts/${draftId}`),
+  createFlowDraft: (payload: any) => api.post('/flow-drafts', payload),
+  updateFlowDraft: (draftId: string, payload: any) => api.put(`/flow-drafts/${draftId}`, payload),
+  publishFlowDraft: (draftId: string, payload: any) =>
+    api.post(`/flow-drafts/${draftId}/publish`, payload),
+  getFlowTemplates: () => api.get('/flow-templates'),
+  getFlowTemplate: (templateId: string) => api.get(`/flow-templates/${templateId}`),
+  updateFlowTemplate: (templateId: string, payload: any) =>
+    api.put(`/flow-templates/${templateId}`, payload),
+  getFlowTemplateVersions: (templateId: string) =>
+    api.get(`/flow-templates/${templateId}/versions`),
+  getFlowTemplateVersion: (templateId: string, versionId: string) =>
+    api.get(`/flow-templates/${templateId}/versions/${versionId}`),
+
   // Log settings
   getLogSettings: () => api.get('/log-settings'),
   updateLogSettings: (payload: any) => api.put('/log-settings', payload),
