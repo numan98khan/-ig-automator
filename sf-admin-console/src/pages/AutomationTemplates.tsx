@@ -1111,7 +1111,7 @@ export default function AutomationTemplates() {
           maxZoom={1.5}
           className="h-full w-full"
         >
-          <Background variant="dots" gap={18} size={1.5} color="rgba(16, 107, 163, 0.2)" />
+          <Background variant="dots" gap={18} size={1.5} color="rgb(var(--muted-foreground) / 0.25)" />
           <MiniMap
             pannable
             zoomable

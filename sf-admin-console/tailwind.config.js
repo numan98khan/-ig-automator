@@ -38,14 +38,14 @@ export default {
         ring: 'rgb(var(--ring) / <alpha-value>)',
       },
       backgroundImage: {
-        'gradient-primary': 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-        'gradient-surface': 'linear-gradient(180deg, rgba(30, 41, 59, 0.7) 0%, rgba(30, 41, 59, 0.4) 100%)',
+        'gradient-primary': 'linear-gradient(135deg, #0a0a0a 0%, #525252 100%)',
+        'gradient-surface': 'linear-gradient(180deg, rgba(24, 24, 24, 0.7) 0%, rgba(24, 24, 24, 0.4) 100%)',
         'glass': 'linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%)',
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
       },
       boxShadow: {
         'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
-        'glow': '0 0 20px rgba(99, 102, 241, 0.5)',
+        'glow': '0 0 20px rgba(0, 0, 0, 0.35)',
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out',

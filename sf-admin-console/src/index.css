@@ -6,37 +6,37 @@
 
 @layer base {
   :root {
-    /* Palantir-inspired Light */
-    --background: 245 248 250;
-    /* #F5F8FA */
-    --foreground: 24 32 38;
-    /* #182026 */
+    /* Monochrome Light */
+    --background: 255 255 255;
+    /* #FFFFFF */
+    --foreground: 17 17 17;
+    /* #111111 */
 
-    --primary: 16 107 163;
-    /* #106BA3 */
+    --primary: 17 17 17;
+    /* #111111 */
     --primary-foreground: 255 255 255;
 
-    --secondary: 231 237 242;
-    /* #E7EDF2 */
-    --secondary-foreground: 24 32 38;
-    /* #182026 */
+    --secondary: 245 245 245;
+    /* #F5F5F5 */
+    --secondary-foreground: 17 17 17;
+    /* #111111 */
 
-    --muted: 222 232 240;
-    /* #DEE8F0 */
-    --muted-foreground: 92 112 128;
-    /* #5C7080 */
+    --muted: 235 235 235;
+    /* #EBEBEB */
+    --muted-foreground: 102 102 102;
+    /* #666666 */
 
-    --accent: 202 215 225;
-    /* #CAD7E1 */
-    --accent-foreground: 24 32 38;
-    /* #182026 */
+    --accent: 230 230 230;
+    /* #E6E6E6 */
+    --accent-foreground: 17 17 17;
+    /* #111111 */
 
-    --border: 216 225 232;
-    /* #D8E1E8 */
-    --input: 216 225 232;
-    /* #D8E1E8 */
-    --ring: 16 107 163;
-    /* #106BA3 */
+    --border: 220 220 220;
+    /* #DCDCDC */
+    --input: 220 220 220;
+    /* #DCDCDC */
+    --ring: 17 17 17;
+    /* #111111 */
 
     --radius: 0.5rem;
 
@@ -48,42 +48,42 @@
   }
 
   .dark {
-    /* Palantir-inspired Dark */
-    --background: 28 33 39;
-    /* #1C2127 */
-    --foreground: 245 248 250;
-    /* #F5F8FA */
+    /* Monochrome Dark */
+    --background: 10 10 10;
+    /* #0A0A0A */
+    --foreground: 245 245 245;
+    /* #F5F5F5 */
 
-    --primary: 72 175 240;
-    /* #48AFF0 */
-    --primary-foreground: 12 24 33;
-    /* #0C1821 */
+    --primary: 245 245 245;
+    /* #F5F5F5 */
+    --primary-foreground: 10 10 10;
+    /* #0A0A0A */
 
-    --secondary: 44 52 63;
-    /* #2C343F */
-    --secondary-foreground: 221 230 238;
-    /* #DDE6EE */
+    --secondary: 26 26 26;
+    /* #1A1A1A */
+    --secondary-foreground: 245 245 245;
+    /* #F5F5F5 */
 
-    --muted: 59 69 81;
-    /* #3B4551 */
-    --muted-foreground: 138 152 171;
-    /* #8A98AB */
+    --muted: 32 32 32;
+    /* #202020 */
+    --muted-foreground: 160 160 160;
+    /* #A0A0A0 */
 
-    --accent: 50 65 80;
-    /* #324150 */
-    --accent-foreground: 221 230 238;
-    /* #DDE6EE */
+    --accent: 42 42 42;
+    /* #2A2A2A */
+    --accent-foreground: 245 245 245;
+    /* #F5F5F5 */
 
-    --border: 74 84 96;
-    /* #4A5460 */
-    --input: 59 69 81;
-    /* #3B4551 */
-    --ring: 72 175 240;
-    /* #48AFF0 */
+    --border: 45 45 45;
+    /* #2D2D2D */
+    --input: 45 45 45;
+    /* #2D2D2D */
+    --ring: 245 245 245;
+    /* #F5F5F5 */
 
-    --card: 33 40 48;
-    /* #212830 */
-    --card-foreground: 245 248 250;
+    --card: 16 16 16;
+    /* #101010 */
+    --card-foreground: 245 245 245;
 
     --glass-blur: 12px;
     --glass-opacity: 0.14;
@@ -231,8 +231,8 @@
   }
 
   .badge-info {
-    background-color: rgb(59 130 246 / 0.2);
-    color: rgb(96 165 250);
-    border: 1px solid rgb(59 130 246 / 0.3);
+    background-color: rgb(var(--muted) / 0.7);
+    color: rgb(var(--foreground));
+    border: 1px solid rgb(var(--border));
   }
 }
