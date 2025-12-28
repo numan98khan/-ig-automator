@@ -23,6 +23,7 @@ import {
 import {
   ReactFlow,
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   addEdge,
@@ -34,6 +35,7 @@ import {
   type Edge,
   type Node,
   type NodeProps,
+  type NodeTypes,
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -478,7 +480,7 @@ const normalizeFlowEdge = (edge: any, index: number): FlowEdge | null => {
   }
 }
 
-const parseFlowDsl = (dsl: any) => {
+const parseFlowDsl = (dsl: any): { nodes: FlowNode[]; edges: FlowEdge[]; startNodeId: string } => {
   const base = dsl && typeof dsl === 'object' ? dsl : { nodes: [], edges: [] }
   const nodes = Array.isArray(base.nodes) ? base.nodes.map(normalizeFlowNode) : []
   const edges = Array.isArray(base.edges)
@@ -599,7 +601,7 @@ const NodeShell = ({
   </div>
 )
 
-const MessageNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
+const MessageNode = ({ data, selected }: NodeProps<FlowNode>) => (
   <NodeShell
     title={data.label || FLOW_NODE_LABELS.send_message}
     subtitle={data.subtitle}
@@ -609,7 +611,7 @@ const MessageNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
   />
 )
 
-const TriggerNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
+const TriggerNode = ({ data, selected }: NodeProps<FlowNode>) => (
   <NodeShell
     title={data.label || FLOW_NODE_LABELS.trigger}
     subtitle={data.subtitle}
@@ -619,7 +621,7 @@ const TriggerNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
   />
 )
 
-const DetectIntentNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
+const DetectIntentNode = ({ data, selected }: NodeProps<FlowNode>) => (
   <NodeShell
     title={data.label || FLOW_NODE_LABELS.detect_intent}
     subtitle={data.subtitle}
@@ -629,7 +631,7 @@ const DetectIntentNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
   />
 )
 
-const AiReplyNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
+const AiReplyNode = ({ data, selected }: NodeProps<FlowNode>) => (
   <NodeShell
     title={data.label || FLOW_NODE_LABELS.ai_reply}
     subtitle={data.subtitle}
@@ -639,7 +641,7 @@ const AiReplyNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
   />
 )
 
-const HandoffNode = ({ data, selected }: NodeProps<FlowNodeData>) => (
+const HandoffNode = ({ data, selected }: NodeProps<FlowNode>) => (
   <NodeShell
     title={data.label || FLOW_NODE_LABELS.handoff}
     subtitle={data.subtitle}
@@ -672,7 +674,7 @@ export default function AutomationTemplates() {
   const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<FlowNode, FlowEdge> | null>(null)
   const syncingRef = useRef(false)
 
-  const nodeTypes = useMemo(
+  const nodeTypes = useMemo<NodeTypes>(
     () => ({
       trigger: TriggerNode,
       detect_intent: DetectIntentNode,
@@ -1011,7 +1013,7 @@ export default function AutomationTemplates() {
   const handleSaveDraft = () => {
     if (!selectedDraftId) return
     const result = buildPayload()
-    if (result.error) {
+    if (result.error || !result.payload) {
       setError(result.error)
       return
     }
@@ -1022,7 +1024,7 @@ export default function AutomationTemplates() {
   const handlePublish = () => {
     if (!selectedDraftId) return
     const result = buildPayload()
-    if (result.error) {
+    if (result.error || !result.payload) {
       setError(result.error)
       return
     }
@@ -1197,7 +1199,7 @@ export default function AutomationTemplates() {
           maxZoom={1.5}
           className="h-full w-full"
         >
-          <Background variant="dots" gap={18} size={1.5} color="rgb(var(--muted-foreground) / 0.25)" />
+          <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="rgb(var(--muted-foreground) / 0.25)" />
           <MiniMap
             pannable
             zoomable

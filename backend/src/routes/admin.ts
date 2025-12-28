@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import Workspace from '../models/Workspace';
 import User from '../models/User';
@@ -676,7 +676,7 @@ router.get('/flow-drafts', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-router.post('/flow-drafts', authenticate, requireAdmin, async (req, res) => {
+router.post('/flow-drafts', authenticate, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { name, description, templateId, dsl, triggers, exposedFields, status, display } = req.body || {};
     if (!name || !dsl) {
@@ -725,7 +725,7 @@ router.get('/flow-drafts/:draftId', authenticate, requireAdmin, async (req, res)
   }
 });
 
-router.put('/flow-drafts/:draftId', authenticate, requireAdmin, async (req, res) => {
+router.put('/flow-drafts/:draftId', authenticate, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { draftId } = req.params;
     const draft = await FlowDraft.findById(draftId);
@@ -772,7 +772,7 @@ router.put('/flow-drafts/:draftId', authenticate, requireAdmin, async (req, res)
   }
 });
 
-router.post('/flow-drafts/:draftId/publish', authenticate, requireAdmin, async (req, res) => {
+router.post('/flow-drafts/:draftId/publish', authenticate, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { draftId } = req.params;
     const draft = await FlowDraft.findById(draftId);
@@ -878,7 +878,7 @@ router.get('/flow-templates', authenticate, requireAdmin, async (_req, res) => {
   }
 });
 
-router.post('/flow-templates', authenticate, requireAdmin, async (req, res) => {
+router.post('/flow-templates', authenticate, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { name, description, status } = req.body || {};
     if (!name) {
@@ -918,7 +918,7 @@ router.get('/flow-templates/:templateId', authenticate, requireAdmin, async (req
   }
 });
 
-router.put('/flow-templates/:templateId', authenticate, requireAdmin, async (req, res) => {
+router.put('/flow-templates/:templateId', authenticate, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { templateId } = req.params;
     const template = await FlowTemplate.findById(templateId);
