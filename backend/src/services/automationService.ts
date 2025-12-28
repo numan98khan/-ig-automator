@@ -292,7 +292,9 @@ const buildExecutionPlan = (graph: FlowRuntimeGraph): ExecutionPlan | null => {
   return null;
 };
 
-const normalizeStepType = (step?: FlowRuntimeStep): 'send_message' | 'ai_reply' | 'handoff' | 'unknown' => {
+const normalizeStepType = (
+  step?: FlowRuntimeStep,
+): 'send_message' | 'ai_reply' | 'handoff' | 'trigger' | 'unknown' => {
   const raw = (step?.type || '').toLowerCase();
   if (raw === 'send_message' || raw === 'message' || raw === 'send' || raw === 'reply') {
     return 'send_message';
@@ -302,6 +304,9 @@ const normalizeStepType = (step?: FlowRuntimeStep): 'send_message' | 'ai_reply' 
   }
   if (raw === 'handoff' || raw === 'escalate') {
     return 'handoff';
+  }
+  if (raw === 'trigger' || raw === 'start' || raw === 'entry') {
+    return 'trigger';
   }
   return 'unknown';
 };
@@ -782,6 +787,8 @@ async function executeFlowPlan(params: {
         });
         sentCount += 1;
       }
+    } else if (stepType === 'trigger') {
+      // Triggers are metadata-only anchors and do not execute at runtime.
     } else {
       logAutomation('⚠️ [AUTOMATION] Unsupported flow step', { stepId: step.id, type: step.type });
       return completeWithError('Unsupported flow step');
