@@ -5,6 +5,7 @@ import InstagramAccount from '../models/InstagramAccount';
 import FollowupTask from '../models/FollowupTask';
 import AutomationInstance from '../models/AutomationInstance';
 import AutomationSession from '../models/AutomationSession';
+import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import { generateAIReply } from './aiReplyService';
 import {
@@ -98,6 +99,31 @@ const deepClone = <T>(value: T): T => {
     return value;
   }
   return JSON.parse(JSON.stringify(value)) as T;
+};
+
+const resolveLatestTemplateVersion = async (params: {
+  templateId?: mongoose.Types.ObjectId | string;
+  fallbackVersionId?: mongoose.Types.ObjectId | string;
+}) => {
+  const { templateId, fallbackVersionId } = params;
+  if (templateId) {
+    const template = await FlowTemplate.findById(templateId).select('currentVersionId').lean();
+    if (template?.currentVersionId) {
+      const version = await FlowTemplateVersion.findOne({
+        _id: template.currentVersionId,
+        status: 'published',
+      }).lean();
+      if (version) return version;
+    }
+  }
+  if (fallbackVersionId) {
+    const version = await FlowTemplateVersion.findOne({
+      _id: fallbackVersionId,
+      status: 'published',
+    }).lean();
+    if (version) return version;
+  }
+  return null;
 };
 
 function buildEffectiveUserConfig(
@@ -931,6 +957,10 @@ async function executeFlowForInstance(params: {
     return { success: false, error: 'Automation paused for human response' };
   }
 
+  if (activeSession.templateVersionId?.toString() !== version._id.toString()) {
+    activeSession.templateVersionId = version._id;
+  }
+
   const igStart = nowMs();
   const igAccount = await InstagramAccount.findById(instagramAccountId).select('+accessToken');
   logAutomationStep('flow_load_ig_account', igStart, { instagramAccountId });
@@ -1013,9 +1043,10 @@ export async function executeAutomation(params: {
     if (activeSession) {
       const instance = await AutomationInstance.findById(activeSession.automationInstanceId);
       if (instance && instance.isActive) {
-        const version = await FlowTemplateVersion.findById(
-          activeSession.templateVersionId || instance.templateVersionId,
-        ).lean();
+        const version = await resolveLatestTemplateVersion({
+          templateId: instance.templateId,
+          fallbackVersionId: activeSession.templateVersionId || instance.templateVersionId,
+        });
         if (version) {
           const runtime = resolveFlowRuntime(version, instance);
           const result = await executeFlowForInstance({
@@ -1049,16 +1080,39 @@ export async function executeAutomation(params: {
       return finish({ success: false, error: 'No active automations found for this trigger' });
     }
 
-    const versionIds = instances.map(instance => instance.templateVersionId);
-    const versions = await FlowTemplateVersion.find({
-      _id: { $in: versionIds },
-      status: 'published',
-    }).lean();
+    const templateIds = Array.from(new Set(instances.map(instance => instance.templateId?.toString()).filter(Boolean)));
+    const templates = templateIds.length
+      ? await FlowTemplate.find({ _id: { $in: templateIds } }).select('currentVersionId').lean()
+      : [];
+    const templateMap = new Map(templates.map((template: any) => [template._id.toString(), template]));
+
+    const storedVersionIds = instances
+      .map(instance => instance.templateVersionId?.toString())
+      .filter(Boolean) as string[];
+    const currentVersionIds = templates
+      .map((template: any) => template.currentVersionId?.toString())
+      .filter(Boolean) as string[];
+    const versionIds = Array.from(new Set([...storedVersionIds, ...currentVersionIds]));
+
+    const versions = versionIds.length
+      ? await FlowTemplateVersion.find({
+          _id: { $in: versionIds },
+          status: 'published',
+        }).lean()
+      : [];
     const versionMap = new Map(versions.map(version => [version._id.toString(), version]));
 
     const matchStart = nowMs();
     for (const instance of instances) {
-      const version = versionMap.get(instance.templateVersionId.toString());
+      const template = instance.templateId
+        ? templateMap.get(instance.templateId.toString())
+        : null;
+      const latestVersionId = template?.currentVersionId?.toString();
+      const latestVersion = latestVersionId ? versionMap.get(latestVersionId) || null : null;
+      const storedVersion = instance.templateVersionId
+        ? versionMap.get(instance.templateVersionId.toString()) || null
+        : null;
+      const version = latestVersion || storedVersion;
       if (!version) continue;
 
       const runtime = resolveFlowRuntime(version, instance);
@@ -1095,7 +1149,7 @@ export async function executeAutomation(params: {
 
       logAutomationStep('execute_flow', matchStart, {
         success: result.success,
-        templateVersionId: instance.templateVersionId?.toString(),
+        templateVersionId: version._id?.toString(),
       });
 
       return result.success

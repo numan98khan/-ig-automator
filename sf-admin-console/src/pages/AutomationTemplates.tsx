@@ -134,6 +134,8 @@ type FlowNodeData = {
 
 type FlowNode = Node<FlowNodeData> & {
   type: FlowNodeType
+  triggerType?: TriggerType
+  triggerDescription?: string
   text?: string
   message?: string
   buttons?: FlowButton[]
@@ -158,6 +160,51 @@ type TriggerForm = {
   description: string
   configText: string
 }
+
+const TRIGGER_LIBRARY: Array<{ type: TriggerType; label: string; description: string }> = [
+  {
+    type: 'post_comment',
+    label: 'Post or Reel Comments',
+    description: 'User comments on your Post or Reel',
+  },
+  {
+    type: 'story_reply',
+    label: 'Story Reply',
+    description: 'User replies to your Story',
+  },
+  {
+    type: 'dm_message',
+    label: 'Instagram Message',
+    description: 'User sends a message',
+  },
+  {
+    type: 'story_share',
+    label: 'Story Share',
+    description: 'User shares your Post or Reel as a Story',
+  },
+  {
+    type: 'instagram_ads',
+    label: 'Instagram Ads',
+    description: 'User clicks an Instagram Ad',
+  },
+  {
+    type: 'live_comment',
+    label: 'Live Comments',
+    description: 'User comments on your Live',
+  },
+  {
+    type: 'ref_url',
+    label: 'Instagram Ref URL',
+    description: 'User clicks a referral link',
+  },
+]
+
+const TRIGGER_METADATA = TRIGGER_LIBRARY.reduce((acc, trigger) => {
+  acc[trigger.type] = { label: trigger.label, description: trigger.description }
+  return acc
+}, {} as Record<TriggerType, { label: string; description: string }>)
+
+const DEFAULT_TRIGGER_TYPE: TriggerType = 'dm_message'
 
 type FieldForm = {
   id: string
@@ -363,7 +410,9 @@ const buildNodeSubtitle = (node: FlowNode) => {
     return text ? text.slice(0, 80) : 'No message yet'
   }
   if (node.type === 'trigger') {
-    return 'Entry trigger for this flow'
+    const triggerType = node.triggerType || DEFAULT_TRIGGER_TYPE
+    const meta = TRIGGER_METADATA[triggerType]
+    return node.triggerDescription?.trim() || meta?.description || 'Entry trigger for this flow'
   }
   if (node.type === 'detect_intent') {
     return 'Detects intent from the latest message'
@@ -388,6 +437,10 @@ const normalizeFlowNode = (node: any, index: number): FlowNode => {
   const id = node?.id || `node-${index + 1}`
   const rawType = node?.type as FlowNodeType | undefined
   const type = rawType && FLOW_NODE_LABELS[rawType] ? rawType : 'send_message'
+  const triggerTypeCandidate = node?.triggerType as TriggerType | undefined
+  const triggerType = triggerTypeCandidate && TRIGGER_METADATA[triggerTypeCandidate]
+    ? triggerTypeCandidate
+    : undefined
   const position = node?.position || { x: 120 + index * 60, y: 80 + index * 40 }
   const normalized: FlowNode = {
     id,
@@ -397,6 +450,8 @@ const normalizeFlowNode = (node: any, index: number): FlowNode => {
       ...(node?.data || {}),
       label: node?.data?.label || node?.label || FLOW_NODE_LABELS[type] || 'Node',
     },
+    triggerType: type === 'trigger' ? triggerType || DEFAULT_TRIGGER_TYPE : undefined,
+    triggerDescription: typeof node?.triggerDescription === 'string' ? node.triggerDescription : undefined,
     text: node?.text,
     message: node?.message,
     buttons: node?.buttons,
@@ -441,6 +496,8 @@ const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?: string
     type: node.type,
     position: node.position,
     data: node.data,
+    triggerType: node.triggerType,
+    triggerDescription: node.triggerDescription,
     text: node.text,
     message: node.message,
     buttons: node.buttons,
@@ -819,22 +876,33 @@ export default function AutomationTemplates() {
       return { error: 'DSL must be valid JSON.' }
     }
 
+    const nodes = Array.isArray(dsl?.nodes) ? dsl.nodes : []
+    const startNodeId =
+      typeof dsl?.startNodeId === 'string'
+        ? dsl.startNodeId
+        : typeof dsl?.start === 'string'
+          ? dsl.start
+          : nodes[0]?.id
+    const startNode = nodes.find((node: any) => node?.id === startNodeId || node?.nodeId === startNodeId)
+    const hasTriggerStart = startNode?.type === 'trigger'
+
     const triggers: FlowTrigger[] = []
-    for (const trigger of draftForm.triggers) {
-      if (!trigger.type) continue
-      let config: Record<string, any> | undefined
-      if (trigger.configText.trim()) {
-        try {
-          config = JSON.parse(trigger.configText)
-        } catch {
-          return { error: `Trigger config must be valid JSON for ${trigger.type}.` }
-        }
-      }
+    if (hasTriggerStart) {
+      const triggerType = (startNode?.triggerType && TRIGGER_METADATA[startNode.triggerType as TriggerType])
+        ? (startNode.triggerType as TriggerType)
+        : DEFAULT_TRIGGER_TYPE
+      const meta = TRIGGER_METADATA[triggerType]
+      const rawLabel = typeof startNode?.data?.label === 'string' ? startNode.data.label.trim() : ''
+      const label = rawLabel && rawLabel !== FLOW_NODE_LABELS.trigger ? rawLabel : meta?.label
+      const rawDescription = typeof startNode?.triggerDescription === 'string'
+        ? startNode.triggerDescription.trim()
+        : ''
+      const description = rawDescription || meta?.description
+
       triggers.push({
-        type: trigger.type,
-        label: trigger.label.trim() || undefined,
-        description: trigger.description.trim() || undefined,
-        ...(config ? { config } : {}),
+        type: triggerType,
+        ...(label ? { label } : {}),
+        ...(description ? { description } : {}),
       })
     }
 
@@ -993,6 +1061,9 @@ export default function AutomationTemplates() {
         data: { label: FLOW_NODE_LABELS[type] || 'Node' },
       }
 
+      if (type === 'trigger') {
+        node.triggerType = DEFAULT_TRIGGER_TYPE
+      }
       if (type === 'send_message') {
         node.text = ''
       }
@@ -1009,7 +1080,10 @@ export default function AutomationTemplates() {
       node.data = buildNodeData(node)
 
       setFlowNodes((nodes) => [...nodes, node])
-      if (!startNodeId) {
+      const currentStart = flowNodes.find((item) => item.id === startNodeId)
+      const shouldPromoteTrigger =
+        type === 'trigger' && (!startNodeId || currentStart?.type !== 'trigger')
+      if (!startNodeId || shouldPromoteTrigger) {
         setStartNodeId(id)
       }
       setSelectedNodeId(id)
@@ -1017,7 +1091,7 @@ export default function AutomationTemplates() {
         setTimeout(() => flowInstance.fitView({ padding: 0.2, duration: 200 }), 0)
       }
     },
-    [flowNodes.length, flowInstance, setFlowNodes, startNodeId],
+    [flowNodes, flowInstance, setFlowNodes, startNodeId],
   )
 
   const updateNode = useCallback(
@@ -1187,10 +1261,11 @@ export default function AutomationTemplates() {
         )}
       </div>
 
-      {selectedNode && (
-        <div className="absolute left-6 top-24 z-20 w-[360px] max-w-[90vw] max-h-[calc(100%-140px)] overflow-y-auto rounded-2xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
-          <div className="text-sm font-semibold text-foreground">Inspector</div>
-          <div className="mt-4 space-y-4">
+      <div className="absolute left-6 top-6 bottom-6 z-20 w-[360px] max-w-[90vw] flex flex-col gap-3">
+        {selectedNode && (
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
+            <div className="text-sm font-semibold text-foreground">Inspector</div>
+            <div className="mt-4 space-y-4">
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Label</label>
               <input
@@ -1222,6 +1297,9 @@ export default function AutomationTemplates() {
                     if (nextType === 'handoff' && !next.handoff) {
                       next.handoff = { topic: '', summary: '' }
                     }
+                    if (nextType === 'trigger' && !next.triggerType) {
+                      next.triggerType = DEFAULT_TRIGGER_TYPE
+                    }
                     return next
                   })
                 }
@@ -1233,6 +1311,49 @@ export default function AutomationTemplates() {
                 ))}
               </select>
             </div>
+            {selectedNode.type === 'trigger' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Trigger type</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.triggerType || DEFAULT_TRIGGER_TYPE}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        triggerType: event.target.value as TriggerType,
+                      }))
+                    }
+                  >
+                    {TRIGGER_LIBRARY.map((trigger) => (
+                      <option key={trigger.type} value={trigger.type}>
+                        {trigger.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-xs text-muted-foreground">
+                    {TRIGGER_METADATA[selectedNode.triggerType || DEFAULT_TRIGGER_TYPE]?.description}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Trigger description</label>
+                  <textarea
+                    className="input w-full h-20 text-sm"
+                    value={selectedNode.triggerDescription || ''}
+                    placeholder={TRIGGER_METADATA[selectedNode.triggerType || DEFAULT_TRIGGER_TYPE]?.description}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        triggerDescription: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Shown to users when they configure the template.
+                  </div>
+                </div>
+              </>
+            )}
             {selectedNode.type !== 'trigger' && selectedNode.type !== 'detect_intent' && (
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Wait for reply</label>
@@ -1420,75 +1541,76 @@ export default function AutomationTemplates() {
               </>
             )}
 
-            <div className="flex flex-wrap items-center gap-2 pt-2">
-              <button
-                className="btn btn-secondary flex items-center gap-2"
-                onClick={() => setStartNodeId(selectedNode.id)}
-              >
-                <Play className="w-4 h-4" />
-                Set as start
-              </button>
-              <button
-                className="btn btn-secondary flex items-center gap-2 text-red-500"
-                onClick={handleDeleteNode}
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete node
-              </button>
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <button
+                  className="btn btn-secondary flex items-center gap-2"
+                  onClick={() => setStartNodeId(selectedNode.id)}
+                >
+                  <Play className="w-4 h-4" />
+                  Set as start
+                </button>
+                <button
+                  className="btn btn-secondary flex items-center gap-2 text-red-500"
+                  onClick={handleDeleteNode}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete node
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="absolute left-6 bottom-6 z-20 space-y-2">
-        <div className="rounded-lg border border-border bg-card/90 px-3 py-2 text-xs text-muted-foreground shadow-sm">
-          <div className="flex items-center gap-2">
-            <Play className="w-3 h-3" />
-            Start node: {startNodeId ? startNodeLabel : 'Not set'}
-          </div>
-          <div className="mt-1">Flow stats: {flowStats.nodes} nodes · {flowStats.edges} connections</div>
-        </div>
-
-        <details className="w-[360px] max-w-[80vw] max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-card/90 p-3 text-xs text-muted-foreground shadow-sm">
-          <summary className="cursor-pointer text-sm font-semibold text-foreground">
-            Advanced: Flow DSL JSON
-          </summary>
-          <div className="mt-3 space-y-3">
-            <textarea
-              className="input w-full h-48 font-mono text-xs"
-              value={dslEditorText}
-              onChange={(event) => {
-                setDslEditorText(event.target.value)
-                setDslEditorDirty(true)
-              }}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                className="btn btn-secondary flex items-center gap-2"
-                onClick={handleApplyDsl}
-                disabled={!dslEditorDirty}
-              >
-                <UploadCloud className="w-4 h-4" />
-                Apply JSON
-              </button>
-              <button
-                className="btn btn-secondary flex items-center gap-2"
-                onClick={handleResetDsl}
-                disabled={!dslEditorDirty}
-              >
-                <RefreshCw className="w-4 h-4" />
-                Reset
-              </button>
-              <button
-                className="btn btn-secondary flex items-center gap-2"
-                onClick={() => navigator.clipboard.writeText(dslEditorText)}
-              >
-                <Copy className="w-4 h-4" />
-                Copy JSON
-              </button>
+        <div className="space-y-2 shrink-0 mt-auto">
+          <div className="rounded-lg border border-border bg-card/90 px-3 py-2 text-xs text-muted-foreground shadow-sm">
+            <div className="flex items-center gap-2">
+              <Play className="w-3 h-3" />
+              Start node: {startNodeId ? startNodeLabel : 'Not set'}
             </div>
+            <div className="mt-1">Flow stats: {flowStats.nodes} nodes · {flowStats.edges} connections</div>
           </div>
-        </details>
+
+          <details className="w-full max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-card/90 p-3 text-xs text-muted-foreground shadow-sm">
+            <summary className="cursor-pointer text-sm font-semibold text-foreground">
+              Advanced: Flow DSL JSON
+            </summary>
+            <div className="mt-3 space-y-3">
+              <textarea
+                className="input w-full h-48 font-mono text-xs"
+                value={dslEditorText}
+                onChange={(event) => {
+                  setDslEditorText(event.target.value)
+                  setDslEditorDirty(true)
+                }}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  className="btn btn-secondary flex items-center gap-2"
+                  onClick={handleApplyDsl}
+                  disabled={!dslEditorDirty}
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  Apply JSON
+                </button>
+                <button
+                  className="btn btn-secondary flex items-center gap-2"
+                  onClick={handleResetDsl}
+                  disabled={!dslEditorDirty}
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Reset
+                </button>
+                <button
+                  className="btn btn-secondary flex items-center gap-2"
+                  onClick={() => navigator.clipboard.writeText(dslEditorText)}
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy JSON
+                </button>
+              </div>
+            </div>
+          </details>
+        </div>
       </div>
     </div>
   )

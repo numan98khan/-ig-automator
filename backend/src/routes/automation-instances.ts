@@ -16,28 +16,26 @@ const resolveTemplateVersion = async (params: {
   templateVersionId?: string;
 }) => {
   const { templateId, templateVersionId } = params;
-  if (templateVersionId) {
+  let template = null;
+
+  if (templateId) {
+    template = await FlowTemplate.findById(templateId).lean();
+  } else if (templateVersionId) {
     const version = await FlowTemplateVersion.findById(templateVersionId).lean();
     if (!version || version.status !== 'published') {
       return null;
     }
-    if (templateId && version.templateId.toString() !== String(templateId)) {
-      return null;
-    }
-    return {
-      templateId: version.templateId,
-      templateVersionId: version._id,
-    };
+    template = await FlowTemplate.findById(version.templateId).lean();
   }
 
-  if (!templateId) return null;
-  const template = await FlowTemplate.findById(templateId).lean();
   if (!template || !template.currentVersionId) return null;
+
   const version = await FlowTemplateVersion.findOne({
     _id: template.currentVersionId,
     status: 'published',
   }).lean();
   if (!version) return null;
+
   return {
     templateId: template._id,
     templateVersionId: version._id,
@@ -48,27 +46,43 @@ const hydrateInstances = async (instances: Array<Record<string, any>>) => {
   if (!instances.length) return instances;
 
   const templateIds = Array.from(new Set(instances.map((item) => item.templateId?.toString()).filter(Boolean)));
-  const versionIds = Array.from(new Set(instances.map((item) => item.templateVersionId?.toString()).filter(Boolean)));
+  const storedVersionIds = Array.from(
+    new Set(instances.map((item) => item.templateVersionId?.toString()).filter(Boolean)),
+  );
 
-  const [templates, versions] = await Promise.all([
-    templateIds.length
-      ? FlowTemplate.find({ _id: { $in: templateIds } }).select(TEMPLATE_PUBLIC_FIELDS).lean()
-      : Promise.resolve([]),
-    versionIds.length
-      ? FlowTemplateVersion.find({ _id: { $in: versionIds } }).select(VERSION_PUBLIC_FIELDS).lean()
-      : Promise.resolve([]),
-  ]);
+  const templates = templateIds.length
+    ? await FlowTemplate.find({ _id: { $in: templateIds } }).select(TEMPLATE_PUBLIC_FIELDS).lean()
+    : [];
+
+  const currentVersionIds = templates
+    .map((template: any) => template.currentVersionId?.toString())
+    .filter(Boolean) as string[];
+
+  const versionIds = Array.from(new Set([...storedVersionIds, ...currentVersionIds]));
+
+  const versions = versionIds.length
+    ? await FlowTemplateVersion.find({ _id: { $in: versionIds } })
+        .select(VERSION_PUBLIC_FIELDS)
+        .lean()
+    : [];
 
   const templateMap = new Map(templates.map((template: any) => [template._id.toString(), template]));
   const versionMap = new Map(versions.map((version: any) => [version._id.toString(), version]));
 
-  return instances.map((instance) => ({
-    ...instance,
-    template: instance.templateId ? templateMap.get(instance.templateId.toString()) || null : null,
-    templateVersion: instance.templateVersionId
+  return instances.map((instance) => {
+    const template = instance.templateId ? templateMap.get(instance.templateId.toString()) || null : null;
+    const latestVersionId = template?.currentVersionId?.toString();
+    const latestVersion = latestVersionId ? versionMap.get(latestVersionId) || null : null;
+    const storedVersion = instance.templateVersionId
       ? versionMap.get(instance.templateVersionId.toString()) || null
-      : null,
-  }));
+      : null;
+
+    return {
+      ...instance,
+      template,
+      templateVersion: latestVersion || storedVersion,
+    };
+  });
 };
 
 router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
