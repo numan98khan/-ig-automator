@@ -115,6 +115,7 @@ const summarizeTriggerConfig = (config?: TriggerConfig) => {
     excludeKeywordCount: config.excludeKeywords?.length || 0,
     categoryIdsCount: config.categoryIds?.length || 0,
     outsideBusinessHours: Boolean(config.outsideBusinessHours),
+    intentTextPreview: config.intentText ? config.intentText.slice(0, 80) : undefined,
     matchOn: config.matchOn
       ? {
           link: Boolean(config.matchOn.link),
@@ -1252,9 +1253,13 @@ export async function executeAutomation(params: {
         continue;
       }
 
-      const matchedTrigger = typedTriggers.find((trigger) =>
-        matchesTriggerConfig(normalizedMessage, trigger.config, messageContext)
-      );
+      let matchedTrigger: FlowTriggerDefinition | undefined;
+      for (const trigger of typedTriggers) {
+        if (await matchesTriggerConfig(normalizedMessage, trigger.config, messageContext)) {
+          matchedTrigger = trigger;
+          break;
+        }
+      }
 
       if (!matchedTrigger) {
         diagnostic.reason = 'trigger_config_mismatch';

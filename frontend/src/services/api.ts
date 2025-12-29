@@ -194,7 +194,8 @@ export interface TriggerConfig {
   excludeKeywords?: string[];
   keywordMatch?: 'any' | 'all';
   categoryIds?: string[];
-  triggerMode?: 'keywords' | 'categories' | 'any';
+  triggerMode?: 'keywords' | 'categories' | 'any' | 'intent';
+  intentText?: string;
   outsideBusinessHours?: boolean;
   businessHours?: BusinessHoursConfig;
   matchOn?: {

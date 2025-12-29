@@ -125,6 +125,14 @@ type FlowAiSettings = {
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 }
 
+type FlowTriggerConfig = {
+  keywords?: string[]
+  excludeKeywords?: string[]
+  keywordMatch?: 'any' | 'all'
+  triggerMode?: 'keywords' | 'categories' | 'any' | 'intent'
+  intentText?: string
+}
+
 type FlowButton = {
   title: string
   payload?: string
@@ -140,6 +148,7 @@ type FlowNode = Node<FlowNodeData> & {
   type: FlowNodeType
   triggerType?: TriggerType
   triggerDescription?: string
+  triggerConfig?: FlowTriggerConfig
   logEnabled?: boolean
   text?: string
   message?: string
@@ -421,6 +430,14 @@ const parseTags = (value: string) =>
     .map((item) => item.trim())
     .filter(Boolean)
 
+const formatKeywordList = (keywords?: string[]) => (keywords || []).join(', ')
+
+const parseKeywordList = (value: string) =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
 const formatKnowledgeIds = (ids?: string[]) => (ids || []).join(', ')
 
 const parseKnowledgeIds = (value: string) =>
@@ -433,6 +450,22 @@ const parseOptionalNumber = (value: string) => {
   if (!value) return undefined
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const normalizeTriggerConfig = (config?: FlowTriggerConfig) => {
+  if (!config) return undefined
+  const keywords = Array.isArray(config.keywords) ? config.keywords.filter(Boolean) : []
+  const excludeKeywords = Array.isArray(config.excludeKeywords) ? config.excludeKeywords.filter(Boolean) : []
+  const intentText = config.intentText?.trim()
+  const output: FlowTriggerConfig = {}
+
+  if (config.triggerMode) output.triggerMode = config.triggerMode
+  if (config.keywordMatch) output.keywordMatch = config.keywordMatch
+  if (keywords.length > 0) output.keywords = keywords
+  if (excludeKeywords.length > 0) output.excludeKeywords = excludeKeywords
+  if (intentText) output.intentText = intentText
+
+  return Object.keys(output).length > 0 ? output : undefined
 }
 
 const buildNodeSubtitle = (node: FlowNode) => {
@@ -494,6 +527,7 @@ const normalizeFlowNode = (node: any, index: number): FlowNode => {
     },
     triggerType: type === 'trigger' ? triggerType || DEFAULT_TRIGGER_TYPE : undefined,
     triggerDescription: typeof node?.triggerDescription === 'string' ? node.triggerDescription : undefined,
+    triggerConfig: node?.triggerConfig ?? node?.data?.triggerConfig,
     logEnabled: typeof node?.logEnabled === 'boolean'
       ? node.logEnabled
       : typeof node?.data?.logEnabled === 'boolean'
@@ -545,6 +579,7 @@ const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?: string
     data: node.data,
     triggerType: node.triggerType,
     triggerDescription: node.triggerDescription,
+    triggerConfig: node.triggerConfig,
     logEnabled: node.logEnabled,
     text: node.text,
     message: node.message,
@@ -762,6 +797,7 @@ export default function AutomationTemplates() {
     () => flowNodes.find((node) => node.id === selectedNodeId) || null,
     [flowNodes, selectedNodeId],
   )
+  const selectedTriggerConfig: FlowTriggerConfig = selectedNode?.triggerConfig || {}
   const flowStats = useMemo(
     () => ({ nodes: flowNodes.length, edges: flowEdges.length }),
     [flowNodes.length, flowEdges.length],
@@ -947,10 +983,12 @@ export default function AutomationTemplates() {
         : ''
       const description = rawDescription || meta?.description
 
+      const triggerConfig = normalizeTriggerConfig(startNode?.triggerConfig)
       triggers.push({
         type: triggerType,
         ...(label ? { label } : {}),
         ...(description ? { description } : {}),
+        ...(triggerConfig ? { config: triggerConfig } : {}),
       })
     }
 
@@ -1351,6 +1389,105 @@ export default function AutomationTemplates() {
                     {TRIGGER_METADATA[selectedNode.triggerType || DEFAULT_TRIGGER_TYPE]?.description}
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Match mode</label>
+                  <select
+                    className="input w-full"
+                    value={selectedTriggerConfig.triggerMode || 'any'}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        triggerConfig: {
+                          ...(node.triggerConfig || {}),
+                          triggerMode: event.target.value as FlowTriggerConfig['triggerMode'],
+                        },
+                      }))
+                    }
+                  >
+                    <option value="any">Any (default)</option>
+                    <option value="keywords">Keywords</option>
+                    <option value="intent">AI intent</option>
+                  </select>
+                  <div className="text-xs text-muted-foreground">
+                    Choose keyword matching or let AI evaluate intent text.
+                  </div>
+                </div>
+                {selectedTriggerConfig.triggerMode === 'keywords' && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-sm text-muted-foreground">Keywords (comma-separated)</label>
+                      <input
+                        className="input w-full"
+                        value={formatKeywordList(selectedTriggerConfig.keywords)}
+                        onChange={(event) =>
+                          updateNode(selectedNode.id, (node) => ({
+                            ...node,
+                            triggerConfig: {
+                              ...(node.triggerConfig || {}),
+                              keywords: parseKeywordList(event.target.value),
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm text-muted-foreground">Exclude keywords (comma-separated)</label>
+                      <input
+                        className="input w-full"
+                        value={formatKeywordList(selectedTriggerConfig.excludeKeywords)}
+                        onChange={(event) =>
+                          updateNode(selectedNode.id, (node) => ({
+                            ...node,
+                            triggerConfig: {
+                              ...(node.triggerConfig || {}),
+                              excludeKeywords: parseKeywordList(event.target.value),
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm text-muted-foreground">Keyword match</label>
+                      <select
+                        className="input w-full"
+                        value={selectedTriggerConfig.keywordMatch || 'any'}
+                        onChange={(event) =>
+                          updateNode(selectedNode.id, (node) => ({
+                            ...node,
+                            triggerConfig: {
+                              ...(node.triggerConfig || {}),
+                              keywordMatch: event.target.value as FlowTriggerConfig['keywordMatch'],
+                            },
+                          }))
+                        }
+                      >
+                        <option value="any">Any keyword</option>
+                        <option value="all">All keywords</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+                {selectedTriggerConfig.triggerMode === 'intent' && (
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Intent description</label>
+                    <textarea
+                      className="input w-full h-24 text-sm"
+                      value={selectedTriggerConfig.intentText || ''}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          triggerConfig: {
+                            ...(node.triggerConfig || {}),
+                            intentText: event.target.value,
+                          },
+                        }))
+                      }
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      Describe the user intent in plain language for AI matching.
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Trigger description</label>
                   <textarea
