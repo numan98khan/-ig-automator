@@ -2,9 +2,14 @@ export type GoalType =
   | 'none'
   | 'capture_lead'
   | 'book_appointment'
-  | 'start_order'
+  | 'order_now'
+  | 'product_inquiry'
+  | 'delivery'
+  | 'order_status'
+  | 'refund_exchange'
+  | 'human'
   | 'handle_support'
-  | 'drive_to_channel';
+  ;
 
 export interface LeadCaptureConfig {
   collectName: boolean;

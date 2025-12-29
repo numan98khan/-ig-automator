@@ -107,7 +107,7 @@ The admin console connects to backend admin API endpoints at `/api/admin/*`:
 
 ## Design
 
-The admin console uses a dark Palantir-inspired theme with:
+The admin console uses a monochrome black and white theme with:
 - Clean, professional design
 - Consistent color scheme
 - Intuitive navigation

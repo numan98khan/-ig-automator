@@ -103,7 +103,7 @@ export async function rebuildWorkspaceReportForDate(workspaceId: string, date: D
     ]).then(([leads, bookings, orders, supports]) => ({
       capture_lead: leads,
       book_appointment: bookings,
-      start_order: orders,
+      order_now: orders,
       handle_support: supports,
     })),
     Promise.resolve({}),
@@ -224,10 +224,24 @@ export function mapGoalKey(goal: GoalType | string): string {
       return 'capture_lead';
     case 'book_appointment':
       return 'book_appointment';
-    case 'start_order':
-      return 'start_order';
+    case 'order_now':
+      return 'order_now';
+    case 'product_inquiry':
+      return 'product_inquiry';
+    case 'delivery':
+      return 'delivery';
+    case 'order_status':
+      return 'order_status';
+    case 'refund_exchange':
+      return 'refund_exchange';
+    case 'human':
+      return 'human';
     case 'handle_support':
       return 'handle_support';
+    case 'start_order':
+      return 'order_now';
+    case 'drive_to_channel':
+      return 'other';
     default:
       return goal || 'other';
   }

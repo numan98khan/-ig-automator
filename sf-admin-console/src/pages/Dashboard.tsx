@@ -76,7 +76,7 @@ export default function Dashboard() {
           value={dashboardStats.totalUsers || 0}
           change={{ value: 8, positive: true }}
           icon={Users}
-          iconColor="text-blue-400"
+          iconColor="text-muted-foreground"
           subtitle="Registered users"
         />
         <StatCard
@@ -102,7 +102,7 @@ export default function Dashboard() {
           value={`${dashboardStats.aiResponseRate || 0}%`}
           change={{ value: 5.2, positive: true }}
           icon={Bot}
-          iconColor="text-primary-light"
+          iconColor="text-muted-foreground"
         />
         <StatCard
           title="Avg Response Time"
@@ -115,7 +115,7 @@ export default function Dashboard() {
           title="Messages (24h)"
           value={dashboardStats.messages24h || 0}
           icon={TrendingUp}
-          iconColor="text-blue-400"
+          iconColor="text-muted-foreground"
         />
         <StatCard
           title="Success Rate"
@@ -133,7 +133,7 @@ export default function Dashboard() {
             <h2 className="text-lg font-semibold text-foreground">
               Recent Escalations
             </h2>
-            <button className="text-sm text-primary hover:text-primary-light">
+            <button className="text-sm text-primary hover:text-foreground/70">
               View All
             </button>
           </div>

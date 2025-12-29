@@ -33,11 +33,15 @@ const LANGUAGES = [
 
 const GOAL_OPTIONS: { value: GoalType; label: string }[] = [
   { value: 'none', label: 'None' },
+  { value: 'product_inquiry', label: 'Product inquiry' },
+  { value: 'delivery', label: 'Delivery' },
+  { value: 'order_now', label: 'Order now' },
+  { value: 'order_status', label: 'Order status' },
+  { value: 'refund_exchange', label: 'Refund / exchange' },
   { value: 'capture_lead', label: 'Capture lead' },
   { value: 'book_appointment', label: 'Book appointment' },
-  { value: 'start_order', label: 'Start order' },
   { value: 'handle_support', label: 'Handle support' },
-  { value: 'drive_to_channel', label: 'Drive to channel' },
+  { value: 'human', label: 'Human handoff' },
 ];
 
 const DEFAULT_GOAL_CONFIGS: GoalConfigs = {
@@ -283,7 +287,7 @@ export default function Automations() {
       );
     }
 
-    if (goal === 'start_order') {
+    if (goal === 'order_now') {
       return (
         <div className="space-y-3 mt-3">
           <div>
@@ -332,35 +336,6 @@ export default function Automations() {
               {option.label}
             </label>
           ))}
-        </div>
-      );
-    }
-
-    if (goal === 'drive_to_channel') {
-      return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Target channel</label>
-            <select
-              value={formData.goalConfigs.drive.targetType}
-              onChange={(e) => updateGoalConfig('drive', { targetType: e.target.value as GoalConfigs['drive']['targetType'] })}
-              className="input-field w-full"
-            >
-              {['website', 'WhatsApp', 'store', 'app'].map(option => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Target link / address</label>
-            <input
-              type="text"
-              value={formData.goalConfigs.drive.targetLink || ''}
-              onChange={(e) => updateGoalConfig('drive', { targetLink: e.target.value })}
-              className="input-field w-full"
-              placeholder="https://... or store address"
-            />
-          </div>
         </div>
       );
     }

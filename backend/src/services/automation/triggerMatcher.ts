@@ -1,15 +1,17 @@
 import { TriggerConfig } from '../../types/automation';
 import { AutomationTestContext } from './types';
 import { isOutsideBusinessHours, matchesKeywords } from './utils';
+import { matchesIntent } from './intentMatcher';
 
-export function matchesTriggerConfig(
+export async function matchesTriggerConfig(
   messageText: string,
   triggerConfig?: TriggerConfig,
   context?: AutomationTestContext,
-): boolean {
+): Promise<boolean> {
   if (!triggerConfig) return true;
   const keywordMatch = triggerConfig.keywordMatch || 'any';
   const triggerMode = triggerConfig.triggerMode || 'any';
+  const intentText = triggerConfig.intentText?.trim() || '';
   if (
     triggerConfig.excludeKeywords &&
     triggerConfig.excludeKeywords.length > 0 &&
@@ -33,6 +35,7 @@ export function matchesTriggerConfig(
   const keywordMatched = triggerConfig.keywords
     ? matchesKeywords(messageText, triggerConfig.keywords, keywordMatch)
     : true;
+  const intentMatched = intentText ? await matchesIntent(messageText, intentText) : false;
 
   if (triggerMode === 'categories') {
     return categoryMatched;
@@ -43,7 +46,14 @@ export function matchesTriggerConfig(
     return keywordMatched;
   }
 
+  if (triggerMode === 'intent') {
+    return Boolean(intentText) && intentMatched;
+  }
+
   if (categoryMatched || linkMatched || attachmentMatched) {
+    return true;
+  }
+  if (intentText && intentMatched) {
     return true;
   }
   if (categoryIds.length > 0 && !categoryMatched) {

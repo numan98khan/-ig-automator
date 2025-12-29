@@ -136,6 +136,40 @@ export interface Message {
   instagramMessageId?: string;
 }
 
+export interface AutomationSessionState {
+  stepIndex?: number;
+  nodeId?: string;
+  vars?: Record<string, any>;
+}
+
+export interface AutomationSession {
+  _id: string;
+  workspaceId: string;
+  conversationId: string;
+  automationInstanceId: string;
+  templateId: string;
+  templateVersionId: string;
+  status: 'active' | 'paused' | 'completed' | 'handoff';
+  state?: AutomationSessionState;
+  rateLimit?: {
+    windowStart?: string;
+    count?: number;
+  };
+  lastAutomationMessageAt?: string;
+  lastCustomerMessageAt?: string;
+  pausedAt?: string;
+  pauseReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutomationSessionSummary {
+  session: AutomationSession | null;
+  instance?: { _id: string; name?: string } | null;
+  template?: { _id: string; name?: string } | null;
+  version?: { _id: string; version?: number; versionLabel?: string } | null;
+}
+
 export interface KnowledgeItem {
   _id: string;
   title: string;
@@ -155,27 +189,13 @@ export type TriggerType =
   | 'live_comment'      // Live Comments
   | 'ref_url';          // Instagram Ref URL
 
-export interface ReplyStep {
-  type: 'constant_reply' | 'ai_reply' | 'template_flow';
-  constantReply?: {
-    message: string;
-  };
-  aiReply?: {
-    goalType: GoalType;
-    goalDescription?: string;
-    knowledgeItemIds: string[];
-    tone?: string;
-    maxReplySentences?: number;
-  };
-  templateFlow?: TemplateFlowConfig;
-}
-
 export interface TriggerConfig {
   keywords?: string[];
   excludeKeywords?: string[];
   keywordMatch?: 'any' | 'all';
   categoryIds?: string[];
-  triggerMode?: 'keywords' | 'categories' | 'any';
+  triggerMode?: 'keywords' | 'categories' | 'any' | 'intent';
+  intentText?: string;
   outsideBusinessHours?: boolean;
   businessHours?: BusinessHoursConfig;
   matchOn?: {
@@ -191,16 +211,102 @@ export interface AutomationStats {
   lastReplySentAt?: string;
 }
 
-export interface Automation {
+export interface FlowFieldOption {
+  label: string;
+  value: string;
+}
+
+export interface FlowFieldUi {
+  placeholder?: string;
+  helpText?: string;
+  group?: string;
+  order?: number;
+  widget?: string;
+}
+
+export interface FlowFieldValidation {
+  min?: number;
+  max?: number;
+  pattern?: string;
+}
+
+export interface FlowFieldSource {
+  nodeId: string;
+  path: string;
+}
+
+export interface FlowExposedField {
+  key: string;
+  label: string;
+  type: 'string' | 'number' | 'boolean' | 'select' | 'multi_select' | 'json' | 'text';
+  description?: string;
+  required?: boolean;
+  defaultValue?: any;
+  options?: FlowFieldOption[];
+  ui?: FlowFieldUi;
+  validation?: FlowFieldValidation;
+  source?: FlowFieldSource;
+}
+
+export interface FlowTriggerDefinition {
+  type: TriggerType;
+  config?: TriggerConfig;
+  label?: string;
+  description?: string;
+}
+
+export interface FlowPreviewMessage {
+  from: 'bot' | 'customer';
+  message: string;
+}
+
+export interface FlowTemplateDisplay {
+  outcome?: string;
+  goal?: 'Bookings' | 'Sales' | 'Leads' | 'Support' | 'General';
+  industry?: 'Clinics' | 'Salons' | 'Retail' | 'Restaurants' | 'Real Estate' | 'General';
+  setupTime?: string;
+  collects?: string[];
+  icon?: string;
+  previewConversation?: FlowPreviewMessage[];
+}
+
+export interface FlowTemplateVersion {
+  _id: string;
+  templateId: string;
+  version: number;
+  versionLabel?: string;
+  status: 'published' | 'archived';
+  triggers?: FlowTriggerDefinition[];
+  exposedFields?: FlowExposedField[];
+  display?: FlowTemplateDisplay;
+  publishedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FlowTemplate {
+  _id: string;
+  name: string;
+  description?: string;
+  status: 'active' | 'archived';
+  currentVersionId?: string;
+  currentVersion?: FlowTemplateVersion | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutomationInstance {
   _id: string;
   name: string;
   description?: string;
   workspaceId: string;
-  triggerType: TriggerType;
-  triggerConfig?: TriggerConfig;
-  replySteps: ReplyStep[];
+  templateId: string;
+  templateVersionId: string;
+  userConfig?: Record<string, any>;
   isActive: boolean;
   stats: AutomationStats;
+  template?: FlowTemplate | null;
+  templateVersion?: FlowTemplateVersion | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -209,135 +315,20 @@ export type GoalType =
   | 'none'
   | 'capture_lead'
   | 'book_appointment'
-  | 'start_order'
+  | 'order_now'
+  | 'product_inquiry'
+  | 'delivery'
+  | 'order_status'
+  | 'refund_exchange'
+  | 'human'
   | 'handle_support'
-  | 'drive_to_channel';
-
-export type AutomationTemplateId =
-  | 'sales_concierge';
+  ;
 
 export interface BusinessHoursConfig {
   startTime: string;
   endTime: string;
   timezone?: string;
   daysOfWeek?: number[];
-}
-
-export interface AutomationRateLimit {
-  maxMessages: number;
-  perMinutes: number;
-}
-
-export interface AutomationAiSettings {
-  tone?: string;
-  maxReplySentences?: number;
-}
-
-export interface SalesCatalogVariantOptions {
-  size?: string[];
-  color?: string[];
-}
-
-export interface SalesCatalogItem {
-  sku: string;
-  name: string;
-  keywords?: string[];
-  price?: number | { min: number; max: number };
-  currency?: string;
-  stock?: 'in' | 'low' | 'out' | 'unknown';
-  variants?: SalesCatalogVariantOptions;
-}
-
-export interface SalesShippingRule {
-  city: string;
-  fee: number;
-  eta: string;
-  codAllowed: boolean;
-}
-
-export interface SalesConciergeConfig {
-  catalog?: SalesCatalogItem[];
-  shippingRules?: SalesShippingRule[];
-  cityAliases?: Record<string, string>;
-  minPhoneLength?: number;
-  useGoogleSheets?: boolean;
-  knowledgeItemIds?: string[];
-  lockMode?: 'none' | 'session_only';
-  lockTtlMinutes?: number;
-  releaseKeywords?: string[];
-  faqInterruptEnabled?: boolean;
-  faqIntentKeywords?: string[];
-  faqResponseSuffix?: string;
-  maxQuestions?: number;
-  rateLimit?: AutomationRateLimit;
-  tags?: string[];
-  aiSettings?: AutomationAiSettings;
-  outputs?: {
-    notify?: string[];
-    createContact?: boolean;
-  };
-}
-
-export interface TemplateFlowConfig {
-  templateId: AutomationTemplateId;
-  config: SalesConciergeConfig;
-}
-
-export interface AutomationTestHistoryItem {
-  from: 'customer' | 'ai';
-  text: string;
-  createdAt?: string;
-}
-
-export interface AutomationTestContext {
-  forceOutsideBusinessHours?: boolean;
-  hasLink?: boolean;
-  hasAttachment?: boolean;
-  linkUrl?: string;
-  attachmentUrls?: string[];
-  categoryId?: string;
-  categoryName?: string;
-  testMode?: 'self_chat' | 'test_user';
-}
-
-export interface AutomationTestState {
-  history?: AutomationTestHistoryItem[];
-  testConversationId?: string;
-  testInstagramAccountId?: string;
-  testParticipantInstagramId?: string;
-  testMode?: 'self_chat' | 'test_user';
-  template?: {
-    templateId: AutomationTemplateId;
-    step?: string;
-    status?: 'active' | 'completed' | 'handoff' | 'paused';
-    questionCount: number;
-    collectedFields?: Record<string, any>;
-    followup?: {
-      status: 'scheduled' | 'sent' | 'cancelled';
-      scheduledAt?: string;
-      message?: string;
-    };
-    lastCustomerMessageAt?: string;
-    lastBusinessMessageAt?: string;
-  };
-  ai?: {
-    activeGoalType?: GoalType;
-    goalState?: 'idle' | 'collecting' | 'completed';
-    collectedFields?: Record<string, any>;
-  };
-}
-
-export interface AutomationTestResponse {
-  replies: string[];
-  state: AutomationTestState;
-  meta?: {
-    triggerMatched?: boolean;
-    detectedLanguage?: string;
-    categoryName?: string;
-    shouldEscalate?: boolean;
-    escalationReason?: string;
-    tags?: string[];
-  };
 }
 
 export interface TierLimits {
@@ -747,6 +738,23 @@ export const conversationAPI = {
     const { data } = await api.get(`/api/conversations/${id}`);
     return data;
   },
+
+  getAutomationSession: async (conversationId: string): Promise<AutomationSessionSummary> => {
+    const { data } = await api.get(`/api/conversations/${conversationId}/automation-session`);
+    return data?.data || data;
+  },
+
+  pauseAutomationSession: async (conversationId: string, reason?: string): Promise<AutomationSession> => {
+    const { data } = await api.post(`/api/conversations/${conversationId}/automation-session/pause`, { reason });
+    const payload = data?.data || data;
+    return payload.session || payload;
+  },
+
+  stopAutomationSession: async (conversationId: string, reason?: string): Promise<AutomationSession> => {
+    const { data } = await api.post(`/api/conversations/${conversationId}/automation-session/stop`, { reason });
+    const payload = data?.data || data;
+    return payload.session || payload;
+  },
 };
 
 // Message API
@@ -801,27 +809,32 @@ export const knowledgeAPI = {
 
 // Automation API
 export const automationAPI = {
-  getByWorkspace: async (workspaceId: string): Promise<Automation[]> => {
+  getByWorkspace: async (workspaceId: string): Promise<AutomationInstance[]> => {
     const { data } = await api.get(`/api/automations/workspace/${workspaceId}`);
     return data;
   },
 
-  getById: async (id: string): Promise<Automation> => {
+  getById: async (id: string): Promise<AutomationInstance> => {
     const { data } = await api.get(`/api/automations/${id}`);
     return data;
   },
 
-  create: async (automation: Omit<Automation, '_id' | 'stats' | 'createdAt' | 'updatedAt'>): Promise<Automation> => {
+  create: async (
+    automation: Omit<AutomationInstance, '_id' | 'stats' | 'createdAt' | 'updatedAt' | 'template' | 'templateVersion'>,
+  ): Promise<AutomationInstance> => {
     const { data } = await api.post('/api/automations', automation);
     return data;
   },
 
-  update: async (id: string, updates: Partial<Omit<Automation, '_id' | 'workspaceId' | 'stats' | 'createdAt' | 'updatedAt'>>): Promise<Automation> => {
+  update: async (
+    id: string,
+    updates: Partial<Omit<AutomationInstance, '_id' | 'workspaceId' | 'stats' | 'createdAt' | 'updatedAt' | 'template' | 'templateVersion'>>,
+  ): Promise<AutomationInstance> => {
     const { data } = await api.put(`/api/automations/${id}`, updates);
     return data;
   },
 
-  toggle: async (id: string): Promise<Automation> => {
+  toggle: async (id: string): Promise<AutomationInstance> => {
     const { data } = await api.patch(`/api/automations/${id}/toggle`);
     return data;
   },
@@ -829,24 +842,26 @@ export const automationAPI = {
   delete: async (id: string): Promise<void> => {
     await api.delete(`/api/automations/${id}`);
   },
+};
 
-  test: async (
-    id: string,
-    messageText: string,
-    state?: AutomationTestState,
-    context?: AutomationTestContext
-  ): Promise<AutomationTestResponse> => {
-    const { data } = await api.post(`/api/automations/${id}/test`, { messageText, state, context });
+export const flowTemplateAPI = {
+  list: async (): Promise<FlowTemplate[]> => {
+    const { data } = await api.get('/api/flow-templates');
     return data;
   },
 
-  testAction: async (
-    id: string,
-    action: 'simulate_followup',
-    state?: AutomationTestState,
-    context?: AutomationTestContext
-  ): Promise<AutomationTestResponse> => {
-    const { data } = await api.post(`/api/automations/${id}/test`, { action, state, context });
+  get: async (templateId: string): Promise<FlowTemplate> => {
+    const { data } = await api.get(`/api/flow-templates/${templateId}`);
+    return data;
+  },
+
+  listVersions: async (templateId: string): Promise<FlowTemplateVersion[]> => {
+    const { data } = await api.get(`/api/flow-templates/${templateId}/versions`);
+    return data;
+  },
+
+  getVersion: async (templateId: string, versionId: string): Promise<FlowTemplateVersion> => {
+    const { data } = await api.get(`/api/flow-templates/${templateId}/versions/${versionId}`);
     return data;
   },
 };

@@ -68,7 +68,7 @@ async function simulateMessages(
 
     const categorization = await categorizeMessage(messageText, workspaceId);
     const category = await MessageCategory.findOne({ workspaceId, nameEn: categorization.categoryName });
-    const detectedGoal = detectGoalIntent(messageText || '');
+    const detectedGoal = await detectGoalIntent(messageText || '');
     const goalMatched = goalMatchesWorkspace(
       detectedGoal,
       settings.primaryGoal as GoalType | undefined,

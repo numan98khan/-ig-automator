@@ -4,6 +4,10 @@ import Message from '../models/Message';
 import Workspace from '../models/Workspace';
 import InstagramAccount from '../models/InstagramAccount';
 import MessageCategory from '../models/MessageCategory';
+import AutomationSession from '../models/AutomationSession';
+import AutomationInstance from '../models/AutomationInstance';
+import FlowTemplate from '../models/FlowTemplate';
+import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { fetchConversations, fetchUserDetails } from '../utils/instagram-api';
@@ -209,6 +213,135 @@ router.get('/escalations/workspace/:workspaceId', authenticate, async (req: Auth
     res.json(payload);
   } catch (error) {
     console.error('Get escalations error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get active automation session for a conversation
+router.get('/:id/automation-session', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const conversation = await Conversation.findById(req.params.id);
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(
+      conversation.workspaceId.toString(),
+      req.userId!
+    );
+
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+
+    const session = await AutomationSession.findOne({
+      conversationId: conversation._id,
+      status: { $in: ['active', 'paused', 'handoff'] },
+    }).sort({ updatedAt: -1 }).lean();
+
+    if (!session) {
+      return res.json({ data: { session: null } });
+    }
+
+    const [instance, template, version] = await Promise.all([
+      AutomationInstance.findById(session.automationInstanceId).select('name').lean(),
+      FlowTemplate.findById(session.templateId).select('name').lean(),
+      FlowTemplateVersion.findById(session.templateVersionId).select('version versionLabel').lean(),
+    ]);
+
+    res.json({
+      data: {
+        session,
+        instance: instance ? { _id: instance._id, name: instance.name } : null,
+        template: template ? { _id: template._id, name: template.name } : null,
+        version: version
+          ? { _id: version._id, version: version.version, versionLabel: version.versionLabel }
+          : null,
+      },
+    });
+  } catch (error) {
+    console.error('Get automation session error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Pause the active automation session for a conversation
+router.post('/:id/automation-session/pause', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const conversation = await Conversation.findById(req.params.id);
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(
+      conversation.workspaceId.toString(),
+      req.userId!
+    );
+
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+
+    const session = await AutomationSession.findOne({
+      conversationId: conversation._id,
+      status: 'active',
+    }).sort({ updatedAt: -1 });
+
+    if (!session) {
+      return res.status(404).json({ error: 'No active automation session found' });
+    }
+
+    session.status = 'paused';
+    session.pausedAt = new Date();
+    session.pauseReason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : 'manual_pause';
+    await session.save();
+
+    res.json({ data: { session } });
+  } catch (error) {
+    console.error('Pause automation session error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Stop (complete) the current automation session for a conversation
+router.post('/:id/automation-session/stop', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const conversation = await Conversation.findById(req.params.id);
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(
+      conversation.workspaceId.toString(),
+      req.userId!
+    );
+
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+
+    const session = await AutomationSession.findOne({
+      conversationId: conversation._id,
+      status: { $in: ['active', 'paused', 'handoff'] },
+    }).sort({ updatedAt: -1 });
+
+    if (!session) {
+      return res.status(404).json({ error: 'No active automation session found' });
+    }
+
+    session.status = 'completed';
+    session.state = {};
+    if (typeof req.body?.reason === 'string' && req.body.reason.trim()) {
+      session.pauseReason = req.body.reason.trim();
+    }
+    await session.save();
+
+    res.json({ data: { session } });
+  } catch (error) {
+    console.error('Stop automation session error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

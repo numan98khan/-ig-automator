@@ -14,6 +14,7 @@ import {
   Message,
   InstagramAccount,
   MessageCategory,
+  AutomationSessionSummary,
 } from '../services/api';
 import {
   Send,
@@ -64,6 +65,9 @@ const Inbox: React.FC = () => {
   const [contextOpen, setContextOpen] = useState(false);
   const [draftSource, setDraftSource] = useState<'ai' | null>(null);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
+  const [automationSession, setAutomationSession] = useState<AutomationSessionSummary | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessionAction, setSessionAction] = useState<'pause' | 'stop' | null>(null);
 
   const handleSyncConversation = async () => {
     if (!selectedConversation || !selectedConversation.instagramConversationId) return;
@@ -115,6 +119,23 @@ const Inbox: React.FC = () => {
     }
   };
 
+  const loadAutomationSession = async () => {
+    if (!selectedConversation?._id) {
+      setAutomationSession(null);
+      return;
+    }
+    setSessionLoading(true);
+    try {
+      const data = await conversationAPI.getAutomationSession(selectedConversation._id);
+      setAutomationSession(data);
+    } catch (error) {
+      console.error('Error loading automation session:', error);
+      setAutomationSession(null);
+    } finally {
+      setSessionLoading(false);
+    }
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -138,6 +159,7 @@ const Inbox: React.FC = () => {
       loadConversations();
       if (selectedConversation) {
         loadMessages();
+        loadAutomationSession();
       }
     }, 5000);
     return () => clearInterval(interval);
@@ -244,6 +266,7 @@ const Inbox: React.FC = () => {
       } else {
         loadMessages();
       }
+      loadAutomationSession();
       setShouldAutoScroll(true);
     }
   }, [selectedConversation]);
@@ -283,6 +306,7 @@ const Inbox: React.FC = () => {
       setDraftSource(null);
       setShouldAutoScroll(true);
       setTimeout(scrollToBottom, 100);
+      loadAutomationSession();
     } catch (error: any) {
       console.error('Error sending message:', error);
       alert(error.response?.data?.error || 'Failed to send message. Please try again.');
@@ -298,11 +322,41 @@ const Inbox: React.FC = () => {
       const message = await messageAPI.generateAIReply(selectedConversation._id);
       setNewMessage(message.text || '');
       setDraftSource('ai');
+      loadAutomationSession();
     } catch (error) {
       console.error('Error generating AI reply:', error);
       alert('Failed to generate AI reply. Please try again.');
     } finally {
       setGeneratingAI(false);
+    }
+  };
+
+  const handlePauseSession = async () => {
+    if (!selectedConversation?._id) return;
+    setSessionAction('pause');
+    try {
+      await conversationAPI.pauseAutomationSession(selectedConversation._id, 'manual_pause');
+      await loadAutomationSession();
+    } catch (error) {
+      console.error('Error pausing automation session:', error);
+      alert('Failed to pause automation session.');
+    } finally {
+      setSessionAction(null);
+    }
+  };
+
+  const handleStopSession = async () => {
+    if (!selectedConversation?._id) return;
+    if (!window.confirm('Stop the active automation session?')) return;
+    setSessionAction('stop');
+    try {
+      await conversationAPI.stopAutomationSession(selectedConversation._id, 'manual_stop');
+      await loadAutomationSession();
+    } catch (error) {
+      console.error('Error stopping automation session:', error);
+      alert('Failed to stop automation session.');
+    } finally {
+      setSessionAction(null);
     }
   };
 
@@ -320,6 +374,29 @@ const Inbox: React.FC = () => {
     if (days < 7) return `${days}d ago`;
     return d.toLocaleDateString();
   };
+
+  const getSessionStatusMeta = (status?: string) => {
+    if (!status) {
+      return { label: 'Inactive', className: 'bg-muted text-muted-foreground' };
+    }
+    if (status === 'active') {
+      return { label: 'Active', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100' };
+    }
+    if (status === 'paused') {
+      return { label: 'Paused', className: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100' };
+    }
+    if (status === 'handoff') {
+      return { label: 'Handoff', className: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100' };
+    }
+    return { label: status, className: 'bg-muted text-muted-foreground' };
+  };
+
+  const session = automationSession?.session;
+  const sessionMeta = getSessionStatusMeta(session?.status);
+  const sessionInstanceName = automationSession?.instance?.name;
+  const sessionTemplateName = automationSession?.template?.name;
+  const sessionVersionLabel = automationSession?.version?.versionLabel;
+  const sessionVersionNumber = automationSession?.version?.version;
 
   const handleConnectInstagram = async () => {
     if (!currentWorkspace) return;
@@ -769,6 +846,89 @@ const Inbox: React.FC = () => {
                   <div className="mt-1 flex items-center justify-between text-sm font-medium text-foreground">
                     <span>{autoReplyEnabled ? 'Auto-reply on' : 'Auto-reply paused'}</span>
                     <span className="text-xs text-muted-foreground">Assist mode</span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg border border-border/70 bg-background/70">
+                  <div className="flex items-center justify-between text-sm font-semibold text-foreground">
+                    <span>Automation session</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${sessionMeta.className}`}>
+                      {sessionMeta.label}
+                    </span>
+                  </div>
+                  {sessionLoading ? (
+                    <p className="mt-2 text-xs text-muted-foreground">Loading session...</p>
+                  ) : session ? (
+                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      <div>
+                        Instance:{' '}
+                        <span className="text-foreground">{sessionInstanceName || session.automationInstanceId}</span>
+                      </div>
+                      {sessionTemplateName && (
+                        <div>
+                          Template: <span className="text-foreground">{sessionTemplateName}</span>
+                        </div>
+                      )}
+                      {(sessionVersionLabel || sessionVersionNumber) && (
+                        <div>
+                          Version:{' '}
+                          <span className="text-foreground">
+                            {sessionVersionLabel || `v${sessionVersionNumber}`}
+                          </span>
+                        </div>
+                      )}
+                      {session.state?.nodeId && (
+                        <div>
+                          Node: <span className="text-foreground">{session.state.nodeId}</span>
+                        </div>
+                      )}
+                      {typeof session.state?.stepIndex === 'number' && (
+                        <div>
+                          Step: <span className="text-foreground">{session.state.stepIndex + 1}</span>
+                        </div>
+                      )}
+                      {session.state?.vars && (
+                        <div>
+                          Vars:{' '}
+                          <span className="text-foreground">{Object.keys(session.state.vars || {}).length}</span>
+                        </div>
+                      )}
+                      {session.lastAutomationMessageAt && (
+                        <div>
+                          Last automation: <span className="text-foreground">{formatTime(session.lastAutomationMessageAt)}</span>
+                        </div>
+                      )}
+                      {session.pausedAt && (
+                        <div>
+                          Paused: <span className="text-foreground">{formatTime(session.pausedAt)}</span>
+                        </div>
+                      )}
+                      {session.pauseReason && (
+                        <div>
+                          Reason: <span className="text-foreground">{session.pauseReason}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">No active session.</p>
+                  )}
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button
+                      variant="secondary"
+                      className="h-9"
+                      disabled={!session || session.status !== 'active' || sessionAction === 'pause' || sessionLoading}
+                      onClick={handlePauseSession}
+                    >
+                      {sessionAction === 'pause' ? 'Pausing...' : 'Pause'}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="h-9"
+                      disabled={!session || sessionAction === 'stop' || sessionLoading}
+                      onClick={handleStopSession}
+                    >
+                      {sessionAction === 'stop' ? 'Stopping...' : 'Stop'}
+                    </Button>
                   </div>
                 </div>
 

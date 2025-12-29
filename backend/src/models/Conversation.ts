@@ -132,7 +132,20 @@ const conversationSchema = new Schema<IConversation>({
   // DM Goals
   activeGoalType: {
     type: String,
-    enum: ['none', 'capture_lead', 'book_appointment', 'start_order', 'handle_support', 'drive_to_channel'],
+    enum: [
+      'none',
+      'capture_lead',
+      'book_appointment',
+      'order_now',
+      'product_inquiry',
+      'delivery',
+      'order_status',
+      'refund_exchange',
+      'human',
+      'handle_support',
+      'start_order',
+      'drive_to_channel',
+    ],
   },
   goalState: {
     type: String,

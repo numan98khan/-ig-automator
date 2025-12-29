@@ -92,16 +92,22 @@ export const adminApi = {
   deleteGlobalKnowledgeItem: (id: string) => api.delete(`/knowledge/${id}`),
   reindexGlobalKnowledge: () => api.post('/knowledge/reindex-vector'),
 
-  // Automation Templates
-  getAutomationTemplates: () => api.get('/automation-templates'),
-  getAutomationTemplate: (templateId: string) => api.get(`/automation-templates/${templateId}`),
-  updateAutomationTemplate: (templateId: string, payload: any) =>
-    api.put(`/automation-templates/${templateId}`, payload),
-
-  // Automation Defaults
-  getAutomationDefaults: (templateId: string) => api.get(`/automation-defaults/${templateId}`),
-  updateAutomationDefaults: (templateId: string, payload: any) =>
-    api.put(`/automation-defaults/${templateId}`, payload),
+  // Flow drafts & templates
+  getFlowDrafts: (params?: { templateId?: string; status?: string }) =>
+    api.get('/flow-drafts', { params }),
+  getFlowDraft: (draftId: string) => api.get(`/flow-drafts/${draftId}`),
+  createFlowDraft: (payload: any) => api.post('/flow-drafts', payload),
+  updateFlowDraft: (draftId: string, payload: any) => api.put(`/flow-drafts/${draftId}`, payload),
+  publishFlowDraft: (draftId: string, payload: any) =>
+    api.post(`/flow-drafts/${draftId}/publish`, payload),
+  getFlowTemplates: () => api.get('/flow-templates'),
+  getFlowTemplate: (templateId: string) => api.get(`/flow-templates/${templateId}`),
+  updateFlowTemplate: (templateId: string, payload: any) =>
+    api.put(`/flow-templates/${templateId}`, payload),
+  getFlowTemplateVersions: (templateId: string) =>
+    api.get(`/flow-templates/${templateId}/versions`),
+  getFlowTemplateVersion: (templateId: string, versionId: string) =>
+    api.get(`/flow-templates/${templateId}/versions/${versionId}`),
 
   // Log settings
   getLogSettings: () => api.get('/log-settings'),

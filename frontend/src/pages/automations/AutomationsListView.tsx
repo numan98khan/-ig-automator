@@ -1,20 +1,16 @@
 import React from 'react';
 import { Plus, Loader2, Target, Trash2, Power, PowerOff } from 'lucide-react';
-import { Automation } from '../../services/api';
+import { AutomationInstance } from '../../services/api';
 import { Button } from '../../components/ui/Button';
-import {
-  TRIGGER_METADATA,
-  GOAL_OPTIONS,
-  AUTOMATION_TEMPLATES,
-} from './constants';
+import { TRIGGER_METADATA } from './constants';
 
 type AutomationsListViewProps = {
-  automations: Automation[];
+  automations: AutomationInstance[];
   loading: boolean;
   onCreate: () => void;
-  onOpen?: (automation: Automation) => void;
-  onToggle: (automation: Automation) => void;
-  onDelete: (automation: Automation) => void;
+  onOpen?: (automation: AutomationInstance) => void;
+  onToggle: (automation: AutomationInstance) => void;
+  onDelete: (automation: AutomationInstance) => void;
 };
 
 export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
@@ -54,8 +50,16 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
     ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {automations.map((automation) => {
-          const trigger = TRIGGER_METADATA[automation.triggerType];
-          const replyStep = automation.replySteps[0];
+          const template = automation.template;
+          const version = automation.templateVersion;
+          const triggers = version?.triggers || [];
+          const primaryTriggerType = triggers[0]?.type;
+          const trigger = primaryTriggerType ? TRIGGER_METADATA[primaryTriggerType] : null;
+          const triggerLabel = triggers.length > 1
+            ? 'Multiple triggers'
+            : trigger?.label || 'Trigger';
+          const triggerDescription = trigger?.description || 'Trigger configured in the template.';
+          const badge = triggers.length > 1 ? null : trigger?.badge;
 
           return (
             <div
@@ -73,45 +77,37 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                 isOpenEnabled ? 'hover:shadow-lg cursor-pointer' : ''
               }`}
             >
-              {trigger.badge && (
+              {badge && (
                 <div className="absolute top-4 right-4">
                   <span className={`px-2 py-1 rounded-md text-xs font-bold ${
-                    trigger.badge === 'PRO' ? 'bg-amber-500/20 text-amber-500' : 'bg-blue-500/20 text-blue-500'
+                    badge === 'PRO' ? 'bg-amber-500/20 text-amber-500' : 'bg-blue-500/20 text-blue-500'
                   }`}>
-                    {trigger.badge}
+                    {badge}
                   </span>
                 </div>
               )}
 
               <div className="flex items-start gap-3 mb-4">
                 <div className="p-2 bg-primary/10 text-primary rounded-lg">
-                  {trigger.icon}
+                  {trigger?.icon || <Target className="w-5 h-5" />}
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-lg mb-1">{automation.name}</h3>
                   <p className="text-sm text-muted-foreground line-clamp-2">
-                    {automation.description || trigger.description}
+                    {automation.description || template?.description || triggerDescription}
                   </p>
                 </div>
               </div>
 
               <div className="mb-4 p-3 bg-muted/30 rounded-lg">
                 <div className="text-xs font-medium text-muted-foreground mb-1">TRIGGER</div>
-                <div className="text-sm font-medium">{trigger.label}</div>
+                <div className="text-sm font-medium">{triggerLabel}</div>
               </div>
 
               <div className="mb-4 p-3 bg-muted/30 rounded-lg">
                 <div className="text-xs font-medium text-muted-foreground mb-1">REPLY</div>
                 <div className="text-sm font-medium">
-                  {replyStep.type === 'constant_reply' ? (
-                    <span>Constant Reply</span>
-                  ) : replyStep.type === 'ai_reply' ? (
-                    <span>AI Reply - {GOAL_OPTIONS.find(g => g.value === replyStep.aiReply?.goalType)?.label}</span>
-                  ) : (
-                    <span>
-                      Template - {AUTOMATION_TEMPLATES.find(t => t.id === replyStep.templateFlow?.templateId)?.name || 'Template'}
-                    </span>
-                  )}
+                  <span>Template - {template?.name || 'Template'}</span>
                 </div>
               </div>
 

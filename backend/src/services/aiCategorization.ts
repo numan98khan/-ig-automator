@@ -1,7 +1,6 @@
 import OpenAI from 'openai';
 import MessageCategory, { DEFAULT_CATEGORIES } from '../models/MessageCategory';
 import mongoose from 'mongoose';
-import { getAutomationTemplateConfig } from './automationTemplateService';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 
 const openai = new OpenAI({
@@ -16,6 +15,10 @@ const logAiTiming = (label: string, model: string | undefined, startNs: bigint, 
   const ms = getDurationMs(startNs);
   console.log('[AI] timing', { label, model, ms: Number(ms.toFixed(2)), success });
 };
+
+const DEFAULT_CATEGORIZATION_MODEL = 'gpt-4o-mini';
+const DEFAULT_CATEGORIZATION_TEMPERATURE = 0.1;
+const DEFAULT_CATEGORIZATION_REASONING_EFFORT: CategorizationOptions['reasoningEffort'] = 'none';
 
 export interface CategorizationResult {
   categoryName: string;
@@ -48,13 +51,12 @@ export async function categorizeMessage(
       examples: (cat.exampleMessages || []).slice(0, 3),
     }));
 
-    const templateConfig = await getAutomationTemplateConfig('sales_concierge');
-    const model = options.model || templateConfig.categorization.model || 'gpt-4o-mini';
+    const model = options.model || DEFAULT_CATEGORIZATION_MODEL;
     modelUsed = model;
     const temperature = typeof options.temperature === 'number'
       ? options.temperature
-      : templateConfig.categorization.temperature;
-    const reasoningEffort = options.reasoningEffort || templateConfig.categorization.reasoningEffort;
+      : DEFAULT_CATEGORIZATION_TEMPERATURE;
+    const reasoningEffort = options.reasoningEffort || DEFAULT_CATEGORIZATION_REASONING_EFFORT;
 
     const categoryNames = categoryMeta.map(c => c.name);
 

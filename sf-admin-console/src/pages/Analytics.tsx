@@ -60,8 +60,8 @@ export default function Analytics() {
 
             <div className="stat-card">
               <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-blue-500/20 rounded-lg">
-                  <MessageSquare className="w-5 h-5 text-blue-400" />
+                <div className="p-2 bg-muted rounded-lg">
+                  <MessageSquare className="w-5 h-5 text-foreground/70" />
                 </div>
                 <h3 className="font-semibold text-muted-foreground">
                   Messages

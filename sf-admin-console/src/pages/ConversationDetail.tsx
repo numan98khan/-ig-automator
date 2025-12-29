@@ -191,7 +191,7 @@ export default function ConversationDetail() {
                       isAI
                         ? 'bg-primary/20 text-primary'
                         : isUser
-                        ? 'bg-blue-500/20 text-blue-500'
+                        ? 'bg-muted text-foreground/80'
                         : 'bg-muted text-muted-foreground'
                     }`}
                   >

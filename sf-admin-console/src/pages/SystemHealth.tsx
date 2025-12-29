@@ -99,8 +99,8 @@ export default function SystemHealth() {
 
         <div className="stat-card">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-blue-500/20 rounded-lg">
-              <HardDrive className="w-5 h-5 text-blue-400" />
+            <div className="p-2 bg-muted rounded-lg">
+              <HardDrive className="w-5 h-5 text-foreground/70" />
             </div>
             <h3 className="font-semibold text-foreground">Memory Usage</h3>
           </div>
@@ -109,7 +109,7 @@ export default function SystemHealth() {
           </p>
           <div className="mt-2 w-full bg-muted rounded-full h-2">
             <div
-              className="bg-blue-500 h-2 rounded-full transition-all"
+              className="bg-foreground/70 h-2 rounded-full transition-all"
               style={{ width: `${database.memoryUsage || 0}%` }}
             />
           </div>

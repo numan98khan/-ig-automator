@@ -102,7 +102,7 @@ router.get('/summary', authenticate, async (req: AuthRequest, res: Response) => 
     const outcomes = {
       leads: totals.goalCompletions.capture_lead || 0,
       bookings: totals.goalCompletions.book_appointment || 0,
-      orders: totals.goalCompletions.start_order || 0,
+      orders: totals.goalCompletions.order_now || totals.goalCompletions.start_order || 0,
       support: totals.goalCompletions.handle_support || 0,
       escalated: totals.escalationsOpened,
       goal: {
@@ -282,7 +282,7 @@ async function buildAttentionItems(workspaceId: string, filter: AttentionFilter)
 
   const conversations = await Conversation.find({
     workspaceId,
-    activeGoalType: { $in: ['capture_lead', 'book_appointment', 'start_order'] },
+    activeGoalType: { $in: ['capture_lead', 'book_appointment', 'order_now', 'start_order'] },
   }).sort({ updatedAt: -1 }).limit(25);
 
   return Promise.all(conversations.map(async conv => {

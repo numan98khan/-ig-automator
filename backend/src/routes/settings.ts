@@ -13,11 +13,24 @@ const router = express.Router();
 function sanitizeSettings(settings: any) {
   if (!settings) return settings;
   const plain = settings.toObject ? settings.toObject() : { ...settings };
+  if (plain.primaryGoal) {
+    plain.primaryGoal = normalizeGoalValue(plain.primaryGoal);
+  }
+  if (plain.secondaryGoal) {
+    plain.secondaryGoal = normalizeGoalValue(plain.secondaryGoal);
+  }
   if (plain.googleSheets) {
     delete plain.googleSheets.serviceAccountJson;
     delete plain.googleSheets.oauthRefreshToken;
   }
   return plain;
+}
+
+function normalizeGoalValue(goal?: string | null) {
+  if (!goal) return goal;
+  if (goal === 'start_order') return 'order_now';
+  if (goal === 'drive_to_channel') return 'none';
+  return goal;
 }
 
 router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
@@ -115,8 +128,8 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     if (followupEnabled !== undefined) updateData.followupEnabled = followupEnabled;
     if (followupHoursBeforeExpiry !== undefined) updateData.followupHoursBeforeExpiry = followupHoursBeforeExpiry;
     if (followupTemplate !== undefined) updateData.followupTemplate = followupTemplate;
-    if (primaryGoal !== undefined) updateData.primaryGoal = primaryGoal;
-    if (secondaryGoal !== undefined) updateData.secondaryGoal = secondaryGoal;
+    if (primaryGoal !== undefined) updateData.primaryGoal = normalizeGoalValue(primaryGoal);
+    if (secondaryGoal !== undefined) updateData.secondaryGoal = normalizeGoalValue(secondaryGoal);
     if (goalConfigs !== undefined) updateData.goalConfigs = goalConfigs;
     if (googleSheets !== undefined) {
       Object.entries(googleSheets as Record<string, any>).forEach(([key, value]) => {

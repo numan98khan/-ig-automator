@@ -7,85 +7,116 @@ import {
   Search,
 } from 'lucide-react';
 import {
-  Automation,
-  KnowledgeItem,
-  GoalType,
-  TriggerType,
+  AutomationInstance,
+  FlowExposedField,
+  FlowTemplate,
+  TriggerConfig,
 } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { AutomationPreviewPhone } from './AutomationPreviewPhone';
-import {
-  AutomationTemplate,
-  GOAL_OPTIONS,
-  TRIGGER_METADATA,
-  AUTOMATION_TEMPLATES,
-  SetupData,
-  SALES_TRIGGER_KEYWORDS,
-  AI_TONE_OPTIONS,
-} from './constants';
+import { FLOW_GOAL_FILTERS, TRIGGER_METADATA } from './constants';
 
 type CreateFormData = {
   name: string;
   description: string;
-  triggerType: TriggerType;
-  replyType: 'constant_reply' | 'ai_reply' | 'template_flow';
-  constantMessage: string;
-  aiGoalType: GoalType;
-  aiGoalDescription: string;
-  aiKnowledgeIds: string[];
 };
 
 type AutomationsCreateViewProps = {
   createViewTitle: string;
   isCreateSetupView: boolean;
-  editingAutomation: Automation | null;
-  isTemplateEditing: boolean;
+  editingAutomation: AutomationInstance | null;
   creationMode: 'templates' | 'custom';
   currentStep: 'gallery' | 'setup' | 'review';
-  selectedTemplate: AutomationTemplate | null;
+  selectedTemplate: FlowTemplate | null;
+  templates: FlowTemplate[];
   templateSearch: string;
-  goalFilter: 'all' | 'Bookings' | 'Sales' | 'Leads' | 'Support';
+  goalFilter: 'all' | (typeof FLOW_GOAL_FILTERS)[number];
   industryFilter: 'all' | 'Clinics' | 'Salons' | 'Retail' | 'Restaurants' | 'Real Estate' | 'General';
   formData: CreateFormData;
-  setupData: SetupData;
+  exposedFields: FlowExposedField[];
+  configValues: Record<string, any>;
   saving: boolean;
-  knowledgeItems: KnowledgeItem[];
-  categories: Array<{ _id: string; nameEn: string }>;
   accountDisplayName: string;
   accountHandle: string;
   accountAvatarUrl?: string;
   accountInitial: string;
   onClose: () => void;
   onSubmit: (event?: React.FormEvent<HTMLFormElement>) => void;
-  onSelectTemplate: (template: AutomationTemplate) => void;
+  onSelectTemplate: (template: FlowTemplate) => void;
   onChangeCreationMode: (mode: 'templates' | 'custom') => void;
   onChangeTemplateSearch: (value: string) => void;
-  onChangeGoalFilter: (goal: 'all' | 'Bookings' | 'Sales' | 'Leads' | 'Support') => void;
+  onChangeGoalFilter: (goal: 'all' | (typeof FLOW_GOAL_FILTERS)[number]) => void;
   onBackToGallery: () => void;
   onBackToSetup: () => void;
   onContinueToReview: () => void;
   onUpdateFormData: React.Dispatch<React.SetStateAction<CreateFormData>>;
-  onUpdateSetupData: React.Dispatch<React.SetStateAction<SetupData>>;
-  onToggleKnowledge: (knowledgeId: string) => void;
+  onUpdateConfigValues: React.Dispatch<React.SetStateAction<Record<string, any>>>;
+};
+
+const formatConfigValue = (value: any) => {
+  if (Array.isArray(value)) return value.join(', ');
+  if (value && typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  if (value === undefined || value === null || value === '') return 'Not set';
+  return String(value);
+};
+
+const formatTriggerConfigSummary = (config?: TriggerConfig) => {
+  if (!config) return '';
+  const parts: string[] = [];
+
+  if (config.triggerMode && config.triggerMode !== 'any') {
+    parts.push(`Mode: ${config.triggerMode}`);
+  }
+  if (config.keywordMatch) {
+    parts.push(`Keyword match: ${config.keywordMatch}`);
+  }
+  if (config.keywords && config.keywords.length > 0) {
+    parts.push(`Keywords: ${config.keywords.join(', ')}`);
+  }
+  if (config.excludeKeywords && config.excludeKeywords.length > 0) {
+    parts.push(`Exclude: ${config.excludeKeywords.join(', ')}`);
+  }
+  if (config.categoryIds && config.categoryIds.length > 0) {
+    parts.push('Category filters');
+  }
+  if (config.outsideBusinessHours) {
+    parts.push('Outside business hours');
+  }
+  const matchOn: string[] = [];
+  if (config.matchOn?.link) matchOn.push('links');
+  if (config.matchOn?.attachment) matchOn.push('attachments');
+  if (matchOn.length > 0) {
+    parts.push(`Match on: ${matchOn.join(', ')}`);
+  }
+  if (config.businessHours) {
+    parts.push('Business hours');
+  }
+
+  return parts.join(' | ');
 };
 
 export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   createViewTitle,
   isCreateSetupView,
   editingAutomation,
-  isTemplateEditing,
   creationMode,
   currentStep,
   selectedTemplate,
+  templates,
   templateSearch,
   goalFilter,
   industryFilter,
   formData,
-  setupData,
+  exposedFields,
+  configValues,
   saving,
-  knowledgeItems,
-  categories,
   accountDisplayName,
   accountHandle,
   accountAvatarUrl,
@@ -100,43 +131,142 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   onBackToSetup,
   onContinueToReview,
   onUpdateFormData,
-  onUpdateSetupData,
-  onToggleKnowledge,
+  onUpdateConfigValues,
 }) => {
   const updateFormData = (updates: Partial<CreateFormData>) => {
     onUpdateFormData((prev) => ({ ...prev, ...updates }));
   };
 
-  const updateSetupData = (updates: Partial<SetupData>) => {
-    onUpdateSetupData((prev) => ({ ...prev, ...updates }));
+  const updateConfigValues = (updates: Record<string, any>) => {
+    onUpdateConfigValues((prev) => ({ ...prev, ...updates }));
   };
 
-  const addSalesTriggerKeyword = (keyword: string) => {
-    const current = (setupData.salesTriggerKeywords || '')
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
-    const exists = current.some((item) => item.toLowerCase() === keyword.toLowerCase());
-    if (!exists) {
-      updateSetupData({ salesTriggerKeywords: [...current, keyword].join(', ') });
+  const version = selectedTemplate?.currentVersion;
+  const display = version?.display;
+  const previewMessages = display?.previewConversation || [];
+  const triggers = version?.triggers || [];
+
+  const sortedFields = [...exposedFields].sort((a, b) => {
+    const orderA = a.ui?.order ?? 999;
+    const orderB = b.ui?.order ?? 999;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.label.localeCompare(b.label);
+  });
+
+  const groupedFields = sortedFields.reduce((acc, field) => {
+    const group = field.ui?.group || 'Configuration';
+    if (!acc[group]) acc[group] = [];
+    acc[group].push(field);
+    return acc;
+  }, {} as Record<string, FlowExposedField[]>);
+
+  const renderField = (field: FlowExposedField) => {
+    const value = configValues[field.key];
+    const description = field.description || field.ui?.helpText;
+
+    if (field.type === 'boolean') {
+      return (
+        <label key={field.key} className="flex items-center gap-3 text-sm">
+          <input
+            type="checkbox"
+            checked={Boolean(value)}
+            onChange={(event) => updateConfigValues({ [field.key]: event.target.checked })}
+            className="rounded border-border"
+          />
+          <span>{field.label}</span>
+          {description && <span className="text-xs text-muted-foreground">{description}</span>}
+        </label>
+      );
     }
-  };
 
-  const toggleSalesTriggerCategory = (categoryId: string) => {
-    const current = setupData.salesTriggerCategoryIds || [];
-    const exists = current.includes(categoryId);
-    updateSetupData({
-      salesTriggerCategoryIds: exists
-        ? current.filter((id) => id !== categoryId)
-        : [...current, categoryId],
-    });
+    if (field.type === 'select') {
+      return (
+        <div key={field.key}>
+          <label className="block text-sm font-medium mb-1.5">
+            {field.label}{field.required ? ' *' : ''}
+          </label>
+          <select
+            value={value ?? ''}
+            onChange={(event) => updateConfigValues({ [field.key]: event.target.value })}
+            className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+          >
+            <option value="">Select...</option>
+            {(field.options || []).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
+        </div>
+      );
+    }
+
+    if (field.type === 'multi_select') {
+      const options = field.options || [];
+      const selected = Array.isArray(value) ? value : [];
+      return (
+        <div key={field.key}>
+          <label className="block text-sm font-medium mb-1.5">
+            {field.label}{field.required ? ' *' : ''}
+          </label>
+          <div className="space-y-2">
+            {options.map((option) => (
+              <label key={option.value} className="flex items-center gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(option.value)}
+                  onChange={(event) => {
+                    const next = event.target.checked
+                      ? [...selected, option.value]
+                      : selected.filter((item: string) => item !== option.value);
+                    updateConfigValues({ [field.key]: next });
+                  }}
+                  className="rounded border-border"
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
+        </div>
+      );
+    }
+
+    if (field.type === 'text' || field.type === 'json') {
+      return (
+        <div key={field.key}>
+          <label className="block text-sm font-medium mb-1.5">
+            {field.label}{field.required ? ' *' : ''}
+          </label>
+          <textarea
+            value={value ?? ''}
+            onChange={(event) => updateConfigValues({ [field.key]: event.target.value })}
+            placeholder={field.ui?.placeholder}
+            rows={field.type === 'json' ? 4 : 3}
+            className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+          />
+          {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
+        </div>
+      );
+    }
+
+    const inputType = field.type === 'number' ? 'number' : 'text';
+    return (
+      <Input
+        key={field.key}
+        label={`${field.label}${field.required ? ' *' : ''}`}
+        type={inputType}
+        value={value ?? ''}
+        onChange={(event) => updateConfigValues({ [field.key]: event.target.value })}
+        placeholder={field.ui?.placeholder}
+      />
+    );
   };
 
   return (
     <div className={`flex-1 min-h-0 ${isCreateSetupView ? 'flex flex-col gap-4 overflow-hidden' : 'space-y-4'}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        
-        
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <button
             onClick={onClose}
@@ -147,7 +277,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
           <ArrowRight className="w-4 h-4" />
           <span className="text-foreground font-medium">{createViewTitle}</span>
         </div>
-
 
         <div className="flex items-center gap-2">
           {currentStep === 'setup' && selectedTemplate ? (
@@ -227,7 +356,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 label="Name"
                 value={formData.name}
                 onChange={(event) => updateFormData({ name: event.target.value })}
-                placeholder="e.g., Book Appointments"
+                placeholder="e.g., Sales Concierge"
               />
               <div>
                 <label className="block text-sm font-medium mb-1.5">Description</label>
@@ -240,139 +369,53 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 />
               </div>
 
-              {selectedTemplate.setupFields.salesTriggerMatchMode && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">Trigger Mode</label>
-                  <select
-                    value={setupData.salesTriggerMatchMode}
-                    onChange={(event) => updateSetupData({ salesTriggerMatchMode: event.target.value as SetupData['salesTriggerMatchMode'] })}
-                    className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                  >
-                    <option value="any">Any (keywords, categories, links, attachments)</option>
-                    <option value="keywords">Keywords only</option>
-                    <option value="categories">AI categories only</option>
-                  </select>
+              <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Triggers
                 </div>
-              )}
-
-              {selectedTemplate.setupFields.salesTriggerKeywords
-                && (setupData.salesTriggerMatchMode === 'any' || setupData.salesTriggerMatchMode === 'keywords') && (
-                <div className="space-y-3">
-                  <Input
-                    label="Sales Trigger Keywords"
-                    value={setupData.salesTriggerKeywords}
-                    onChange={(event) => updateSetupData({ salesTriggerKeywords: event.target.value })}
-                    placeholder="price, stock, order, delivery"
-                  />
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5">Match Rule</label>
-                    <select
-                      value={setupData.salesTriggerKeywordMatch}
-                      onChange={(event) => updateSetupData({ salesTriggerKeywordMatch: event.target.value as 'any' | 'all' })}
-                      className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                    >
-                      <option value="any">Match any keyword</option>
-                      <option value="all">Match all keywords</option>
-                    </select>
+                {triggers.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">
+                    Triggers are defined in the template.
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {SALES_TRIGGER_KEYWORDS.map((keyword) => (
-                      <button
-                        key={keyword}
-                        type="button"
-                        onClick={() => addSalesTriggerKeyword(keyword)}
-                        className="px-3 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-                      >
-                        {keyword}
-                      </button>
-                    ))}
+                ) : (
+                  <div className="space-y-3">
+                    {triggers.map((trigger, index) => {
+                      const meta = TRIGGER_METADATA[trigger.type];
+                      const summary = formatTriggerConfigSummary(trigger.config);
+                      return (
+                        <div
+                          key={`${trigger.type}-${index}`}
+                          className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/60 p-2"
+                        >
+                          <div className="p-2 bg-primary/10 text-primary rounded-lg">
+                            {meta?.icon || <Sparkles className="w-5 h-5" />}
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-foreground">
+                              {trigger.label || meta?.label || trigger.type}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {trigger.description || meta?.description || 'Trigger configured in the template.'}
+                            </div>
+                            {summary && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {summary}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              {selectedTemplate.setupFields.salesTriggerCategories
-                && (setupData.salesTriggerMatchMode === 'any' || setupData.salesTriggerMatchMode === 'categories') && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium">AI Categories (optional)</label>
-                  <p className="text-xs text-muted-foreground">
-                    Triggers when the message is categorized into any selected category.
-                  </p>
-                  {categories.length > 0 ? (
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {categories.map((category) => (
-                        <label key={category._id} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={(setupData.salesTriggerCategoryIds || []).includes(category._id)}
-                            onChange={() => toggleSalesTriggerCategory(category._id)}
-                            className="rounded border-border"
-                          />
-                          {category.nameEn}
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">No categories found for this workspace yet.</p>
-                  )}
+              {Object.entries(groupedFields).map(([group, fields]) => (
+                <div key={group} className="space-y-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group}</div>
+                  {fields.map(renderField)}
                 </div>
-              )}
-
-              {selectedTemplate.setupFields.salesUseGoogleSheets && (
-                <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
-                  <label className="flex items-center gap-2 text-sm font-medium">
-                    <input
-                      type="checkbox"
-                      checked={!!setupData.salesUseGoogleSheets}
-                      onChange={(event) => updateSetupData({ salesUseGoogleSheets: event.target.checked })}
-                      className="rounded border-border"
-                    />
-                    Use connected Google Sheet for catalog + stock
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    Requires a Google Sheets connection in Integrations. Without it, catalog matching is disabled.
-                  </p>
-                </div>
-              )}
-
-              {selectedTemplate.setupFields.salesKnowledgeItems && (
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <label className="block text-sm font-medium">Knowledge Items</label>
-                    {knowledgeItems.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => updateSetupData({ salesKnowledgeItemIds: knowledgeItems.map((item) => item._id) })}
-                        className="text-xs text-primary hover:text-primary/80 transition-colors"
-                      >
-                        Select all
-                      </button>
-                    )}
-                  </div>
-                  {knowledgeItems.length === 0 ? (
-                    <div className="text-xs text-muted-foreground">No knowledge items available.</div>
-                  ) : (
-                    <div className="space-y-2 max-h-48 overflow-y-auto border border-border rounded-lg p-3">
-                      {knowledgeItems.map((item) => (
-                        <label key={item._id} className="flex items-center gap-3 text-xs cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={setupData.salesKnowledgeItemIds.includes(item._id)}
-                            onChange={() => {
-                              const next = setupData.salesKnowledgeItemIds.includes(item._id)
-                                ? setupData.salesKnowledgeItemIds.filter((id) => id !== item._id)
-                                : [...setupData.salesKnowledgeItemIds, item._id];
-                              updateSetupData({ salesKnowledgeItemIds: next });
-                            }}
-                            className="rounded border-border"
-                          />
-                          <span className="text-muted-foreground">{item.title}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
+              ))}
             </div>
 
             <div className="h-full min-h-0 flex flex-col">
@@ -391,14 +434,14 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                       accountHandle={accountHandle}
                       accountAvatarUrl={accountAvatarUrl}
                       accountInitial={accountInitial}
-                      messages={selectedTemplate.previewConversation.map((msg, idx) => ({
+                      messages={previewMessages.map((msg, idx) => ({
                         id: `preview-${idx}`,
                         from: msg.from === 'customer' ? 'customer' : 'ai',
                         text: msg.message,
                       }))}
                       showSeen={
-                        selectedTemplate.previewConversation.length > 0 &&
-                        selectedTemplate.previewConversation[selectedTemplate.previewConversation.length - 1].from === 'bot'
+                        previewMessages.length > 0 &&
+                        previewMessages[previewMessages.length - 1].from === 'bot'
                       }
                       mode="static"
                     />
@@ -417,418 +460,210 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
             </p>
           </div>
 
-          {editingAutomation && !isTemplateEditing ? (
-            <form onSubmit={onSubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Name</label>
-                <Input
-                  value={formData.name}
-                  onChange={(event) => updateFormData({ name: event.target.value })}
-                  placeholder="e.g., Welcome New Followers"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Description (optional)</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(event) => updateFormData({ description: event.target.value })}
-                  placeholder="Describe what this automation does..."
-                  rows={3}
-                  className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Trigger</label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto">
-                  {Object.entries(TRIGGER_METADATA).map(([type, meta]) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => updateFormData({ triggerType: type as TriggerType })}
-                      className={`text-left border rounded-lg p-3 transition-all ${
-                        formData.triggerType === type
-                          ? 'border-primary bg-primary/5 shadow-sm'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="text-primary">{meta.icon}</div>
-                        <span className="font-medium text-sm">{meta.label}</span>
-                        {meta.badge && (
-                          <span className={`ml-auto px-1.5 py-0.5 rounded text-xs font-bold ${
-                            meta.badge === 'PRO' ? 'bg-amber-500/20 text-amber-500' : 'bg-blue-500/20 text-blue-500'
-                          }`}>
-                            {meta.badge}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">{meta.description}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Reply Type</label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="space-y-6">
+            {currentStep === 'gallery' && (
+              <>
+                <div className="flex items-center gap-3 p-1 bg-muted/40 rounded-lg w-fit">
                   <button
-                    type="button"
-                    onClick={() => updateFormData({ replyType: 'constant_reply' })}
-                    className={`text-left border rounded-lg p-4 transition-all ${
-                      formData.replyType === 'constant_reply'
-                        ? 'border-primary bg-primary/5 shadow-sm'
-                        : 'border-border hover:border-primary/50'
+                    onClick={() => onChangeCreationMode('templates')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      creationMode === 'templates'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <div className="font-medium mb-1">Constant Reply</div>
-                    <p className="text-xs text-muted-foreground">Send a predefined message</p>
+                    Templates <span className="text-xs text-primary">(Recommended)</span>
                   </button>
                   <button
-                    type="button"
-                    onClick={() => updateFormData({ replyType: 'ai_reply' })}
-                    className={`text-left border rounded-lg p-4 transition-all ${
-                      formData.replyType === 'ai_reply'
-                        ? 'border-primary bg-primary/5 shadow-sm'
-                        : 'border-border hover:border-primary/50'
+                    onClick={() => onChangeCreationMode('custom')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      creationMode === 'custom'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <div className="font-medium mb-1">AI Reply</div>
-                    <p className="text-xs text-muted-foreground">AI generates responses with a goal</p>
+                    Custom
                   </button>
                 </div>
-              </div>
 
-              {formData.replyType === 'constant_reply' && (
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Message</label>
-                  <textarea
-                    value={formData.constantMessage}
-                    onChange={(event) => updateFormData({ constantMessage: event.target.value })}
-                    placeholder="Enter your message..."
-                    rows={4}
-                    className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                    required
-                  />
-                </div>
-              )}
+                {creationMode === 'templates' ? (
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        value={templateSearch}
+                        onChange={(event) => onChangeTemplateSearch(event.target.value)}
+                        placeholder="Search templates..."
+                        className="pl-10"
+                      />
+                    </div>
 
-              {formData.replyType === 'ai_reply' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Goal</label>
-                    <select
-                      value={formData.aiGoalType}
-                      onChange={(event) => updateFormData({ aiGoalType: event.target.value as GoalType })}
-                      className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                      required
-                    >
-                      {GOAL_OPTIONS.map(option => (
-                        <option key={option.value} value={option.value}>
-                          {option.label} - {option.description}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1.5">Goal Description (optional)</label>
-                    <Input
-                      value={formData.aiGoalDescription}
-                      onChange={(event) => updateFormData({ aiGoalDescription: event.target.value })}
-                      placeholder="Describe the goal in natural language..."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Knowledge Items</label>
-                    {knowledgeItems.length === 0 ? (
-                      <div className="text-sm text-muted-foreground p-4 bg-muted/30 rounded-lg">
-                        No knowledge items available. Create knowledge items first.
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-48 overflow-y-auto border border-border rounded-lg p-3">
-                        {knowledgeItems.map(item => (
-                          <label
-                            key={item._id}
-                            className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded-md cursor-pointer"
+                    <div className="flex flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">Goal:</span>
+                        {(['all', ...FLOW_GOAL_FILTERS] as const).map((goal) => (
+                          <button
+                            key={goal}
+                            onClick={() => onChangeGoalFilter(goal)}
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                              goalFilter === goal
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                            }`}
                           >
-                            <input
-                              type="checkbox"
-                              checked={formData.aiKnowledgeIds.includes(item._id)}
-                              onChange={() => onToggleKnowledge(item._id)}
-                              className="rounded border-border"
-                            />
-                            <div className="flex-1">
-                              <div className="text-sm font-medium">{item.title}</div>
-                              <div className="text-xs text-muted-foreground line-clamp-1">{item.content}</div>
-                            </div>
-                          </label>
+                            {goal === 'all' ? 'All' : goal}
+                          </button>
                         ))}
                       </div>
-                    )}
-                  </div>
-                </>
-              )}
+                    </div>
 
-              <div className="flex justify-end gap-3 pt-2">
-                <Button type="button" variant="ghost" onClick={onClose}>
-                  Cancel
-                </Button>
-                <Button type="submit" isLoading={saving}>
-                  {editingAutomation ? 'Save Changes' : 'Create Automation'}
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <div className="space-y-6">
-              {currentStep === 'gallery' && (
-                <>
-                  <div className="flex items-center gap-3 p-1 bg-muted/40 rounded-lg w-fit">
-                    <button
-                      onClick={() => onChangeCreationMode('templates')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                        creationMode === 'templates'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Templates <span className="text-xs text-primary">(Recommended)</span>
-                    </button>
-                    <button
-                      onClick={() => onChangeCreationMode('custom')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                        creationMode === 'custom'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Custom
-                    </button>
-                  </div>
-
-                  {creationMode === 'templates' ? (
-                    <div className="space-y-4">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          value={templateSearch}
-                          onChange={(event) => onChangeTemplateSearch(event.target.value)}
-                          placeholder="Search templates..."
-                          className="pl-10"
-                        />
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-muted-foreground">Goal:</span>
-                          {(['all', 'Bookings', 'Sales', 'Leads', 'Support'] as const).map((goal) => (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2">
+                      {templates
+                        .filter((template) => {
+                          if (!template.currentVersion) return false;
+                          const displayInfo = template.currentVersion?.display;
+                          const matchesSearch =
+                            templateSearch === '' ||
+                            template.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+                            (displayInfo?.outcome || '').toLowerCase().includes(templateSearch.toLowerCase());
+                          const matchesGoal = goalFilter === 'all' || displayInfo?.goal === goalFilter;
+                          const matchesIndustry = industryFilter === 'all' || displayInfo?.industry === industryFilter;
+                          return matchesSearch && matchesGoal && matchesIndustry;
+                        })
+                        .map((template) => {
+                          const displayInfo = template.currentVersion?.display;
+                          const triggers = template.currentVersion?.triggers || [];
+                          return (
                             <button
-                              key={goal}
-                              onClick={() => onChangeGoalFilter(goal)}
-                              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                                goalFilter === goal
-                                  ? 'bg-primary text-primary-foreground'
-                                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                              }`}
-                            >
-                              {goal === 'all' ? 'All' : goal}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2">
-                        {AUTOMATION_TEMPLATES
-                          .filter((template) => {
-                            const matchesSearch =
-                              templateSearch === '' ||
-                              template.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
-                              template.outcome.toLowerCase().includes(templateSearch.toLowerCase());
-                            const matchesGoal = goalFilter === 'all' || template.goal === goalFilter;
-                            const matchesIndustry = industryFilter === 'all' || template.industry === industryFilter;
-                            return matchesSearch && matchesGoal && matchesIndustry;
-                          })
-                          .map((template) => (
-                            <button
-                              key={template.id}
+                              key={template._id}
                               onClick={() => onSelectTemplate(template)}
                               className="text-left border border-border rounded-lg p-4 hover:border-primary/50 hover:bg-muted/30 transition-all group"
                             >
                               <div className="flex items-start gap-3 mb-3">
                                 <div className="p-2 bg-primary/10 text-primary rounded-lg group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                                  {template.icon}
+                                  <Sparkles className="w-5 h-5" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <h3 className="font-semibold text-sm mb-1">{template.name}</h3>
-                                  <p className="text-xs text-muted-foreground line-clamp-2">{template.outcome}</p>
+                                  <p className="text-xs text-muted-foreground line-clamp-2">
+                                    {displayInfo?.outcome || template.description || 'Automation template'}
+                                  </p>
                                 </div>
                               </div>
 
                               <div className="flex flex-wrap gap-1 mb-2">
-                                {template.triggers.slice(0, 3).map((trigger) => (
+                                {triggers.slice(0, 3).map((trigger) => (
                                   <span
-                                    key={trigger}
+                                    key={`${template._id}-${trigger.type}`}
                                     className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs"
                                   >
-                                    {TRIGGER_METADATA[trigger]?.label.split(' ')[0]}
+                                    {TRIGGER_METADATA[trigger.type]?.label.split(' ')[0] || trigger.type}
                                   </span>
                                 ))}
                               </div>
 
                               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                <span>{template.setupTime}</span>
-                                <span>Collects: {template.collects.slice(0, 2).join(', ')}</span>
+                                <span>{displayInfo?.setupTime || 'Quick setup'}</span>
+                                <span>
+                                  Collects: {(displayInfo?.collects || []).slice(0, 2).join(', ') || 'Configurable inputs'}
+                                </span>
                               </div>
                             </button>
-                          ))}
-                      </div>
+                          );
+                        })}
                     </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      Custom automation builder coming soon. For now, please use Templates.
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Custom automation builder coming soon. For now, please use Templates.
+                  </div>
+                )}
+              </>
+            )}
+
+            {currentStep === 'review' && selectedTemplate && (
+              <div className="space-y-6">
+                <div className="bg-muted/30 border border-border rounded-lg p-4">
+                  <h3 className="font-semibold mb-4 flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-primary" />
+                    Ready to Activate
+                  </h3>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground uppercase">Automation</label>
+                      <p className="font-semibold">{formData.name}</p>
+                      <p className="text-sm text-muted-foreground">{formData.description}</p>
                     </div>
-                  )}
-                </>
-              )}
 
-              {currentStep === 'review' && selectedTemplate && (
-                <div className="space-y-6">
-                  <div className="bg-muted/30 border border-border rounded-lg p-4">
-                    <h3 className="font-semibold mb-4 flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-primary" />
-                      Ready to Activate
-                    </h3>
-
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground uppercase">Automation</label>
-                        <p className="font-semibold">{formData.name}</p>
-                        <p className="text-sm text-muted-foreground">{formData.description}</p>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground uppercase">Triggers Enabled</label>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {selectedTemplate.triggers.map((trigger) => (
-                            <div
-                              key={trigger}
-                              className="flex items-center gap-2 px-3 py-2 bg-primary/10 text-primary rounded-lg text-sm"
-                            >
-                              {TRIGGER_METADATA[trigger]?.icon}
-                              {TRIGGER_METADATA[trigger]?.label}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground uppercase">Reply Behavior</label>
-                        <p className="text-sm mt-1">
-                          {selectedTemplate.replyType === 'ai_reply' ? (
-                            <span className="flex items-center gap-2">
-                              <Sparkles className="w-4 h-4 text-primary" />
-                              AI-powered responses with goal: {GOAL_OPTIONS.find((g) => g.value === selectedTemplate.aiGoalType)?.label}
-                            </span>
-                          ) : selectedTemplate.replyType === 'template_flow' ? (
-                            <span className="flex items-center gap-2">
-                              <Sparkles className="w-4 h-4 text-primary" />
-                              Template flow: {selectedTemplate.name}
-                            </span>
-                          ) : (
-                            'Constant reply'
-                          )}
-                        </p>
-                      </div>
-
-                      {selectedTemplate.replyType !== 'constant_reply' && (
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground uppercase">AI Response Settings</label>
-                          <div className="grid gap-3 mt-2 sm:grid-cols-2">
-                            <div>
-                              <label className="block text-sm font-medium mb-1.5">Tone</label>
-                              <select
-                                value={setupData.aiTone}
-                                onChange={(event) => updateSetupData({ aiTone: event.target.value })}
-                                className="w-full px-3 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground uppercase">Triggers Enabled</label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {(version?.triggers || []).length > 0
+                          ? (version?.triggers || []).map((trigger) => (
+                              <div
+                                key={`${selectedTemplate._id}-${trigger.type}`}
+                                className="flex items-center gap-2 px-3 py-2 bg-primary/10 text-primary rounded-lg text-sm"
                               >
-                                {AI_TONE_OPTIONS.map((tone) => (
-                                  <option key={tone.value} value={tone.value}>{tone.label}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <Input
-                              label="Max sentences"
-                              type="number"
-                              min={1}
-                              max={5}
-                              value={setupData.aiMaxSentences}
-                              onChange={(event) => updateSetupData({ aiMaxSentences: event.target.value })}
-                            />
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-2">
-                            AI replies will be trimmed to the maximum number of sentences.
-                          </p>
-                        </div>
-                      )}
+                                {TRIGGER_METADATA[trigger.type]?.icon}
+                                {trigger.label || TRIGGER_METADATA[trigger.type]?.label || trigger.type}
+                              </div>
+                            ))
+                          : (
+                            <div className="text-sm text-muted-foreground">Triggers are defined in the template.</div>
+                          )}
+                      </div>
+                    </div>
 
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground uppercase mb-2 block">
-                          Safety Settings
-                        </label>
-                        <div className="space-y-2">
-                          <label className="flex items-center gap-3 text-sm">
-                            <input type="checkbox" defaultChecked className="rounded" />
-                            <span>Pause on human takeover</span>
-                          </label>
-                          <label className="flex items-center gap-3 text-sm">
-                            <input type="checkbox" defaultChecked className="rounded" />
-                            <span>Respect after-hours settings</span>
-                          </label>
-                          <label className="flex items-center gap-3 text-sm">
-                            <input type="checkbox" defaultChecked className="rounded" />
-                            <span>Rate limit (max 50 messages/hour)</span>
-                          </label>
-                        </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground uppercase">Configurable Inputs</label>
+                      <div className="mt-2 space-y-2 text-sm">
+                        {exposedFields.length === 0 && (
+                          <div className="text-muted-foreground">No configurable fields for this template.</div>
+                        )}
+                        {exposedFields.map((field) => (
+                          <div key={field.key} className="flex items-start justify-between gap-4">
+                            <span className="text-muted-foreground">{field.label}</span>
+                            <span className="font-medium">{formatConfigValue(configValues[field.key])}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              <div className="flex justify-between items-center pt-4 border-t border-border">
-                <div>
-                  {currentStep !== 'gallery' && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={onBackToSetup}
-                      leftIcon={<ArrowLeft className="w-4 h-4" />}
-                    >
-                      Back
-                    </Button>
-                  )}
-                </div>
-                <div className="flex gap-3">
-                  <Button type="button" variant="outline" onClick={onClose}>
-                    Cancel
+            <div className="flex justify-between items-center pt-4 border-t border-border">
+              <div>
+                {currentStep !== 'gallery' && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={onBackToSetup}
+                    leftIcon={<ArrowLeft className="w-4 h-4" />}
+                  >
+                    Back
                   </Button>
-                  {currentStep === 'gallery' && creationMode === 'templates' && (
-                    <Button disabled className="opacity-50">
-                      Select a template to continue
-                    </Button>
-                  )}
-                  {currentStep === 'review' && (
-                    <Button onClick={() => onSubmit()} isLoading={saving} leftIcon={<CheckCircle className="w-4 h-4" />}>
-                      Activate Automation
-                    </Button>
-                  )}
-                </div>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                {currentStep === 'gallery' && creationMode === 'templates' && (
+                  <Button disabled className="opacity-50">
+                    Select a template to continue
+                  </Button>
+                )}
+                {currentStep === 'review' && (
+                  <Button onClick={() => onSubmit()} isLoading={saving} leftIcon={<CheckCircle className="w-4 h-4" />}>
+                    Activate Automation
+                  </Button>
+                )}
               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
