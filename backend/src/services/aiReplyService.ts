@@ -52,6 +52,7 @@ export interface AIReplyOptions {
   workspaceSettingsOverride?: Partial<IWorkspaceSettings>;
   tone?: string;
   maxReplySentences?: number;
+  ragEnabled?: boolean;
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
@@ -185,6 +186,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     ? options.maxOutputTokens
     : 420;
   const reasoningEffort = options.reasoningEffort;
+  const ragEnabled = options.ragEnabled !== false;
   const messages: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = messageHistory
     ? [...messageHistory].slice(-historyLimit)
     : await Message.find({ conversationId: conversation._id })
@@ -271,7 +273,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     '';
 
   // Semantic RAG if available
-  if (recentCustomerText) {
+  if (recentCustomerText && ragEnabled) {
     try {
       vectorContexts = await searchWorkspaceKnowledge(String(workspaceId), recentCustomerText, 5);
     } catch (error) {
@@ -578,6 +580,7 @@ Generate a response following all rules above. Return JSON with:
       temperatureOmitted: !supportsTemperature(model),
       reasoningEffort: supportsReasoningEffort(model) ? reasoningEffort : undefined,
       maxOutputTokens,
+      ragEnabled,
       category: categoryName || 'General',
       aiPolicy,
       decisionMode,

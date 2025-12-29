@@ -118,6 +118,7 @@ type FlowAiSettings = {
   tone?: string
   maxReplySentences?: number
   historyLimit?: number
+  ragEnabled?: boolean
   model?: string
   temperature?: number
   maxOutputTokens?: number
@@ -453,6 +454,9 @@ const buildNodeSubtitle = (node: FlowNode) => {
     if (node.aiSettings?.tone) details.push(`Tone: ${node.aiSettings.tone}`)
     if (node.aiSettings?.historyLimit) {
       details.push(`History: ${node.aiSettings.historyLimit}`)
+    }
+    if (node.aiSettings?.ragEnabled === false) {
+      details.push('RAG: off')
     }
     if (node.aiSettings?.maxOutputTokens) {
       details.push(`Max tokens: ${node.aiSettings.maxOutputTokens}`)
@@ -1543,6 +1547,28 @@ export default function AutomationTemplates() {
                   />
                   <div className="text-[11px] text-muted-foreground">
                     Number of recent messages sent to the model.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={selectedNode.aiSettings?.ragEnabled !== false}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          aiSettings: {
+                            ...(node.aiSettings || {}),
+                            ragEnabled: event.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Enable semantic RAG (vector search)
+                  </label>
+                  <div className="text-[11px] text-muted-foreground">
+                    Disable to ignore vector matches in replies.
                   </div>
                 </div>
                 <div className="space-y-2">

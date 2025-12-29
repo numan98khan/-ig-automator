@@ -572,6 +572,7 @@ async function buildAutomationAiReply(params: {
     workspaceSettingsOverride: settings,
     tone: aiSettings?.tone,
     maxReplySentences: aiSettings?.maxReplySentences,
+    ragEnabled: aiSettings?.ragEnabled,
     model: aiSettings?.model,
     temperature: aiSettings?.temperature,
     maxOutputTokens: aiSettings?.maxOutputTokens,

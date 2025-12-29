@@ -24,6 +24,7 @@ export interface AutomationAiSettings {
   tone?: string;
   maxReplySentences?: number;
   historyLimit?: number;
+  ragEnabled?: boolean;
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
