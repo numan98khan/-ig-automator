@@ -671,9 +671,14 @@ export default function Sandbox() {
             <option value="none">None</option>
             <option value="capture_lead">Capture lead</option>
             <option value="book_appointment">Book appointment</option>
-            <option value="start_order">Start order</option>
+            <option value="order_now">Order now</option>
+            <option value="product_inquiry">Product inquiry</option>
+            <option value="delivery">Delivery</option>
+            <option value="order_status">Order status</option>
+            <option value="refund_exchange">Refund / exchange</option>
+            <option value="human">Human handoff</option>
             <option value="handle_support">Handle support</option>
-            <option value="drive_to_channel">Drive to channel</option>
+            
           </select>
         </div>
         <div>
@@ -689,9 +694,14 @@ export default function Sandbox() {
             <option value="none">None</option>
             <option value="capture_lead">Capture lead</option>
             <option value="book_appointment">Book appointment</option>
-            <option value="start_order">Start order</option>
+            <option value="order_now">Order now</option>
+            <option value="product_inquiry">Product inquiry</option>
+            <option value="delivery">Delivery</option>
+            <option value="order_status">Order status</option>
+            <option value="refund_exchange">Refund / exchange</option>
+            <option value="human">Human handoff</option>
             <option value="handle_support">Handle support</option>
-            <option value="drive_to_channel">Drive to channel</option>
+            
           </select>
         </div>
       </div>

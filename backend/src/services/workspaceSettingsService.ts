@@ -54,24 +54,40 @@ const INTENT_REASONING_EFFORT: AutomationIntentSettings['reasoningEffort'] = 'no
 
 const intentLabels: Array<{ value: GoalType; description: string }> = [
   {
-    value: 'book_appointment',
-    description: 'Scheduling or booking a service, appointment, or reservation.',
+    value: 'product_inquiry',
+    description: 'Asking about price, availability, sizes, colors, or variants.',
   },
   {
-    value: 'start_order',
-    description: 'Buying or placing a new order, pricing, product availability, or catalog inquiries.',
+    value: 'delivery',
+    description: 'Shipping, COD, delivery time, ETA, or logistics questions.',
+  },
+  {
+    value: 'order_now',
+    description: 'Ready to buy now, proceed to checkout, or place an order.',
+  },
+  {
+    value: 'order_status',
+    description: 'Order tracking, status, where is my order, or past order update.',
+  },
+  {
+    value: 'refund_exchange',
+    description: 'Refund, exchange, return, or replacement requests.',
+  },
+  {
+    value: 'human',
+    description: 'Asking for a human agent, representative, or handoff.',
   },
   {
     value: 'handle_support',
-    description: 'Problems, complaints, refunds, cancellations, order status, delivery delays, or issues with an existing order.',
+    description: 'Problems, complaints, cancellations, or support requests not covered above.',
   },
   {
     value: 'capture_lead',
     description: 'Asking for a quote, requesting a call/email, or leaving contact details.',
   },
   {
-    value: 'drive_to_channel',
-    description: 'Asking for location, address, website, store hours, WhatsApp, or app links.',
+    value: 'book_appointment',
+    description: 'Scheduling or booking a service, appointment, or reservation.',
   },
   {
     value: 'none',
@@ -82,17 +98,32 @@ const intentLabels: Array<{ value: GoalType; description: string }> = [
 const detectGoalIntentFallback = (text: string): GoalType => {
   const lower = text.toLowerCase();
 
+  if (/(refund|exchange|return|replace|replacement)/.test(lower)) return 'refund_exchange';
+  if (/(order status|track|tracking|where is my order|last order|shipment status|delivery status)/.test(lower)) {
+    return 'order_status';
+  }
+  if (/(shipping|delivery|eta|when will|ship|cod|cash on delivery)/.test(lower)) return 'delivery';
+  if (/(buy now|order now|checkout|place order|ready to buy|purchase now)/.test(lower)) return 'order_now';
+  if (/(price|availability|in stock|variant|variants|size|color|colour|material|fabric)/.test(lower)) {
+    return 'product_inquiry';
+  }
+  if (/(human|agent|representative|real person|someone|operator)/.test(lower)) return 'human';
   if (/(book|appointment|schedule|reserve|reservation)/.test(lower)) return 'book_appointment';
-  if (/(buy|price|order|purchase|checkout|cart|start order|place order)/.test(lower)) return 'start_order';
   if (/(interested|contact me|reach out|quote|more info|call me|email me)/.test(lower)) return 'capture_lead';
-  if (/(late|broken|refund|problem|issue|support|help with order|cancel)/.test(lower)) return 'handle_support';
-  if (/(where are you|location|address|website|site|link|whatsapp|app|store)/.test(lower)) return 'drive_to_channel';
+  if (/(late|broken|problem|issue|support|help with order|cancel|complaint)/.test(lower)) return 'handle_support';
   return 'none';
 };
 
 const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
 const supportsReasoningEffort = (model?: string): boolean => /^(gpt-5|o)/i.test(model || '');
 const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
+
+const normalizeGoalType = (value?: string | null): GoalType | 'none' => {
+  if (!value) return 'none';
+  if (value === 'start_order') return 'order_now';
+  if (value === 'drive_to_channel') return 'none';
+  return value as GoalType;
+};
 
 export async function detectGoalIntent(
   text: string,
@@ -184,8 +215,11 @@ export async function detectGoalIntent(
 }
 
 export function goalMatchesWorkspace(goal: GoalType, primary?: GoalType, secondary?: GoalType): boolean {
-  if (!goal || goal === 'none') return false;
-  return goal === primary || goal === secondary;
+  const normalizedGoal = normalizeGoalType(goal);
+  if (!normalizedGoal || normalizedGoal === 'none') return false;
+  const normalizedPrimary = normalizeGoalType(primary);
+  const normalizedSecondary = normalizeGoalType(secondary);
+  return normalizedGoal === normalizedPrimary || normalizedGoal === normalizedSecondary;
 }
 
 export async function getWorkspaceSettings(

@@ -360,7 +360,18 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
         properties: {
           goalType: {
             type: 'string',
-            enum: ['none', 'capture_lead', 'book_appointment', 'start_order', 'handle_support', 'drive_to_channel'],
+            enum: [
+              'none',
+              'capture_lead',
+              'book_appointment',
+              'order_now',
+              'product_inquiry',
+              'delivery',
+              'order_status',
+              'refund_exchange',
+              'human',
+              'handle_support',
+            ],
           },
           status: { type: ['string', 'null'], enum: ['idle', 'collecting', 'completed', null] },
           collectedFields: {
