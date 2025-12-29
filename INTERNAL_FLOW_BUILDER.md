@@ -90,7 +90,13 @@ Publish flow lives in `backend/src/routes/admin.ts`.
 1) Admin publishes a draft (`POST /admin/flow-drafts/:draftId/publish`)
 2) The DSL snapshot is compiled:
    - `backend/src/services/flowCompiler.ts`
-   - Currently a pass-through compiler: `{ graph: dsl }`
+   - Compiler output contains `compiler` metadata, `compiledAt`, a normalized `graph`, and `warnings`.
+   - `dsl.nodes` is the primary source; `dsl.steps` is accepted but marked deprecated (warning).
+   - Nodes are normalized and validated (id, type, text/message for `send_message`).
+   - `next` pointers are preserved if present on nodes (either `node.next` or `node.data.next`).
+   - Edges are normalized to `{ from, to }` and validated against existing node ids.
+   - `startNodeId` is resolved from `dsl.startNodeId` (or `dsl.start`). If missing/invalid, the compiler falls back to the first node and emits a warning.
+   - Invalid DSL or missing required structure throws a `FlowCompilerError` with `errors` and `warnings`.
 3) A new `FlowTemplateVersion` is created and marked published.
 4) `FlowTemplate.currentVersionId` is updated to the new version.
 
@@ -109,6 +115,7 @@ Key points:
 - `detect_intent` stores the output in `session.state.vars.detectedIntent`.
 - `trigger` nodes are ignored at execution (they only define entry criteria).
 - State persists via `buildNextState` and `AutomationSession`.
+- Node-level logging is supported via `logEnabled` on each node. If `logEnabled` is explicitly `false`, node start/complete logging is suppressed; otherwise logs are emitted.
 
 ### Always Use Latest Published Version
 
@@ -139,6 +146,7 @@ Key UI behaviors:
 - Node palette with FAB (top-right).
 - Inspector panel on the left, stacked with the start-node summary and DSL panel.
 - Trigger node supports `triggerType` + `triggerDescription` editing.
+- Inspector now includes a per-node logging toggle that persists `logEnabled` into the DSL.
 - Adding a trigger node auto-promotes it to the start node if the current start is not a trigger.
 
 ## Operational Notes / Gotchas
@@ -146,7 +154,7 @@ Key UI behaviors:
 - If the start node is not a trigger, the template won’t match any inbound trigger.
 - Drafts keep the raw DSL; versions are immutable once published.
 - Trigger info shown to end users comes from the current version’s `triggers`.
-- Compiler currently does not optimize; it simply stores the DSL as `compiled.graph`.
+- Compiler validates and normalizes DSL; warnings are stored on the compiled artifact and errors block publish.
 
 ## Extending the System
 
@@ -159,4 +167,3 @@ When adding trigger config filters:
 - Extend trigger node schema to capture config JSON.
 - Serialize into `triggers` during save/publish.
 - Update `matchesTriggerConfig` logic if needed.
-
