@@ -97,6 +97,10 @@ const logAutomationStep = (step: string, startMs: number, details?: Record<strin
 
 const shouldLogNode = (step?: FlowRuntimeStep) => step?.logEnabled !== false;
 
+const logNodeEvent = (message: string, details?: Record<string, any>) => {
+  console.log(`🧩 [FLOW NODE] ${message}`, details || {});
+};
+
 const deepClone = <T>(value: T): T => {
   if (value === undefined) {
     return value;
@@ -754,7 +758,7 @@ async function executeFlowPlan(params: {
     const nodeStart = nowMs();
 
     if (shouldLogNode(step)) {
-      logAutomation('🧭 [AUTOMATION] Node start', {
+      logNodeEvent('Node start', {
         nodeId: step.id,
         type: stepType,
         waitForReply: step.waitForReply,
@@ -857,10 +861,11 @@ async function executeFlowPlan(params: {
     executedSteps += 1;
 
     if (shouldLogNode(step)) {
-      logAutomationStep('flow_node_complete', nodeStart, {
+      logNodeEvent('Node complete', {
         nodeId: step.id,
         type: stepType,
         executedSteps,
+        durationMs: Math.max(0, Math.round(nowMs() - nodeStart)),
       });
     }
 
