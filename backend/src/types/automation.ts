@@ -23,6 +23,7 @@ export interface AutomationRateLimit {
 export interface AutomationAiSettings {
   tone?: string;
   maxReplySentences?: number;
+  historyLimit?: number;
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;

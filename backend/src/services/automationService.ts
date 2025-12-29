@@ -557,7 +557,7 @@ async function buildAutomationAiReply(params: {
     categorization: messageContext?.categoryName
       ? { categoryName: messageContext.categoryName }
       : undefined,
-    historyLimit: 20,
+    historyLimit: aiSettings?.historyLimit,
     goalContext: {
       workspaceGoals: {
         primaryGoal: settings?.primaryGoal,

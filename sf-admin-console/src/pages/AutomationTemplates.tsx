@@ -117,6 +117,7 @@ type FlowNodeType = 'trigger' | 'detect_intent' | 'send_message' | 'ai_reply' | 
 type FlowAiSettings = {
   tone?: string
   maxReplySentences?: number
+  historyLimit?: number
   model?: string
   temperature?: number
   maxOutputTokens?: number
@@ -208,6 +209,26 @@ const TRIGGER_METADATA = TRIGGER_LIBRARY.reduce((acc, trigger) => {
 }, {} as Record<TriggerType, { label: string; description: string }>)
 
 const DEFAULT_TRIGGER_TYPE: TriggerType = 'dm_message'
+
+const AI_MODEL_SUGGESTIONS = [
+  'gpt-5',
+  'gpt-5-mini',
+  'gpt-5-nano',
+  'gpt-4o',
+  'gpt-4o-mini',
+  'o1',
+  'o1-mini',
+  'o1-preview',
+]
+
+const REASONING_EFFORT_OPTIONS: Array<FlowAiSettings['reasoningEffort']> = [
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+]
 
 type FieldForm = {
   id: string
@@ -407,6 +428,12 @@ const parseKnowledgeIds = (value: string) =>
     .map((item) => item.trim())
     .filter(Boolean)
 
+const parseOptionalNumber = (value: string) => {
+  if (!value) return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 const buildNodeSubtitle = (node: FlowNode) => {
   if (node.type === 'send_message') {
     const text = node.text || node.message || ''
@@ -421,8 +448,16 @@ const buildNodeSubtitle = (node: FlowNode) => {
     return 'Detects intent from the latest message'
   }
   if (node.type === 'ai_reply') {
-    const tone = node.aiSettings?.tone
-    return tone ? `Tone: ${tone}` : 'Uses AI defaults'
+    const details = []
+    if (node.aiSettings?.model) details.push(`Model: ${node.aiSettings.model}`)
+    if (node.aiSettings?.tone) details.push(`Tone: ${node.aiSettings.tone}`)
+    if (node.aiSettings?.historyLimit) {
+      details.push(`History: ${node.aiSettings.historyLimit}`)
+    }
+    if (node.aiSettings?.maxOutputTokens) {
+      details.push(`Max tokens: ${node.aiSettings.maxOutputTokens}`)
+    }
+    return details.length > 0 ? details.join(' · ') : 'Uses AI defaults'
   }
   if (node.type === 'handoff') {
     return node.handoff?.topic ? `Topic: ${node.handoff.topic}` : 'No topic set'
@@ -1489,9 +1524,32 @@ export default function AutomationTemplates() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">History limit</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={selectedNode.aiSettings?.historyLimit ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          historyLimit: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Number of recent messages sent to the model.
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Model</label>
                   <input
                     className="input w-full"
+                    list="ai-model-options"
                     value={selectedNode.aiSettings?.model || ''}
                     onChange={(event) =>
                       updateNode(selectedNode.id, (node) => ({
@@ -1499,6 +1557,79 @@ export default function AutomationTemplates() {
                         aiSettings: {
                           ...(node.aiSettings || {}),
                           model: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                  <datalist id="ai-model-options">
+                    {AI_MODEL_SUGGESTIONS.map((model) => (
+                      <option key={model} value={model} />
+                    ))}
+                  </datalist>
+                  <div className="text-[11px] text-muted-foreground">
+                    Leave blank to use the workspace default model.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Reasoning effort</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.reasoningEffort || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          reasoningEffort: event.target.value
+                            ? (event.target.value as FlowAiSettings['reasoningEffort'])
+                            : undefined,
+                        },
+                      }))
+                    }
+                  >
+                    <option value="">Auto (model default)</option>
+                    {REASONING_EFFORT_OPTIONS.map((effort) => (
+                      <option key={effort} value={effort}>
+                        {effort}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-[11px] text-muted-foreground">
+                    Applied only for reasoning-capable models (gpt-5, o-series).
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Temperature</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    step="0.1"
+                    value={selectedNode.aiSettings?.temperature ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          temperature: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Max output tokens</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={selectedNode.aiSettings?.maxOutputTokens ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          maxOutputTokens: parseOptionalNumber(event.target.value),
                         },
                       }))
                     }
