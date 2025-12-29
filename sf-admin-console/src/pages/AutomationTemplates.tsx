@@ -138,6 +138,7 @@ type FlowNode = Node<FlowNodeData> & {
   type: FlowNodeType
   triggerType?: TriggerType
   triggerDescription?: string
+  logEnabled?: boolean
   text?: string
   message?: string
   buttons?: FlowButton[]
@@ -454,6 +455,11 @@ const normalizeFlowNode = (node: any, index: number): FlowNode => {
     },
     triggerType: type === 'trigger' ? triggerType || DEFAULT_TRIGGER_TYPE : undefined,
     triggerDescription: typeof node?.triggerDescription === 'string' ? node.triggerDescription : undefined,
+    logEnabled: typeof node?.logEnabled === 'boolean'
+      ? node.logEnabled
+      : typeof node?.data?.logEnabled === 'boolean'
+        ? node.data.logEnabled
+        : undefined,
     text: node?.text,
     message: node?.message,
     buttons: node?.buttons,
@@ -500,6 +506,7 @@ const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?: string
     data: node.data,
     triggerType: node.triggerType,
     triggerDescription: node.triggerDescription,
+    logEnabled: node.logEnabled,
     text: node.text,
     message: node.message,
     buttons: node.buttons,
@@ -1374,6 +1381,29 @@ export default function AutomationTemplates() {
                 </select>
               </div>
             )}
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Node logging</label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="node-logging"
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={selectedNode.logEnabled !== false}
+                  onChange={(event) =>
+                    updateNode(selectedNode.id, (node) => ({
+                      ...node,
+                      logEnabled: event.target.checked,
+                    }))
+                  }
+                />
+                <label htmlFor="node-logging" className="text-sm text-muted-foreground">
+                  Enable logging for this node
+                </label>
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                Disable to suppress runtime logs for this step.
+              </div>
+            </div>
 
             {selectedNode.type === 'send_message' && (
               <>
