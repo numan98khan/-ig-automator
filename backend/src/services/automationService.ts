@@ -25,6 +25,7 @@ import { matchesTriggerConfig } from './automation/triggerMatcher';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import {
   AutomationAiSettings,
+  AutomationIntentSettings,
   AutomationRateLimit,
   TriggerConfig,
   TriggerType,
@@ -57,6 +58,7 @@ type FlowRuntimeStep = {
     message?: string;
   };
   rateLimit?: AutomationRateLimit;
+  intentSettings?: AutomationIntentSettings;
 };
 
 type FlowRuntimeGraph = {
@@ -612,7 +614,7 @@ async function buildAutomationAiReply(params: {
   const { conversation, messageText, messageContext, aiSettings, knowledgeItemIds } = params;
   const settings = params.workspaceSettings || await getWorkspaceSettings(conversation.workspaceId);
   const goalConfigs = getGoalConfigs(settings);
-  const detectedGoal = detectGoalIntent(messageText || '');
+  const detectedGoal = await detectGoalIntent(messageText || '');
   const goalMatched = goalMatchesWorkspace(
     detectedGoal,
     settings?.primaryGoal,
@@ -914,7 +916,7 @@ async function executeFlowPlan(params: {
       }
     } else if (stepType === 'detect_intent') {
       const intentStart = nowMs();
-      const detectedIntent = detectGoalIntent(messageText || '');
+      const detectedIntent = await detectGoalIntent(messageText || '', step.intentSettings);
       await markTriggeredOnce();
       session.state = {
         ...(session.state || {}),

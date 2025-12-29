@@ -125,6 +125,12 @@ type FlowAiSettings = {
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 }
 
+type FlowIntentSettings = {
+  model?: string
+  temperature?: number
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+}
+
 type FlowTriggerConfig = {
   keywords?: string[]
   excludeKeywords?: string[]
@@ -149,6 +155,7 @@ type FlowNode = Node<FlowNodeData> & {
   triggerType?: TriggerType
   triggerDescription?: string
   triggerConfig?: FlowTriggerConfig
+  intentSettings?: FlowIntentSettings
   logEnabled?: boolean
   text?: string
   message?: string
@@ -532,6 +539,7 @@ const normalizeFlowNode = (node: any, index: number): FlowNode => {
     triggerType: type === 'trigger' ? triggerType || DEFAULT_TRIGGER_TYPE : undefined,
     triggerDescription: typeof node?.triggerDescription === 'string' ? node.triggerDescription : undefined,
     triggerConfig: node?.triggerConfig ?? node?.data?.triggerConfig,
+    intentSettings: node?.intentSettings ?? node?.data?.intentSettings,
     logEnabled: typeof node?.logEnabled === 'boolean'
       ? node.logEnabled
       : typeof node?.data?.logEnabled === 'boolean'
@@ -584,6 +592,7 @@ const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?: string
     triggerType: node.triggerType,
     triggerDescription: node.triggerDescription,
     triggerConfig: node.triggerConfig,
+    intentSettings: node.intentSettings,
     logEnabled: node.logEnabled,
     text: node.text,
     message: node.message,
@@ -1370,6 +1379,11 @@ export default function AutomationTemplates() {
         {selectedNode && (
           <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
             <div className="text-sm font-semibold text-foreground">Inspector</div>
+            <datalist id="ai-model-options">
+              {AI_MODEL_SUGGESTIONS.map((model) => (
+                <option key={model} value={model} />
+              ))}
+            </datalist>
             <div className="mt-4 space-y-4">
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Label</label>
@@ -1543,6 +1557,73 @@ export default function AutomationTemplates() {
                   <option value="yes">Pause after this step</option>
                 </select>
               </div>
+            )}
+            {selectedNode.type === 'detect_intent' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Model</label>
+                  <input
+                    className="input w-full"
+                    list="ai-model-options"
+                    value={selectedNode.intentSettings?.model || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        intentSettings: {
+                          ...(node.intentSettings || {}),
+                          model: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Leave blank to use the default intent model.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Reasoning effort</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.intentSettings?.reasoningEffort || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        intentSettings: {
+                          ...(node.intentSettings || {}),
+                          reasoningEffort: event.target.value
+                            ? (event.target.value as FlowIntentSettings['reasoningEffort'])
+                            : undefined,
+                        },
+                      }))
+                    }
+                  >
+                    <option value="">Auto (model default)</option>
+                    {REASONING_EFFORT_OPTIONS.map((effort) => (
+                      <option key={effort} value={effort}>
+                        {effort}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Temperature</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    step="0.1"
+                    value={selectedNode.intentSettings?.temperature ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        intentSettings: {
+                          ...(node.intentSettings || {}),
+                          temperature: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                </div>
+              </>
             )}
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Node logging</label>
@@ -1732,11 +1813,6 @@ export default function AutomationTemplates() {
                       }))
                     }
                   />
-                  <datalist id="ai-model-options">
-                    {AI_MODEL_SUGGESTIONS.map((model) => (
-                      <option key={model} value={model} />
-                    ))}
-                  </datalist>
                   <div className="text-[11px] text-muted-foreground">
                     Leave blank to use the workspace default model.
                   </div>

@@ -31,6 +31,12 @@ export interface AutomationAiSettings {
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 }
 
+export interface AutomationIntentSettings {
+  model?: string;
+  temperature?: number;
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+}
+
 // Trigger configuration (for future extensibility)
 export interface TriggerConfig {
   // Could add specific filters or conditions per trigger type

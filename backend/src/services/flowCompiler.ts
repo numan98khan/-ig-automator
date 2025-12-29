@@ -14,6 +14,11 @@ type FlowRuntimeStep = {
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
   aiSettings?: AutomationAiSettings;
+  intentSettings?: {
+    model?: string;
+    temperature?: number;
+    reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  };
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
   next?: string;
@@ -62,6 +67,8 @@ const normalizeButtons = (node: Record<string, any>) => node.buttons ?? node.dat
 const normalizeTags = (node: Record<string, any>) => node.tags ?? node.data?.tags;
 
 const normalizeAiSettings = (node: Record<string, any>) => node.aiSettings ?? node.data?.aiSettings;
+const normalizeIntentSettings = (node: Record<string, any>) =>
+  node.intentSettings ?? node.data?.intentSettings;
 
 const normalizeKnowledgeItemIds = (node: Record<string, any>) =>
   node.knowledgeItemIds ?? node.data?.knowledgeItemIds;
@@ -184,6 +191,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const buttons = normalizeButtons(node);
     const tags = normalizeTags(node);
     const aiSettings = normalizeAiSettings(node);
+    const intentSettings = normalizeIntentSettings(node);
     const knowledgeItemIds = normalizeKnowledgeItemIds(node);
     const waitForReply = normalizeWaitForReply(node);
     const handoff = normalizeHandoff(node);
@@ -209,6 +217,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       buttons,
       tags,
       aiSettings,
+      intentSettings,
       knowledgeItemIds,
       waitForReply,
       next,
