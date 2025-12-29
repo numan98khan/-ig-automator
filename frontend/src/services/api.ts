@@ -136,6 +136,40 @@ export interface Message {
   instagramMessageId?: string;
 }
 
+export interface AutomationSessionState {
+  stepIndex?: number;
+  nodeId?: string;
+  vars?: Record<string, any>;
+}
+
+export interface AutomationSession {
+  _id: string;
+  workspaceId: string;
+  conversationId: string;
+  automationInstanceId: string;
+  templateId: string;
+  templateVersionId: string;
+  status: 'active' | 'paused' | 'completed' | 'handoff';
+  state?: AutomationSessionState;
+  rateLimit?: {
+    windowStart?: string;
+    count?: number;
+  };
+  lastAutomationMessageAt?: string;
+  lastCustomerMessageAt?: string;
+  pausedAt?: string;
+  pauseReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutomationSessionSummary {
+  session: AutomationSession | null;
+  instance?: { _id: string; name?: string } | null;
+  template?: { _id: string; name?: string } | null;
+  version?: { _id: string; version?: number; versionLabel?: string } | null;
+}
+
 export interface KnowledgeItem {
   _id: string;
   title: string;
@@ -697,6 +731,23 @@ export const conversationAPI = {
   getById: async (id: string): Promise<Conversation> => {
     const { data } = await api.get(`/api/conversations/${id}`);
     return data;
+  },
+
+  getAutomationSession: async (conversationId: string): Promise<AutomationSessionSummary> => {
+    const { data } = await api.get(`/api/conversations/${conversationId}/automation-session`);
+    return data?.data || data;
+  },
+
+  pauseAutomationSession: async (conversationId: string, reason?: string): Promise<AutomationSession> => {
+    const { data } = await api.post(`/api/conversations/${conversationId}/automation-session/pause`, { reason });
+    const payload = data?.data || data;
+    return payload.session || payload;
+  },
+
+  stopAutomationSession: async (conversationId: string, reason?: string): Promise<AutomationSession> => {
+    const { data } = await api.post(`/api/conversations/${conversationId}/automation-session/stop`, { reason });
+    const payload = data?.data || data;
+    return payload.session || payload;
   },
 };
 

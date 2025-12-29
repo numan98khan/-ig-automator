@@ -23,7 +23,12 @@ import {
 import { pauseForTypingIfNeeded } from './automation/typing';
 import { matchesTriggerConfig } from './automation/triggerMatcher';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
-import { AutomationAiSettings, AutomationRateLimit, TriggerType } from '../types/automation';
+import {
+  AutomationAiSettings,
+  AutomationRateLimit,
+  TriggerConfig,
+  TriggerType,
+} from '../types/automation';
 import { FlowExposedField, FlowTriggerDefinition } from '../types/flow';
 import { AutomationTestContext } from './automation/types';
 
@@ -100,6 +105,40 @@ const shouldLogNode = (step?: FlowRuntimeStep) => step?.logEnabled !== false;
 const logNodeEvent = (message: string, details?: Record<string, any>) => {
   console.log(`🧩 [FLOW NODE] ${message}`, details || {});
 };
+
+const summarizeTriggerConfig = (config?: TriggerConfig) => {
+  if (!config) return null;
+  return {
+    triggerMode: config.triggerMode || 'any',
+    keywordMatch: config.keywordMatch || 'any',
+    keywordCount: config.keywords?.length || 0,
+    excludeKeywordCount: config.excludeKeywords?.length || 0,
+    categoryIdsCount: config.categoryIds?.length || 0,
+    outsideBusinessHours: Boolean(config.outsideBusinessHours),
+    matchOn: config.matchOn
+      ? {
+          link: Boolean(config.matchOn.link),
+          attachment: Boolean(config.matchOn.attachment),
+        }
+      : undefined,
+  };
+};
+
+const summarizeTriggers = (triggers: FlowTriggerDefinition[]) =>
+  triggers.map((trigger) => ({
+    type: trigger.type,
+    label: trigger.label,
+    description: trigger.description,
+    config: summarizeTriggerConfig(trigger.config),
+  }));
+
+const summarizeMessageContext = (context?: AutomationTestContext) => ({
+  categoryId: context?.categoryId,
+  categoryName: context?.categoryName,
+  hasLink: Boolean(context?.hasLink),
+  hasAttachment: Boolean(context?.hasAttachment),
+  forceOutsideBusinessHours: Boolean(context?.forceOutsideBusinessHours),
+});
 
 const deepClone = <T>(value: T): T => {
   if (value === undefined) {
@@ -1062,6 +1101,7 @@ export async function executeAutomation(params: {
     });
 
     const normalizedMessage = messageText || '';
+    const contextSummary = summarizeMessageContext(messageContext);
     const activeSession = await AutomationSession.findOne({
       conversationId: new mongoose.Types.ObjectId(conversationId),
       status: 'active',
@@ -1069,13 +1109,38 @@ export async function executeAutomation(params: {
 
     if (activeSession) {
       const instance = await AutomationInstance.findById(activeSession.automationInstanceId);
-      if (instance && instance.isActive) {
+      if (!instance) {
+        logAutomation('⚠️  [AUTOMATION] Active session instance missing', {
+          sessionId: activeSession._id?.toString(),
+          automationInstanceId: activeSession.automationInstanceId?.toString(),
+        });
+      } else if (!instance.isActive) {
+        logAutomation('⚠️  [AUTOMATION] Active session instance inactive', {
+          sessionId: activeSession._id?.toString(),
+          automationInstanceId: instance._id?.toString(),
+          name: instance.name,
+        });
+      } else {
         const version = await resolveLatestTemplateVersion({
           templateId: instance.templateId,
           fallbackVersionId: activeSession.templateVersionId || instance.templateVersionId,
         });
-        if (version) {
+        if (!version) {
+          logAutomation('⚠️  [AUTOMATION] Active session version missing', {
+            sessionId: activeSession._id?.toString(),
+            automationInstanceId: instance._id?.toString(),
+            templateId: instance.templateId?.toString(),
+            templateVersionId: activeSession.templateVersionId?.toString() || instance.templateVersionId?.toString(),
+          });
+        } else {
           const runtime = resolveFlowRuntime(version, instance);
+          if (!runtime) {
+            logAutomation('⚠️  [AUTOMATION] Active session runtime invalid', {
+              sessionId: activeSession._id?.toString(),
+              automationInstanceId: instance._id?.toString(),
+              templateVersionId: version._id?.toString(),
+            });
+          } else {
           const result = await executeFlowForInstance({
             instance,
             version,
@@ -1088,10 +1153,19 @@ export async function executeAutomation(params: {
             platform,
             messageContext,
           });
+          if (!result.success) {
+            logAutomation('⚠️  [AUTOMATION] Active session execution failed', {
+              instanceId: instance._id?.toString(),
+              name: instance.name,
+              templateVersionId: version._id?.toString(),
+              error: result.error,
+            });
+          }
           return result.success
             ? finish({ success: true, automationExecuted: instance.name })
             : finish({ success: false, error: result.error || 'Flow execution failed' });
         }
+      }
       }
     }
 
@@ -1130,7 +1204,13 @@ export async function executeAutomation(params: {
     const versionMap = new Map(versions.map(version => [version._id.toString(), version]));
 
     const matchStart = nowMs();
+    const matchDiagnostics: Array<Record<string, any>> = [];
     for (const instance of instances) {
+      const diagnostic: Record<string, any> = {
+        instanceId: instance._id?.toString(),
+        name: instance.name,
+        templateId: instance.templateId?.toString(),
+      };
       const template = instance.templateId
         ? templateMap.get(instance.templateId.toString())
         : null;
@@ -1140,19 +1220,48 @@ export async function executeAutomation(params: {
         ? versionMap.get(instance.templateVersionId.toString()) || null
         : null;
       const version = latestVersion || storedVersion;
-      if (!version) continue;
+      if (!version) {
+        diagnostic.reason = 'missing_published_version';
+        diagnostic.templateVersionId = instance.templateVersionId?.toString();
+        diagnostic.latestVersionId = latestVersionId;
+        matchDiagnostics.push(diagnostic);
+        continue;
+      }
 
       const runtime = resolveFlowRuntime(version, instance);
-      if (!runtime) continue;
+      if (!runtime) {
+        diagnostic.reason = 'runtime_resolution_failed';
+        diagnostic.templateVersionId = version._id?.toString();
+        matchDiagnostics.push(diagnostic);
+        continue;
+      }
       const triggers = runtime.triggers || [];
-      if (triggers.length === 0) continue;
+      if (triggers.length === 0) {
+        diagnostic.reason = 'no_triggers_defined';
+        diagnostic.templateVersionId = version._id?.toString();
+        matchDiagnostics.push(diagnostic);
+        continue;
+      }
 
-      const matchedTrigger = triggers.find((trigger) => {
-        if (trigger.type !== triggerType) return false;
-        return matchesTriggerConfig(normalizedMessage, trigger.config, messageContext);
-      });
+      const typedTriggers = triggers.filter((trigger) => trigger.type === triggerType);
+      if (typedTriggers.length === 0) {
+        diagnostic.reason = 'trigger_type_mismatch';
+        diagnostic.templateVersionId = version._id?.toString();
+        diagnostic.availableTriggers = triggers.map((trigger) => trigger.type);
+        matchDiagnostics.push(diagnostic);
+        continue;
+      }
+
+      const matchedTrigger = typedTriggers.find((trigger) =>
+        matchesTriggerConfig(normalizedMessage, trigger.config, messageContext)
+      );
 
       if (!matchedTrigger) {
+        diagnostic.reason = 'trigger_config_mismatch';
+        diagnostic.templateVersionId = version._id?.toString();
+        diagnostic.triggers = summarizeTriggers(typedTriggers);
+        diagnostic.messageContext = contextSummary;
+        matchDiagnostics.push(diagnostic);
         continue;
       }
 
@@ -1179,6 +1288,15 @@ export async function executeAutomation(params: {
         templateVersionId: version._id?.toString(),
       });
 
+      if (!result.success) {
+        logAutomation('⚠️  [AUTOMATION] Match execution failed', {
+          instanceId: instance._id?.toString(),
+          name: instance.name,
+          templateVersionId: version._id?.toString(),
+          error: result.error,
+        });
+      }
+
       return result.success
         ? finish({ success: true, automationExecuted: instance.name })
         : finish({ success: false, error: result.error || 'Flow execution failed' });
@@ -1189,6 +1307,16 @@ export async function executeAutomation(params: {
       evaluated: instances.length,
       triggerType,
     });
+
+    if (matchDiagnostics.length > 0) {
+      logAutomation('🔍 [AUTOMATION] Match diagnostics', {
+        triggerType,
+        messageContext: contextSummary,
+        evaluated: matchDiagnostics.length,
+        diagnostics: matchDiagnostics.slice(0, 10),
+        truncated: matchDiagnostics.length > 10,
+      });
+    }
 
     logAutomation('⚠️  [AUTOMATION] No automations matched trigger filters');
     return finish({ success: false, error: 'No automations matched trigger filters' });
@@ -1211,11 +1339,12 @@ export async function checkAndExecuteAutomations(params: {
   instagramAccountId: string;
   platform?: string;
   messageContext?: AutomationTestContext;
-}): Promise<{ executed: boolean; automationName?: string }> {
+}): Promise<{ executed: boolean; automationName?: string; error?: string }> {
   const result = await executeAutomation(params);
   return {
     executed: result.success,
     automationName: result.automationExecuted,
+    error: result.error,
   };
 }
 

@@ -449,7 +449,11 @@ async function processMessageAutomations(
     if (automationResult.executed) {
       logAutomation(`✅ Automation executed: ${automationResult.automationName}`);
     } else {
-      logAutomation('ℹ️ No active automations found for this trigger');
+      if (automationResult.error) {
+        logAutomation('⚠️  [AUTOMATION] Execution failed', { error: automationResult.error });
+      } else {
+        logAutomation('ℹ️ No automations matched trigger filters');
+      }
     }
 
   } catch (error) {
