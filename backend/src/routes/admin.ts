@@ -797,7 +797,17 @@ router.post('/flow-drafts/:draftId/publish', authenticate, requireAdmin, async (
       return res.status(400).json({ error: 'dslSnapshot or compiled artifact is required to publish' });
     }
 
-    const compiledArtifact = compiled || compileFlow(snapshot);
+    let compiledArtifact = compiled;
+    if (!compiledArtifact) {
+      try {
+        compiledArtifact = compileFlow(snapshot);
+      } catch (error: any) {
+        return res.status(400).json({
+          error: error.message || 'Failed to compile flow draft',
+          details: error.details,
+        });
+      }
+    }
 
     let template: any = null;
     const resolvedTemplateId = templateId || draft.templateId;
