@@ -19,8 +19,12 @@ import { getLogSettingsSnapshot } from '../services/adminLogSettingsService';
 
 const router = express.Router();
 
-const logAutomation = (message: string) => {
+const logAutomation = (message: string, details?: Record<string, unknown>) => {
   if (!getLogSettingsSnapshot().automationLogsEnabled) return;
+  if (details) {
+    console.log(message, details);
+    return;
+  }
   console.log(message);
 };
 
