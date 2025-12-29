@@ -17,6 +17,7 @@ type FlowRuntimeStep = {
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
   next?: string;
+  logEnabled?: boolean;
   handoff?: {
     topic?: string;
     summary?: string;
@@ -73,6 +74,12 @@ const normalizeHandoff = (node: Record<string, any>) => node.handoff ?? node.dat
 const normalizeRateLimit = (node: Record<string, any>) => node.rateLimit ?? node.data?.rateLimit;
 
 const normalizeNext = (node: Record<string, any>) => node.next ?? node.data?.next;
+
+const normalizeLogEnabled = (node: Record<string, any>) => {
+  if (typeof node.logEnabled === 'boolean') return node.logEnabled;
+  if (typeof node.data?.logEnabled === 'boolean') return node.data.logEnabled;
+  return undefined;
+};
 
 const normalizeType = (node: Record<string, any>) =>
   typeof node.type === 'string'
@@ -182,6 +189,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const handoff = normalizeHandoff(node);
     const rateLimit = normalizeRateLimit(node);
     const next = normalizeNext(node);
+    const logEnabled = normalizeLogEnabled(node);
 
     if (type.toLowerCase() === 'send_message' && !text && !message) {
       warnings.push({
@@ -204,6 +212,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       knowledgeItemIds,
       waitForReply,
       next,
+      logEnabled,
       handoff,
       rateLimit,
     });
