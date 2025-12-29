@@ -224,32 +224,64 @@ const getConfigValue = (config: Record<string, any>, path: string): any => {
   }, config as any);
 };
 
-const resolveTemplateString = (value: string, config: Record<string, any>): any => {
+const resolveTemplateString = (
+  value: string,
+  config: Record<string, any>,
+  options?: { preserveUnknownVars?: boolean },
+): any => {
   if (!value.includes('{{')) return value;
   const matches = Array.from(value.matchAll(TOKEN_REGEX));
   if (matches.length === 0) return value;
+  const preserveUnknownVars = options?.preserveUnknownVars;
   if (matches.length === 1 && value === matches[0][0]) {
-    const raw = getConfigValue(config, matches[0][1].trim());
-    return raw === undefined ? '' : raw;
+    const key = matches[0][1].trim();
+    const raw = getConfigValue(config, key);
+    if (raw === undefined) {
+      return preserveUnknownVars && key.startsWith('vars.') ? value : '';
+    }
+    return raw;
   }
-  return value.replace(TOKEN_REGEX, (_match, key) => stringifyConfigValue(getConfigValue(config, key.trim())));
+  return value.replace(TOKEN_REGEX, (match, key) => {
+    const trimmed = key.trim();
+    const raw = getConfigValue(config, trimmed);
+    if (raw === undefined && preserveUnknownVars && trimmed.startsWith('vars.')) {
+      return match;
+    }
+    return stringifyConfigValue(raw);
+  });
 };
 
-const interpolateObject = (value: any, config: Record<string, any>): any => {
+const interpolateObject = (
+  value: any,
+  config: Record<string, any>,
+  options?: { preserveUnknownVars?: boolean },
+): any => {
   if (typeof value === 'string') {
-    return resolveTemplateString(value, config);
+    return resolveTemplateString(value, config, options);
   }
   if (Array.isArray(value)) {
-    return value.map(item => interpolateObject(item, config));
+    return value.map(item => interpolateObject(item, config, options));
   }
   if (value && typeof value === 'object') {
     const output: Record<string, any> = {};
     Object.entries(value).forEach(([key, entry]) => {
-      output[key] = interpolateObject(entry, config);
+      output[key] = interpolateObject(entry, config, options);
     });
     return output;
   }
   return value;
+};
+
+const buildRuntimeTemplateContext = (session?: any): Record<string, any> => {
+  const vars = session?.state?.vars && typeof session.state.vars === 'object' ? session.state.vars : {};
+  return { vars, ...vars };
+};
+
+const resolveMessageTemplate = (value: string, session?: any): string => {
+  if (!value) return '';
+  const resolved = resolveTemplateString(value, buildRuntimeTemplateContext(session));
+  if (typeof resolved === 'string') return resolved;
+  return stringifyConfigValue(resolved);
 };
 
 const setByPath = (target: any, path: string, value: any) => {
@@ -328,7 +360,7 @@ const resolveFlowRuntime = (version: any, instance: any) => {
     config,
   });
 
-  const resolvedGraph = interpolateObject(graph, config);
+  const resolvedGraph = interpolateObject(graph, config, { preserveUnknownVars: true });
   const resolvedTriggers = interpolateObject(triggers, config) as FlowTriggerDefinition[];
 
   return {
@@ -808,7 +840,7 @@ async function executeFlowPlan(params: {
     }
 
     if (stepType === 'send_message') {
-      const text = step.text || step.message || '';
+      const text = resolveMessageTemplate(step.text || step.message || '', session);
       if (!text) {
         return completeWithError('Missing message text for step');
       }
