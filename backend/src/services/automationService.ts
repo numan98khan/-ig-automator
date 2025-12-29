@@ -44,6 +44,7 @@ type FlowRuntimeStep = {
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
   next?: string;
+  logEnabled?: boolean;
   handoff?: {
     topic?: string;
     summary?: string;
@@ -92,6 +93,12 @@ const logAutomationStep = (step: string, startMs: number, details?: Record<strin
   if (!shouldLogAutomationSteps()) return;
   const ms = Math.max(0, Math.round(nowMs() - startMs));
   console.log('⏱️ [AUTOMATION] Step', { step, ms, ...(details || {}) });
+};
+
+const shouldLogNode = (step?: FlowRuntimeStep) => step?.logEnabled !== false;
+
+const logNodeEvent = (message: string, details?: Record<string, any>) => {
+  console.log(`🧩 [FLOW NODE] ${message}`, details || {});
 };
 
 const deepClone = <T>(value: T): T => {
@@ -748,6 +755,16 @@ async function executeFlowPlan(params: {
 
     const stepType = normalizeStepType(step);
     const rateLimit = resolveRateLimit(step.rateLimit, plan.graph.rateLimit);
+    const nodeStart = nowMs();
+
+    if (shouldLogNode(step)) {
+      logNodeEvent('Node start', {
+        nodeId: step.id,
+        type: stepType,
+        waitForReply: step.waitForReply,
+        hasNext: Boolean(step.next || plan.edges?.some((edge) => edge.from === step.id)),
+      });
+    }
 
     if (stepType === 'send_message') {
       const text = step.text || step.message || '';
@@ -842,6 +859,15 @@ async function executeFlowPlan(params: {
     }
 
     executedSteps += 1;
+
+    if (shouldLogNode(step)) {
+      logNodeEvent('Node complete', {
+        nodeId: step.id,
+        type: stepType,
+        executedSteps,
+        durationMs: Math.max(0, Math.round(nowMs() - nodeStart)),
+      });
+    }
 
     let nextStepIndex: number | undefined;
     let nextNodeId: string | undefined;

@@ -1,3 +1,4 @@
+import { AutomationAiSettings, AutomationRateLimit } from '../types/automation';
 import { CompiledFlow, FlowDsl } from '../types/flow';
 
 type CompileMeta = {
@@ -5,19 +6,299 @@ type CompileMeta = {
   version: number;
 };
 
+type FlowRuntimeStep = {
+  id?: string;
+  type?: string;
+  text?: string;
+  message?: string;
+  buttons?: Array<{ title: string; payload?: string } | string>;
+  tags?: string[];
+  aiSettings?: AutomationAiSettings;
+  knowledgeItemIds?: string[];
+  waitForReply?: boolean;
+  next?: string;
+  logEnabled?: boolean;
+  handoff?: {
+    topic?: string;
+    summary?: string;
+    recommendedNextAction?: string;
+    message?: string;
+  };
+  rateLimit?: AutomationRateLimit;
+};
+
+type FlowRuntimeEdge = {
+  from: string;
+  to: string;
+  condition?: Record<string, any>;
+};
+
+type FlowCompileIssue = {
+  code: string;
+  message: string;
+  nodeId?: string;
+};
+
+type FlowCompileDetails = {
+  errors: FlowCompileIssue[];
+  warnings: FlowCompileIssue[];
+};
+
+class FlowCompilerError extends Error {
+  details: FlowCompileDetails;
+
+  constructor(message: string, details: FlowCompileDetails) {
+    super(message);
+    this.name = 'FlowCompilerError';
+    this.details = details;
+  }
+}
+
+const normalizeText = (node: Record<string, any>) =>
+  node.text ?? node.message ?? node.data?.text ?? node.data?.message;
+
+const normalizeButtons = (node: Record<string, any>) => node.buttons ?? node.data?.buttons;
+
+const normalizeTags = (node: Record<string, any>) => node.tags ?? node.data?.tags;
+
+const normalizeAiSettings = (node: Record<string, any>) => node.aiSettings ?? node.data?.aiSettings;
+
+const normalizeKnowledgeItemIds = (node: Record<string, any>) =>
+  node.knowledgeItemIds ?? node.data?.knowledgeItemIds;
+
+const normalizeWaitForReply = (node: Record<string, any>) =>
+  node.waitForReply ?? node.data?.waitForReply;
+
+const normalizeHandoff = (node: Record<string, any>) => node.handoff ?? node.data?.handoff;
+
+const normalizeRateLimit = (node: Record<string, any>) => node.rateLimit ?? node.data?.rateLimit;
+
+const normalizeNext = (node: Record<string, any>) => node.next ?? node.data?.next;
+
+const normalizeLogEnabled = (node: Record<string, any>) => {
+  if (typeof node.logEnabled === 'boolean') return node.logEnabled;
+  if (typeof node.data?.logEnabled === 'boolean') return node.data.logEnabled;
+  return undefined;
+};
+
+const normalizeType = (node: Record<string, any>) =>
+  typeof node.type === 'string'
+    ? node.type
+    : typeof node.nodeType === 'string'
+      ? node.nodeType
+      : '';
+
+const normalizeId = (node: Record<string, any>) =>
+  typeof node.id === 'string'
+    ? node.id
+    : typeof node.nodeId === 'string'
+      ? node.nodeId
+      : '';
+
 export function compileFlow(dsl: FlowDsl): CompiledFlow {
   if (!dsl || typeof dsl !== 'object') {
     throw new Error('Invalid flow DSL');
   }
 
   const compiler: CompileMeta = {
-    name: 'pass_through',
-    version: 1,
+    name: 'runtime_graph',
+    version: 2,
+  };
+
+  const warnings: FlowCompileIssue[] = [];
+  const errors: FlowCompileIssue[] = [];
+
+  const rawNodes = Array.isArray(dsl.nodes)
+    ? dsl.nodes
+    : Array.isArray(dsl.steps)
+      ? dsl.steps
+      : null;
+
+  if (!rawNodes) {
+    errors.push({
+      code: 'missing_nodes',
+      message: 'dsl.nodes must be an array',
+    });
+  }
+
+  if (dsl.edges !== undefined && !Array.isArray(dsl.edges)) {
+    errors.push({
+      code: 'invalid_edges',
+      message: 'dsl.edges must be an array when provided',
+    });
+  }
+
+  if (errors.length > 0) {
+    throw new FlowCompilerError('Invalid flow DSL', { errors, warnings });
+  }
+
+  if (!Array.isArray(dsl.nodes) && Array.isArray(dsl.steps)) {
+    warnings.push({
+      code: 'deprecated_steps',
+      message: 'dsl.steps is deprecated; use dsl.nodes instead',
+    });
+  }
+
+  const normalizedNodes: FlowRuntimeStep[] = [];
+  const nodeIds = new Set<string>();
+
+  rawNodes?.forEach((node: any, index: number) => {
+    if (!node || typeof node !== 'object') {
+      warnings.push({
+        code: 'invalid_node',
+        message: `Node at index ${index} is not an object`,
+      });
+      return;
+    }
+
+    const id = normalizeId(node);
+    if (!id) {
+      warnings.push({
+        code: 'missing_node_id',
+        message: `Node at index ${index} is missing an id`,
+      });
+      return;
+    }
+
+    if (nodeIds.has(id)) {
+      warnings.push({
+        code: 'duplicate_node_id',
+        message: `Node id "${id}" is duplicated`,
+        nodeId: id,
+      });
+      return;
+    }
+
+    const type = normalizeType(node);
+    if (!type) {
+      warnings.push({
+        code: 'missing_node_type',
+        message: `Node "${id}" is missing a type`,
+        nodeId: id,
+      });
+      return;
+    }
+
+    const text = normalizeText(node);
+    const message = node.message ?? node.data?.message;
+    const buttons = normalizeButtons(node);
+    const tags = normalizeTags(node);
+    const aiSettings = normalizeAiSettings(node);
+    const knowledgeItemIds = normalizeKnowledgeItemIds(node);
+    const waitForReply = normalizeWaitForReply(node);
+    const handoff = normalizeHandoff(node);
+    const rateLimit = normalizeRateLimit(node);
+    const next = normalizeNext(node);
+    const logEnabled = normalizeLogEnabled(node);
+
+    if (type.toLowerCase() === 'send_message' && !text && !message) {
+      warnings.push({
+        code: 'missing_message_text',
+        message: `Node "${id}" is missing message text`,
+        nodeId: id,
+      });
+      return;
+    }
+
+    nodeIds.add(id);
+    normalizedNodes.push({
+      id,
+      type,
+      text,
+      message,
+      buttons,
+      tags,
+      aiSettings,
+      knowledgeItemIds,
+      waitForReply,
+      next,
+      logEnabled,
+      handoff,
+      rateLimit,
+    });
+  });
+
+  const normalizedEdges: FlowRuntimeEdge[] = [];
+  (dsl.edges || []).forEach((edge: any, index: number) => {
+    if (!edge || typeof edge !== 'object') {
+      warnings.push({
+        code: 'invalid_edge',
+        message: `Edge at index ${index} is not an object`,
+      });
+      return;
+    }
+
+    const from = typeof edge.from === 'string'
+      ? edge.from
+      : typeof edge.source === 'string'
+        ? edge.source
+        : '';
+    const to = typeof edge.to === 'string'
+      ? edge.to
+      : typeof edge.target === 'string'
+        ? edge.target
+        : '';
+
+    if (!from || !to) {
+      warnings.push({
+        code: 'missing_edge_connection',
+        message: `Edge at index ${index} is missing source/target`,
+      });
+      return;
+    }
+
+    if (!nodeIds.has(from) || !nodeIds.has(to)) {
+      warnings.push({
+        code: 'edge_node_missing',
+        message: `Edge at index ${index} references unknown nodes`,
+      });
+      return;
+    }
+
+    normalizedEdges.push({
+      from,
+      to,
+      condition: edge.condition,
+    });
+  });
+
+  let startNodeId = typeof dsl.startNodeId === 'string' ? dsl.startNodeId : undefined;
+  if (!startNodeId && typeof dsl.start === 'string') {
+    startNodeId = dsl.start;
+  }
+  if (!startNodeId || !nodeIds.has(startNodeId)) {
+    const fallbackId = normalizedNodes[0]?.id;
+    if (fallbackId) {
+      warnings.push({
+        code: 'start_node_fallback',
+        message: 'startNodeId missing or invalid; falling back to first node',
+        nodeId: fallbackId,
+      });
+      startNodeId = fallbackId;
+    } else {
+      errors.push({
+        code: 'missing_start_node',
+        message: 'No valid nodes available to determine startNodeId',
+      });
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new FlowCompilerError('Invalid flow DSL', { errors, warnings });
+  }
+
+  const graph = {
+    nodes: normalizedNodes,
+    edges: normalizedEdges,
+    startNodeId,
+    rateLimit: dsl.rateLimit,
+    aiSettings: dsl.aiSettings,
   };
 
   return {
     compiler,
     compiledAt: new Date().toISOString(),
-    graph: dsl,
+    graph,
+    warnings,
   };
 }
