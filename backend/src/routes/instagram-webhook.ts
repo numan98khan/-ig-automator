@@ -408,22 +408,6 @@ async function processMessageAutomations(
   try {
     logAutomation(`🤖 Processing automations for conversation ${conversation._id}`);
 
-    // 1. Categorize the message
-    const categorization = await categorizeMessage(messageText, workspaceId);
-    logAutomation(`📋 Message categorized as: ${categorization.categoryName} (${categorization.detectedLanguage})`);
-
-    // 2. Get or create category and update message
-    const categoryId = await getOrCreateCategory(workspaceId, categorization.categoryName);
-    await incrementCategoryCount(categoryId);
-
-    // Update the saved message with categorization data
-    savedMessage.categoryId = categoryId;
-    savedMessage.detectedLanguage = categorization.detectedLanguage;
-    if (categorization.translatedText) {
-      savedMessage.translatedText = categorization.translatedText;
-    }
-    await savedMessage.save();
-
     const messageContext = {
       hasLink: Boolean(savedMessage.linkPreview?.url || /https?:\/\/\S+/i.test(messageText)),
       hasAttachment: Array.isArray(savedMessage.attachments) && savedMessage.attachments.length > 0,
@@ -431,11 +415,9 @@ async function processMessageAutomations(
       attachmentUrls: Array.isArray(savedMessage.attachments)
         ? savedMessage.attachments.map((attachment: any) => attachment.url).filter(Boolean)
         : undefined,
-      categoryId: categoryId.toString(),
-      categoryName: categorization.categoryName,
     };
 
-    // 3. Check for active automations
+    // Check for active automations
     const automationResult = await checkAndExecuteAutomations({
       workspaceId,
       triggerType: 'dm_message',
