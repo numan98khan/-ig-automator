@@ -1327,38 +1327,6 @@ export default function AutomationTemplates() {
                 }
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Type</label>
-              <select
-                className="input w-full"
-                value={selectedNode.type}
-                onChange={(event) =>
-                  updateNode(selectedNode.id, (node) => {
-                    const nextType = event.target.value as FlowNodeType
-                    const next: FlowNode = { ...node, type: nextType }
-                    if (nextType === 'send_message' && !next.text) {
-                      next.text = ''
-                    }
-                    if (nextType === 'ai_reply' && !next.aiSettings) {
-                      next.aiSettings = {}
-                    }
-                    if (nextType === 'handoff' && !next.handoff) {
-                      next.handoff = { topic: '', summary: '' }
-                    }
-                    if (nextType === 'trigger' && !next.triggerType) {
-                      next.triggerType = DEFAULT_TRIGGER_TYPE
-                    }
-                    return next
-                  })
-                }
-              >
-                {FLOW_NODE_LIBRARY.map((item) => (
-                  <option key={item.type} value={item.type}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
             {selectedNode.type === 'trigger' && (
               <>
                 <div className="space-y-2">
