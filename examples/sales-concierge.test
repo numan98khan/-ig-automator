@@ -1,0 +1,108 @@
+Nauman, below is a single end-to-end test conversation that matches your current flow:
+
+Trigger → Detect intent → Message (“Responding for…”) → AI Reply
+
+I’m assuming your AI can read the inventory sheet and use the “Avg Unit Cost” as a quoted starting price.
+
+Test Conversation (Inventory + Fabric + Optional Stitching)
+
+User: Salam
+Bot (Message node): Responding for: greeting
+Bot (AI Reply): Walaikum assalam. What would you like today—unstitched fabric/suit set, stitching at home, or alterations?
+
+User: I want unstitched lawn 3pc set. Price and available?
+Bot (Message node): Responding for: product_inquiry
+Bot (AI Reply): Yes—Unstitched Lawn 3pc Set (FAB-LAWN-3PC) is in stock (53 sets).
+Starting price: ~PKR 2,800 per set.
+How many sets do you want, and which city for delivery?
+
+User: 2 sets. Deliver to Lahore. Also I want it stitched for my wife.
+Bot (Message node): Responding for: order_now
+Bot (AI Reply): Noted: 2× Lawn 3pc for Lahore + stitching request. Stock is available.
+For stitching, do you want casual / semi-formal / formal?
+Typical stitching:
+
+Casual ~PKR 2,500
+
+Semi-formal ~PKR 3,000
+
+Formal/heavy 3,500–4,000+
+Also, please share phone number and area in Lahore.
+
+User: Casual. Phone 03xx-xxxxxxx. DHA Lahore.
+Bot (Message node): Responding for: collect_details
+Bot (AI Reply): Great. Next two things:
+
+Delivery address (street + house + landmark)
+
+Tailor visit preference: date/time for home measurement (e.g., tomorrow 6–9pm)?
+
+User: Address: DHA Phase 6, Street xx, House xx. Visit Sunday 5pm.
+Bot (Message node): Responding for: booking_tailor_visit
+Bot (AI Reply): Confirmed.
+
+Delivery: 2× Unstitched Lawn 3pc to DHA Phase 6
+
+Tailor visit: Sunday 5pm for measurements + design confirmation (casual stitching)
+
+Quick notes:
+
+Color may vary slightly due to lighting/screen.
+
+Delivery charges depend on location (we’ll confirm).
+Do you want any add-ons like lining, lace, or buttons?
+
+User: Yes I also need raw silk 10 meters and lining 5 meters.
+Bot (Message node): Responding for: add_items
+Bot (AI Reply): Sure. Current stock:
+
+Raw Silk (FAB-SILK-M): 95 meters available — starting ~PKR 980/m
+
+Suit Lining (ACC-LINING-M): 140 meters available — starting ~PKR 180/m
+
+Confirm quantities: Raw Silk 10m + Lining 5m (correct)?
+Also, do you want buttons or zippers?
+
+User: Add buttons pack 2. COD please.
+Bot (Message node): Responding for: checkout
+Bot (AI Reply): Noted. Buttons Pack (ACC-BUTTON-50) is in stock (69 packs). Starting ~PKR 120/pack.
+
+Order summary (items):
+
+2× Unstitched Lawn 3pc Set (FAB-LAWN-3PC)
+
+10m Raw Silk (FAB-SILK-M)
+
+5m Suit Lining (ACC-LINING-M)
+
+2× Buttons Pack (ACC-BUTTON-50)
+Payment: COD
+Delivery: DHA Phase 6, Lahore
+Tailor visit: Sunday 5pm
+
+Before I confirm: any note on color/shade for the silk, or should we share available options?
+
+User: Share options. Also if I don’t like fabric can I return?
+Bot (Message node): Responding for: returns_policy
+Bot (AI Reply): For unstitched fabric, return/exchange depends on condition and time window:
+
+Must be unused, not cut/altered, packaging intact.
+If the wrong item is delivered or there’s a defect, we resolve it promptly.
+
+For custom-stitched outfits, they’re generally not refundable (made to measurements). If a fit issue is due to our measurement/stitching, we fix it per adjustment policy.
+
+I’ll share available silk shade options next—do you prefer light / medium / dark tones?
+
+User: Medium tones. Confirm order.
+Bot (Message node): Responding for: confirm_order
+Bot (AI Reply): Confirmed. We’ll proceed with:
+
+Delivery for items + COD
+
+Silk medium-tone options shared for your selection
+
+Tailor visit Sunday 5pm for measurements and stitching quote finalization
+
+You can also send any design reference photos before Sunday to speed up the visit.
+
+If you want, I can also generate a second conversation to test low stock / reorder behavior (e.g., chiffon dupatta has only 23 pieces) and a third to test alteration service (SRV-ALTER) routing.
