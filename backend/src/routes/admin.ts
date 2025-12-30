@@ -12,6 +12,7 @@ import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
+import AutomationIntention from '../models/AutomationIntention';
 import FlowDraft from '../models/FlowDraft';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
@@ -705,6 +706,95 @@ router.delete('/log-events', authenticate, requireAdmin, async (_req, res) => {
     res.json({ data: { success: true } });
   } catch (error) {
     console.error('Admin log events delete error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Intentions (global intent catalog)
+router.get('/intentions', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const intentions = await AutomationIntention.find({})
+      .sort({ name: 1 })
+      .lean();
+    res.json({ data: intentions });
+  } catch (error) {
+    console.error('Admin intentions list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/intentions', authenticate, requireAdmin, async (req: AuthRequest, res) => {
+  try {
+    const { name, description } = req.body || {};
+    const normalizedName = typeof name === 'string' ? name.trim() : '';
+    const normalizedDescription = typeof description === 'string' ? description.trim() : '';
+    if (!normalizedName || !normalizedDescription) {
+      return res.status(400).json({ error: 'name and description are required' });
+    }
+
+    const escapedName = normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const existing = await AutomationIntention.findOne({
+      name: new RegExp(`^${escapedName}$`, 'i'),
+    }).lean();
+    if (existing) {
+      return res.status(400).json({ error: 'Intention already exists' });
+    }
+
+    const intention = await AutomationIntention.create({
+      name: normalizedName,
+      description: normalizedDescription,
+      createdBy: toObjectId(req.userId),
+      updatedBy: toObjectId(req.userId),
+    });
+    res.status(201).json({ data: intention });
+  } catch (error: any) {
+    console.error('Admin intentions create error:', error);
+    res.status(400).json({ error: error.message || 'Failed to create intention' });
+  }
+});
+
+router.put('/intentions/:id', authenticate, requireAdmin, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const intention = await AutomationIntention.findById(id);
+    if (!intention) {
+      return res.status(404).json({ error: 'Intention not found' });
+    }
+
+    const { name, description } = req.body || {};
+    if (name !== undefined) {
+      const normalizedName = typeof name === 'string' ? name.trim() : '';
+      if (!normalizedName) {
+        return res.status(400).json({ error: 'name cannot be empty' });
+      }
+      intention.name = normalizedName;
+    }
+    if (description !== undefined) {
+      const normalizedDescription = typeof description === 'string' ? description.trim() : '';
+      if (!normalizedDescription) {
+        return res.status(400).json({ error: 'description cannot be empty' });
+      }
+      intention.description = normalizedDescription;
+    }
+
+    intention.updatedBy = toObjectId(req.userId);
+    await intention.save();
+    res.json({ data: intention });
+  } catch (error: any) {
+    console.error('Admin intentions update error:', error);
+    res.status(400).json({ error: error.message || 'Failed to update intention' });
+  }
+});
+
+router.delete('/intentions/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const intention = await AutomationIntention.findByIdAndDelete(req.params.id);
+    if (!intention) {
+      return res.status(404).json({ error: 'Intention not found' });
+    }
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin intentions delete error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

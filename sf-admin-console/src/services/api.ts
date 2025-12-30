@@ -109,6 +109,14 @@ export const adminApi = {
   getFlowTemplateVersion: (templateId: string, versionId: string) =>
     api.get(`/flow-templates/${templateId}/versions/${versionId}`),
 
+  // Intentions
+  getIntentions: () => api.get('/intentions'),
+  createIntention: (payload: { name: string; description: string }) =>
+    api.post('/intentions', payload),
+  updateIntention: (id: string, payload: { name?: string; description?: string }) =>
+    api.put(`/intentions/${id}`, payload),
+  deleteIntention: (id: string) => api.delete(`/intentions/${id}`),
+
   // Log settings
   getLogSettings: () => api.get('/log-settings'),
   updateLogSettings: (payload: any) => api.put('/log-settings', payload),

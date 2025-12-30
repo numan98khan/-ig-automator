@@ -116,6 +116,23 @@ export default function AutomationTemplates() {
     queryFn: () => adminApi.getFlowTemplates(),
   })
 
+  const { data: intentionData } = useQuery({
+    queryKey: ['intentions'],
+    queryFn: () => adminApi.getIntentions(),
+  })
+
+  const intentionOptions = useMemo(() => {
+    const payload = unwrapData<any>(intentionData)
+    if (!Array.isArray(payload)) return []
+    return payload
+      .map((item: any) => ({
+        value: item.name,
+        label: item.name,
+        description: item.description,
+      }))
+      .filter((item: any) => item.value)
+  }, [intentionData])
+
   const drafts = useMemo(() => {
     const payload = unwrapData<any>(draftData)
     return Array.isArray(payload) ? (payload as FlowDraft[]) : []
@@ -136,6 +153,10 @@ export default function AutomationTemplates() {
   const selectedNode = useMemo(
     () => flowNodes.find((node) => node.id === selectedNodeId) || null,
     [flowNodes, selectedNodeId],
+  )
+  const selectedNodeEdges = useMemo(
+    () => (selectedNode ? flowEdges.filter((edge) => edge.source === selectedNode.id) : []),
+    [flowEdges, selectedNode],
   )
   const selectedTriggerConfig: FlowTriggerConfig = selectedNode?.triggerConfig || {}
   const flowStats = useMemo(
@@ -476,6 +497,26 @@ export default function AutomationTemplates() {
     [setFlowEdges],
   )
 
+  const handleUpdateEdgeIntent = useCallback(
+    (edgeId: string, intent?: string) => {
+      setFlowEdges((edges) =>
+        edges.map((edge) => {
+          if (edge.id !== edgeId) return edge
+          const nextCondition = intent ? { intent } : undefined
+          return {
+            ...edge,
+            condition: nextCondition,
+            data: {
+              ...(edge.data || {}),
+              condition: nextCondition,
+            },
+          }
+        }),
+      )
+    },
+    [setFlowEdges],
+  )
+
   const handleAddNode = useCallback(
     (type: FlowNodeType) => {
       const id = `node-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -727,9 +768,56 @@ export default function AutomationTemplates() {
               />
             </div>
             {selectedNode.type === 'condition' && (
-              <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                Routes flow by evaluating edge conditions against <code>vars.detectedIntent</code>.
-                Add intent conditions on edges in the DSL JSON (e.g. <code>{`{ "condition": { "intent": "book" } }`}</code>).
+              <div className="space-y-3">
+                <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  Routes flow by evaluating edge conditions against <code>vars.detectedIntent</code>.
+                </div>
+                {selectedNodeEdges.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">
+                    Connect this node to at least one next step to configure intent routing.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Outgoing routes
+                    </div>
+                    {selectedNodeEdges.map((edge) => {
+                      const targetNode = flowNodes.find((node) => node.id === edge.target)
+                      const currentIntent = edge.condition?.intent || edge.data?.condition?.intent || ''
+                      return (
+                        <div key={edge.id} className="space-y-1">
+                          <label className="text-xs text-muted-foreground">
+                            To {targetNode?.data?.label || edge.target}
+                          </label>
+                          <select
+                            className="input w-full text-sm"
+                            value={currentIntent}
+                            onChange={(event) =>
+                              handleUpdateEdgeIntent(edge.id, event.target.value || undefined)
+                            }
+                          >
+                            <option value="">Any intent</option>
+                            {intentionOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          {currentIntent && (
+                            <div className="text-[11px] text-muted-foreground">
+                              {intentionOptions.find((option) => option.value === currentIntent)?.description}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {intentionOptions.length === 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        No intentions configured yet. Add them under Automations → Intentions.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {selectedNode.type === 'trigger' && (

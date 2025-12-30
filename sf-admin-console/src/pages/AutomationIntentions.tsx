@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { adminApi, unwrapData } from '../services/api'
 
 type Intention = {
   id: string
@@ -7,30 +9,41 @@ type Intention = {
   description: string
 }
 
-const STORAGE_KEY = 'sendfx.admin.intentions'
-
 export default function AutomationIntentions() {
-  const [intentions, setIntentions] = useState<Intention[]>([])
+  const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) return
-    try {
-      const parsed = JSON.parse(stored)
-      if (Array.isArray(parsed)) {
-        setIntentions(parsed)
-      }
-    } catch {
-      // ignore invalid local storage payloads
-    }
-  }, [])
+  const { data, isLoading } = useQuery({
+    queryKey: ['intentions'],
+    queryFn: () => adminApi.getIntentions(),
+  })
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(intentions))
-  }, [intentions])
+  const intentions = useMemo(() => {
+    const payload = unwrapData<any>(data)
+    return Array.isArray(payload)
+      ? payload.map((item: any) => ({
+        id: item._id || item.id,
+        name: item.name,
+        description: item.description,
+      }))
+      : []
+  }, [data])
+
+  const createMutation = useMutation({
+    mutationFn: (payload: { name: string; description: string }) => adminApi.createIntention(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['intentions'] })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => adminApi.deleteIntention(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['intentions'] })
+    },
+  })
 
   const sortedIntentions = useMemo(
     () => [...intentions].sort((a, b) => a.name.localeCompare(b.name)),
@@ -46,28 +59,17 @@ export default function AutomationIntentions() {
       setError('Intention description is required.')
       return
     }
-    const duplicate = intentions.some(
-      (item) => item.name.toLowerCase() === name.trim().toLowerCase(),
-    )
-    if (duplicate) {
-      setError('That intention already exists.')
-      return
-    }
     setError(null)
-    setIntentions((prev) => [
-      ...prev,
-      {
-        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        name: name.trim(),
-        description: description.trim(),
-      },
-    ])
+    createMutation.mutate({
+      name: name.trim(),
+      description: description.trim(),
+    })
     setName('')
     setDescription('')
   }
 
   const handleDelete = (id: string) => {
-    setIntentions((prev) => prev.filter((item) => item.id !== id))
+    deleteMutation.mutate(id)
   }
 
   return (
@@ -114,9 +116,13 @@ export default function AutomationIntentions() {
               onChange={(event) => setDescription(event.target.value)}
             />
           </div>
-          <button className="btn btn-primary mt-7 flex items-center gap-2" onClick={handleAdd}>
+          <button
+            className="btn btn-primary mt-7 flex items-center gap-2"
+            onClick={handleAdd}
+            disabled={createMutation.isPending}
+          >
             <Plus className="w-4 h-4" />
-            Add
+            {createMutation.isPending ? 'Saving...' : 'Add'}
           </button>
         </div>
       </div>
@@ -131,7 +137,9 @@ export default function AutomationIntentions() {
           </div>
         </div>
 
-        {sortedIntentions.length === 0 ? (
+        {isLoading ? (
+          <div className="text-sm text-muted-foreground">Loading intentions...</div>
+        ) : sortedIntentions.length === 0 ? (
           <div className="text-sm text-muted-foreground">
             No intentions yet. Add one to get started.
           </div>
@@ -149,6 +157,7 @@ export default function AutomationIntentions() {
                 <button
                   className="btn btn-secondary text-red-500 flex items-center gap-2 self-start"
                   onClick={() => handleDelete(item.id)}
+                  disabled={deleteMutation.isPending}
                 >
                   <Trash2 className="w-4 h-4" />
                   Remove
