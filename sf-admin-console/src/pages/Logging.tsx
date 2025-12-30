@@ -185,8 +185,12 @@ export default function Logging() {
                         {event.level}
                       </span>
                     </td>
-                    <td className="py-3 pr-3 text-foreground">{event.category}</td>
-                    <td className="py-3 pr-3 text-foreground">{event.message}</td>
+                    <td className="py-3 pr-3 text-foreground break-words">{event.category}</td>
+                    <td className="py-3 pr-3 text-foreground break-words">
+                      <div className="max-w-[360px] whitespace-pre-wrap break-words">
+                        {event.message}
+                      </div>
+                    </td>
                     <td className="py-3 text-xs text-muted-foreground">
                       {event.details ? (
                         <pre className="max-w-[360px] whitespace-pre-wrap break-words text-foreground/90">
