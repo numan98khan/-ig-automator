@@ -611,8 +611,18 @@ export default function AutomationTemplates() {
 
   const handleSelectionChange = useCallback(
     ({ nodes, edges }: { nodes: FlowNode[]; edges: FlowEdge[] }) => {
-      setSelectedNodeId(nodes[0]?.id || null)
-      setSelectedEdgeId(edges[0]?.id || null)
+      if (nodes.length > 0) {
+        setSelectedNodeId(nodes[0]?.id || null)
+        setSelectedEdgeId(null)
+        return
+      }
+      if (edges.length > 0) {
+        setSelectedEdgeId(edges[0]?.id || null)
+        setSelectedNodeId(null)
+        return
+      }
+      setSelectedNodeId(null)
+      setSelectedEdgeId(null)
     },
     [setSelectedNodeId, setSelectedEdgeId],
   )
