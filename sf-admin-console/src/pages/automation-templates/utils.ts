@@ -174,6 +174,11 @@ export const buildNodeSubtitle = (node: FlowNode) => {
   if (node.type === 'handoff') {
     return node.handoff?.topic ? `Topic: ${node.handoff.topic}` : 'No topic set'
   }
+  if (node.type === 'router') {
+    return node.routing?.matchMode === 'all'
+      ? 'Routes to all matching branches'
+      : 'Routes to the first matching branch'
+  }
   return ''
 }
 
@@ -181,6 +186,7 @@ export const buildNodeData = (node: FlowNode): FlowNodeData => ({
   label: node.data?.label || FLOW_NODE_LABELS[node.type] || 'Node',
   subtitle: buildNodeSubtitle(node),
   isStart: node.data?.isStart,
+  branchTag: node.data?.branchTag,
 })
 
 export const normalizeFlowNode = (node: any, index: number): FlowNode => {
@@ -217,6 +223,7 @@ export const normalizeFlowNode = (node: any, index: number): FlowNode => {
     knowledgeItemIds: node?.knowledgeItemIds,
     handoff: node?.handoff,
     waitForReply: node?.waitForReply,
+    routing: node?.routing ?? node?.data?.routing,
   }
   normalized.data = buildNodeData(normalized)
   return normalized
@@ -232,6 +239,8 @@ export const normalizeFlowEdge = (edge: any, index: number): FlowEdge | null => 
     target: edge.target,
     type: edge?.type || 'smoothstep',
     label: edge?.label,
+    condition: edge?.condition,
+    order: edge?.order,
   }
 }
 
@@ -252,7 +261,11 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     id: node.id,
     type: node.type,
     position: node.position,
-    data: node.data,
+    data: (() => {
+      const data = { ...(node.data || {}) } as Record<string, any>
+      delete data.branchTag
+      return data
+    })(),
     triggerType: node.triggerType,
     triggerDescription: node.triggerDescription,
     triggerConfig: node.triggerConfig,
@@ -266,6 +279,7 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     knowledgeItemIds: node.knowledgeItemIds,
     handoff: node.handoff,
     waitForReply: node.waitForReply,
+    routing: node.routing,
   })),
   edges: edges.map((edge) => ({
     id: edge.id,
@@ -273,6 +287,8 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     target: edge.target,
     type: edge.type,
     label: edge.label,
+    condition: edge.condition,
+    order: edge.order,
   })),
   ...(startNodeId ? { startNodeId } : {}),
 })

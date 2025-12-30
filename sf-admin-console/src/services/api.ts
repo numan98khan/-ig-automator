@@ -108,6 +108,12 @@ export const adminApi = {
     api.get(`/flow-templates/${templateId}/versions`),
   getFlowTemplateVersion: (templateId: string, versionId: string) =>
     api.get(`/flow-templates/${templateId}/versions/${versionId}`),
+  getAutomationIntents: () => api.get('/automation-intents'),
+  createAutomationIntent: (payload: { value: string; description: string }) =>
+    api.post('/automation-intents', payload),
+  updateAutomationIntent: (id: string, payload: { value?: string; description?: string }) =>
+    api.put(`/automation-intents/${id}`, payload),
+  deleteAutomationIntent: (id: string) => api.delete(`/automation-intents/${id}`),
 
   // Log settings
   getLogSettings: () => api.get('/log-settings'),

@@ -30,12 +30,17 @@ type FlowRuntimeStep = {
     message?: string;
   };
   rateLimit?: AutomationRateLimit;
+  routing?: {
+    matchMode?: 'first' | 'all';
+    defaultTarget?: string;
+  };
 };
 
 type FlowRuntimeEdge = {
   from: string;
   to: string;
   condition?: Record<string, any>;
+  order?: number;
 };
 
 type FlowCompileIssue = {
@@ -87,6 +92,8 @@ const normalizeLogEnabled = (node: Record<string, any>) => {
   if (typeof node.data?.logEnabled === 'boolean') return node.data.logEnabled;
   return undefined;
 };
+
+const normalizeRouting = (node: Record<string, any>) => node.routing ?? node.data?.routing;
 
 const normalizeType = (node: Record<string, any>) =>
   typeof node.type === 'string'
@@ -148,6 +155,8 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
 
   const normalizedNodes: FlowRuntimeStep[] = [];
   const nodeIds = new Set<string>();
+  const nodeTypeById = new Map<string, string>();
+  const nodeYById = new Map<string, number>();
 
   rawNodes?.forEach((node: any, index: number) => {
     if (!node || typeof node !== 'object') {
@@ -198,6 +207,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const rateLimit = normalizeRateLimit(node);
     const next = normalizeNext(node);
     const logEnabled = normalizeLogEnabled(node);
+    const routing = normalizeRouting(node);
 
     if (type.toLowerCase() === 'send_message' && !text && !message) {
       warnings.push({
@@ -209,6 +219,10 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     }
 
     nodeIds.add(id);
+    nodeTypeById.set(id, type.toLowerCase());
+    if (typeof node.position?.y === 'number') {
+      nodeYById.set(id, node.position.y);
+    }
     normalizedNodes.push({
       id,
       type,
@@ -224,6 +238,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       logEnabled,
       handoff,
       rateLimit,
+      routing,
     });
   });
 
@@ -264,10 +279,15 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       return;
     }
 
+    const order = typeof edge.order === 'number'
+      ? edge.order
+      : (nodeTypeById.get(from) === 'router' ? nodeYById.get(to) : undefined);
+
     normalizedEdges.push({
       from,
       to,
       condition: edge.condition,
+      order,
     });
   });
 
