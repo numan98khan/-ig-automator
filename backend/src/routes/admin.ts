@@ -646,15 +646,21 @@ router.get('/log-settings', authenticate, requireAdmin, async (_req, res) => {
 router.put('/log-settings', authenticate, requireAdmin, async (req, res) => {
   try {
     const aiTimingEnabled = toOptionalBoolean(req.body?.aiTimingEnabled);
+    const aiLogsEnabled = toOptionalBoolean(req.body?.aiLogsEnabled);
     const automationLogsEnabled = toOptionalBoolean(req.body?.automationLogsEnabled);
     const automationStepsEnabled = toOptionalBoolean(req.body?.automationStepsEnabled);
+    const instagramWebhookLogsEnabled = toOptionalBoolean(req.body?.instagramWebhookLogsEnabled);
+    const igApiLogsEnabled = toOptionalBoolean(req.body?.igApiLogsEnabled);
     const openaiApiLogsEnabled = toOptionalBoolean(req.body?.openaiApiLogsEnabled);
     const consoleLogsEnabled = toOptionalBoolean(req.body?.consoleLogsEnabled);
 
     const settings = await updateLogSettings({
       ...(aiTimingEnabled === undefined ? {} : { aiTimingEnabled }),
+      ...(aiLogsEnabled === undefined ? {} : { aiLogsEnabled }),
       ...(automationLogsEnabled === undefined ? {} : { automationLogsEnabled }),
       ...(automationStepsEnabled === undefined ? {} : { automationStepsEnabled }),
+      ...(instagramWebhookLogsEnabled === undefined ? {} : { instagramWebhookLogsEnabled }),
+      ...(igApiLogsEnabled === undefined ? {} : { igApiLogsEnabled }),
       ...(openaiApiLogsEnabled === undefined ? {} : { openaiApiLogsEnabled }),
       ...(consoleLogsEnabled === undefined ? {} : { consoleLogsEnabled }),
     });

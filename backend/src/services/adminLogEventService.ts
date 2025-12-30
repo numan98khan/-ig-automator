@@ -38,6 +38,9 @@ export const logAdminEvent = async (payload: AdminLogEventPayload): Promise<void
     if (category === 'automation_step' && !settings.automationStepsEnabled) return;
     if (category === 'flow_node' && !settings.automationStepsEnabled) return;
     if (category === 'ai_timing' && !settings.aiTimingEnabled) return;
+    if (category === 'ai' && !settings.aiLogsEnabled) return;
+    if (category === 'instagram_webhook' && !settings.instagramWebhookLogsEnabled) return;
+    if (category === 'ig_api' && !settings.igApiLogsEnabled) return;
     if (category === 'openai_api' && !settings.openaiApiLogsEnabled) return;
     if (category === 'console' && !settings.consoleLogsEnabled) return;
 

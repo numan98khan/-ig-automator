@@ -2,16 +2,22 @@ import AdminLogSettings from '../models/AdminLogSettings';
 
 export type AdminLogSettingsSnapshot = {
   aiTimingEnabled: boolean;
+  aiLogsEnabled: boolean;
   automationLogsEnabled: boolean;
   automationStepsEnabled: boolean;
+  instagramWebhookLogsEnabled: boolean;
+  igApiLogsEnabled: boolean;
   openaiApiLogsEnabled: boolean;
   consoleLogsEnabled: boolean;
 };
 
 const DEFAULT_SETTINGS: AdminLogSettingsSnapshot = {
   aiTimingEnabled: true,
+  aiLogsEnabled: true,
   automationLogsEnabled: true,
   automationStepsEnabled: true,
+  instagramWebhookLogsEnabled: true,
+  igApiLogsEnabled: true,
   openaiApiLogsEnabled: false,
   consoleLogsEnabled: false,
 };
@@ -24,8 +30,11 @@ let refreshPromise: Promise<void> | null = null;
 
 const toSnapshot = (doc: any): AdminLogSettingsSnapshot => ({
   aiTimingEnabled: doc?.aiTimingEnabled ?? DEFAULT_SETTINGS.aiTimingEnabled,
+  aiLogsEnabled: doc?.aiLogsEnabled ?? DEFAULT_SETTINGS.aiLogsEnabled,
   automationLogsEnabled: doc?.automationLogsEnabled ?? DEFAULT_SETTINGS.automationLogsEnabled,
   automationStepsEnabled: doc?.automationStepsEnabled ?? DEFAULT_SETTINGS.automationStepsEnabled,
+  instagramWebhookLogsEnabled: doc?.instagramWebhookLogsEnabled ?? DEFAULT_SETTINGS.instagramWebhookLogsEnabled,
+  igApiLogsEnabled: doc?.igApiLogsEnabled ?? DEFAULT_SETTINGS.igApiLogsEnabled,
   openaiApiLogsEnabled: doc?.openaiApiLogsEnabled ?? DEFAULT_SETTINGS.openaiApiLogsEnabled,
   consoleLogsEnabled: doc?.consoleLogsEnabled ?? DEFAULT_SETTINGS.consoleLogsEnabled,
 });
@@ -73,11 +82,20 @@ export const updateLogSettings = async (
   if (typeof updates.aiTimingEnabled === 'boolean') {
     updatePayload.aiTimingEnabled = updates.aiTimingEnabled;
   }
+  if (typeof updates.aiLogsEnabled === 'boolean') {
+    updatePayload.aiLogsEnabled = updates.aiLogsEnabled;
+  }
   if (typeof updates.automationLogsEnabled === 'boolean') {
     updatePayload.automationLogsEnabled = updates.automationLogsEnabled;
   }
   if (typeof updates.automationStepsEnabled === 'boolean') {
     updatePayload.automationStepsEnabled = updates.automationStepsEnabled;
+  }
+  if (typeof updates.instagramWebhookLogsEnabled === 'boolean') {
+    updatePayload.instagramWebhookLogsEnabled = updates.instagramWebhookLogsEnabled;
+  }
+  if (typeof updates.igApiLogsEnabled === 'boolean') {
+    updatePayload.igApiLogsEnabled = updates.igApiLogsEnabled;
   }
   if (typeof updates.openaiApiLogsEnabled === 'boolean') {
     updatePayload.openaiApiLogsEnabled = updates.openaiApiLogsEnabled;
