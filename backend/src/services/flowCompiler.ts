@@ -14,6 +14,9 @@ type FlowRuntimeStep = {
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
   aiSettings?: AutomationAiSettings;
+  agentSystemPrompt?: string;
+  agentSteps?: string[];
+  agentEndCondition?: string;
   intentSettings?: {
     model?: string;
     temperature?: number;
@@ -74,6 +77,12 @@ const normalizeTags = (node: Record<string, any>) => node.tags ?? node.data?.tag
 const normalizeAiSettings = (node: Record<string, any>) => node.aiSettings ?? node.data?.aiSettings;
 const normalizeIntentSettings = (node: Record<string, any>) =>
   node.intentSettings ?? node.data?.intentSettings;
+const normalizeAgentSystemPrompt = (node: Record<string, any>) =>
+  node.agentSystemPrompt ?? node.data?.agentSystemPrompt;
+const normalizeAgentSteps = (node: Record<string, any>) =>
+  node.agentSteps ?? node.data?.agentSteps;
+const normalizeAgentEndCondition = (node: Record<string, any>) =>
+  node.agentEndCondition ?? node.data?.agentEndCondition;
 
 const normalizeKnowledgeItemIds = (node: Record<string, any>) =>
   node.knowledgeItemIds ?? node.data?.knowledgeItemIds;
@@ -200,6 +209,9 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const buttons = normalizeButtons(node);
     const tags = normalizeTags(node);
     const aiSettings = normalizeAiSettings(node);
+    const agentSystemPrompt = normalizeAgentSystemPrompt(node);
+    const agentSteps = normalizeAgentSteps(node);
+    const agentEndCondition = normalizeAgentEndCondition(node);
     const intentSettings = normalizeIntentSettings(node);
     const knowledgeItemIds = normalizeKnowledgeItemIds(node);
     const waitForReply = normalizeWaitForReply(node);
@@ -231,6 +243,11 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       buttons,
       tags,
       aiSettings,
+      agentSystemPrompt: typeof agentSystemPrompt === 'string' ? agentSystemPrompt : undefined,
+      agentSteps: Array.isArray(agentSteps)
+        ? agentSteps.filter((step) => typeof step === 'string' && step.trim())
+        : undefined,
+      agentEndCondition: typeof agentEndCondition === 'string' ? agentEndCondition : undefined,
       intentSettings,
       knowledgeItemIds,
       waitForReply,

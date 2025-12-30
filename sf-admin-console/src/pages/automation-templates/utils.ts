@@ -171,6 +171,14 @@ export const buildNodeSubtitle = (node: FlowNode) => {
     }
     return details.length > 0 ? details.join(' · ') : 'Uses AI defaults'
   }
+  if (node.type === 'ai_agent') {
+    const details = []
+    const stepCount = Array.isArray(node.agentSteps) ? node.agentSteps.filter(Boolean).length : 0
+    if (stepCount > 0) details.push(`Steps: ${stepCount}`)
+    if (node.agentEndCondition?.trim()) details.push('End condition set')
+    if (node.aiSettings?.model) details.push(`Model: ${node.aiSettings.model}`)
+    return details.length > 0 ? details.join(' · ') : 'Configure agent steps'
+  }
   if (node.type === 'handoff') {
     return node.handoff?.topic ? `Topic: ${node.handoff.topic}` : 'No topic set'
   }
@@ -220,6 +228,9 @@ export const normalizeFlowNode = (node: any, index: number): FlowNode => {
     buttons: node?.buttons,
     tags: node?.tags,
     aiSettings: node?.aiSettings,
+    agentSystemPrompt: node?.agentSystemPrompt ?? node?.data?.agentSystemPrompt,
+    agentSteps: node?.agentSteps ?? node?.data?.agentSteps,
+    agentEndCondition: node?.agentEndCondition ?? node?.data?.agentEndCondition,
     knowledgeItemIds: node?.knowledgeItemIds,
     handoff: node?.handoff,
     waitForReply: node?.waitForReply,
@@ -276,6 +287,9 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     buttons: node.buttons,
     tags: node.tags,
     aiSettings: node.aiSettings,
+    agentSystemPrompt: node.agentSystemPrompt,
+    agentSteps: node.agentSteps,
+    agentEndCondition: node.agentEndCondition,
     knowledgeItemIds: node.knowledgeItemIds,
     handoff: node.handoff,
     waitForReply: node.waitForReply,

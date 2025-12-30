@@ -72,7 +72,14 @@ export type FlowTemplate = {
   currentVersionId?: string
 }
 
-export type FlowNodeType = 'trigger' | 'detect_intent' | 'send_message' | 'ai_reply' | 'handoff' | 'router'
+export type FlowNodeType =
+  | 'trigger'
+  | 'detect_intent'
+  | 'send_message'
+  | 'ai_reply'
+  | 'ai_agent'
+  | 'handoff'
+  | 'router'
 
 export type RouterMatchMode = 'first' | 'all'
 export type RouterRuleOperator = 'equals' | 'contains' | 'gt' | 'lt' | 'keywords'
@@ -145,6 +152,9 @@ export type FlowNode = Node<FlowNodeData> & {
   buttons?: FlowButton[]
   tags?: string[]
   aiSettings?: FlowAiSettings
+  agentSystemPrompt?: string
+  agentSteps?: string[]
+  agentEndCondition?: string
   knowledgeItemIds?: string[]
   handoff?: {
     topic?: string

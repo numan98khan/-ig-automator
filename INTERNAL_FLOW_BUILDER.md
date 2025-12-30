@@ -87,6 +87,7 @@ Supported node types:
 - `detect_intent`
 - `send_message`
 - `ai_reply`
+- `ai_agent`
 - `handoff`
 
 ## Node Payloads + Graph Defaults
@@ -101,6 +102,7 @@ Per-node fields:
 - `detect_intent`: `intentSettings` (model, temperature, reasoningEffort) passed to intent detection.
 - `send_message`: `text`/`message`, `buttons`, `tags`.
 - `ai_reply`: `aiSettings`, `knowledgeItemIds` (optional RAG pinning).
+- `ai_agent`: `agentSystemPrompt`, `agentSteps[]`, `agentEndCondition`, plus `aiSettings` + `knowledgeItemIds`.
 - `handoff`: `handoff` object with `topic`, `summary`, `recommendedNextAction`, `message`.
 
 Graph-level defaults:
@@ -149,6 +151,7 @@ Current UI does not expose advanced trigger config (filter JSON). If needed, add
 Template variables:
 - Graph values are interpolated with `{{ key }}` tokens using user config before execution.
 - Runtime variables live under `vars.*` (ex: `{{ vars.detectedIntent }}`) and are resolved per message.
+- AI agent nodes also populate `vars.agentStepIndex`, `vars.agentStep`, `vars.agentDone`, and `vars.agentStepSummary`.
 
 ## Compilation + Publish
 
@@ -185,6 +188,7 @@ Key points:
 - Flow steps are executed against the compiled graph using the node types above.
 - `detect_intent` stores the output in `session.state.vars.detectedIntent`.
 - `detect_intent` runs intent detection against the global AutomationIntent list and stores the output in `session.state.vars.detectedIntent`.
+- `ai_agent` runs a multi-turn agent loop using its own system prompt, steps, and end condition. It persists progress in session state and keeps the node active until the end condition is met.
 - `trigger` nodes are ignored at execution (they only define entry criteria).
 - State persists via `buildNextState` and `AutomationSession`.
 - Node-level logging is supported via `logEnabled` on each node. If `logEnabled` is explicitly `false`, node start/complete logging is suppressed; otherwise logs are emitted.
@@ -226,6 +230,7 @@ Key UI behaviors:
 - Message nodes can add buttons + tags; AI Reply nodes can edit model settings, reasoning effort,
   and knowledge item ids.
 - Detect intent nodes can override model, temperature, reasoning effort.
+- AI agent nodes include their own system prompt, step list, end condition, and the same AI settings/knowledge base controls as AI Reply.
 - Handoff nodes capture topic/summary/message for the escalation ticket.
 - Adding a trigger node auto-promotes it to the start node if the current start is not a trigger.
 - Router rules can use the detected intent and now pull options from the persisted automation-intents list.

@@ -1,4 +1,5 @@
 import {
+  Bot,
   Flag,
   GitBranch,
   MessageSquare,
@@ -66,6 +67,10 @@ export const AI_MODEL_SUGGESTIONS = [
 
 export const MESSAGE_STATE_VARIABLES = [
   { key: 'detectedIntent', label: 'Detected intent', token: '{{ vars.detectedIntent }}' },
+  { key: 'agentStepIndex', label: 'Agent step index', token: '{{ vars.agentStepIndex }}' },
+  { key: 'agentStep', label: 'Agent step', token: '{{ vars.agentStep }}' },
+  { key: 'agentDone', label: 'Agent done', token: '{{ vars.agentDone }}' },
+  { key: 'agentStepSummary', label: 'Agent step summary', token: '{{ vars.agentStepSummary }}' },
 ]
 
 export const REASONING_EFFORT_OPTIONS: Array<FlowAiSettings['reasoningEffort']> = [
@@ -141,6 +146,12 @@ export const FLOW_NODE_LIBRARY: Array<{
     icon: Sparkles,
   },
   {
+    type: 'ai_agent',
+    label: 'AI Agent',
+    description: 'Multi-turn agent with steps and end conditions.',
+    icon: Bot,
+  },
+  {
     type: 'handoff',
     label: 'Handoff',
     description: 'Escalate to a human teammate.',
@@ -154,5 +165,6 @@ export const FLOW_NODE_LABELS: Record<FlowNodeType, string> = {
   send_message: 'Message',
   router: 'Router',
   ai_reply: 'AI Reply',
+  ai_agent: 'AI Agent',
   handoff: 'Handoff',
 }

@@ -10,7 +10,14 @@ export interface IAutomationSession extends Document {
   state?: {
     stepIndex?: number;
     nodeId?: string;
+    nodeQueue?: string[];
     vars?: Record<string, any>;
+    agent?: {
+      nodeId?: string;
+      stepIndex?: number;
+      stepCount?: number;
+      lastStepSummary?: string;
+    };
   };
   rateLimit?: {
     windowStart: Date;

@@ -8,6 +8,7 @@ import AutomationSession from '../models/AutomationSession';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import { generateAIReply } from './aiReplyService';
+import { generateAIAgentReply } from './aiAgentService';
 import {
   sendMessage as sendInstagramMessage,
   sendButtonMessage,
@@ -51,6 +52,9 @@ type FlowRuntimeStep = {
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
   aiSettings?: AutomationAiSettings;
+  agentSystemPrompt?: string;
+  agentSteps?: string[];
+  agentEndCondition?: string;
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
   next?: string;
@@ -466,13 +470,16 @@ const buildExecutionPlan = (graph: FlowRuntimeGraph): ExecutionPlan | null => {
 
 const normalizeStepType = (
   step?: FlowRuntimeStep,
-): 'send_message' | 'ai_reply' | 'handoff' | 'trigger' | 'detect_intent' | 'router' | 'unknown' => {
+): 'send_message' | 'ai_reply' | 'ai_agent' | 'handoff' | 'trigger' | 'detect_intent' | 'router' | 'unknown' => {
   const raw = (step?.type || '').toLowerCase();
   if (raw === 'send_message' || raw === 'message' || raw === 'send' || raw === 'reply') {
     return 'send_message';
   }
   if (raw === 'ai_reply' || raw === 'ai' || raw === 'ai_message') {
     return 'ai_reply';
+  }
+  if (raw === 'ai_agent' || raw === 'agent') {
+    return 'ai_agent';
   }
   if (raw === 'handoff' || raw === 'escalate') {
     return 'handoff';
@@ -1033,10 +1040,14 @@ async function executeFlowPlan(params: {
     await markAutomationTriggered(instance._id, new Date());
   };
   const buildNextState = (nextState: Record<string, any>) => {
-    if (session.state?.vars) {
-      return { ...nextState, vars: session.state.vars };
+    const base = { ...nextState };
+    if (!('vars' in base) && session.state?.vars) {
+      base.vars = session.state.vars;
     }
-    return nextState;
+    if (!('agent' in base) && session.state?.agent) {
+      base.agent = session.state.agent;
+    }
+    return base;
   };
   const completeWithError = async (error: string) => {
     session.status = 'completed';
@@ -1085,6 +1096,8 @@ async function executeFlowPlan(params: {
     const stepType = normalizeStepType(step);
     const rateLimit = resolveRateLimit(step.rateLimit, plan.graph.rateLimit);
     const nodeStart = nowMs();
+    let forceWaitForReply = false;
+    let forcedNextNodeId: string | undefined;
 
     if (shouldLogNode(step)) {
       logNodeEvent('Node start', {
@@ -1135,6 +1148,93 @@ async function executeFlowPlan(params: {
         return { success: false, error: aiResult.error || 'AI reply failed', sentCount, executedSteps };
       }
       sentCount += 1;
+    } else if (stepType === 'ai_agent') {
+      if (rateLimit && !updateRateLimit(session, rateLimit)) {
+        return { success: false, error: 'Rate limit exceeded', sentCount, executedSteps };
+      }
+      await markTriggeredOnce();
+      if (!step.id) {
+        return { success: false, error: 'AI agent node missing id', sentCount, executedSteps };
+      }
+
+      const aiSettings = {
+        ...(plan.graph.aiSettings || {}),
+        ...(step.aiSettings || {}),
+      };
+      const agentSteps = Array.isArray(step.agentSteps)
+        ? step.agentSteps.map((agentStep) => String(agentStep || '').trim()).filter(Boolean)
+        : [];
+      const storedAgent = session.state?.agent?.nodeId === step.id ? session.state.agent : {};
+      const agentStepIndex = typeof storedAgent?.stepIndex === 'number' ? storedAgent.stepIndex : 0;
+
+      const agentStart = nowMs();
+      const agentResult = await generateAIAgentReply({
+        conversation,
+        workspaceId: conversation.workspaceId,
+        latestCustomerMessage: messageText,
+        systemPrompt: step.agentSystemPrompt,
+        steps: agentSteps,
+        stepIndex: agentStepIndex,
+        endCondition: step.agentEndCondition,
+        aiSettings,
+        knowledgeItemIds: step.knowledgeItemIds,
+      });
+      logAutomationStep('flow_ai_agent', agentStart, {
+        stepIndex: agentStepIndex,
+        advanceStep: agentResult.advanceStep,
+        endConversation: agentResult.endConversation,
+      });
+
+      if (!agentResult.replyText) {
+        return { success: false, error: 'AI agent reply missing', sentCount, executedSteps };
+      }
+
+      await sendFlowMessage({
+        conversation,
+        instance,
+        igAccount,
+        recipientId: conversation.participantInstagramId,
+        text: agentResult.replyText,
+        platform,
+        source: 'ai_reply',
+      });
+      sentCount += 1;
+
+      const stepCount = agentSteps.length;
+      const nextStepIndex = agentResult.advanceStep && stepCount > 0
+        ? Math.min(agentStepIndex + 1, stepCount - 1)
+        : agentStepIndex;
+      const agentDone = Boolean(agentResult.endConversation);
+
+      const nextVars = {
+        ...(session.state?.vars || {}),
+        agentNodeId: step.id,
+        agentStepIndex: nextStepIndex,
+        agentStepCount: stepCount,
+        agentStep: agentSteps[nextStepIndex] || '',
+        agentDone,
+        agentStepSummary: agentResult.stepSummary,
+      };
+
+      session.state = {
+        ...(session.state || {}),
+        vars: nextVars,
+      };
+
+      if (agentDone) {
+        if (session.state?.agent) {
+          delete session.state.agent;
+        }
+      } else {
+        session.state.agent = {
+          nodeId: step.id,
+          stepIndex: nextStepIndex,
+          stepCount,
+          lastStepSummary: agentResult.stepSummary,
+        };
+        forceWaitForReply = true;
+        forcedNextNodeId = step.id;
+      }
     } else if (stepType === 'handoff') {
       await markTriggeredOnce();
       const topic = step.handoff?.topic || 'Handoff requested';
@@ -1221,7 +1321,12 @@ async function executeFlowPlan(params: {
       }
     }
 
-    if (step.waitForReply) {
+    if (forcedNextNodeId) {
+      nextNodeId = forcedNextNodeId;
+    }
+
+    const shouldPause = forceWaitForReply || (step.waitForReply && stepType !== 'ai_agent');
+    if (shouldPause) {
       const hasNext = plan.mode === 'steps'
         ? (nextStepIndex !== undefined && Boolean(plan.steps[nextStepIndex]))
         : (Boolean(nextNodeId)

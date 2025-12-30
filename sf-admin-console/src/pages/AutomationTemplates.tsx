@@ -652,6 +652,12 @@ export default function AutomationTemplates() {
       if (type === 'ai_reply') {
         node.aiSettings = {}
       }
+      if (type === 'ai_agent') {
+        node.aiSettings = {}
+        node.agentSteps = []
+        node.agentSystemPrompt = ''
+        node.agentEndCondition = ''
+      }
       if (type === 'handoff') {
         node.handoff = {
           topic: '',
@@ -911,6 +917,7 @@ export default function AutomationTemplates() {
               if (node.type === 'detect_intent') return '#6B7FD6'
               if (node.type === 'router') return '#4FA3B8'
               if (node.type === 'ai_reply') return '#7C8EA4'
+              if (node.type === 'ai_agent') return '#7B6CB6'
               if (node.type === 'handoff') return '#C96A4A'
               return '#4B9AD5'
             }}
@@ -1615,7 +1622,7 @@ export default function AutomationTemplates() {
                     ))}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    Available after a Detect intent step runs.
+                    Available after a Detect intent or AI Agent step runs.
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -1652,6 +1659,266 @@ export default function AutomationTemplates() {
 
             {selectedNode.type === 'ai_reply' && (
               <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Tone</label>
+                  <input
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.tone || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          tone: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Max reply sentences</label>
+                  <input
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.maxReplySentences ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          maxReplySentences: event.target.value
+                            ? Number(event.target.value)
+                            : undefined,
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">History limit</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={selectedNode.aiSettings?.historyLimit ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          historyLimit: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Number of recent messages sent to the model.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={selectedNode.aiSettings?.ragEnabled !== false}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          aiSettings: {
+                            ...(node.aiSettings || {}),
+                            ragEnabled: event.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Enable semantic RAG (vector search)
+                  </label>
+                  <div className="text-[11px] text-muted-foreground">
+                    Disable to ignore vector matches in replies.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Model</label>
+                  <input
+                    className="input w-full"
+                    list="ai-model-options"
+                    value={selectedNode.aiSettings?.model || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          model: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Leave blank to use the workspace default model.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Reasoning effort</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.reasoningEffort || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          reasoningEffort: event.target.value
+                            ? (event.target.value as FlowAiSettings['reasoningEffort'])
+                            : undefined,
+                        },
+                      }))
+                    }
+                  >
+                    <option value="">Auto (model default)</option>
+                    {REASONING_EFFORT_OPTIONS.map((effort) => (
+                      <option key={effort} value={effort}>
+                        {effort}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-[11px] text-muted-foreground">
+                    Applied only for reasoning-capable models (gpt-5, o-series).
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Temperature</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    step="0.1"
+                    value={selectedNode.aiSettings?.temperature ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          temperature: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Max output tokens</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={selectedNode.aiSettings?.maxOutputTokens ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          maxOutputTokens: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Knowledge item IDs</label>
+                  <input
+                    className="input w-full"
+                    value={formatKnowledgeIds(selectedNode.knowledgeItemIds)}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        knowledgeItemIds: parseKnowledgeIds(event.target.value),
+                      }))
+                    }
+                  />
+                </div>
+              </>
+            )}
+
+            {selectedNode.type === 'ai_agent' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">System prompt</label>
+                  <textarea
+                    className="input w-full h-28 text-sm"
+                    value={selectedNode.agentSystemPrompt || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        agentSystemPrompt: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-muted-foreground">Agent steps</label>
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:text-primary/80"
+                      onClick={() =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          agentSteps: [...(node.agentSteps || []), ''],
+                        }))
+                      }
+                    >
+                      + Add step
+                    </button>
+                  </div>
+                  {Array.isArray(selectedNode.agentSteps) && selectedNode.agentSteps.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedNode.agentSteps.map((step, index) => (
+                        <div key={`${selectedNode.id}-agent-step-${index}`} className="flex items-start gap-2">
+                          <span className="mt-2 text-xs text-muted-foreground">{index + 1}.</span>
+                          <input
+                            className="input flex-1"
+                            value={step}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextSteps = Array.isArray(node.agentSteps)
+                                  ? [...node.agentSteps]
+                                  : []
+                                nextSteps[index] = event.target.value
+                                return { ...node, agentSteps: nextSteps }
+                              })
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="mt-2 text-xs text-rose-400 hover:text-rose-300"
+                            onClick={() =>
+                              updateNode(selectedNode.id, (node) => ({
+                                ...node,
+                                agentSteps: (node.agentSteps || []).filter((_, i) => i !== index),
+                              }))
+                            }
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">No steps yet.</div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">End conversation prompt</label>
+                  <textarea
+                    className="input w-full h-20 text-sm"
+                    value={selectedNode.agentEndCondition || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        agentEndCondition: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Tone</label>
                   <input
