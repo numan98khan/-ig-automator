@@ -186,6 +186,7 @@ export const buildNodeData = (node: FlowNode): FlowNodeData => ({
   label: node.data?.label || FLOW_NODE_LABELS[node.type] || 'Node',
   subtitle: buildNodeSubtitle(node),
   isStart: node.data?.isStart,
+  branchTag: node.data?.branchTag,
 })
 
 export const normalizeFlowNode = (node: any, index: number): FlowNode => {
@@ -260,7 +261,11 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     id: node.id,
     type: node.type,
     position: node.position,
-    data: node.data,
+    data: (() => {
+      const data = { ...(node.data || {}) } as Record<string, any>
+      delete data.branchTag
+      return data
+    })(),
     triggerType: node.triggerType,
     triggerDescription: node.triggerDescription,
     triggerConfig: node.triggerConfig,

@@ -205,6 +205,95 @@ export default function AutomationTemplates() {
     () => draftForm.fields.map((field) => field.key).filter(Boolean),
     [draftForm.fields],
   )
+
+  useEffect(() => {
+    if (flowNodes.length === 0) return
+    const nodeMap = new Map(flowNodes.map((node) => [node.id, node]))
+    const routerIds = new Set(flowNodes.filter((node) => node.type === 'router').map((node) => node.id))
+
+    const branchTags = new Map<string, string | undefined>()
+    routerIds.forEach((routerId) => {
+      const outgoing = flowEdges.filter((edge) => edge.source === routerId)
+      const sorted = outgoing
+        .map((edge, index) => ({ edge, index }))
+        .sort((a, b) => {
+          const aOrder = typeof a.edge.order === 'number'
+            ? a.edge.order
+            : (nodeMap.get(a.edge.target)?.position?.y ?? a.index)
+          const bOrder = typeof b.edge.order === 'number'
+            ? b.edge.order
+            : (nodeMap.get(b.edge.target)?.position?.y ?? b.index)
+          return aOrder - bOrder
+        })
+        .map((entry) => entry.edge)
+
+      let routeIndex = 1
+      sorted.forEach((edge) => {
+        const condition = normalizeRouterCondition(edge.condition)
+        const isDefault = condition.type === 'else'
+        const sourceLabels: string[] = []
+        const seenSources = new Set<string>()
+        if (!isDefault) {
+          (condition.rules || []).forEach((rule) => {
+            const label = rule.source === 'vars'
+              ? 'vars'
+              : rule.source === 'message'
+                ? 'message'
+                : rule.source === 'config'
+                  ? 'config'
+                  : rule.source === 'context'
+                    ? 'context'
+                    : ''
+            if (label && !seenSources.has(label)) {
+              sourceLabels.push(label)
+              seenSources.add(label)
+            }
+          })
+        }
+        const sourceText = sourceLabels.length > 0 ? sourceLabels.join(' + ') : 'rules'
+        const tag = isDefault ? 'default' : `${routeIndex} | ${sourceText}`
+        if (!isDefault) {
+          routeIndex += 1
+        }
+        if (edge.target) {
+          branchTags.set(edge.target, tag)
+        }
+      })
+    })
+
+    setFlowNodes((nodes) => {
+      let changed = false
+      const nextNodes = nodes.map((node) => {
+        const branchTag = branchTags.get(node.id)
+        if (node.data?.branchTag === branchTag) return node
+        changed = true
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            branchTag,
+          },
+        }
+      })
+      return changed ? nextNodes : nodes
+    })
+
+    if (routerIds.size === 0) return
+    setFlowEdges((edges) => {
+      let changed = false
+      const nextEdges = edges.map((edge) => {
+        if (!routerIds.has(edge.source)) return edge
+        if (edge.type !== 'router' && !edge.label) return edge
+        changed = true
+        return {
+          ...edge,
+          type: 'smoothstep',
+          label: undefined,
+        }
+      })
+      return changed ? nextEdges : edges
+    })
+  }, [flowEdges, flowNodes, setFlowEdges, setFlowNodes])
   const startNodeLabel = useMemo(() => {
     if (!startNodeId) return ''
     const node = flowNodes.find((item) => item.id === startNodeId)

@@ -130,6 +130,7 @@ export type FlowNodeData = {
   label: string
   subtitle?: string
   isStart?: boolean
+  branchTag?: string
 }
 
 export type FlowNode = Node<FlowNodeData> & {

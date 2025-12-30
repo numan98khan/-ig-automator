@@ -10,20 +10,28 @@ const NodeShell = ({
   icon: Icon,
   selected,
   isStart,
+  branchTag,
 }: {
   title: string
   subtitle?: string
   icon: typeof MessageSquare
   selected?: boolean
   isStart?: boolean
+  branchTag?: string
 }) => (
-  <div
-    className={`rounded-lg border bg-card px-3 py-2 shadow-sm min-w-[190px] ${
-      selected ? 'ring-2 ring-primary/50 border-primary/70' : 'border-border'
-    }`}
-  >
-    <Handle type="target" position={Position.Left} className="!bg-primary !border-primary" />
-    <Handle type="source" position={Position.Right} className="!bg-primary !border-primary" />
+  <div className="relative">
+    {branchTag ? (
+      <div className="absolute -top-3 left-3 rounded-full border border-border bg-card/90 px-2.5 py-0.5 text-[11px] text-muted-foreground shadow-sm backdrop-blur">
+        {branchTag}
+      </div>
+    ) : null}
+    <div
+      className={`rounded-lg border bg-card px-3 py-2 shadow-sm min-w-[190px] ${
+        selected ? 'ring-2 ring-primary/50 border-primary/70' : 'border-border'
+      }`}
+    >
+      <Handle type="target" position={Position.Left} className="!bg-primary !border-primary" />
+      <Handle type="source" position={Position.Right} className="!bg-primary !border-primary" />
     <div className="flex items-center justify-between gap-2">
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 text-primary" />
@@ -33,7 +41,8 @@ const NodeShell = ({
         <span className="text-[10px] rounded-full bg-primary/10 px-2 py-0.5 text-primary">Start</span>
       )}
     </div>
-    <div className="mt-1 text-xs text-muted-foreground">{subtitle || 'No details yet.'}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{subtitle || 'No details yet.'}</div>
+    </div>
   </div>
 )
 
@@ -44,6 +53,7 @@ const MessageNode = ({ data, selected }: NodeProps<FlowNode>) => (
     icon={MessageSquare}
     selected={selected}
     isStart={data.isStart}
+    branchTag={data.branchTag}
   />
 )
 
@@ -54,6 +64,7 @@ const TriggerNode = ({ data, selected }: NodeProps<FlowNode>) => (
     icon={Zap}
     selected={selected}
     isStart={data.isStart}
+    branchTag={data.branchTag}
   />
 )
 
@@ -64,6 +75,7 @@ const DetectIntentNode = ({ data, selected }: NodeProps<FlowNode>) => (
     icon={Search}
     selected={selected}
     isStart={data.isStart}
+    branchTag={data.branchTag}
   />
 )
 
@@ -74,6 +86,7 @@ const AiReplyNode = ({ data, selected }: NodeProps<FlowNode>) => (
     icon={Sparkles}
     selected={selected}
     isStart={data.isStart}
+    branchTag={data.branchTag}
   />
 )
 
@@ -84,6 +97,7 @@ const RouterNode = ({ data, selected }: NodeProps<FlowNode>) => (
     icon={GitBranch}
     selected={selected}
     isStart={data.isStart}
+    branchTag={data.branchTag}
   />
 )
 
@@ -94,6 +108,7 @@ const HandoffNode = ({ data, selected }: NodeProps<FlowNode>) => (
     icon={Flag}
     selected={selected}
     isStart={data.isStart}
+    branchTag={data.branchTag}
   />
 )
 
