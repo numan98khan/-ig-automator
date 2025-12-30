@@ -52,7 +52,7 @@ const INTENT_MODEL = process.env.OPENAI_INTENT_MODEL || 'gpt-4o-mini';
 const INTENT_TEMPERATURE = 0;
 const INTENT_REASONING_EFFORT: AutomationIntentSettings['reasoningEffort'] = 'none';
 
-const intentLabels: Array<{ value: GoalType; description: string }> = [
+export const intentLabels: Array<{ value: GoalType; description: string }> = [
   {
     value: 'product_inquiry',
     description: 'Asking about price, availability, sizes, colors, or variants.',

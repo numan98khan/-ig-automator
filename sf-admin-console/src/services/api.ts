@@ -108,6 +108,7 @@ export const adminApi = {
     api.get(`/flow-templates/${templateId}/versions`),
   getFlowTemplateVersion: (templateId: string, versionId: string) =>
     api.get(`/flow-templates/${templateId}/versions/${versionId}`),
+  getAutomationIntents: () => api.get('/automation-intents'),
 
   // Log settings
   getLogSettings: () => api.get('/log-settings'),

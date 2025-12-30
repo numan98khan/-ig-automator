@@ -153,6 +153,11 @@ export default function AutomationTemplates() {
     queryFn: () => adminApi.getFlowTemplates(),
   })
 
+  const { data: intentData } = useQuery({
+    queryKey: ['automation-intents'],
+    queryFn: () => adminApi.getAutomationIntents(),
+  })
+
   const drafts = useMemo(() => {
     const payload = unwrapData<any>(draftData)
     return Array.isArray(payload) ? (payload as FlowDraft[]) : []
@@ -162,6 +167,11 @@ export default function AutomationTemplates() {
     const payload = unwrapData<any>(templateData)
     return Array.isArray(payload) ? (payload as FlowTemplate[]) : []
   }, [templateData])
+
+  const intentOptions = useMemo(() => {
+    const payload = unwrapData<any>(intentData)
+    return Array.isArray(payload) ? payload : []
+  }, [intentData])
 
   const templateMap = useMemo(() => {
     const map = new Map<string, FlowTemplate>()
@@ -1136,6 +1146,9 @@ export default function AutomationTemplates() {
                                           ? [{ value: 'equals', label: 'Equals' }]
                                           : ROUTER_OPERATOR_OPTIONS
                                       const isKeywordRule = rule.operator === 'keywords'
+                                      const normalizedPath = (rule.path || '').replace(/^vars\./, '')
+                                      const isDetectedIntent = rule.source === 'vars'
+                                        && normalizedPath === 'detectedIntent'
                                       return (
                                         <div key={`${edge.id}-rule-${ruleIndex}`} className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-2">
                                           <div className="flex items-center gap-2">
@@ -1279,6 +1292,24 @@ export default function AutomationTemplates() {
                                                   <option value="all">All</option>
                                                 </select>
                                               </>
+                                            ) : isDetectedIntent && rule.operator === 'equals' && intentOptions.length > 0 ? (
+                                              <select
+                                                className="input h-8 text-xs flex-1"
+                                                value={typeof rule.value === 'string' ? rule.value : ''}
+                                                onChange={(event) =>
+                                                  updateRouterRule(edge.id, ruleIndex, () => ({
+                                                    ...rule,
+                                                    value: event.target.value,
+                                                  }))
+                                                }
+                                              >
+                                                <option value="">Select intent</option>
+                                                {intentOptions.map((option: any) => (
+                                                  <option key={option.value} value={option.value}>
+                                                    {option.value}
+                                                  </option>
+                                                ))}
+                                              </select>
                                             ) : rule.operator === 'gt' || rule.operator === 'lt' ? (
                                               <input
                                                 className="input h-8 text-xs w-28"

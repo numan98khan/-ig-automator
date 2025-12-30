@@ -20,6 +20,7 @@ import { ensureBillingAccountForUser, upsertActiveSubscription } from '../servic
 import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
 import { deleteAdminLogEvents, getAdminLogEvents } from '../services/adminLogEventService';
 import { compileFlow } from '../services/flowCompiler';
+import { intentLabels } from '../services/workspaceSettingsService';
 import {
   GLOBAL_WORKSPACE_KEY,
   deleteKnowledgeEmbedding,
@@ -707,6 +708,11 @@ router.delete('/log-events', authenticate, requireAdmin, async (_req, res) => {
     console.error('Admin log events delete error:', error);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// Automation intents (used by internal flow router)
+router.get('/automation-intents', authenticate, requireAdmin, async (_req, res) => {
+  res.json({ data: intentLabels });
 });
 
 // Flow drafts (internal builder)
