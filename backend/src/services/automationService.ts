@@ -1275,7 +1275,7 @@ async function executeFlowForInstance(params: {
   messageText: string;
   platform?: string;
   messageContext?: AutomationTestContext;
-  runtime?: { graph: FlowRuntimeGraph; triggers: FlowTriggerDefinition[] } | null;
+  runtime?: { graph: FlowRuntimeGraph; triggers: FlowTriggerDefinition[]; config: Record<string, any> } | null;
 }): Promise<{ success: boolean; error?: string }> {
   const {
     instance,

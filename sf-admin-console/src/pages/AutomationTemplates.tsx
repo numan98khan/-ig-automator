@@ -703,7 +703,7 @@ export default function AutomationTemplates() {
 
   const normalizeRouterCondition = useCallback((condition?: RouterCondition): RouterCondition => {
     if (!condition) {
-      return { ...ROUTER_DEFAULT_CONDITION, rules: [...ROUTER_DEFAULT_CONDITION.rules] }
+      return { ...ROUTER_DEFAULT_CONDITION, rules: [...(ROUTER_DEFAULT_CONDITION.rules || [])] }
     }
     if (condition.type === 'else') {
       return { type: 'else' }
@@ -1403,7 +1403,11 @@ export default function AutomationTemplates() {
                                               <input
                                                 className="input h-8 text-xs w-28"
                                                 type="number"
-                                                value={rule.value ?? ''}
+                                                value={
+                                                  typeof rule.value === 'number' || typeof rule.value === 'string'
+                                                    ? rule.value
+                                                    : ''
+                                                }
                                                 onChange={(event) =>
                                                   updateRouterRule(edge.id, ruleIndex, () => ({
                                                     ...rule,
@@ -1414,7 +1418,13 @@ export default function AutomationTemplates() {
                                             ) : (
                                               <input
                                                 className="input h-8 text-xs flex-1"
-                                                value={rule.value ?? ''}
+                                                value={
+                                                  typeof rule.value === 'string' || typeof rule.value === 'number'
+                                                    ? rule.value
+                                                    : typeof rule.value === 'boolean'
+                                                      ? (rule.value ? 'true' : 'false')
+                                                      : ''
+                                                }
                                                 onChange={(event) =>
                                                   updateRouterRule(edge.id, ruleIndex, () => ({
                                                     ...rule,
