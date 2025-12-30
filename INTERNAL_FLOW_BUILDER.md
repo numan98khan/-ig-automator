@@ -9,6 +9,7 @@ This document describes how the internal flow builder drives user-facing templat
 - End users only see templates (and their latest published version) and create instances with per-user config.
 - Runtime resolves the latest version, applies exposed field overrides + template variables, then executes the compiled graph.
 - The start trigger node defines entry triggers, including optional trigger config (keywords, intent, etc).
+- Global automation intentions are stored in Mongo and reused by detect-intent steps + router rules.
 
 ## Key Data Models
 
@@ -29,6 +30,9 @@ Backend types live in `backend/src/types/flow.ts` and Mongoose models in `backen
 - `AutomationSession`
   - Runtime session for a live conversation.
   - Stores flow state and is updated to use the latest template version at runtime.
+- `AutomationIntent`
+  - Global intent definitions persisted in Mongo (value + description).
+  - Used by detect-intent nodes + router rule dropdowns in the builder.
 
 ## DSL Shape
 
@@ -180,6 +184,7 @@ Key points:
 - Exposed fields patch the graph/triggers, then config + vars are interpolated into the graph.
 - Flow steps are executed against the compiled graph using the node types above.
 - `detect_intent` stores the output in `session.state.vars.detectedIntent`.
+- `detect_intent` runs intent detection against the global AutomationIntent list and stores the output in `session.state.vars.detectedIntent`.
 - `trigger` nodes are ignored at execution (they only define entry criteria).
 - State persists via `buildNextState` and `AutomationSession`.
 - Node-level logging is supported via `logEnabled` on each node. If `logEnabled` is explicitly `false`, node start/complete logging is suppressed; otherwise logs are emitted.
@@ -223,6 +228,23 @@ Key UI behaviors:
 - Detect intent nodes can override model, temperature, reasoning effort.
 - Handoff nodes capture topic/summary/message for the escalation ticket.
 - Adding a trigger node auto-promotes it to the start node if the current start is not a trigger.
+- Router rules can use the detected intent and now pull options from the persisted automation-intents list.
+- Automations now have a sub-navigation: Flows (builder) and Intentions (global intent list).
+
+## Automation Intentions (Global)
+
+Intentions are global intent labels used by the detect-intent step and router logic. They are stored in Mongo
+and seeded with the default list on first access.
+
+Admin endpoints (auth + admin):
+- `GET /admin/automation-intents` (list; seeds defaults on first access)
+- `POST /admin/automation-intents` (create)
+- `PUT /admin/automation-intents/:id` (update)
+- `DELETE /admin/automation-intents/:id` (delete)
+
+Notes:
+- Updating or deleting an intent value can break existing flow routing rules that reference it.
+- The router UI uses these values when building conditions like "Detected intent equals ...".
 
 ## Operational Notes / Gotchas
 
