@@ -55,6 +55,9 @@ type FlowRuntimeStep = {
   agentSystemPrompt?: string;
   agentSteps?: string[];
   agentEndCondition?: string;
+  agentStopCondition?: string;
+  agentMaxQuestions?: number;
+  agentSlots?: Array<{ key: string; question?: string; defaultValue?: string }>;
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
   next?: string;
@@ -1164,8 +1167,23 @@ async function executeFlowPlan(params: {
       const agentSteps = Array.isArray(step.agentSteps)
         ? step.agentSteps.map((agentStep) => String(agentStep || '').trim()).filter(Boolean)
         : [];
+      const agentSlots = Array.isArray(step.agentSlots)
+        ? step.agentSlots
+          .map((slot) => ({
+            key: typeof slot?.key === 'string' ? slot.key.trim() : '',
+            question: typeof slot?.question === 'string' ? slot.question.trim() : undefined,
+            defaultValue: typeof slot?.defaultValue === 'string' ? slot.defaultValue.trim() : undefined,
+          }))
+          .filter((slot) => slot.key)
+        : [];
       const storedAgent = session.state?.agent?.nodeId === step.id ? session.state.agent : {};
       const agentStepIndex = typeof storedAgent?.stepIndex === 'number' ? storedAgent.stepIndex : 0;
+      const agentSlotValues = storedAgent?.slots && typeof storedAgent.slots === 'object'
+        ? { ...storedAgent.slots }
+        : {};
+      const questionsAsked = typeof storedAgent?.questionsAsked === 'number' ? storedAgent.questionsAsked : 0;
+      const maxQuestions = typeof step.agentMaxQuestions === 'number' ? step.agentMaxQuestions : undefined;
+      const maxQuestionsReached = typeof maxQuestions === 'number' ? questionsAsked >= maxQuestions : false;
 
       const agentStart = nowMs();
       const agentResult = await generateAIAgentReply({
@@ -1176,6 +1194,12 @@ async function executeFlowPlan(params: {
         steps: agentSteps,
         stepIndex: agentStepIndex,
         endCondition: step.agentEndCondition,
+        stopCondition: step.agentStopCondition,
+        slotDefinitions: agentSlots,
+        slotValues: agentSlotValues,
+        maxQuestions,
+        questionsAsked,
+        maxQuestionsReached,
         aiSettings,
         knowledgeItemIds: step.knowledgeItemIds,
       });
@@ -1200,11 +1224,35 @@ async function executeFlowPlan(params: {
       });
       sentCount += 1;
 
+      const collectedFields = agentResult.collectedFields || {};
+      Object.entries(collectedFields).forEach(([key, value]) => {
+        if (!key) return;
+        if (value === null) return;
+        if (typeof value === 'string' && value.trim()) {
+          agentSlotValues[key] = value.trim();
+        }
+      });
+      agentSlots.forEach((slot) => {
+        if (!slot.defaultValue) return;
+        if (!agentSlotValues[slot.key]) {
+          agentSlotValues[slot.key] = slot.defaultValue;
+        }
+      });
+
+      const missingFields = Array.isArray(agentResult.missingFields)
+        ? agentResult.missingFields
+        : agentSlots
+          .map((slot) => slot.key)
+          .filter((key) => !agentSlotValues[key]);
+
+      const nextQuestionsAsked = agentResult.askedQuestion ? questionsAsked + 1 : questionsAsked;
+
       const stepCount = agentSteps.length;
       const nextStepIndex = agentResult.advanceStep && stepCount > 0
         ? Math.min(agentStepIndex + 1, stepCount - 1)
         : agentStepIndex;
-      const agentDone = Boolean(agentResult.endConversation);
+      const agentStop = Boolean(agentResult.shouldStop);
+      const agentDone = Boolean(agentResult.endConversation) || agentStop || maxQuestionsReached;
 
       const nextVars = {
         ...(session.state?.vars || {}),
@@ -1214,6 +1262,9 @@ async function executeFlowPlan(params: {
         agentStep: agentSteps[nextStepIndex] || '',
         agentDone,
         agentStepSummary: agentResult.stepSummary,
+        agentSlots: agentSlotValues,
+        agentMissingSlots: missingFields,
+        agentQuestionsAsked: nextQuestionsAsked,
       };
 
       session.state = {
@@ -1231,6 +1282,8 @@ async function executeFlowPlan(params: {
           stepIndex: nextStepIndex,
           stepCount,
           lastStepSummary: agentResult.stepSummary,
+          slots: agentSlotValues,
+          questionsAsked: nextQuestionsAsked,
         };
         forceWaitForReply = true;
         forcedNextNodeId = step.id;

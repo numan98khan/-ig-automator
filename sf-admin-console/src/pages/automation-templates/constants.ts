@@ -71,6 +71,9 @@ export const MESSAGE_STATE_VARIABLES = [
   { key: 'agentStep', label: 'Agent step', token: '{{ vars.agentStep }}' },
   { key: 'agentDone', label: 'Agent done', token: '{{ vars.agentDone }}' },
   { key: 'agentStepSummary', label: 'Agent step summary', token: '{{ vars.agentStepSummary }}' },
+  { key: 'agentSlots', label: 'Agent slots', token: '{{ vars.agentSlots }}' },
+  { key: 'agentMissingSlots', label: 'Agent missing slots', token: '{{ vars.agentMissingSlots }}' },
+  { key: 'agentQuestionsAsked', label: 'Agent questions asked', token: '{{ vars.agentQuestionsAsked }}' },
 ]
 
 export const REASONING_EFFORT_OPTIONS: Array<FlowAiSettings['reasoningEffort']> = [

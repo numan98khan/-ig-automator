@@ -17,6 +17,8 @@ export interface IAutomationSession extends Document {
       stepIndex?: number;
       stepCount?: number;
       lastStepSummary?: string;
+      slots?: Record<string, string>;
+      questionsAsked?: number;
     };
   };
   rateLimit?: {

@@ -120,6 +120,12 @@ export type FlowIntentSettings = {
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 }
 
+export type FlowAgentSlot = {
+  key: string
+  question?: string
+  defaultValue?: string
+}
+
 export type FlowTriggerConfig = {
   keywords?: string[]
   excludeKeywords?: string[]
@@ -155,6 +161,9 @@ export type FlowNode = Node<FlowNodeData> & {
   agentSystemPrompt?: string
   agentSteps?: string[]
   agentEndCondition?: string
+  agentStopCondition?: string
+  agentMaxQuestions?: number
+  agentSlots?: FlowAgentSlot[]
   knowledgeItemIds?: string[]
   handoff?: {
     topic?: string

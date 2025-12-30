@@ -16,6 +16,10 @@ export type AIAgentResult = {
   advanceStep: boolean;
   endConversation: boolean;
   stepSummary?: string;
+  collectedFields?: Record<string, string | null>;
+  missingFields?: string[];
+  askedQuestion?: boolean;
+  shouldStop?: boolean;
 };
 
 export type AIAgentOptions = {
@@ -26,6 +30,12 @@ export type AIAgentOptions = {
   steps?: string[];
   stepIndex?: number;
   endCondition?: string;
+  stopCondition?: string;
+  slotDefinitions?: Array<{ key: string; question?: string; defaultValue?: string }>;
+  slotValues?: Record<string, string>;
+  maxQuestions?: number;
+  questionsAsked?: number;
+  maxQuestionsReached?: boolean;
   aiSettings?: AutomationAiSettings;
   knowledgeItemIds?: string[];
 };
@@ -58,6 +68,12 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     steps,
     stepIndex,
     endCondition,
+    stopCondition,
+    slotDefinitions,
+    slotValues,
+    maxQuestions,
+    questionsAsked,
+    maxQuestionsReached,
     aiSettings,
     knowledgeItemIds,
   } = options;
@@ -79,6 +95,23 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     ? stepIndex
     : 0;
   const currentStep = trimmedSteps[currentStepIndex] || '';
+  const safeSlots = Array.isArray(slotDefinitions)
+    ? slotDefinitions
+      .map((slot) => ({
+        key: String(slot?.key || '').trim(),
+        question: slot?.question ? String(slot.question).trim() : undefined,
+        defaultValue: slot?.defaultValue ? String(slot.defaultValue).trim() : undefined,
+      }))
+      .filter((slot) => slot.key)
+    : [];
+  const slotValueMap: Record<string, string> = slotValues && typeof slotValues === 'object'
+    ? Object.entries(slotValues).reduce((acc, [key, value]) => {
+        if (typeof value === 'string' && value.trim()) {
+          acc[key] = value.trim();
+        }
+        return acc;
+      }, {} as Record<string, string>)
+    : {};
 
   const messages = await Message.find({ conversationId: conversation._id })
     .sort({ createdAt: -1 })
@@ -136,11 +169,30 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     'You are running inside a multi-step automation agent.',
     'Follow the system prompt above, then complete the current step before moving on.',
     'Use the end condition to decide when the agent should finish and allow the flow to continue.',
-  ].join('\n');
+    stopCondition?.trim()
+      ? 'Stop immediately when the stop condition is met. If stop condition is met, set shouldStop=true and endConversation=true.'
+      : '',
+    'Use slot tracking to avoid re-asking for information that is already collected.',
+    'If a slot has a question defined, use it when asking for that slot.',
+    'Ask at most one question at a time, only for missing slot values.',
+    maxQuestionsReached ? 'Max questions reached: do NOT ask a question. Provide a brief closing response.' : '',
+  ].filter(Boolean).join('\n');
 
   const stepsBlock = trimmedSteps.length > 0
     ? trimmedSteps.map((step, index) => `${index + 1}. ${step}`).join('\n')
     : 'No steps defined.';
+
+  const slotsBlock = safeSlots.length > 0
+    ? safeSlots.map((slot) => {
+      const details = [
+        `- ${slot.key}`,
+        slot.question ? `question: ${slot.question}` : null,
+        slot.defaultValue ? `default: ${slot.defaultValue}` : null,
+        slotValueMap[slot.key] ? `current: ${slotValueMap[slot.key]}` : null,
+      ].filter(Boolean).join(' | ');
+      return details;
+    }).join('\n')
+    : 'No slots defined.';
 
   const userMessage = `
 STEPS:
@@ -151,6 +203,15 @@ ${currentStep || 'No active step.'}
 
 END CONDITION:
 ${endCondition?.trim() || 'No end condition defined.'}
+
+STOP CONDITION:
+${stopCondition?.trim() || 'No stop condition defined.'}
+
+SLOTS:
+${slotsBlock}
+
+QUESTIONS ASKED:
+${typeof questionsAsked === 'number' ? questionsAsked : 0} / ${typeof maxQuestions === 'number' ? maxQuestions : 'unlimited'}
 
 KNOWLEDGE:
 ${knowledgeContext || 'No knowledge provided.'}
@@ -168,6 +229,10 @@ Return JSON with:
 - advanceStep: true if the current step has been completed; otherwise false
 - endConversation: true only when the end condition is satisfied; otherwise false
 - stepSummary: optional short summary of what was completed or learned in this step
+- collectedFields: list of { key, value } entries for newly collected slot values (keys should match slot keys); use default values if defined and still missing
+- missingFields: list of slot keys still missing after this turn
+- askedQuestion: true if your reply asks the customer a question; otherwise false
+- shouldStop: true if the stop condition is satisfied; otherwise false
 `.trim();
 
   const schema = {
@@ -178,8 +243,35 @@ Return JSON with:
       advanceStep: { type: 'boolean' },
       endConversation: { type: 'boolean' },
       stepSummary: { type: ['string', 'null'] },
+      collectedFields: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            key: { type: 'string' },
+            value: { type: ['string', 'null'] },
+          },
+          required: ['key', 'value'],
+        },
+      },
+      missingFields: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+      askedQuestion: { type: 'boolean' },
+      shouldStop: { type: 'boolean' },
     },
-    required: ['replyText', 'advanceStep', 'endConversation', 'stepSummary'],
+    required: [
+      'replyText',
+      'advanceStep',
+      'endConversation',
+      'stepSummary',
+      'collectedFields',
+      'missingFields',
+      'askedQuestion',
+      'shouldStop',
+    ],
   };
 
   let responseContent: string | null = null;
@@ -219,6 +311,9 @@ Return JSON with:
       steps: trimmedSteps.length,
       stepIndex: currentStepIndex,
       ragEnabled,
+      maxQuestions,
+      questionsAsked: typeof questionsAsked === 'number' ? questionsAsked : 0,
+      maxQuestionsReached,
     });
 
     const response = await openai.responses.create(requestPayload);
@@ -230,6 +325,23 @@ Return JSON with:
     const advanceStep = Boolean(raw.advanceStep);
     const endConversation = Boolean(raw.endConversation);
     const stepSummary = raw.stepSummary ? String(raw.stepSummary).trim() : undefined;
+    const collectedFields = Array.isArray(raw.collectedFields)
+      ? raw.collectedFields.reduce((acc: Record<string, string | null>, entry: any) => {
+          const key = typeof entry?.key === 'string' ? entry.key.trim() : '';
+          if (!key) return acc;
+          if (entry?.value === null) {
+            acc[key] = null;
+          } else if (typeof entry?.value === 'string') {
+            acc[key] = entry.value.trim();
+          }
+          return acc;
+        }, {} as Record<string, string | null>)
+      : undefined;
+    const missingFields = Array.isArray(raw.missingFields)
+      ? raw.missingFields.map((item: any) => String(item).trim()).filter(Boolean)
+      : [];
+    const askedQuestion = Boolean(raw.askedQuestion);
+    const shouldStop = Boolean(raw.shouldStop);
 
     let finalReply = replyText;
     if (finalReply && Number.isFinite(maxReplySentences) && maxReplySentences > 0) {
@@ -244,6 +356,10 @@ Return JSON with:
       advanceStep,
       endConversation,
       stepSummary,
+      collectedFields,
+      missingFields,
+      askedQuestion,
+      shouldStop,
     };
   } catch (error: any) {
     console.error('AI agent generation failed:', error?.message || error);
@@ -257,6 +373,10 @@ Return JSON with:
     replyText: 'Thanks for your message! A teammate will follow up shortly.',
     advanceStep: false,
     endConversation: false,
+    collectedFields: {},
+    missingFields: [],
+    askedQuestion: false,
+    shouldStop: false,
   };
 }
 

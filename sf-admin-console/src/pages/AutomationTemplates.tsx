@@ -657,6 +657,9 @@ export default function AutomationTemplates() {
         node.agentSteps = []
         node.agentSystemPrompt = ''
         node.agentEndCondition = ''
+        node.agentStopCondition = ''
+        node.agentMaxQuestions = undefined
+        node.agentSlots = []
       }
       if (type === 'handoff') {
         node.handoff = {
@@ -1918,6 +1921,128 @@ export default function AutomationTemplates() {
                       }))
                     }
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Stop condition prompt</label>
+                  <textarea
+                    className="input w-full h-20 text-sm"
+                    value={selectedNode.agentStopCondition || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        agentStopCondition: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    When this condition is met, the agent ends immediately and continues the flow.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Max questions</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={selectedNode.agentMaxQuestions ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        agentMaxQuestions: parseOptionalNumber(event.target.value),
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Leave blank for unlimited follow-up questions.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-muted-foreground">Agent slots</label>
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:text-primary/80"
+                      onClick={() =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          agentSlots: [
+                            ...(node.agentSlots || []),
+                            { key: '', question: '', defaultValue: '' },
+                          ],
+                        }))
+                      }
+                    >
+                      + Add slot
+                    </button>
+                  </div>
+                  {Array.isArray(selectedNode.agentSlots) && selectedNode.agentSlots.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedNode.agentSlots.map((slot, index) => (
+                        <div key={`${selectedNode.id}-agent-slot-${index}`} className="rounded-lg border border-border p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">Slot {index + 1}</span>
+                            <button
+                              type="button"
+                              className="text-xs text-rose-400 hover:text-rose-300"
+                              onClick={() =>
+                                updateNode(selectedNode.id, (node) => ({
+                                  ...node,
+                                  agentSlots: (node.agentSlots || []).filter((_, i) => i !== index),
+                                }))
+                              }
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          <input
+                            className="input w-full"
+                            placeholder="Slot key (e.g., productType)"
+                            value={slot.key}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextSlots = Array.isArray(node.agentSlots)
+                                  ? [...node.agentSlots]
+                                  : []
+                                nextSlots[index] = { ...nextSlots[index], key: event.target.value }
+                                return { ...node, agentSlots: nextSlots }
+                              })
+                            }
+                          />
+                          <input
+                            className="input w-full"
+                            placeholder="Question to ask when missing"
+                            value={slot.question || ''}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextSlots = Array.isArray(node.agentSlots)
+                                  ? [...node.agentSlots]
+                                  : []
+                                nextSlots[index] = { ...nextSlots[index], question: event.target.value }
+                                return { ...node, agentSlots: nextSlots }
+                              })
+                            }
+                          />
+                          <input
+                            className="input w-full"
+                            placeholder="Default value (optional)"
+                            value={slot.defaultValue || ''}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextSlots = Array.isArray(node.agentSlots)
+                                  ? [...node.agentSlots]
+                                  : []
+                                nextSlots[index] = { ...nextSlots[index], defaultValue: event.target.value }
+                                return { ...node, agentSlots: nextSlots }
+                              })
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">No slots yet.</div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Tone</label>

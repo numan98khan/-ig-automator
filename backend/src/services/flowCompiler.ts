@@ -17,6 +17,9 @@ type FlowRuntimeStep = {
   agentSystemPrompt?: string;
   agentSteps?: string[];
   agentEndCondition?: string;
+  agentStopCondition?: string;
+  agentMaxQuestions?: number;
+  agentSlots?: Array<{ key: string; question?: string; defaultValue?: string }>;
   intentSettings?: {
     model?: string;
     temperature?: number;
@@ -83,6 +86,12 @@ const normalizeAgentSteps = (node: Record<string, any>) =>
   node.agentSteps ?? node.data?.agentSteps;
 const normalizeAgentEndCondition = (node: Record<string, any>) =>
   node.agentEndCondition ?? node.data?.agentEndCondition;
+const normalizeAgentStopCondition = (node: Record<string, any>) =>
+  node.agentStopCondition ?? node.data?.agentStopCondition;
+const normalizeAgentMaxQuestions = (node: Record<string, any>) =>
+  node.agentMaxQuestions ?? node.data?.agentMaxQuestions;
+const normalizeAgentSlots = (node: Record<string, any>) =>
+  node.agentSlots ?? node.data?.agentSlots;
 
 const normalizeKnowledgeItemIds = (node: Record<string, any>) =>
   node.knowledgeItemIds ?? node.data?.knowledgeItemIds;
@@ -212,6 +221,9 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const agentSystemPrompt = normalizeAgentSystemPrompt(node);
     const agentSteps = normalizeAgentSteps(node);
     const agentEndCondition = normalizeAgentEndCondition(node);
+    const agentStopCondition = normalizeAgentStopCondition(node);
+    const agentMaxQuestions = normalizeAgentMaxQuestions(node);
+    const agentSlots = normalizeAgentSlots(node);
     const intentSettings = normalizeIntentSettings(node);
     const knowledgeItemIds = normalizeKnowledgeItemIds(node);
     const waitForReply = normalizeWaitForReply(node);
@@ -248,6 +260,17 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
         ? agentSteps.filter((step) => typeof step === 'string' && step.trim())
         : undefined,
       agentEndCondition: typeof agentEndCondition === 'string' ? agentEndCondition : undefined,
+      agentStopCondition: typeof agentStopCondition === 'string' ? agentStopCondition : undefined,
+      agentMaxQuestions: typeof agentMaxQuestions === 'number' ? agentMaxQuestions : undefined,
+      agentSlots: Array.isArray(agentSlots)
+        ? agentSlots
+          .map((slot: any) => ({
+            key: typeof slot?.key === 'string' ? slot.key.trim() : '',
+            question: typeof slot?.question === 'string' ? slot.question.trim() : undefined,
+            defaultValue: typeof slot?.defaultValue === 'string' ? slot.defaultValue.trim() : undefined,
+          }))
+          .filter((slot: any) => slot.key)
+        : undefined,
       intentSettings,
       knowledgeItemIds,
       waitForReply,

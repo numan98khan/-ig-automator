@@ -176,6 +176,9 @@ export const buildNodeSubtitle = (node: FlowNode) => {
     const stepCount = Array.isArray(node.agentSteps) ? node.agentSteps.filter(Boolean).length : 0
     if (stepCount > 0) details.push(`Steps: ${stepCount}`)
     if (node.agentEndCondition?.trim()) details.push('End condition set')
+    if (typeof node.agentMaxQuestions === 'number') details.push(`Max Q: ${node.agentMaxQuestions}`)
+    const slotCount = Array.isArray(node.agentSlots) ? node.agentSlots.filter((slot) => slot?.key).length : 0
+    if (slotCount > 0) details.push(`Slots: ${slotCount}`)
     if (node.aiSettings?.model) details.push(`Model: ${node.aiSettings.model}`)
     return details.length > 0 ? details.join(' · ') : 'Configure agent steps'
   }
@@ -231,6 +234,9 @@ export const normalizeFlowNode = (node: any, index: number): FlowNode => {
     agentSystemPrompt: node?.agentSystemPrompt ?? node?.data?.agentSystemPrompt,
     agentSteps: node?.agentSteps ?? node?.data?.agentSteps,
     agentEndCondition: node?.agentEndCondition ?? node?.data?.agentEndCondition,
+    agentStopCondition: node?.agentStopCondition ?? node?.data?.agentStopCondition,
+    agentMaxQuestions: node?.agentMaxQuestions ?? node?.data?.agentMaxQuestions,
+    agentSlots: node?.agentSlots ?? node?.data?.agentSlots,
     knowledgeItemIds: node?.knowledgeItemIds,
     handoff: node?.handoff,
     waitForReply: node?.waitForReply,
@@ -290,6 +296,9 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     agentSystemPrompt: node.agentSystemPrompt,
     agentSteps: node.agentSteps,
     agentEndCondition: node.agentEndCondition,
+    agentStopCondition: node.agentStopCondition,
+    agentMaxQuestions: node.agentMaxQuestions,
+    agentSlots: node.agentSlots,
     knowledgeItemIds: node.knowledgeItemIds,
     handoff: node.handoff,
     waitForReply: node.waitForReply,
