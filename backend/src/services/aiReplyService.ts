@@ -299,6 +299,12 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     knowledgeItemsUsed = [...ragUsed, ...knowledgeItemsUsed];
   }
 
+  const ragMatchPreview = vectorContexts.slice(0, 3).map((ctx) => ({
+    id: ctx.id,
+    title: ctx.title,
+    contentSnippet: truncateText(ctx.content, 240),
+  }));
+
   if (categoryKnowledge?.content) {
     knowledgeContext += `\n\nCategory Guidance (${category?.nameEn || 'Unspecified'}):\n${categoryKnowledge.content}`;
   }
@@ -602,6 +608,7 @@ Generate a response following all rules above. Return JSON with:
       knowledgeItems: knowledgeItems.length,
       knowledgeItemFilter: options.knowledgeItemIds?.length || 0,
       ragMatches: vectorContexts.length,
+      ragMatchPreview: ragMatchPreview.length ? ragMatchPreview : undefined,
     });
 
     requestStart = process.hrtime.bigint();
