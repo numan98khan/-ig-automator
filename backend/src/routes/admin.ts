@@ -18,6 +18,7 @@ import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import Tier from '../models/Tier';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
+import { deleteAdminLogEvents, getAdminLogEvents } from '../services/adminLogEventService';
 import { compileFlow } from '../services/flowCompiler';
 import {
   GLOBAL_WORKSPACE_KEY,
@@ -645,19 +646,65 @@ router.get('/log-settings', authenticate, requireAdmin, async (_req, res) => {
 router.put('/log-settings', authenticate, requireAdmin, async (req, res) => {
   try {
     const aiTimingEnabled = toOptionalBoolean(req.body?.aiTimingEnabled);
+    const aiLogsEnabled = toOptionalBoolean(req.body?.aiLogsEnabled);
     const automationLogsEnabled = toOptionalBoolean(req.body?.automationLogsEnabled);
     const automationStepsEnabled = toOptionalBoolean(req.body?.automationStepsEnabled);
+    const instagramWebhookLogsEnabled = toOptionalBoolean(req.body?.instagramWebhookLogsEnabled);
+    const igApiLogsEnabled = toOptionalBoolean(req.body?.igApiLogsEnabled);
     const openaiApiLogsEnabled = toOptionalBoolean(req.body?.openaiApiLogsEnabled);
+    const consoleLogsEnabled = toOptionalBoolean(req.body?.consoleLogsEnabled);
 
     const settings = await updateLogSettings({
       ...(aiTimingEnabled === undefined ? {} : { aiTimingEnabled }),
+      ...(aiLogsEnabled === undefined ? {} : { aiLogsEnabled }),
       ...(automationLogsEnabled === undefined ? {} : { automationLogsEnabled }),
       ...(automationStepsEnabled === undefined ? {} : { automationStepsEnabled }),
+      ...(instagramWebhookLogsEnabled === undefined ? {} : { instagramWebhookLogsEnabled }),
+      ...(igApiLogsEnabled === undefined ? {} : { igApiLogsEnabled }),
       ...(openaiApiLogsEnabled === undefined ? {} : { openaiApiLogsEnabled }),
+      ...(consoleLogsEnabled === undefined ? {} : { consoleLogsEnabled }),
     });
     res.json({ data: settings });
   } catch (error) {
     console.error('Admin log settings update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Admin log events (stored in Mongo with TTL)
+router.get('/log-events', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(500, Math.max(1, toInt(req.query.limit, 200)));
+    const category = typeof req.query.category === 'string' ? req.query.category.trim() : undefined;
+    const level = typeof req.query.level === 'string' ? req.query.level.trim() : undefined;
+    const workspaceId = typeof req.query.workspaceId === 'string'
+      ? req.query.workspaceId.trim()
+      : undefined;
+    const beforeRaw = typeof req.query.before === 'string' ? req.query.before.trim() : undefined;
+    const before = beforeRaw ? new Date(beforeRaw) : undefined;
+    const beforeDate = before && !Number.isNaN(before.getTime()) ? before : undefined;
+
+    const events = await getAdminLogEvents({
+      limit,
+      category,
+      level: level === 'warn' || level === 'error' || level === 'info' ? level : undefined,
+      workspaceId,
+      before: beforeDate,
+    });
+
+    res.json({ data: events });
+  } catch (error) {
+    console.error('Admin log events get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.delete('/log-events', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    await deleteAdminLogEvents();
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin log events delete error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

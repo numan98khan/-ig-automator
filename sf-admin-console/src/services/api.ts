@@ -112,6 +112,14 @@ export const adminApi = {
   // Log settings
   getLogSettings: () => api.get('/log-settings'),
   updateLogSettings: (payload: any) => api.put('/log-settings', payload),
+  getLogEvents: (params?: {
+    limit?: number
+    category?: string
+    level?: 'info' | 'warn' | 'error'
+    workspaceId?: string
+    before?: string
+  }) => api.get('/log-events', { params }),
+  deleteLogEvents: () => api.delete('/log-events'),
 
   // Tiers
   getTiers: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>

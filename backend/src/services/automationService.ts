@@ -23,6 +23,7 @@ import {
 import { pauseForTypingIfNeeded } from './automation/typing';
 import { matchesTriggerConfig } from './automation/triggerMatcher';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
+import { logAdminEvent } from './adminLogEventService';
 import {
   AutomationAiSettings,
   AutomationIntentSettings,
@@ -87,8 +88,25 @@ const nowMs = () => Date.now();
 const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
 const shouldLogAutomationSteps = () => getLogSettingsSnapshot().automationStepsEnabled;
 
+const resolveWorkspaceId = (details?: Record<string, any>) => {
+  const candidate = details?.workspaceId;
+  if (!candidate) return undefined;
+  if (typeof candidate === 'string') return candidate;
+  if (candidate instanceof mongoose.Types.ObjectId) return candidate;
+  if (typeof candidate === 'object' && typeof candidate.toString === 'function') {
+    return candidate.toString();
+  }
+  return undefined;
+};
+
 const logAutomation = (message: string, details?: Record<string, any>) => {
   if (!shouldLogAutomation()) return;
+  void logAdminEvent({
+    category: 'automation',
+    message,
+    details,
+    workspaceId: resolveWorkspaceId(details),
+  });
   if (details) {
     console.log(message, details);
     return;
@@ -99,12 +117,24 @@ const logAutomation = (message: string, details?: Record<string, any>) => {
 const logAutomationStep = (step: string, startMs: number, details?: Record<string, any>) => {
   if (!shouldLogAutomationSteps()) return;
   const ms = Math.max(0, Math.round(nowMs() - startMs));
+  void logAdminEvent({
+    category: 'automation_step',
+    message: 'Automation step timing',
+    details: { step, ms, ...(details || {}) },
+    workspaceId: resolveWorkspaceId(details),
+  });
   console.log('⏱️ [AUTOMATION] Step', { step, ms, ...(details || {}) });
 };
 
 const shouldLogNode = (step?: FlowRuntimeStep) => step?.logEnabled !== false;
 
 const logNodeEvent = (message: string, details?: Record<string, any>) => {
+  void logAdminEvent({
+    category: 'flow_node',
+    message: `🧩 [FLOW NODE] ${message}`,
+    details,
+    workspaceId: resolveWorkspaceId(details),
+  });
   console.log(`🧩 [FLOW NODE] ${message}`, details || {});
 };
 

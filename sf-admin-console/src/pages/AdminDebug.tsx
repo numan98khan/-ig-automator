@@ -15,9 +15,13 @@ export default function AdminDebug() {
   const queryClient = useQueryClient()
   const [logSettings, setLogSettings] = useState({
     aiTimingEnabled: true,
+    aiLogsEnabled: true,
     automationLogsEnabled: true,
     automationStepsEnabled: true,
+    instagramWebhookLogsEnabled: true,
+    igApiLogsEnabled: true,
     openaiApiLogsEnabled: false,
+    consoleLogsEnabled: false,
   })
 
   const { data: workspaces } = useQuery({
@@ -42,9 +46,13 @@ export default function AdminDebug() {
     if (payload && typeof payload.aiTimingEnabled === 'boolean') {
       setLogSettings({
         aiTimingEnabled: payload.aiTimingEnabled,
+        aiLogsEnabled: payload.aiLogsEnabled ?? true,
         automationLogsEnabled: payload.automationLogsEnabled,
         automationStepsEnabled: payload.automationStepsEnabled,
+        instagramWebhookLogsEnabled: payload.instagramWebhookLogsEnabled ?? true,
+        igApiLogsEnabled: payload.igApiLogsEnabled ?? true,
         openaiApiLogsEnabled: payload.openaiApiLogsEnabled ?? false,
+        consoleLogsEnabled: payload.consoleLogsEnabled ?? false,
       })
     }
   }, [logSettingsData])
@@ -80,7 +88,6 @@ export default function AdminDebug() {
 
   const workspaceCount = getWorkspaceCount()
   const userCount = getUserCount()
-
   const isSavingLogSettings = updateLogsMutation.isPending
 
   return (
@@ -145,6 +152,13 @@ export default function AdminDebug() {
             disabled={isSavingLogSettings}
           />
           <LogToggleRow
+            title="AI logs"
+            description="AI reply generation logs."
+            enabled={logSettings.aiLogsEnabled}
+            onToggle={() => toggleLogSetting('aiLogsEnabled')}
+            disabled={isSavingLogSettings}
+          />
+          <LogToggleRow
             title="Automation logs"
             description="Automation start/match/execute summaries."
             enabled={logSettings.automationLogsEnabled}
@@ -159,10 +173,31 @@ export default function AdminDebug() {
             disabled={isSavingLogSettings}
           />
           <LogToggleRow
+            title="Instagram webhook logs"
+            description="Inbound webhook payload summaries."
+            enabled={logSettings.instagramWebhookLogsEnabled}
+            onToggle={() => toggleLogSetting('instagramWebhookLogsEnabled')}
+            disabled={isSavingLogSettings}
+          />
+          <LogToggleRow
+            title="IG API logs"
+            description="Instagram API request/response logs."
+            enabled={logSettings.igApiLogsEnabled}
+            onToggle={() => toggleLogSetting('igApiLogsEnabled')}
+            disabled={isSavingLogSettings}
+          />
+          <LogToggleRow
             title="OpenAI API logs"
             description="Raw OpenAI response summaries for debugging."
             enabled={logSettings.openaiApiLogsEnabled}
             onToggle={() => toggleLogSetting('openaiApiLogsEnabled')}
+            disabled={isSavingLogSettings}
+          />
+          <LogToggleRow
+            title="Console logs"
+            description="Capture console.log/warn/error output into Mongo."
+            enabled={logSettings.consoleLogsEnabled}
+            onToggle={() => toggleLogSetting('consoleLogsEnabled')}
             disabled={isSavingLogSettings}
           />
         </div>

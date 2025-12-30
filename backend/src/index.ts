@@ -33,11 +33,13 @@ import flowTemplateRoutes from './routes/flow-templates';
 import automationInstanceRoutes from './routes/automation-instances';
 import integrationsRoutes from './routes/integrations';
 import { ensureDefaultAdmin } from './utils/defaultAdmin';
+import { initConsoleLogCapture } from './services/consoleLogCapture';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+initConsoleLogCapture();
 const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
 

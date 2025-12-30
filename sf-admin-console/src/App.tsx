@@ -11,6 +11,7 @@ import Users from './pages/Users'
 import Analytics from './pages/Analytics'
 import AIAssistantConfig from './pages/AIAssistantConfig'
 import AdminDebug from './pages/AdminDebug'
+import Logging from './pages/Logging'
 import Tiers from './pages/Tiers'
 import AutomationTemplates from './pages/AutomationTemplates'
 
@@ -35,6 +36,7 @@ function App() {
                 <Route path="/automations" element={<AutomationTemplates />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/debug" element={<AdminDebug />} />
+                <Route path="/logging" element={<Logging />} />
               </Routes>
             </Layout>
           </ProtectedRoute>
