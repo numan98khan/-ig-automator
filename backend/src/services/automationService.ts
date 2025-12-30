@@ -784,11 +784,58 @@ async function handleAiReplyStep(params: {
   return { success: true };
 }
 
-const resolveNextNodeId = (step: FlowRuntimeStep, plan: ExecutionPlan): string | undefined => {
+const normalizeIntentList = (value?: string | string[]): string[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return [value.trim()];
+  }
+  return [];
+};
+
+const matchesIntentCondition = (condition: Record<string, any>, detectedIntent?: string): boolean => {
+  const intents = normalizeIntentList(condition.intent || condition.intents);
+  const notIntents = normalizeIntentList(condition.notIntent || condition.notIntents);
+
+  if (intents.length > 0 && (!detectedIntent || !intents.includes(detectedIntent))) {
+    return false;
+  }
+
+  if (notIntents.length > 0 && detectedIntent && notIntents.includes(detectedIntent)) {
+    return false;
+  }
+
+  if (intents.length === 0 && notIntents.length === 0) {
+    return Object.keys(condition).length === 0;
+  }
+
+  return true;
+};
+
+const resolveNextNodeId = (
+  step: FlowRuntimeStep,
+  plan: ExecutionPlan,
+  session: any,
+): string | undefined => {
   if (step.next) return step.next;
   if (!step.id || !plan.edges) return undefined;
-  const edge = plan.edges.find((candidate) => candidate.from === step.id);
-  return edge?.to;
+
+  const outboundEdges = plan.edges.filter((candidate) => candidate.from === step.id);
+  if (outboundEdges.length === 0) return undefined;
+
+  const detectedIntent = session?.state?.vars?.detectedIntent;
+
+  for (const edge of outboundEdges) {
+    if (!edge.condition || typeof edge.condition !== 'object') continue;
+    if (matchesIntentCondition(edge.condition, detectedIntent)) {
+      return edge.to;
+    }
+  }
+
+  const fallbackEdge = outboundEdges.find((candidate) => !candidate.condition);
+  return fallbackEdge?.to;
 };
 
 async function executeFlowPlan(params: {
@@ -980,7 +1027,7 @@ async function executeFlowPlan(params: {
     if (plan.mode === 'steps') {
       nextStepIndex = stepIndex + 1;
     } else {
-      nextNodeId = resolveNextNodeId(step, plan);
+      nextNodeId = resolveNextNodeId(step, plan, session);
     }
 
     if (step.waitForReply) {
