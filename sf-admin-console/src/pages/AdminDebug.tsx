@@ -294,7 +294,7 @@ export default function AdminDebug() {
           </div>
         </div>
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm text-foreground">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
                 <th className="py-2 pr-3">Time</th>
@@ -322,11 +322,11 @@ export default function AdminDebug() {
                         {event.level}
                       </span>
                     </td>
-                    <td className="py-3 pr-3">{event.category}</td>
-                    <td className="py-3 pr-3">{event.message}</td>
+                    <td className="py-3 pr-3 text-foreground">{event.category}</td>
+                    <td className="py-3 pr-3 text-foreground">{event.message}</td>
                     <td className="py-3 text-xs text-muted-foreground">
                       {event.details ? (
-                        <pre className="max-w-[360px] whitespace-pre-wrap break-words">
+                        <pre className="max-w-[360px] whitespace-pre-wrap break-words text-foreground/90">
                           {JSON.stringify(event.details, null, 2)}
                         </pre>
                       ) : (
