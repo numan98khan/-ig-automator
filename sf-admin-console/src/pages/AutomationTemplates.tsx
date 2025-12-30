@@ -617,6 +617,19 @@ export default function AutomationTemplates() {
     [setSelectedNodeId, setSelectedEdgeId],
   )
 
+  const handleEdgeClick = useCallback(
+    (_event: React.MouseEvent, edge: FlowEdge) => {
+      setSelectedEdgeId(edge.id)
+      setSelectedNodeId(null)
+    },
+    [setSelectedEdgeId, setSelectedNodeId],
+  )
+
+  const handlePaneClick = useCallback(() => {
+    setSelectedNodeId(null)
+    setSelectedEdgeId(null)
+  }, [setSelectedNodeId, setSelectedEdgeId])
+
   const handleApplyDsl = () => {
     try {
       const parsed = JSON.parse(dslEditorText || '{}')
@@ -677,6 +690,8 @@ export default function AutomationTemplates() {
           onEdgesChange={onEdgesChange}
           onConnect={handleConnect}
           onSelectionChange={handleSelectionChange}
+          onEdgeClick={handleEdgeClick}
+          onPaneClick={handlePaneClick}
           onInit={setFlowInstance}
           nodeTypes={nodeTypes}
           fitView
