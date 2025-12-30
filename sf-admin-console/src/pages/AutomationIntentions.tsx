@@ -20,7 +20,7 @@ export default function AutomationIntentions() {
     queryFn: () => adminApi.getIntentions(),
   })
 
-  const intentions = useMemo(() => {
+  const intentions = useMemo<Intention[]>(() => {
     const payload = unwrapData<any>(data)
     return Array.isArray(payload)
       ? payload.map((item: any) => ({
