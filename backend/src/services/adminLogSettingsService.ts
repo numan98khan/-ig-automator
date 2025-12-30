@@ -5,6 +5,7 @@ export type AdminLogSettingsSnapshot = {
   automationLogsEnabled: boolean;
   automationStepsEnabled: boolean;
   openaiApiLogsEnabled: boolean;
+  consoleLogsEnabled: boolean;
 };
 
 const DEFAULT_SETTINGS: AdminLogSettingsSnapshot = {
@@ -12,6 +13,7 @@ const DEFAULT_SETTINGS: AdminLogSettingsSnapshot = {
   automationLogsEnabled: true,
   automationStepsEnabled: true,
   openaiApiLogsEnabled: false,
+  consoleLogsEnabled: false,
 };
 
 const CACHE_TTL_MS = 30000;
@@ -25,6 +27,7 @@ const toSnapshot = (doc: any): AdminLogSettingsSnapshot => ({
   automationLogsEnabled: doc?.automationLogsEnabled ?? DEFAULT_SETTINGS.automationLogsEnabled,
   automationStepsEnabled: doc?.automationStepsEnabled ?? DEFAULT_SETTINGS.automationStepsEnabled,
   openaiApiLogsEnabled: doc?.openaiApiLogsEnabled ?? DEFAULT_SETTINGS.openaiApiLogsEnabled,
+  consoleLogsEnabled: doc?.consoleLogsEnabled ?? DEFAULT_SETTINGS.consoleLogsEnabled,
 });
 
 const refreshLogSettings = async (force = false): Promise<void> => {
@@ -78,6 +81,9 @@ export const updateLogSettings = async (
   }
   if (typeof updates.openaiApiLogsEnabled === 'boolean') {
     updatePayload.openaiApiLogsEnabled = updates.openaiApiLogsEnabled;
+  }
+  if (typeof updates.consoleLogsEnabled === 'boolean') {
+    updatePayload.consoleLogsEnabled = updates.consoleLogsEnabled;
   }
 
   if (Object.keys(updatePayload).length === 0) {

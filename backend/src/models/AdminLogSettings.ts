@@ -5,6 +5,7 @@ export interface IAdminLogSettings extends Document {
   automationLogsEnabled: boolean;
   automationStepsEnabled: boolean;
   openaiApiLogsEnabled: boolean;
+  consoleLogsEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -15,6 +16,7 @@ const adminLogSettingsSchema = new Schema<IAdminLogSettings>(
     automationLogsEnabled: { type: Boolean, default: true },
     automationStepsEnabled: { type: Boolean, default: true },
     openaiApiLogsEnabled: { type: Boolean, default: false },
+    consoleLogsEnabled: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

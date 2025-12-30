@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import AdminLogEvent, { IAdminLogEvent } from '../models/AdminLogEvent';
+import { getLogSettingsSnapshot } from './adminLogSettingsService';
 
 export type AdminLogLevel = 'info' | 'warn' | 'error';
 
@@ -31,6 +32,15 @@ const toOptionalObjectId = (value?: string | mongoose.Types.ObjectId) => {
 
 export const logAdminEvent = async (payload: AdminLogEventPayload): Promise<void> => {
   try {
+    const settings = getLogSettingsSnapshot();
+    const category = payload.category;
+    if (category === 'automation' && !settings.automationLogsEnabled) return;
+    if (category === 'automation_step' && !settings.automationStepsEnabled) return;
+    if (category === 'flow_node' && !settings.automationStepsEnabled) return;
+    if (category === 'ai_timing' && !settings.aiTimingEnabled) return;
+    if (category === 'openai_api' && !settings.openaiApiLogsEnabled) return;
+    if (category === 'console' && !settings.consoleLogsEnabled) return;
+
     const workspaceId = toOptionalObjectId(payload.workspaceId);
     await AdminLogEvent.create({
       workspaceId,

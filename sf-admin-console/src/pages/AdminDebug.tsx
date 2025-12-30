@@ -29,6 +29,7 @@ export default function AdminDebug() {
     automationLogsEnabled: true,
     automationStepsEnabled: true,
     openaiApiLogsEnabled: false,
+    consoleLogsEnabled: false,
   })
   const [logFilters, setLogFilters] = useState({
     limit: 200,
@@ -75,6 +76,7 @@ export default function AdminDebug() {
         automationLogsEnabled: payload.automationLogsEnabled,
         automationStepsEnabled: payload.automationStepsEnabled,
         openaiApiLogsEnabled: payload.openaiApiLogsEnabled ?? false,
+        consoleLogsEnabled: payload.consoleLogsEnabled ?? false,
       })
     }
   }, [logSettingsData])
@@ -200,6 +202,13 @@ export default function AdminDebug() {
             description="Raw OpenAI response summaries for debugging."
             enabled={logSettings.openaiApiLogsEnabled}
             onToggle={() => toggleLogSetting('openaiApiLogsEnabled')}
+            disabled={isSavingLogSettings}
+          />
+          <LogToggleRow
+            title="Console logs"
+            description="Capture console.log/warn/error output into Mongo."
+            enabled={logSettings.consoleLogsEnabled}
+            onToggle={() => toggleLogSetting('consoleLogsEnabled')}
             disabled={isSavingLogSettings}
           />
         </div>

@@ -649,12 +649,14 @@ router.put('/log-settings', authenticate, requireAdmin, async (req, res) => {
     const automationLogsEnabled = toOptionalBoolean(req.body?.automationLogsEnabled);
     const automationStepsEnabled = toOptionalBoolean(req.body?.automationStepsEnabled);
     const openaiApiLogsEnabled = toOptionalBoolean(req.body?.openaiApiLogsEnabled);
+    const consoleLogsEnabled = toOptionalBoolean(req.body?.consoleLogsEnabled);
 
     const settings = await updateLogSettings({
       ...(aiTimingEnabled === undefined ? {} : { aiTimingEnabled }),
       ...(automationLogsEnabled === undefined ? {} : { automationLogsEnabled }),
       ...(automationStepsEnabled === undefined ? {} : { automationStepsEnabled }),
       ...(openaiApiLogsEnabled === undefined ? {} : { openaiApiLogsEnabled }),
+      ...(consoleLogsEnabled === undefined ? {} : { consoleLogsEnabled }),
     });
     res.json({ data: settings });
   } catch (error) {
