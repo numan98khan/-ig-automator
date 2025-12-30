@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { adminApi, unwrapData } from '../services/api'
+import AutomationsTabs from '../components/AutomationsTabs'
 import {
   ArrowLeft,
   Plus,
@@ -1964,30 +1965,31 @@ export default function AutomationTemplates() {
   return (
     <>
       <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Flow Builder</h1>
-          <p className="text-muted-foreground mt-1">
-            Author internal flow drafts, control display metadata, and expose configurable fields.
-          </p>
+        <AutomationsTabs />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Flow Builder</h1>
+            <p className="text-muted-foreground mt-1">
+              Author internal flow drafts, control display metadata, and expose configurable fields.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="btn btn-secondary flex items-center gap-2"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['flow-drafts'] })}
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </button>
+            <button
+              className="btn btn-primary flex items-center gap-2"
+              onClick={() => setNewDraftOpen((prev) => !prev)}
+            >
+              <Plus className="w-4 h-4" />
+              New draft
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="btn btn-secondary flex items-center gap-2"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ['flow-drafts'] })}
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-          <button
-            className="btn btn-primary flex items-center gap-2"
-            onClick={() => setNewDraftOpen((prev) => !prev)}
-          >
-            <Plus className="w-4 h-4" />
-            New draft
-          </button>
-        </div>
-      </div>
 
       {error && (
         <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">

@@ -15,12 +15,13 @@ import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalA
 import FlowDraft from '../models/FlowDraft';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
+import AutomationIntent from '../models/AutomationIntent';
 import Tier from '../models/Tier';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
 import { deleteAdminLogEvents, getAdminLogEvents } from '../services/adminLogEventService';
 import { compileFlow } from '../services/flowCompiler';
-import { intentLabels } from '../services/workspaceSettingsService';
+import { listAutomationIntents } from '../services/automationIntentService';
 import {
   GLOBAL_WORKSPACE_KEY,
   deleteKnowledgeEmbedding,
@@ -712,7 +713,68 @@ router.delete('/log-events', authenticate, requireAdmin, async (_req, res) => {
 
 // Automation intents (used by internal flow router)
 router.get('/automation-intents', authenticate, requireAdmin, async (_req, res) => {
-  res.json({ data: intentLabels });
+  try {
+    const intents = await listAutomationIntents();
+    res.json({ data: intents });
+  } catch (error) {
+    console.error('Admin automation intents list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/automation-intents', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const value = typeof req.body?.value === 'string' ? req.body.value.trim() : '';
+    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+    if (!value || !description) {
+      return res.status(400).json({ error: 'value and description are required' });
+    }
+
+    const exists = await AutomationIntent.findOne({ value }).lean();
+    if (exists) {
+      return res.status(409).json({ error: 'Intent value already exists' });
+    }
+
+    const intent = await AutomationIntent.create({ value, description });
+    res.status(201).json({ data: intent });
+  } catch (error: any) {
+    console.error('Admin automation intent create error:', error);
+    res.status(400).json({ error: error.message || 'Failed to create automation intent' });
+  }
+});
+
+router.put('/automation-intents/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const intent = await AutomationIntent.findById(req.params.id);
+    if (!intent) return res.status(404).json({ error: 'Automation intent not found' });
+
+    const value = typeof req.body?.value === 'string' ? req.body.value.trim() : '';
+    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+
+    if (value) {
+      intent.value = value;
+    }
+    if (description) {
+      intent.description = description;
+    }
+
+    await intent.save();
+    res.json({ data: intent });
+  } catch (error: any) {
+    console.error('Admin automation intent update error:', error);
+    res.status(400).json({ error: error.message || 'Failed to update automation intent' });
+  }
+});
+
+router.delete('/automation-intents/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const intent = await AutomationIntent.findByIdAndDelete(req.params.id);
+    if (!intent) return res.status(404).json({ error: 'Automation intent not found' });
+    res.json({ data: { success: true } });
+  } catch (error: any) {
+    console.error('Admin automation intent delete error:', error);
+    res.status(400).json({ error: error.message || 'Failed to delete automation intent' });
+  }
 });
 
 // Flow drafts (internal builder)

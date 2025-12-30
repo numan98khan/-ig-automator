@@ -15,6 +15,7 @@ import {
 import { addTicketUpdate, createTicket, getActiveTicket } from './escalationService';
 import { addCountIncrement, trackDailyMetric } from './reportingService';
 import {
+  detectAutomationIntent,
   detectGoalIntent,
   getGoalConfigs,
   getWorkspaceSettings,
@@ -1169,7 +1170,7 @@ async function executeFlowPlan(params: {
       }
     } else if (stepType === 'detect_intent') {
       const intentStart = nowMs();
-      const detectedIntent = await detectGoalIntent(messageText || '', step.intentSettings);
+      const detectedIntent = await detectAutomationIntent(messageText || '', step.intentSettings);
       await markTriggeredOnce();
       session.state = {
         ...(session.state || {}),

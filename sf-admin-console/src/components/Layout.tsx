@@ -90,7 +90,9 @@ export default function Layout({ children }: LayoutProps) {
           {/* Navigation */}
           <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto lg:px-2 lg:group-hover:px-3">
             {navigation.map((item) => {
-              const isActive = location.pathname === item.href
+              const isActive = item.href === '/'
+                ? location.pathname === '/'
+                : location.pathname.startsWith(item.href)
               const Icon = item.icon
               return (
                 <Link
