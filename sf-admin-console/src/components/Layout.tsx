@@ -32,7 +32,15 @@ export default function Layout({ children }: LayoutProps) {
     { name: 'Users', href: '/users', icon: Users },
     { name: 'Tiers', href: '/tiers', icon: Bug },
     { name: 'AI Assistant', href: '/ai-assistant', icon: Bot },
-    { name: 'Automations', href: '/automations', icon: Settings },
+    {
+      name: 'Automations',
+      href: '/automations/flows',
+      icon: Settings,
+      children: [
+        { name: 'Flows', href: '/automations/flows' },
+        { name: 'Intentions', href: '/automations/intentions' },
+      ],
+    },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Logging', href: '/logging', icon: ScrollText },
     { name: 'Debug', href: '/debug', icon: Bug },
@@ -91,26 +99,51 @@ export default function Layout({ children }: LayoutProps) {
           <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto lg:px-2 lg:group-hover:px-3">
             {navigation.map((item) => {
               const isActive = location.pathname === item.href
+              const isChildActive = item.children?.some((child) => location.pathname === child.href)
               const Icon = item.icon
+              const highlight = isActive || isChildActive
               return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  title={item.name}
-                  className={`flex items-center gap-3 px-3 py-0 h-12 rounded-lg transition-colors lg:justify-center lg:gap-0 lg:px-2 lg:group-hover:justify-start lg:group-hover:gap-3 lg:group-hover:px-4 ${
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  }`}
-                >
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0">
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <span className="font-medium whitespace-nowrap transition-all duration-200 lg:max-w-0 lg:overflow-hidden lg:opacity-0 lg:translate-x-2 lg:group-hover:max-w-[200px] lg:group-hover:opacity-100 lg:group-hover:translate-x-0">
-                    {item.name}
-                  </span>
-                </Link>
+                <div key={item.name} className="space-y-1">
+                  <Link
+                    to={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    title={item.name}
+                    className={`flex items-center gap-3 px-3 py-0 h-12 rounded-lg transition-colors lg:justify-center lg:gap-0 lg:px-2 lg:group-hover:justify-start lg:group-hover:gap-3 lg:group-hover:px-4 ${
+                      highlight
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0">
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <span className="font-medium whitespace-nowrap transition-all duration-200 lg:max-w-0 lg:overflow-hidden lg:opacity-0 lg:translate-x-2 lg:group-hover:max-w-[200px] lg:group-hover:opacity-100 lg:group-hover:translate-x-0">
+                      {item.name}
+                    </span>
+                  </Link>
+                  {item.children && (
+                    <div className="pl-12 pr-2 space-y-1 lg:pl-4 lg:group-hover:pl-12 transition-all">
+                      {item.children.map((child) => {
+                        const childActive = location.pathname === child.href
+                        return (
+                          <Link
+                            key={child.name}
+                            to={child.href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            title={child.name}
+                            className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                              childActive
+                                ? 'bg-primary/15 text-primary'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            }`}
+                          >
+                            {child.name}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </nav>

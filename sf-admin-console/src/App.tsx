@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -14,6 +14,7 @@ import AdminDebug from './pages/AdminDebug'
 import Logging from './pages/Logging'
 import Tiers from './pages/Tiers'
 import AutomationTemplates from './pages/AutomationTemplates'
+import AutomationIntentions from './pages/AutomationIntentions'
 
 function App() {
   return (
@@ -33,7 +34,9 @@ function App() {
                 <Route path="/users" element={<Users />} />
                 <Route path="/tiers" element={<Tiers />} />
                 <Route path="/ai-assistant" element={<AIAssistantConfig />} />
-                <Route path="/automations" element={<AutomationTemplates />} />
+                <Route path="/automations" element={<Navigate to="/automations/flows" replace />} />
+                <Route path="/automations/flows" element={<AutomationTemplates />} />
+                <Route path="/automations/intentions" element={<AutomationIntentions />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/debug" element={<AdminDebug />} />
                 <Route path="/logging" element={<Logging />} />
