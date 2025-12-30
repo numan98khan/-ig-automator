@@ -177,9 +177,9 @@ Return JSON with:
       replyText: { type: 'string' },
       advanceStep: { type: 'boolean' },
       endConversation: { type: 'boolean' },
-      stepSummary: { type: 'string' },
+      stepSummary: { type: ['string', 'null'] },
     },
-    required: ['replyText', 'advanceStep', 'endConversation'],
+    required: ['replyText', 'advanceStep', 'endConversation', 'stepSummary'],
   };
 
   let responseContent: string | null = null;
