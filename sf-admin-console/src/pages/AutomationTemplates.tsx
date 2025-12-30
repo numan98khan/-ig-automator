@@ -727,6 +727,11 @@ export default function AutomationTemplates() {
           Tap a node to edit its settings.
         </div>
       ) : null}
+      {selectedNode?.type === 'condition' && !selectedEdgeId && (
+        <div className="absolute left-1/2 top-14 z-20 -translate-x-1/2 rounded-full border border-primary/40 bg-primary/10 px-4 py-1 text-xs text-primary shadow-sm">
+          Click a route line (edge) from the Intent router to set its intent.
+        </div>
+      )}
 
       <div className="absolute right-6 top-6 z-30 flex flex-col items-end gap-3">
         <button
