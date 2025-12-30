@@ -645,6 +645,7 @@ export default function AutomationTemplates() {
             nodeColor={(node) => {
               if (node.type === 'trigger') return '#2FB16B'
               if (node.type === 'detect_intent') return '#6B7FD6'
+              if (node.type === 'condition') return '#6FA6BF'
               if (node.type === 'ai_reply') return '#7C8EA4'
               if (node.type === 'handoff') return '#C96A4A'
               return '#4B9AD5'
@@ -725,6 +726,12 @@ export default function AutomationTemplates() {
                 }
               />
             </div>
+            {selectedNode.type === 'condition' && (
+              <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                Routes flow by evaluating edge conditions against <code>vars.detectedIntent</code>.
+                Add intent conditions on edges in the DSL JSON (e.g. <code>{`{ "condition": { "intent": "book" } }`}</code>).
+              </div>
+            )}
             {selectedNode.type === 'trigger' && (
               <>
                 <div className="space-y-2">
@@ -867,7 +874,9 @@ export default function AutomationTemplates() {
                 </div>
               </>
             )}
-            {selectedNode.type !== 'trigger' && selectedNode.type !== 'detect_intent' && (
+            {selectedNode.type !== 'trigger' &&
+              selectedNode.type !== 'detect_intent' &&
+              selectedNode.type !== 'condition' && (
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Wait for reply</label>
                 <select

@@ -1,6 +1,6 @@
 import type { NodeProps, NodeTypes } from '@xyflow/react'
 import { Handle, Position } from '@xyflow/react'
-import { Flag, MessageSquare, Search, Sparkles, Zap } from 'lucide-react'
+import { Flag, GitBranch, MessageSquare, Search, Sparkles, Zap } from 'lucide-react'
 import { FLOW_NODE_LABELS } from '../constants'
 import type { FlowNode } from '../types'
 
@@ -67,6 +67,16 @@ const DetectIntentNode = ({ data, selected }: NodeProps<FlowNode>) => (
   />
 )
 
+const ConditionNode = ({ data, selected }: NodeProps<FlowNode>) => (
+  <NodeShell
+    title={data.label || FLOW_NODE_LABELS.condition}
+    subtitle={data.subtitle}
+    icon={GitBranch}
+    selected={selected}
+    isStart={data.isStart}
+  />
+)
+
 const AiReplyNode = ({ data, selected }: NodeProps<FlowNode>) => (
   <NodeShell
     title={data.label || FLOW_NODE_LABELS.ai_reply}
@@ -90,6 +100,7 @@ const HandoffNode = ({ data, selected }: NodeProps<FlowNode>) => (
 export const buildFlowNodeTypes = (): NodeTypes => ({
   trigger: TriggerNode,
   detect_intent: DetectIntentNode,
+  condition: ConditionNode,
   send_message: MessageNode,
   ai_reply: AiReplyNode,
   handoff: HandoffNode,

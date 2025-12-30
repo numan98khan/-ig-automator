@@ -81,6 +81,7 @@ Example:
 Supported node types:
 - `trigger`
 - `detect_intent`
+- `condition`
 - `send_message`
 - `ai_reply`
 - `handoff`
@@ -95,6 +96,7 @@ Common optional fields (all nodes):
 Per-node fields:
 - `trigger`: `triggerType`, `triggerDescription`, `triggerConfig` (keywords, intent text, etc).
 - `detect_intent`: `intentSettings` (model, temperature, reasoningEffort) passed to intent detection.
+- `condition`: no per-node fields; routes via edge `condition` data.
 - `send_message`: `text`/`message`, `buttons`, `tags`.
 - `ai_reply`: `aiSettings`, `knowledgeItemIds` (optional RAG pinning).
 - `handoff`: `handoff` object with `topic`, `summary`, `recommendedNextAction`, `message`.
@@ -180,12 +182,33 @@ Key points:
 - Exposed fields patch the graph/triggers, then config + vars are interpolated into the graph.
 - Flow steps are executed against the compiled graph using the node types above.
 - `detect_intent` stores the output in `session.state.vars.detectedIntent`.
+- `condition` nodes are no-ops at runtime; they exist to branch to the next node based on edge conditions.
 - `trigger` nodes are ignored at execution (they only define entry criteria).
 - State persists via `buildNextState` and `AutomationSession`.
 - Node-level logging is supported via `logEnabled` on each node. If `logEnabled` is explicitly `false`, node start/complete logging is suppressed; otherwise logs are emitted.
 - `waitForReply` stops the current run and stores the next node pointer in session state.
 - `ai_reply` merges `graph.aiSettings` with node `aiSettings`, supports `knowledgeItemIds`, and respects `rateLimit`.
 - `send_message` supports buttons/tags, and templates can reference `{{ vars.* }}`.
+
+### Edge Conditions (Intent Routing)
+
+Edges may include a `condition` object to drive branching:
+
+```json
+{
+  "id": "edge-2",
+  "source": "node-router",
+  "target": "node-booking",
+  "condition": { "intent": "book" }
+}
+```
+
+Supported fields:
+- `intent` or `intents`: string or string[] of allowed intents.
+- `notIntent` or `notIntents`: string or string[] of disallowed intents.
+
+If multiple outbound edges exist, the runtime selects the first edge with a matching condition. If no
+conditions match, it falls back to the first edge without a condition (if present).
 
 ### Always Use Latest Published Version
 

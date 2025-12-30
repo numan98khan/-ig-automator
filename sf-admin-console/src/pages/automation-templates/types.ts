@@ -72,7 +72,13 @@ export type FlowTemplate = {
   currentVersionId?: string
 }
 
-export type FlowNodeType = 'trigger' | 'detect_intent' | 'send_message' | 'ai_reply' | 'handoff'
+export type FlowNodeType =
+  | 'trigger'
+  | 'detect_intent'
+  | 'condition'
+  | 'send_message'
+  | 'ai_reply'
+  | 'handoff'
 
 export type FlowAiSettings = {
   tone?: string
@@ -132,7 +138,9 @@ export type FlowNode = Node<FlowNodeData> & {
   waitForReply?: boolean
 }
 
-export type FlowEdge = Edge
+export type FlowEdge = Edge<{ condition?: Record<string, any> }> & {
+  condition?: Record<string, any>
+}
 
 export type TriggerForm = {
   id: string

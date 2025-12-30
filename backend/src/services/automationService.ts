@@ -431,7 +431,7 @@ const buildExecutionPlan = (graph: FlowRuntimeGraph): ExecutionPlan | null => {
 
 const normalizeStepType = (
   step?: FlowRuntimeStep,
-): 'send_message' | 'ai_reply' | 'handoff' | 'trigger' | 'detect_intent' | 'unknown' => {
+): 'send_message' | 'ai_reply' | 'handoff' | 'trigger' | 'detect_intent' | 'condition' | 'unknown' => {
   const raw = (step?.type || '').toLowerCase();
   if (raw === 'send_message' || raw === 'message' || raw === 'send' || raw === 'reply') {
     return 'send_message';
@@ -447,6 +447,9 @@ const normalizeStepType = (
   }
   if (raw === 'detect_intent' || raw === 'intent' || raw === 'intent_detection') {
     return 'detect_intent';
+  }
+  if (raw === 'condition' || raw === 'router' || raw === 'route' || raw === 'branch') {
+    return 'condition';
   }
   return 'unknown';
 };
@@ -1003,6 +1006,8 @@ async function executeFlowPlan(params: {
         },
       };
       logAutomationStep('flow_detect_intent', intentStart, { detectedIntent });
+    } else if (stepType === 'condition') {
+      // Condition nodes are routing-only; they do not perform side effects.
     } else if (stepType === 'trigger') {
       // Triggers are metadata-only anchors and do not execute at runtime.
     } else {

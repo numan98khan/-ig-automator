@@ -156,6 +156,9 @@ export const buildNodeSubtitle = (node: FlowNode) => {
   if (node.type === 'detect_intent') {
     return 'Detects intent from the latest message'
   }
+  if (node.type === 'condition') {
+    return 'Routes based on intent edges'
+  }
   if (node.type === 'ai_reply') {
     const details = []
     if (node.aiSettings?.model) details.push(`Model: ${node.aiSettings.model}`)
@@ -232,6 +235,8 @@ export const normalizeFlowEdge = (edge: any, index: number): FlowEdge | null => 
     target: edge.target,
     type: edge?.type || 'smoothstep',
     label: edge?.label,
+    data: edge?.data,
+    condition: edge?.condition,
   }
 }
 
@@ -273,6 +278,8 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     target: edge.target,
     type: edge.type,
     label: edge.label,
+    data: edge.data,
+    condition: edge.condition ?? edge.data?.condition,
   })),
   ...(startNodeId ? { startNodeId } : {}),
 })

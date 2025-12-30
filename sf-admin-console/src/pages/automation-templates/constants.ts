@@ -1,5 +1,6 @@
 import {
   Flag,
+  GitBranch,
   MessageSquare,
   Search,
   Sparkles,
@@ -122,6 +123,12 @@ export const FLOW_NODE_LIBRARY: Array<{
     icon: Search,
   },
   {
+    type: 'condition',
+    label: 'Intent router',
+    description: 'Branch the flow based on detected intent.',
+    icon: GitBranch,
+  },
+  {
     type: 'send_message',
     label: 'Message',
     description: 'Send a static message.',
@@ -144,6 +151,7 @@ export const FLOW_NODE_LIBRARY: Array<{
 export const FLOW_NODE_LABELS: Record<FlowNodeType, string> = {
   trigger: 'Trigger',
   detect_intent: 'Detect intent',
+  condition: 'Intent router',
   send_message: 'Message',
   ai_reply: 'AI Reply',
   handoff: 'Handoff',
