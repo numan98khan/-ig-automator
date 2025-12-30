@@ -771,7 +771,60 @@ export default function AutomationTemplates() {
       </div>
 
       <div className="absolute left-6 top-6 bottom-6 z-20 w-[360px] max-w-[90vw] flex flex-col gap-3">
-        {selectedNode && (
+        {selectedEdge && (
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
+            <div className="text-sm font-semibold text-foreground">Edge Inspector</div>
+            <div className="mt-4 space-y-3 text-sm">
+              {(() => {
+                const sourceNode = flowNodes.find((node) => node.id === selectedEdge.source)
+                const targetNode = flowNodes.find((node) => node.id === selectedEdge.target)
+                const isConditionSource = sourceNode?.type === 'condition'
+                const currentIntent = selectedEdge.condition?.intent || selectedEdge.data?.condition?.intent || ''
+                if (!isConditionSource) {
+                  return (
+                    <div className="text-xs text-muted-foreground">
+                      Select an edge from an Intent router node to configure intent matching.
+                    </div>
+                  )
+                }
+                return (
+                  <div className="space-y-2">
+                    <div className="text-xs text-muted-foreground">
+                      From <strong>{sourceNode?.data?.label || selectedEdge.source}</strong> to{' '}
+                      <strong>{targetNode?.data?.label || selectedEdge.target}</strong>
+                    </div>
+                    <label className="text-xs text-muted-foreground">Intent match</label>
+                    <select
+                      className="input w-full text-sm"
+                      value={currentIntent}
+                      onChange={(event) =>
+                        handleUpdateEdgeIntent(selectedEdge.id, event.target.value || undefined)
+                      }
+                    >
+                      <option value="">Any intent</option>
+                      {intentionOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {currentIntent && (
+                      <div className="text-[11px] text-muted-foreground">
+                        {intentionOptions.find((option) => option.value === currentIntent)?.description}
+                      </div>
+                    )}
+                    {intentionOptions.length === 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        No intentions configured yet. Add them under Automations → Intentions.
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        )}
+        {!selectedEdge && selectedNode && (
           <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
             <div className="text-sm font-semibold text-foreground">Inspector</div>
             <datalist id="ai-model-options">
@@ -1417,59 +1470,6 @@ export default function AutomationTemplates() {
                   Delete node
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-        {!selectedNode && selectedEdge && (
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
-            <div className="text-sm font-semibold text-foreground">Edge Inspector</div>
-            <div className="mt-4 space-y-3 text-sm">
-              {(() => {
-                const sourceNode = flowNodes.find((node) => node.id === selectedEdge.source)
-                const targetNode = flowNodes.find((node) => node.id === selectedEdge.target)
-                const isConditionSource = sourceNode?.type === 'condition'
-                const currentIntent = selectedEdge.condition?.intent || selectedEdge.data?.condition?.intent || ''
-                if (!isConditionSource) {
-                  return (
-                    <div className="text-xs text-muted-foreground">
-                      Select an edge from an Intent router node to configure intent matching.
-                    </div>
-                  )
-                }
-                return (
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      From <strong>{sourceNode?.data?.label || selectedEdge.source}</strong> to{' '}
-                      <strong>{targetNode?.data?.label || selectedEdge.target}</strong>
-                    </div>
-                    <label className="text-xs text-muted-foreground">Intent match</label>
-                    <select
-                      className="input w-full text-sm"
-                      value={currentIntent}
-                      onChange={(event) =>
-                        handleUpdateEdgeIntent(selectedEdge.id, event.target.value || undefined)
-                      }
-                    >
-                      <option value="">Any intent</option>
-                      {intentionOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    {currentIntent && (
-                      <div className="text-[11px] text-muted-foreground">
-                        {intentionOptions.find((option) => option.value === currentIntent)?.description}
-                      </div>
-                    )}
-                    {intentionOptions.length === 0 && (
-                      <div className="text-xs text-muted-foreground">
-                        No intentions configured yet. Add them under Automations → Intentions.
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
             </div>
           </div>
         )}
