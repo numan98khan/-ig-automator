@@ -119,6 +119,7 @@ export const adminApi = {
     workspaceId?: string
     before?: string
   }) => api.get('/log-events', { params }),
+  deleteLogEvents: () => api.delete('/log-events'),
 
   // Tiers
   getTiers: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>

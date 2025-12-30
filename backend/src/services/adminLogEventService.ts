@@ -71,3 +71,7 @@ export const getAdminLogEvents = async (params: LogQueryParams = {}): Promise<IA
   const limit = params.limit && params.limit > 0 ? Math.min(params.limit, 500) : 200;
   return AdminLogEvent.find(query).sort({ createdAt: -1 }).limit(limit).lean();
 };
+
+export const deleteAdminLogEvents = async (): Promise<void> => {
+  await AdminLogEvent.deleteMany({});
+};

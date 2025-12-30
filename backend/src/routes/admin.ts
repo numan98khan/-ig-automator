@@ -18,7 +18,7 @@ import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import Tier from '../models/Tier';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
-import { getAdminLogEvents } from '../services/adminLogEventService';
+import { deleteAdminLogEvents, getAdminLogEvents } from '../services/adminLogEventService';
 import { compileFlow } from '../services/flowCompiler';
 import {
   GLOBAL_WORKSPACE_KEY,
@@ -695,6 +695,16 @@ router.get('/log-events', authenticate, requireAdmin, async (req, res) => {
     res.json({ data: events });
   } catch (error) {
     console.error('Admin log events get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.delete('/log-events', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    await deleteAdminLogEvents();
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin log events delete error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

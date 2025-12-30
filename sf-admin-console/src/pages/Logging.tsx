@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { adminApi, unwrapData } from '../services/api'
 
 type AdminLogEvent = {
@@ -14,6 +14,7 @@ type AdminLogEvent = {
 }
 
 export default function Logging() {
+  const queryClient = useQueryClient()
   const [logFilters, setLogFilters] = useState({
     limit: 200,
     category: '',
@@ -33,6 +34,18 @@ export default function Logging() {
       }),
     refetchInterval: logFilters.autoRefresh ? 5000 : false,
   })
+
+  const purgeLogsMutation = useMutation({
+    mutationFn: () => adminApi.deleteLogEvents(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-log-events'] })
+    },
+  })
+
+  const handlePurgeLogs = () => {
+    if (!window.confirm('Permanently delete all stored log events?')) return
+    purgeLogsMutation.mutate()
+  }
 
   const logEvents = unwrapData<AdminLogEvent[]>(logEventsData) || []
 
@@ -62,6 +75,13 @@ export default function Logging() {
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {isFetchingLogs ? 'Refreshing…' : `Showing ${logEvents.length} events`}
+            <button
+              className="btn btn-secondary text-xs"
+              onClick={handlePurgeLogs}
+              disabled={purgeLogsMutation.isPending}
+            >
+              {purgeLogsMutation.isPending ? 'Purging...' : 'Purge logs'}
+            </button>
           </div>
         </div>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3">
