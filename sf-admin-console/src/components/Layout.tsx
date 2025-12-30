@@ -12,6 +12,7 @@ import {
   LogOut,
   X,
   Bug,
+  ScrollText,
 } from 'lucide-react'
 import { useAdminAuth } from '../context/AdminAuthContext'
 
@@ -33,6 +34,7 @@ export default function Layout({ children }: LayoutProps) {
     { name: 'AI Assistant', href: '/ai-assistant', icon: Bot },
     { name: 'Automations', href: '/automations', icon: Settings },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+    { name: 'Logging', href: '/logging', icon: ScrollText },
     { name: 'Debug', href: '/debug', icon: Bug },
   ]
 
