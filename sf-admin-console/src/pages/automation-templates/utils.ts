@@ -174,6 +174,11 @@ export const buildNodeSubtitle = (node: FlowNode) => {
   if (node.type === 'handoff') {
     return node.handoff?.topic ? `Topic: ${node.handoff.topic}` : 'No topic set'
   }
+  if (node.type === 'router') {
+    return node.routing?.matchMode === 'all'
+      ? 'Routes to all matching branches'
+      : 'Routes to the first matching branch'
+  }
   return ''
 }
 
@@ -217,6 +222,7 @@ export const normalizeFlowNode = (node: any, index: number): FlowNode => {
     knowledgeItemIds: node?.knowledgeItemIds,
     handoff: node?.handoff,
     waitForReply: node?.waitForReply,
+    routing: node?.routing ?? node?.data?.routing,
   }
   normalized.data = buildNodeData(normalized)
   return normalized
@@ -232,6 +238,8 @@ export const normalizeFlowEdge = (edge: any, index: number): FlowEdge | null => 
     target: edge.target,
     type: edge?.type || 'smoothstep',
     label: edge?.label,
+    condition: edge?.condition,
+    order: edge?.order,
   }
 }
 
@@ -266,6 +274,7 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     knowledgeItemIds: node.knowledgeItemIds,
     handoff: node.handoff,
     waitForReply: node.waitForReply,
+    routing: node.routing,
   })),
   edges: edges.map((edge) => ({
     id: edge.id,
@@ -273,6 +282,8 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     target: edge.target,
     type: edge.type,
     label: edge.label,
+    condition: edge.condition,
+    order: edge.order,
   })),
   ...(startNodeId ? { startNodeId } : {}),
 })

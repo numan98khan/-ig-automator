@@ -22,6 +22,7 @@ import {
 } from './workspaceSettingsService';
 import { pauseForTypingIfNeeded } from './automation/typing';
 import { matchesTriggerConfig } from './automation/triggerMatcher';
+import { matchesKeywords, normalizeText } from './automation/utils';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logAdminEvent } from './adminLogEventService';
 import {
@@ -37,7 +38,8 @@ import { AutomationTestContext } from './automation/types';
 type FlowRuntimeEdge = {
   from: string;
   to: string;
-  condition?: Record<string, any>;
+  condition?: RouterCondition;
+  order?: number;
 };
 
 type FlowRuntimeStep = {
@@ -60,6 +62,7 @@ type FlowRuntimeStep = {
   };
   rateLimit?: AutomationRateLimit;
   intentSettings?: AutomationIntentSettings;
+  routing?: RouterRouting;
 };
 
 type FlowRuntimeGraph = {
@@ -81,6 +84,37 @@ type ExecutionPlan = {
   nodeMap?: Map<string, FlowRuntimeStep>;
   edges?: FlowRuntimeEdge[];
   graph: FlowRuntimeGraph;
+};
+
+type RouterMatchMode = 'first' | 'all';
+
+type RouterRuleOperator = 'equals' | 'contains' | 'gt' | 'lt' | 'keywords';
+type RouterRuleSource = 'vars' | 'message' | 'config' | 'context';
+
+type RouterRule = {
+  source: RouterRuleSource;
+  path?: string;
+  operator: RouterRuleOperator;
+  value?: any;
+  match?: 'any' | 'all';
+};
+
+type RouterCondition = {
+  type?: 'rules' | 'else';
+  op?: 'all' | 'any';
+  rules?: RouterRule[];
+};
+
+type RouterRouting = {
+  matchMode?: RouterMatchMode;
+  defaultTarget?: string;
+};
+
+type RouterContext = {
+  messageText: string;
+  messageContext?: AutomationTestContext;
+  config: Record<string, any>;
+  vars: Record<string, any>;
 };
 
 const nowMs = () => Date.now();
@@ -431,7 +465,7 @@ const buildExecutionPlan = (graph: FlowRuntimeGraph): ExecutionPlan | null => {
 
 const normalizeStepType = (
   step?: FlowRuntimeStep,
-): 'send_message' | 'ai_reply' | 'handoff' | 'trigger' | 'detect_intent' | 'unknown' => {
+): 'send_message' | 'ai_reply' | 'handoff' | 'trigger' | 'detect_intent' | 'router' | 'unknown' => {
   const raw = (step?.type || '').toLowerCase();
   if (raw === 'send_message' || raw === 'message' || raw === 'send' || raw === 'reply') {
     return 'send_message';
@@ -444,6 +478,9 @@ const normalizeStepType = (
   }
   if (raw === 'trigger' || raw === 'start' || raw === 'entry') {
     return 'trigger';
+  }
+  if (raw === 'router' || raw === 'branch' || raw === 'switch') {
+    return 'router';
   }
   if (raw === 'detect_intent' || raw === 'intent' || raw === 'intent_detection') {
     return 'detect_intent';
@@ -784,11 +821,178 @@ async function handleAiReplyStep(params: {
   return { success: true };
 }
 
-const resolveNextNodeId = (step: FlowRuntimeStep, plan: ExecutionPlan): string | undefined => {
-  if (step.next) return step.next;
-  if (!step.id || !plan.edges) return undefined;
+const normalizeRouterCondition = (condition?: RouterCondition): RouterCondition => {
+  if (!condition) return { type: 'rules', op: 'all', rules: [] };
+  if (condition.type === 'else') return { type: 'else' };
+  return {
+    type: 'rules',
+    op: condition.op === 'any' ? 'any' : 'all',
+    rules: Array.isArray(condition.rules) ? condition.rules : [],
+  };
+};
+
+const normalizeRouterValue = (value: any): string => {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  return String(value);
+};
+
+const coerceBoolean = (value: any): boolean | null => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed === 'true') return true;
+    if (trimmed === 'false') return false;
+  }
+  return null;
+};
+
+const coerceNumber = (value: any): number | null => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const getRouterValue = (rule: RouterRule, context: RouterContext): any => {
+  if (rule.source === 'message') {
+    return context.messageText;
+  }
+  if (rule.source === 'context') {
+    if (!rule.path) return undefined;
+    return context.messageContext?.[rule.path as keyof AutomationTestContext];
+  }
+  if (rule.source === 'vars') {
+    const path = rule.path?.replace(/^vars\./, '') || '';
+    return path ? getConfigValue(context.vars, path) : undefined;
+  }
+  if (rule.source === 'config') {
+    const path = rule.path?.replace(/^config\./, '') || '';
+    return path ? getConfigValue(context.config, path) : undefined;
+  }
+  return undefined;
+};
+
+const evaluateRouterRule = (rule: RouterRule, context: RouterContext): boolean => {
+  const left = getRouterValue(rule, context);
+  const operator = rule.operator;
+
+  if (operator === 'keywords') {
+    const keywords = Array.isArray(rule.value)
+      ? rule.value.map((value) => String(value).trim()).filter(Boolean)
+      : typeof rule.value === 'string'
+        ? rule.value.split(',').map((value) => value.trim()).filter(Boolean)
+        : [];
+    return matchesKeywords(normalizeRouterValue(left), keywords, rule.match || 'any');
+  }
+
+  if (operator === 'gt' || operator === 'lt') {
+    const leftNumber = coerceNumber(left);
+    const rightNumber = coerceNumber(rule.value);
+    if (leftNumber === null || rightNumber === null) return false;
+    return operator === 'gt' ? leftNumber > rightNumber : leftNumber < rightNumber;
+  }
+
+  if (operator === 'contains') {
+    if (Array.isArray(left)) {
+      return left.some((item) => {
+        if (typeof item === 'string' && typeof rule.value === 'string') {
+          return normalizeText(item).includes(normalizeText(rule.value));
+        }
+        return item === rule.value;
+      });
+    }
+    const leftText = normalizeText(normalizeRouterValue(left));
+    const rightText = normalizeText(normalizeRouterValue(rule.value));
+    if (!rightText) return false;
+    return leftText.includes(rightText);
+  }
+
+  if (operator === 'equals') {
+    if (typeof left === 'boolean') {
+      const rightBool = coerceBoolean(rule.value);
+      return rightBool !== null ? left === rightBool : false;
+    }
+    const leftNumber = coerceNumber(left);
+    const rightNumber = coerceNumber(rule.value);
+    if (leftNumber !== null && rightNumber !== null) {
+      return leftNumber === rightNumber;
+    }
+    return normalizeText(normalizeRouterValue(left)) === normalizeText(normalizeRouterValue(rule.value));
+  }
+
+  return false;
+};
+
+const evaluateRouterCondition = (condition: RouterCondition, context: RouterContext): boolean => {
+  if (condition.type === 'else') return false;
+  const op = condition.op === 'any' ? 'any' : 'all';
+  const rules = Array.isArray(condition.rules) ? condition.rules : [];
+  if (rules.length === 0) return false;
+  const results = rules.map((rule) => evaluateRouterRule(rule, context));
+  return op === 'any' ? results.some(Boolean) : results.every(Boolean);
+};
+
+const sortRouterEdges = (edges: FlowRuntimeEdge[]): FlowRuntimeEdge[] => {
+  return edges
+    .map((edge, index) => ({ edge, index }))
+    .sort((a, b) => {
+      const aOrder = typeof a.edge.order === 'number' ? a.edge.order : a.index;
+      const bOrder = typeof b.edge.order === 'number' ? b.edge.order : b.index;
+      return aOrder - bOrder;
+    })
+    .map((entry) => entry.edge);
+};
+
+const resolveRouterTargets = (
+  step: FlowRuntimeStep,
+  plan: ExecutionPlan,
+  context: RouterContext,
+): { nextNodeId?: string; queuedNodeIds?: string[] } => {
+  if (!step.id || !plan.edges) return {};
+  const edges = plan.edges.filter((edge) => edge.from === step.id);
+  if (edges.length === 0) return {};
+  const sorted = sortRouterEdges(edges);
+  const matchMode: RouterMatchMode = step.routing?.matchMode === 'all' ? 'all' : 'first';
+
+  const defaultEdge = sorted.find((edge) => normalizeRouterCondition(edge.condition).type === 'else');
+  const matched = sorted.filter((edge) =>
+    evaluateRouterCondition(normalizeRouterCondition(edge.condition), context),
+  );
+
+  if (matched.length > 0) {
+    const targets = matched.map((edge) => edge.to).filter(Boolean);
+    const uniqueTargets = Array.from(new Set(targets));
+    if (uniqueTargets.length === 0) return {};
+    if (matchMode === 'all') {
+      return { nextNodeId: uniqueTargets[0], queuedNodeIds: uniqueTargets.slice(1) };
+    }
+    return { nextNodeId: uniqueTargets[0] };
+  }
+
+  if (defaultEdge?.to) {
+    return { nextNodeId: defaultEdge.to };
+  }
+
+  return {};
+};
+
+const resolveNextNodeId = (
+  step: FlowRuntimeStep,
+  plan: ExecutionPlan,
+  stepType: ReturnType<typeof normalizeStepType>,
+  context: RouterContext,
+): { nextNodeId?: string; queuedNodeIds?: string[] } => {
+  if (stepType === 'router') {
+    return resolveRouterTargets(step, plan, context);
+  }
+  if (step.next) return { nextNodeId: step.next };
+  if (!step.id || !plan.edges) return {};
   const edge = plan.edges.find((candidate) => candidate.from === step.id);
-  return edge?.to;
+  return { nextNodeId: edge?.to };
 };
 
 async function executeFlowPlan(params: {
@@ -800,6 +1004,7 @@ async function executeFlowPlan(params: {
   messageText: string;
   platform?: string;
   messageContext?: AutomationTestContext;
+  config?: Record<string, any>;
 }): Promise<{ success: boolean; error?: string; sentCount: number; executedSteps: number }> {
   const {
     plan,
@@ -810,12 +1015,16 @@ async function executeFlowPlan(params: {
     messageText,
     platform,
     messageContext,
+    config,
   } = params;
 
+  const runtimeConfig = config && typeof config === 'object' ? config : {};
   const maxSteps = 12;
   let sentCount = 0;
   let executedSteps = 0;
   let triggered = false;
+  let nodeQueue = Array.isArray(session.state?.nodeQueue) ? [...session.state.nodeQueue] : [];
+  let fallbackToStart = false;
 
   const markTriggeredOnce = async () => {
     if (triggered) return;
@@ -852,6 +1061,20 @@ async function executeFlowPlan(params: {
       step = plan.steps[stepIndex];
     } else if (nodeId && plan.nodeMap) {
       step = plan.nodeMap.get(nodeId) || plan.steps.find(candidate => candidate.id === nodeId);
+    }
+
+    if (!step && plan.mode === 'nodes' && nodeId && plan.startNodeId && nodeId !== plan.startNodeId) {
+      if (!fallbackToStart) {
+        const missingNodeId = nodeId;
+        fallbackToStart = true;
+        nodeId = plan.startNodeId;
+        nodeQueue = [];
+        logAutomation('⚠️ [AUTOMATION] Flow node pointer missing, restarting at start node', {
+          nodeId: missingNodeId,
+          startNodeId: plan.startNodeId,
+        });
+        continue;
+      }
     }
 
     if (!step) {
@@ -956,6 +1179,8 @@ async function executeFlowPlan(params: {
         },
       };
       logAutomationStep('flow_detect_intent', intentStart, { detectedIntent });
+    } else if (stepType === 'router') {
+      // Router nodes only decide the next path.
     } else if (stepType === 'trigger') {
       // Triggers are metadata-only anchors and do not execute at runtime.
     } else {
@@ -980,7 +1205,19 @@ async function executeFlowPlan(params: {
     if (plan.mode === 'steps') {
       nextStepIndex = stepIndex + 1;
     } else {
-      nextNodeId = resolveNextNodeId(step, plan);
+      const routing = resolveNextNodeId(step, plan, stepType, {
+        messageText,
+        messageContext,
+        config: runtimeConfig,
+        vars: session.state?.vars || {},
+      });
+      nextNodeId = routing.nextNodeId;
+      if (routing.queuedNodeIds && routing.queuedNodeIds.length > 0) {
+        nodeQueue = nodeQueue.concat(routing.queuedNodeIds);
+      }
+      if (!nextNodeId && nodeQueue.length > 0) {
+        nextNodeId = nodeQueue.shift();
+      }
     }
 
     if (step.waitForReply) {
@@ -989,7 +1226,9 @@ async function executeFlowPlan(params: {
         : (Boolean(nextNodeId)
           && Boolean(plan.nodeMap?.get(nextNodeId as string) || plan.steps.find(candidate => candidate.id === nextNodeId)));
       const nextState = hasNext
-        ? (plan.mode === 'steps' ? { stepIndex: nextStepIndex } : { nodeId: nextNodeId })
+        ? (plan.mode === 'steps'
+          ? { stepIndex: nextStepIndex, nodeQueue: nodeQueue.length > 0 ? nodeQueue : undefined }
+          : { nodeId: nextNodeId, nodeQueue: nodeQueue.length > 0 ? nodeQueue : undefined })
         : {};
       session.state = buildNextState(nextState);
       session.status = hasNext ? 'active' : 'completed';
@@ -1115,6 +1354,7 @@ async function executeFlowForInstance(params: {
     messageText,
     platform,
     messageContext,
+    config: resolvedRuntime.config,
   });
   logAutomationStep('flow_execute', runStart, { success: result.success, steps: result.executedSteps });
 

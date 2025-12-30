@@ -72,7 +72,29 @@ export type FlowTemplate = {
   currentVersionId?: string
 }
 
-export type FlowNodeType = 'trigger' | 'detect_intent' | 'send_message' | 'ai_reply' | 'handoff'
+export type FlowNodeType = 'trigger' | 'detect_intent' | 'send_message' | 'ai_reply' | 'handoff' | 'router'
+
+export type RouterMatchMode = 'first' | 'all'
+export type RouterRuleOperator = 'equals' | 'contains' | 'gt' | 'lt' | 'keywords'
+export type RouterRuleSource = 'vars' | 'message' | 'config' | 'context'
+
+export type RouterRule = {
+  source: RouterRuleSource
+  path?: string
+  operator: RouterRuleOperator
+  value?: string | number | boolean | string[]
+  match?: 'any' | 'all'
+}
+
+export type RouterCondition = {
+  type?: 'rules' | 'else'
+  op?: 'all' | 'any'
+  rules?: RouterRule[]
+}
+
+export type RouterRouting = {
+  matchMode?: RouterMatchMode
+}
 
 export type FlowAiSettings = {
   tone?: string
@@ -130,9 +152,13 @@ export type FlowNode = Node<FlowNodeData> & {
     message?: string
   }
   waitForReply?: boolean
+  routing?: RouterRouting
 }
 
-export type FlowEdge = Edge
+export type FlowEdge = Edge & {
+  condition?: RouterCondition
+  order?: number
+}
 
 export type TriggerForm = {
   id: string
