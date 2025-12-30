@@ -45,6 +45,7 @@ import {
 import { buildFlowNodeTypes } from './automation-templates/components/FlowNodes'
 import type {
   DraftForm,
+  FieldForm,
   FlowAiSettings,
   FlowDisplay,
   FlowDraft,
