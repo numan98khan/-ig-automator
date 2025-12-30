@@ -9,16 +9,11 @@ import {
   RefreshCw,
   UploadCloud,
   Trash2,
-  MessageSquare,
-  Sparkles,
-  Flag,
   Play,
   Network,
   Copy,
   Eraser,
   Maximize2,
-  Zap,
-  Search,
 } from 'lucide-react'
 import {
   ReactFlow,
@@ -29,721 +24,61 @@ import {
   addEdge,
   useEdgesState,
   useNodesState,
-  Handle,
-  Position,
   type Connection,
-  type Edge,
-  type Node,
-  type NodeProps,
   type NodeTypes,
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-
-type TriggerType =
-  | 'post_comment'
-  | 'story_reply'
-  | 'dm_message'
-  | 'story_share'
-  | 'instagram_ads'
-  | 'live_comment'
-  | 'ref_url'
-
-type FlowTrigger = {
-  type: TriggerType
-  label?: string
-  description?: string
-  config?: Record<string, any>
-}
-
-type FlowField = {
-  key: string
-  label: string
-  type: 'string' | 'number' | 'boolean' | 'select' | 'multi_select' | 'json' | 'text'
-  description?: string
-  required?: boolean
-  defaultValue?: any
-  options?: Array<{ label: string; value: string }>
-  ui?: {
-    placeholder?: string
-    helpText?: string
-    group?: string
-    order?: number
-  }
-  validation?: {
-    min?: number
-    max?: number
-    pattern?: string
-  }
-  source?: {
-    nodeId?: string
-    path?: string
-  }
-}
-
-type FlowDisplay = {
-  outcome?: string
-  goal?: 'Bookings' | 'Sales' | 'Leads' | 'Support' | 'General'
-  industry?: 'Clinics' | 'Salons' | 'Retail' | 'Restaurants' | 'Real Estate' | 'General'
-  setupTime?: string
-  collects?: string[]
-  icon?: string
-  previewConversation?: Array<{ from: 'bot' | 'customer'; message: string }>
-}
-
-type FlowDraft = {
-  _id: string
-  name: string
-  description?: string
-  status: 'draft' | 'archived'
-  templateId?: string
-  dsl: Record<string, any>
-  triggers?: FlowTrigger[]
-  exposedFields?: FlowField[]
-  display?: FlowDisplay
-  updatedAt?: string
-}
-
-type FlowTemplate = {
-  _id: string
-  name: string
-  description?: string
-  status: 'active' | 'archived'
-  currentVersionId?: string
-}
-
-type FlowNodeType = 'trigger' | 'detect_intent' | 'send_message' | 'ai_reply' | 'handoff'
-
-type FlowAiSettings = {
-  tone?: string
-  maxReplySentences?: number
-  historyLimit?: number
-  ragEnabled?: boolean
-  model?: string
-  temperature?: number
-  maxOutputTokens?: number
-  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
-}
-
-type FlowIntentSettings = {
-  model?: string
-  temperature?: number
-  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
-}
-
-type FlowTriggerConfig = {
-  keywords?: string[]
-  excludeKeywords?: string[]
-  keywordMatch?: 'any' | 'all'
-  triggerMode?: 'keywords' | 'categories' | 'any' | 'intent'
-  intentText?: string
-}
-
-type FlowButton = {
-  title: string
-  payload?: string
-}
-
-type FlowNodeData = {
-  label: string
-  subtitle?: string
-  isStart?: boolean
-}
-
-type FlowNode = Node<FlowNodeData> & {
-  type: FlowNodeType
-  triggerType?: TriggerType
-  triggerDescription?: string
-  triggerConfig?: FlowTriggerConfig
-  intentSettings?: FlowIntentSettings
-  logEnabled?: boolean
-  text?: string
-  message?: string
-  buttons?: FlowButton[]
-  tags?: string[]
-  aiSettings?: FlowAiSettings
-  knowledgeItemIds?: string[]
-  handoff?: {
-    topic?: string
-    summary?: string
-    recommendedNextAction?: string
-    message?: string
-  }
-  waitForReply?: boolean
-}
-
-type FlowEdge = Edge
-
-type TriggerForm = {
-  id: string
-  type: TriggerType
-  label: string
-  description: string
-  configText: string
-}
-
-const TRIGGER_LIBRARY: Array<{ type: TriggerType; label: string; description: string }> = [
-  {
-    type: 'post_comment',
-    label: 'Post or Reel Comments',
-    description: 'User comments on your Post or Reel',
-  },
-  {
-    type: 'story_reply',
-    label: 'Story Reply',
-    description: 'User replies to your Story',
-  },
-  {
-    type: 'dm_message',
-    label: 'Instagram Message',
-    description: 'User sends a message',
-  },
-  {
-    type: 'story_share',
-    label: 'Story Share',
-    description: 'User shares your Post or Reel as a Story',
-  },
-  {
-    type: 'instagram_ads',
-    label: 'Instagram Ads',
-    description: 'User clicks an Instagram Ad',
-  },
-  {
-    type: 'live_comment',
-    label: 'Live Comments',
-    description: 'User comments on your Live',
-  },
-  {
-    type: 'ref_url',
-    label: 'Instagram Ref URL',
-    description: 'User clicks a referral link',
-  },
-]
-
-const TRIGGER_METADATA = TRIGGER_LIBRARY.reduce((acc, trigger) => {
-  acc[trigger.type] = { label: trigger.label, description: trigger.description }
-  return acc
-}, {} as Record<TriggerType, { label: string; description: string }>)
-
-const DEFAULT_TRIGGER_TYPE: TriggerType = 'dm_message'
-
-const AI_MODEL_SUGGESTIONS = [
-  'gpt-5',
-  'gpt-5-mini',
-  'gpt-5-nano',
-  'gpt-4o',
-  'gpt-4o-mini',
-  'o1',
-  'o1-mini',
-  'o1-preview',
-]
-
-const MESSAGE_STATE_VARIABLES = [
-  { key: 'detectedIntent', label: 'Detected intent', token: '{{ vars.detectedIntent }}' },
-]
-
-const REASONING_EFFORT_OPTIONS: Array<FlowAiSettings['reasoningEffort']> = [
-  'none',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-]
-
-type FieldForm = {
-  id: string
-  key: string
-  label: string
-  type: FlowField['type']
-  description: string
-  required: boolean
-  defaultValue: string | boolean
-  optionsText: string
-  uiGroup: string
-  uiOrder: string
-  uiPlaceholder: string
-  uiHelpText: string
-  validationMin: string
-  validationMax: string
-  validationPattern: string
-  sourceNodeId: string
-  sourcePath: string
-}
-
-type DraftForm = {
-  name: string
-  description: string
-  status: 'draft' | 'archived'
-  templateId: string
-  dslText: string
-  triggers: TriggerForm[]
-  fields: FieldForm[]
-  display: {
-    outcome: string
-    goal: FlowDisplay['goal'] | ''
-    industry: FlowDisplay['industry'] | ''
-    setupTime: string
-    collectsText: string
-    icon: string
-    previewText: string
-  }
-}
-
-const FIELD_TYPES: FlowField['type'][] = [
-  'string',
-  'number',
-  'boolean',
-  'select',
-  'multi_select',
-  'json',
-  'text',
-]
-
-const GOAL_OPTIONS: Array<FlowDisplay['goal']> = ['Bookings', 'Sales', 'Leads', 'Support', 'General']
-const INDUSTRY_OPTIONS: Array<FlowDisplay['industry']> = [
-  'Clinics',
-  'Salons',
-  'Retail',
-  'Restaurants',
-  'Real Estate',
-  'General',
-]
-
-const formatJson = (value: any) => {
-  if (value === undefined || value === null) return ''
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return ''
-  }
-}
-
-const formatDefaultValue = (value: any, type: FlowField['type']) => {
-  if (type === 'boolean') return Boolean(value)
-  if (value === undefined || value === null) return ''
-  if (typeof value === 'string' || typeof value === 'number') return String(value)
-  return formatJson(value)
-}
-
-const parseOptionsText = (text: string) => {
-  const lines = text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-  return lines.map((line) => {
-    const [labelPart, valuePart] = line.includes('|') ? line.split('|') : line.split(':')
-    const label = (labelPart || '').trim()
-    const value = (valuePart || labelPart || '').trim()
-    return { label: label || value, value }
-  }).filter((option) => option.value)
-}
-
-const parseDefaultValue = (field: FieldForm) => {
-  const raw = field.defaultValue
-  if (raw === '' || raw === undefined || raw === null) return undefined
-  if (field.type === 'boolean') return Boolean(raw)
-  if (field.type === 'number') {
-    const parsed = Number(raw)
-    if (Number.isNaN(parsed)) return undefined
-    return parsed
-  }
-  if (field.type === 'json') {
-    if (typeof raw !== 'string') return raw
-    return JSON.parse(raw)
-  }
-  if (field.type === 'multi_select') {
-    if (Array.isArray(raw)) return raw
-    if (typeof raw === 'string' && raw.trim().startsWith('[')) {
-      return JSON.parse(raw)
-    }
-    return String(raw)
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean)
-  }
-  return raw
-}
-
-const FLOW_NODE_LIBRARY: Array<{
-  type: FlowNodeType
-  label: string
-  description: string
-  icon: typeof MessageSquare
-}> = [
-  {
-    type: 'trigger',
-    label: 'Trigger',
-    description: 'Starts the flow when a trigger fires.',
-    icon: Zap,
-  },
-  {
-    type: 'detect_intent',
-    label: 'Detect intent',
-    description: 'Analyze the latest message and capture intent.',
-    icon: Search,
-  },
-  {
-    type: 'send_message',
-    label: 'Message',
-    description: 'Send a static message.',
-    icon: MessageSquare,
-  },
-  {
-    type: 'ai_reply',
-    label: 'AI Reply',
-    description: 'Generate a response with AI.',
-    icon: Sparkles,
-  },
-  {
-    type: 'handoff',
-    label: 'Handoff',
-    description: 'Escalate to a human teammate.',
-    icon: Flag,
-  },
-]
-
-const FLOW_NODE_LABELS: Record<FlowNodeType, string> = {
-  trigger: 'Trigger',
-  detect_intent: 'Detect intent',
-  send_message: 'Message',
-  ai_reply: 'AI Reply',
-  handoff: 'Handoff',
-}
-
-const formatButtonList = (buttons?: FlowButton[]) => {
-  if (!buttons || buttons.length === 0) return ''
-  return buttons
-    .map((button) => (button.payload ? `${button.title}|${button.payload}` : button.title))
-    .join('\n')
-}
-
-const parseButtonList = (value: string): FlowButton[] => {
-  if (!value.trim()) return []
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [titlePart, payloadPart] = line.includes('|') ? line.split('|') : line.split(':')
-      const title = (titlePart || '').trim()
-      const payload = payloadPart ? payloadPart.trim() : undefined
-      return title ? { title, payload } : null
-    })
-    .filter(Boolean) as FlowButton[]
-}
-
-const formatTags = (tags?: string[]) => (tags || []).join(', ')
-
-const parseTags = (value: string) =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-const formatKeywordList = (keywords?: string[]) => (keywords || []).join(', ')
-
-const parseKeywordList = (value: string) =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-const formatKnowledgeIds = (ids?: string[]) => (ids || []).join(', ')
-
-const parseKnowledgeIds = (value: string) =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-const parseOptionalNumber = (value: string) => {
-  if (!value) return undefined
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : undefined
-}
-
-const normalizeTriggerConfig = (config?: FlowTriggerConfig) => {
-  if (!config) return undefined
-  const keywords = Array.isArray(config.keywords) ? config.keywords.filter(Boolean) : []
-  const excludeKeywords = Array.isArray(config.excludeKeywords) ? config.excludeKeywords.filter(Boolean) : []
-  const intentText = config.intentText?.trim()
-  const output: FlowTriggerConfig = {}
-
-  if (config.triggerMode) output.triggerMode = config.triggerMode
-  if (config.keywordMatch) output.keywordMatch = config.keywordMatch
-  if (keywords.length > 0) output.keywords = keywords
-  if (excludeKeywords.length > 0) output.excludeKeywords = excludeKeywords
-  if (intentText) output.intentText = intentText
-
-  return Object.keys(output).length > 0 ? output : undefined
-}
-
-const buildNodeSubtitle = (node: FlowNode) => {
-  if (node.type === 'send_message') {
-    const text = node.text || node.message || ''
-    return text ? text.slice(0, 80) : 'No message yet'
-  }
-  if (node.type === 'trigger') {
-    const triggerType = node.triggerType || DEFAULT_TRIGGER_TYPE
-    const meta = TRIGGER_METADATA[triggerType]
-    return node.triggerDescription?.trim() || meta?.description || 'Entry trigger for this flow'
-  }
-  if (node.type === 'detect_intent') {
-    return 'Detects intent from the latest message'
-  }
-  if (node.type === 'ai_reply') {
-    const details = []
-    if (node.aiSettings?.model) details.push(`Model: ${node.aiSettings.model}`)
-    if (node.aiSettings?.tone) details.push(`Tone: ${node.aiSettings.tone}`)
-    if (node.aiSettings?.historyLimit) {
-      details.push(`History: ${node.aiSettings.historyLimit}`)
-    }
-    if (node.aiSettings?.ragEnabled === false) {
-      details.push('RAG: off')
-    }
-    if (node.aiSettings?.maxOutputTokens) {
-      details.push(`Max tokens: ${node.aiSettings.maxOutputTokens}`)
-    }
-    return details.length > 0 ? details.join(' · ') : 'Uses AI defaults'
-  }
-  if (node.type === 'handoff') {
-    return node.handoff?.topic ? `Topic: ${node.handoff.topic}` : 'No topic set'
-  }
-  return ''
-}
-
-const buildNodeData = (node: FlowNode): FlowNodeData => ({
-  label: node.data?.label || FLOW_NODE_LABELS[node.type] || 'Node',
-  subtitle: buildNodeSubtitle(node),
-  isStart: node.data?.isStart,
-})
-
-const normalizeFlowNode = (node: any, index: number): FlowNode => {
-  const id = node?.id || `node-${index + 1}`
-  const rawType = node?.type as FlowNodeType | undefined
-  const type = rawType && FLOW_NODE_LABELS[rawType] ? rawType : 'send_message'
-  const triggerTypeCandidate = node?.triggerType as TriggerType | undefined
-  const triggerType = triggerTypeCandidate && TRIGGER_METADATA[triggerTypeCandidate]
-    ? triggerTypeCandidate
-    : undefined
-  const position = node?.position || { x: 120 + index * 60, y: 80 + index * 40 }
-  const normalized: FlowNode = {
-    id,
-    type,
-    position,
-    data: {
-      ...(node?.data || {}),
-      label: node?.data?.label || node?.label || FLOW_NODE_LABELS[type] || 'Node',
-    },
-    triggerType: type === 'trigger' ? triggerType || DEFAULT_TRIGGER_TYPE : undefined,
-    triggerDescription: typeof node?.triggerDescription === 'string' ? node.triggerDescription : undefined,
-    triggerConfig: node?.triggerConfig ?? node?.data?.triggerConfig,
-    intentSettings: node?.intentSettings ?? node?.data?.intentSettings,
-    logEnabled: typeof node?.logEnabled === 'boolean'
-      ? node.logEnabled
-      : typeof node?.data?.logEnabled === 'boolean'
-        ? node.data.logEnabled
-        : undefined,
-    text: node?.text,
-    message: node?.message,
-    buttons: node?.buttons,
-    tags: node?.tags,
-    aiSettings: node?.aiSettings,
-    knowledgeItemIds: node?.knowledgeItemIds,
-    handoff: node?.handoff,
-    waitForReply: node?.waitForReply,
-  }
-  normalized.data = buildNodeData(normalized)
-  return normalized
-}
-
-const normalizeFlowEdge = (edge: any, index: number): FlowEdge | null => {
-  if (!edge?.source || !edge?.target) {
-    return null
-  }
-  return {
-    id: edge?.id || `edge-${index + 1}-${edge?.source}-${edge?.target}`,
-    source: edge.source,
-    target: edge.target,
-    type: edge?.type || 'smoothstep',
-    label: edge?.label,
-  }
-}
-
-const parseFlowDsl = (dsl: any): { nodes: FlowNode[]; edges: FlowEdge[]; startNodeId: string } => {
-  const base = dsl && typeof dsl === 'object' ? dsl : { nodes: [], edges: [] }
-  const nodes = Array.isArray(base.nodes) ? base.nodes.map(normalizeFlowNode) : []
-  const edges = Array.isArray(base.edges)
-    ? base.edges.map(normalizeFlowEdge).filter(Boolean) as FlowEdge[]
-    : []
-  const startNodeId = typeof base.startNodeId === 'string'
-    ? base.startNodeId
-    : nodes[0]?.id || ''
-  return { nodes, edges, startNodeId }
-}
-
-const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?: string) => ({
-  nodes: nodes.map((node) => ({
-    id: node.id,
-    type: node.type,
-    position: node.position,
-    data: node.data,
-    triggerType: node.triggerType,
-    triggerDescription: node.triggerDescription,
-    triggerConfig: node.triggerConfig,
-    intentSettings: node.intentSettings,
-    logEnabled: node.logEnabled,
-    text: node.text,
-    message: node.message,
-    buttons: node.buttons,
-    tags: node.tags,
-    aiSettings: node.aiSettings,
-    knowledgeItemIds: node.knowledgeItemIds,
-    handoff: node.handoff,
-    waitForReply: node.waitForReply,
-  })),
-  edges: edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    type: edge.type,
-    label: edge.label,
-  })),
-  ...(startNodeId ? { startNodeId } : {}),
-})
-
-const buildEmptyDraftForm = (): DraftForm => ({
-  name: '',
-  description: '',
-  status: 'draft',
-  templateId: '',
-  dslText: '{\n  "nodes": [],\n  "edges": []\n}',
-  triggers: [],
-  fields: [],
-  display: {
-    outcome: '',
-    goal: '',
-    industry: '',
-    setupTime: '',
-    collectsText: '',
-    icon: '',
-    previewText: '',
-  },
-})
-
-const buildFieldForm = (field?: FlowField): FieldForm => ({
-  id: `${Date.now()}-${Math.random()}`,
-  key: field?.key || '',
-  label: field?.label || '',
-  type: field?.type || 'string',
-  description: field?.description || '',
-  required: Boolean(field?.required),
-  defaultValue: formatDefaultValue(field?.defaultValue, field?.type || 'string'),
-  optionsText: (field?.options || [])
-    .map((option) => `${option.label}|${option.value}`)
-    .join('\n'),
-  uiGroup: field?.ui?.group || '',
-  uiOrder: field?.ui?.order !== undefined ? String(field.ui.order) : '',
-  uiPlaceholder: field?.ui?.placeholder || '',
-  uiHelpText: field?.ui?.helpText || '',
-  validationMin: field?.validation?.min !== undefined ? String(field.validation.min) : '',
-  validationMax: field?.validation?.max !== undefined ? String(field.validation.max) : '',
-  validationPattern: field?.validation?.pattern || '',
-  sourceNodeId: field?.source?.nodeId || '',
-  sourcePath: field?.source?.path || '',
-})
-
-const buildTriggerForm = (trigger?: FlowTrigger): TriggerForm => ({
-  id: `${Date.now()}-${Math.random()}`,
-  type: trigger?.type || 'dm_message',
-  label: trigger?.label || '',
-  description: trigger?.description || '',
-  configText: formatJson(trigger?.config),
-})
-
-const NodeShell = ({
-  title,
-  subtitle,
-  icon: Icon,
-  selected,
-  isStart,
-}: {
-  title: string
-  subtitle?: string
-  icon: typeof MessageSquare
-  selected?: boolean
-  isStart?: boolean
-}) => (
-  <div
-    className={`rounded-lg border bg-card px-3 py-2 shadow-sm min-w-[190px] ${
-      selected ? 'ring-2 ring-primary/50 border-primary/70' : 'border-border'
-    }`}
-  >
-    <Handle type="target" position={Position.Left} className="!bg-primary !border-primary" />
-    <Handle type="source" position={Position.Right} className="!bg-primary !border-primary" />
-    <div className="flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-primary" />
-        <span className="text-sm font-semibold text-foreground">{title}</span>
-      </div>
-      {isStart && (
-        <span className="text-[10px] rounded-full bg-primary/10 px-2 py-0.5 text-primary">Start</span>
-      )}
-    </div>
-    <div className="mt-1 text-xs text-muted-foreground">{subtitle || 'No details yet.'}</div>
-  </div>
-)
-
-const MessageNode = ({ data, selected }: NodeProps<FlowNode>) => (
-  <NodeShell
-    title={data.label || FLOW_NODE_LABELS.send_message}
-    subtitle={data.subtitle}
-    icon={MessageSquare}
-    selected={selected}
-    isStart={data.isStart}
-  />
-)
-
-const TriggerNode = ({ data, selected }: NodeProps<FlowNode>) => (
-  <NodeShell
-    title={data.label || FLOW_NODE_LABELS.trigger}
-    subtitle={data.subtitle}
-    icon={Zap}
-    selected={selected}
-    isStart={data.isStart}
-  />
-)
-
-const DetectIntentNode = ({ data, selected }: NodeProps<FlowNode>) => (
-  <NodeShell
-    title={data.label || FLOW_NODE_LABELS.detect_intent}
-    subtitle={data.subtitle}
-    icon={Search}
-    selected={selected}
-    isStart={data.isStart}
-  />
-)
-
-const AiReplyNode = ({ data, selected }: NodeProps<FlowNode>) => (
-  <NodeShell
-    title={data.label || FLOW_NODE_LABELS.ai_reply}
-    subtitle={data.subtitle}
-    icon={Sparkles}
-    selected={selected}
-    isStart={data.isStart}
-  />
-)
-
-const HandoffNode = ({ data, selected }: NodeProps<FlowNode>) => (
-  <NodeShell
-    title={data.label || FLOW_NODE_LABELS.handoff}
-    subtitle={data.subtitle}
-    icon={Flag}
-    selected={selected}
-    isStart={data.isStart}
-  />
-)
+import {
+  AI_MODEL_SUGGESTIONS,
+  DEFAULT_TRIGGER_TYPE,
+  FIELD_TYPES,
+  FLOW_NODE_LABELS,
+  FLOW_NODE_LIBRARY,
+  GOAL_OPTIONS,
+  INDUSTRY_OPTIONS,
+  MESSAGE_STATE_VARIABLES,
+  REASONING_EFFORT_OPTIONS,
+  TRIGGER_LIBRARY,
+  TRIGGER_METADATA,
+} from './automation-templates/constants'
+import { buildFlowNodeTypes } from './automation-templates/components/FlowNodes'
+import type {
+  DraftForm,
+  FlowAiSettings,
+  FlowDisplay,
+  FlowDraft,
+  FlowEdge,
+  FlowField,
+  FlowIntentSettings,
+  FlowNode,
+  FlowNodeType,
+  FlowTemplate,
+  FlowTrigger,
+  FlowTriggerConfig,
+  TriggerType,
+} from './automation-templates/types'
+import {
+  buildEmptyDraftForm,
+  buildFieldForm,
+  buildFlowDsl,
+  buildNodeData,
+  buildTriggerForm,
+  formatButtonList,
+  formatJson,
+  formatKeywordList,
+  formatKnowledgeIds,
+  formatTags,
+  normalizeTriggerConfig,
+  parseButtonList,
+  parseDefaultValue,
+  parseFlowDsl,
+  parseKeywordList,
+  parseKnowledgeIds,
+  parseOptionalNumber,
+  parseOptionsText,
+  parseTags,
+} from './automation-templates/utils'
 
 export default function AutomationTemplates() {
   const queryClient = useQueryClient()
@@ -768,16 +103,7 @@ export default function AutomationTemplates() {
   const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<FlowNode, FlowEdge> | null>(null)
   const syncingRef = useRef(false)
 
-  const nodeTypes = useMemo<NodeTypes>(
-    () => ({
-      trigger: TriggerNode,
-      detect_intent: DetectIntentNode,
-      send_message: MessageNode,
-      ai_reply: AiReplyNode,
-      handoff: HandoffNode,
-    }),
-    [],
-  )
+  const nodeTypes = useMemo<NodeTypes>(() => buildFlowNodeTypes(), [])
 
   const { data: draftData, isLoading } = useQuery({
     queryKey: ['flow-drafts'],
