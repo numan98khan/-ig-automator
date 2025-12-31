@@ -11,7 +11,6 @@ import {
   X as CloseIcon,
   LayoutDashboard,
   Search,
-  Sparkles,
   Plus,
   Check,
   Moon,
@@ -37,20 +36,13 @@ const Layout: React.FC = () => {
   const { theme, setTheme } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const accountMenuRef = useOverlayClose({ isOpen: accountMenuOpen, onClose: () => setAccountMenuOpen(false) });
-  const aiMenuRef = useOverlayClose({ isOpen: aiMenuOpen, onClose: () => setAiMenuOpen(false) });
   const userMenuRef = useOverlayClose({ isOpen: showUserMenu, onClose: () => setShowUserMenu(false) });
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
-
-  const aiLinks = useMemo<Array<{ to: string; label: string; icon: typeof MessageSquare }>>(
-    () => [],
-    [],
-  );
 
   const navLinks = useMemo(() => {
     const links = [
@@ -63,7 +55,6 @@ const Layout: React.FC = () => {
     return links;
   }, [location.pathname]);
 
-  const aiMenuActive = aiLinks.some((link) => isActive(link.to));
   const connectedAccountLabel = useMemo(() => {
     if (!activeAccount) return null;
     return activeAccount.username ? `@${activeAccount.username}` : 'Connected IG';
@@ -217,37 +208,6 @@ const Layout: React.FC = () => {
                   {link.label}
                 </Link>
               ))}
-              <div className="relative" ref={aiMenuRef}>
-                <button
-                  onClick={() => setAiMenuOpen(!aiMenuOpen)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-semibold transition ${aiMenuActive
-                    ? 'bg-primary/10 text-primary shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                    }`}
-                >
-                  <Sparkles className={`w-4 h-4 ${aiMenuActive ? 'text-primary' : ''}`} />
-                  AI
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-                {aiMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-background border border-border rounded-xl shadow-xl py-2 z-20">
-                    {aiLinks.map((link) => (
-                      <Link
-                        key={link.to}
-                        to={link.to}
-                        onClick={() => setAiMenuOpen(false)}
-                        className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition ${isActive(link.to)
-                          ? 'bg-primary/10 text-primary'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                          }`}
-                      >
-                        <link.icon className="w-4 h-4" />
-                        {link.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
@@ -379,24 +339,6 @@ const Layout: React.FC = () => {
                     to={link.to}
                     onClick={() => setShowMobileMenu(false)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${link.isActive
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                      }`}
-                  >
-                    <link.icon className="w-5 h-5" />
-                    {link.label}
-                  </Link>
-                ))}
-              </div>
-
-              <div className="space-y-1 pt-3 border-t border-border/50">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">AI</p>
-                {aiLinks.map((link) => (
-                  <Link
-                    key={link.to}
-                    to={link.to}
-                    onClick={() => setShowMobileMenu(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${isActive(link.to)
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                       }`}
