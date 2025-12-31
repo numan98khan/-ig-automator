@@ -223,10 +223,16 @@ export interface AutomationStats {
 
 export interface AutomationIntent {
   _id?: string;
+  workspaceId?: string;
   value: string;
   description: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface AutomationIntentListResponse {
+  systemIntents: AutomationIntent[];
+  customIntents: AutomationIntent[];
 }
 
 export interface FlowFieldOption {
@@ -754,11 +760,11 @@ export const automationAPI = {
 };
 
 export const automationIntentAPI = {
-  list: async (): Promise<AutomationIntent[]> => {
-    const { data } = await api.get('/api/automation-intents');
+  list: async (workspaceId: string): Promise<AutomationIntentListResponse> => {
+    const { data } = await api.get('/api/automation-intents', { params: { workspaceId } });
     return data;
   },
-  create: async (payload: { value: string; description: string }): Promise<AutomationIntent> => {
+  create: async (payload: { workspaceId: string; value: string; description: string }): Promise<AutomationIntent> => {
     const { data } = await api.post('/api/automation-intents', payload);
     return data;
   },
