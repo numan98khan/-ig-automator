@@ -212,6 +212,12 @@ export default function AutomationTemplates() {
     const nodeMap = new Map(flowNodes.map((node) => [node.id, node]))
     const routerIds = new Set(flowNodes.filter((node) => node.type === 'router').map((node) => node.id))
 
+    const formatRuleValue = (value: RouterRule['value']) => {
+      if (Array.isArray(value)) return value.join(', ')
+      if (value === undefined || value === null || value === '') return ''
+      return String(value)
+    }
+
     const branchTags = new Map<string, string | undefined>()
     routerIds.forEach((routerId) => {
       const outgoing = flowEdges.filter((edge) => edge.source === routerId)
@@ -237,7 +243,7 @@ export default function AutomationTemplates() {
         if (!isDefault) {
           (condition.rules || []).forEach((rule) => {
             const label = rule.source === 'vars'
-              ? 'vars'
+              ? formatRuleValue(rule.value)
               : rule.source === 'message'
                 ? 'message'
                 : rule.source === 'config'
