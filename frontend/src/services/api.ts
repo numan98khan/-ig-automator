@@ -221,6 +221,14 @@ export interface AutomationStats {
   lastReplySentAt?: string;
 }
 
+export interface AutomationIntent {
+  _id?: string;
+  value: string;
+  description: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface FlowFieldOption {
   label: string;
   value: string;
@@ -742,6 +750,17 @@ export const automationAPI = {
 
   delete: async (id: string): Promise<void> => {
     await api.delete(`/api/automations/${id}`);
+  },
+};
+
+export const automationIntentAPI = {
+  list: async (): Promise<AutomationIntent[]> => {
+    const { data } = await api.get('/api/automation-intents');
+    return data;
+  },
+  create: async (payload: { value: string; description: string }): Promise<AutomationIntent> => {
+    const { data } = await api.post('/api/automation-intents', payload);
+    return data;
   },
 };
 
