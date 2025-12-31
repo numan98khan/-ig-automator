@@ -130,7 +130,7 @@ export type FlowTriggerConfig = {
   keywords?: string[]
   excludeKeywords?: string[]
   keywordMatch?: 'any' | 'all'
-  triggerMode?: 'keywords' | 'categories' | 'any' | 'intent'
+  triggerMode?: 'keywords' | 'any' | 'intent'
   intentText?: string
 }
 

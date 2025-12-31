@@ -16,7 +16,6 @@ export interface IReportDailyWorkspace extends Document {
   goalCompletions: Record<string, number>;
   firstResponseTimeSumMs: number;
   firstResponseTimeCount: number;
-  categoryCounts: Record<string, number>;
   tagCounts: Record<string, number>;
   escalationReasonCounts: Record<string, number>;
   kbArticleCounts: Record<string, number>;
@@ -40,7 +39,6 @@ const reportDailyWorkspaceSchema = new Schema<IReportDailyWorkspace>({
   goalCompletions: { type: Map, of: Number, default: {} },
   firstResponseTimeSumMs: { type: Number, default: 0 },
   firstResponseTimeCount: { type: Number, default: 0 },
-  categoryCounts: { type: Map, of: Number, default: {} },
   tagCounts: { type: Map, of: Number, default: {} },
   escalationReasonCounts: { type: Map, of: Number, default: {} },
   kbArticleCounts: { type: Map, of: Number, default: {} },

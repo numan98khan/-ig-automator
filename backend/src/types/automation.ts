@@ -43,8 +43,7 @@ export interface TriggerConfig {
   keywords?: string[]; // Optional keywords to filter on
   excludeKeywords?: string[]; // Optional keywords to exclude
   keywordMatch?: 'any' | 'all';
-  categoryIds?: string[];
-  triggerMode?: 'keywords' | 'categories' | 'any' | 'intent';
+  triggerMode?: 'keywords' | 'any' | 'intent';
   intentText?: string;
   outsideBusinessHours?: boolean;
   businessHours?: BusinessHoursConfig;

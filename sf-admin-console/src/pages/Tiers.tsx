@@ -17,7 +17,6 @@ type TierFormState = {
   name: string
   description?: string
   status: 'active' | 'inactive' | 'deprecated'
-  allowCustomCategories: boolean
   isDefault: boolean
   limits: {
     aiMessages?: number | null
@@ -25,7 +24,6 @@ type TierFormState = {
     teamMembers?: number | null
     automations?: number | null
     knowledgeItems?: number | null
-    messageCategories?: number | null
   }
 }
 
@@ -33,7 +31,6 @@ const EMPTY_TIER: TierFormState = {
   name: '',
   description: '',
   status: 'active',
-  allowCustomCategories: true,
   isDefault: false,
   limits: {},
 }
@@ -57,7 +54,6 @@ export default function Tiers() {
         name: payload.name,
         description: payload.description,
         status: payload.status,
-        allowCustomCategories: payload.allowCustomCategories,
         isDefault: payload.isDefault,
         limits: normalizeLimits(payload.limits),
       }
@@ -91,7 +87,6 @@ export default function Tiers() {
       name: tier.name || '',
       description: tier.description || '',
       status: tier.status || 'active',
-      allowCustomCategories: tier.allowCustomCategories !== false,
       isDefault: Boolean(tier.isDefault),
       limits: tier.limits || {},
     })
@@ -104,7 +99,6 @@ export default function Tiers() {
     { key: 'teamMembers', label: 'Team members' },
     { key: 'automations', label: 'Automations' },
     { key: 'knowledgeItems', label: 'Knowledge items' },
-    { key: 'messageCategories', label: 'Message categories' },
   ]
 
   return (
@@ -152,7 +146,7 @@ export default function Tiers() {
                     ))}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Custom categories: {tier.allowCustomCategories === false ? 'Disabled' : 'Allowed'}
+                    Custom limits: {Object.keys(tier.limits || {}).length || 0}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 self-start md:self-auto">
@@ -240,16 +234,6 @@ export default function Tiers() {
                     min={0}
                   />
                 ))}
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                <span className="text-sm text-muted-foreground">Allow custom categories</span>
-                <button
-                  type="button"
-                  onClick={() => setFormState((prev) => ({ ...prev, allowCustomCategories: !prev.allowCustomCategories }))}
-                  className="text-primary"
-                >
-                  {formState.allowCustomCategories ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
-                </button>
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 px-4 py-3 border-t border-border">

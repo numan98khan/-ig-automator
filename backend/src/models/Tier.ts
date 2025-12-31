@@ -8,14 +8,12 @@ export interface TierLimits {
   teamMembers?: number;
   automations?: number;
   knowledgeItems?: number;
-  messageCategories?: number;
 }
 
 export interface ITier extends Document {
   name: string;
   description?: string;
   limits: TierLimits;
-  allowCustomCategories: boolean;
   isDefault: boolean;
   isCustom: boolean;
   status: TierStatus;
@@ -30,7 +28,6 @@ const limitsSchema = new Schema<TierLimits>(
     teamMembers: { type: Number },
     automations: { type: Number },
     knowledgeItems: { type: Number },
-    messageCategories: { type: Number },
   },
   { _id: false }
 );
@@ -50,10 +47,6 @@ const tierSchema = new Schema<ITier>(
     limits: {
       type: limitsSchema,
       default: {},
-    },
-    allowCustomCategories: {
-      type: Boolean,
-      default: true,
     },
     isDefault: {
       type: Boolean,

@@ -264,7 +264,7 @@ const Team: React.FC = () => {
             </div>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li><span className="text-foreground font-semibold">Owner:</span> billing + workspace settings</li>
-              <li><span className="text-foreground font-semibold">Manager:</span> manage categories, knowledge, and alerts</li>
+              <li><span className="text-foreground font-semibold">Manager:</span> manage knowledge and alerts</li>
               <li><span className="text-foreground font-semibold">Agent:</span> inbox and alerts access</li>
               <li><span className="text-foreground font-semibold">Viewer:</span> read-only analytics</li>
             </ul>

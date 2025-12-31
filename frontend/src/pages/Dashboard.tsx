@@ -10,7 +10,6 @@ import {
   MessageSquare,
   ShieldCheck,
   Sparkles,
-  Tag,
   User,
   UserPlus,
 } from 'lucide-react';
@@ -20,7 +19,7 @@ import { Badge } from '../components/ui/Badge';
 import { dashboardAPI, DashboardAttentionItem, DashboardInsightsResponse, DashboardSummaryResponse } from '../services/api';
 
 type TimeRange = 'today' | '7d' | '30d';
-type AttentionFilter = 'escalations' | 'unreplied' | 'followups' | 'high_intent';
+type AttentionFilter = 'escalations' | 'unreplied' | 'followups';
 
 const timeframeOptions: { value: TimeRange; label: string; helper: string }[] = [
   { value: 'today', label: 'Today', helper: 'Starts 12:00am local' },
@@ -32,7 +31,6 @@ const badgeVariantMap = {
   escalated: { label: 'Escalated', variant: 'danger' as const },
   sla: { label: 'SLA risk', variant: 'warning' as const },
   followup: { label: 'Follow-up due', variant: 'secondary' as const },
-  high_intent: { label: 'High intent', variant: 'primary' as const },
 };
 
 const Dashboard: React.FC = () => {
@@ -96,7 +94,6 @@ const Dashboard: React.FC = () => {
   const aiMetrics = useMemo(() => insights?.aiPerformance || {
     escalationRate: 0,
     topReasons: [],
-    topCategories: [],
   }, [insights]);
 
   const knowledgeMetrics = useMemo(() => insights?.knowledge || {
@@ -216,7 +213,7 @@ const Dashboard: React.FC = () => {
               <p className="text-sm text-muted-foreground">Sort by escalations, unreplied, follow-ups, or high intent.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {(['escalations', 'unreplied', 'followups', 'high_intent'] as AttentionFilter[]).map((filter) => (
+              {(['escalations', 'unreplied', 'followups'] as AttentionFilter[]).map((filter) => (
                 <Button
                   key={filter}
                   variant={attentionFilter === filter ? 'primary' : 'outline'}
@@ -228,7 +225,6 @@ const Dashboard: React.FC = () => {
                   {filter === 'escalations' && 'Escalations'}
                   {filter === 'unreplied' && 'Unreplied'}
                   {filter === 'followups' && 'Follow-ups due'}
-                  {filter === 'high_intent' && 'High intent'}
                 </Button>
               ))}
             </div>
@@ -252,7 +248,6 @@ const Dashboard: React.FC = () => {
                     </div>
                     <p className="text-sm text-foreground/90 line-clamp-2">{item.lastMessagePreview || 'No preview available'}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      {item.category && <Badge variant="secondary">{item.category}</Badge>}
                       <span className="text-xs text-muted-foreground">Last message {formatTimeAgo(item.lastMessageAt)}</span>
                       {(item.badges || []).map((badge) => {
                         const isBadgeKey = (value: string): value is keyof typeof badgeVariantMap =>
@@ -374,20 +369,6 @@ const Dashboard: React.FC = () => {
             )}
           </div>
 
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Top categories handled</p>
-            {aiMetrics.topCategories.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No categorized AI replies yet.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {aiMetrics.topCategories.map((category) => (
-                  <Badge key={category.name} variant="primary">
-                    {category.name} ({formatNumber(category.count)})
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="glass-panel rounded-2xl shadow-sm p-5 space-y-3">

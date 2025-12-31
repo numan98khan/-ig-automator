@@ -2,7 +2,6 @@ import express, { Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import Workspace from '../models/Workspace';
-import { initializeDefaultCategories } from '../services/aiCategorization';
 
 const router = express.Router();
 
@@ -54,8 +53,6 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       // Create default settings
       settings = await WorkspaceSettings.create({ workspaceId });
 
-      // Initialize default categories for the workspace
-      await initializeDefaultCategories(workspaceId);
     }
 
     res.json(sanitizeSettings(settings));

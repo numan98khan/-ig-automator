@@ -6,12 +6,11 @@ import ReportDailyWorkspace from '../models/ReportDailyWorkspace';
 import Escalation from '../models/Escalation';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
-import MessageCategory from '../models/MessageCategory';
 import { DashboardRange, formatDateKey, getDateBounds } from '../services/reportingService';
 
 const router = express.Router();
 
-type AttentionFilter = 'escalations' | 'unreplied' | 'followups' | 'high_intent';
+type AttentionFilter = 'escalations' | 'unreplied' | 'followups';
 
 router.get('/summary', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -159,14 +158,12 @@ router.get('/insights', authenticate, async (req: AuthRequest, res: Response) =>
     }).lean();
 
     const totals = docs.reduce((acc, doc) => {
-      const categoryCounts = mapToRecord(doc.categoryCounts);
       const escalationReasons = mapToRecord(doc.escalationReasonCounts);
       const kbArticles = mapToRecord(doc.kbArticleCounts);
 
       acc.aiReplies += doc.aiReplies || 0;
       acc.escalations += doc.escalationsOpened || 0;
       acc.kbBacked += doc.kbBackedReplies || 0;
-      acc.categoryCounts = combineMap(acc.categoryCounts, categoryCounts);
       acc.escalationReasons = combineMap(acc.escalationReasons, escalationReasons);
       acc.kbArticles = combineMap(acc.kbArticles, kbArticles);
       return acc;
@@ -174,17 +171,14 @@ router.get('/insights', authenticate, async (req: AuthRequest, res: Response) =>
       aiReplies: 0,
       escalations: 0,
       kbBacked: 0,
-      categoryCounts: {} as Record<string, number>,
       escalationReasons: {} as Record<string, number>,
       kbArticles: {} as Record<string, number>,
     });
 
-    const categories = await hydrateCategoryNames(totals.categoryCounts);
     const insights = {
       aiPerformance: {
         escalationRate: totals.aiReplies > 0 ? totals.escalations / totals.aiReplies : 0,
         topReasons: topEntries(totals.escalationReasons, 3),
-        topCategories: categories,
       },
       knowledge: {
         kbBackedRate: totals.aiReplies > 0 ? totals.kbBacked / totals.aiReplies : 0,
@@ -221,7 +215,6 @@ async function buildAttentionItems(workspaceId: string, filter: AttentionFilter)
         handle: conversation?.participantHandle,
         lastMessagePreview: lastMessage?.text,
         lastMessageAt: lastMessage?.createdAt,
-        category: esc.reason,
         badges: ['escalated'],
         actions: { canResolve: true },
       };
@@ -248,7 +241,6 @@ async function buildAttentionItems(workspaceId: string, filter: AttentionFilter)
         handle: conv.participantHandle,
         lastMessagePreview: lastMessage?.text,
         lastMessageAt: lastMessage?.createdAt,
-        category: (conv as any).categoryName,
         badges: ['sla'],
         actions: { canAssign: true, canSnooze: true },
       };
@@ -273,33 +265,12 @@ async function buildAttentionItems(workspaceId: string, filter: AttentionFilter)
         handle: conv.participantHandle,
         lastMessagePreview: lastMessage?.text,
         lastMessageAt: lastMessage?.createdAt,
-        category: (conv as any).categoryName,
         badges: ['followup'],
         actions: { canAssign: true, canSnooze: true },
       };
     }));
   }
-
-  const conversations = await Conversation.find({
-    workspaceId,
-    activeGoalType: { $in: ['capture_lead', 'book_appointment', 'order_now', 'start_order'] },
-  }).sort({ updatedAt: -1 }).limit(25);
-
-  return Promise.all(conversations.map(async conv => {
-    const lastMessage = await Message.findOne({ workspaceId, conversationId: conv._id })
-      .sort({ createdAt: -1 });
-    return {
-      id: conv._id.toString(),
-      conversationId: conv._id.toString(),
-      participantName: conv.participantName,
-      handle: conv.participantHandle,
-      lastMessagePreview: lastMessage?.text,
-      lastMessageAt: lastMessage?.createdAt,
-      category: (conv as any).categoryName,
-      badges: ['high_intent'],
-      actions: { canAssign: true, canResolve: true },
-    };
-  }));
+  return [];
 }
 
 function combineMap(base: Record<string, number>, incoming: Record<string, number>): Record<string, number> {
@@ -316,17 +287,6 @@ function mapToRecord(value: Record<string, number> | Map<string, number> | undef
     return Object.fromEntries(value.entries());
   }
   return value;
-}
-
-async function hydrateCategoryNames(counts: Record<string, number>) {
-  const ids = Object.keys(counts).filter(id => mongoose.Types.ObjectId.isValid(id));
-  const categories = await MessageCategory.find({ _id: { $in: ids } });
-  const nameMap = new Map(categories.map(c => [c._id.toString(), c.nameEn]));
-
-  return Object.entries(counts)
-    .map(([id, count]) => ({ name: nameMap.get(id) || id, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
 }
 
 function topEntries(map: Record<string, number>, limit: number) {

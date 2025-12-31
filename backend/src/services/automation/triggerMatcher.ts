@@ -26,20 +26,12 @@ export async function matchesTriggerConfig(
   ) {
     return false;
   }
-  const categoryIds = triggerConfig.categoryIds || [];
-  const categoryMatched = categoryIds.length > 0
-    ? Boolean(context?.categoryId && categoryIds.includes(context.categoryId))
-    : false;
   const linkMatched = !!triggerConfig.matchOn?.link && !!context?.hasLink;
   const attachmentMatched = !!triggerConfig.matchOn?.attachment && !!context?.hasAttachment;
   const keywordMatched = triggerConfig.keywords
     ? matchesKeywords(messageText, triggerConfig.keywords, keywordMatch)
     : true;
   const intentMatched = intentText ? await matchesIntent(messageText, intentText) : false;
-
-  if (triggerMode === 'categories') {
-    return categoryMatched;
-  }
 
   if (triggerMode === 'keywords') {
     if (linkMatched || attachmentMatched) return true;
@@ -50,14 +42,11 @@ export async function matchesTriggerConfig(
     return Boolean(intentText) && intentMatched;
   }
 
-  if (categoryMatched || linkMatched || attachmentMatched) {
+  if (linkMatched || attachmentMatched) {
     return true;
   }
   if (intentText && intentMatched) {
     return true;
-  }
-  if (categoryIds.length > 0 && !categoryMatched) {
-    return false;
   }
   if (!keywordMatched) {
     return false;

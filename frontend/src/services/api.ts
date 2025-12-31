@@ -89,8 +89,6 @@ export interface Conversation {
   lastMessage?: string;
   createdAt: string;
   isSynced?: boolean;
-  categoryName?: string;
-  categoryId?: any;
   humanRequired?: boolean;
   humanRequiredReason?: string;
   humanTriggeredAt?: string;
@@ -125,7 +123,6 @@ export interface Message {
   text: string;
   from: 'customer' | 'user' | 'ai';
   createdAt: string;
-  categoryId?: any;
   seenAt?: string;
   aiTags?: string[];
   aiShouldEscalate?: boolean;
@@ -207,8 +204,7 @@ export interface TriggerConfig {
   keywords?: string[];
   excludeKeywords?: string[];
   keywordMatch?: 'any' | 'all';
-  categoryIds?: string[];
-  triggerMode?: 'keywords' | 'categories' | 'any' | 'intent';
+  triggerMode?: 'keywords' | 'any' | 'intent';
   intentText?: string;
   outsideBusinessHours?: boolean;
   businessHours?: BusinessHoursConfig;
@@ -351,14 +347,12 @@ export interface TierLimits {
   teamMembers?: number;
   automations?: number;
   knowledgeItems?: number;
-  messageCategories?: number;
 }
 
 export interface Tier {
   _id: string;
   name: string;
   description?: string;
-  allowCustomCategories: boolean;
   isDefault: boolean;
   isCustom: boolean;
   status: 'active' | 'inactive' | 'deprecated';
@@ -376,7 +370,6 @@ export interface WorkspaceTierUsage {
   instagramAccounts?: number;
   teamMembers?: number;
   knowledgeItems?: number;
-  messageCategories?: number;
 }
 
 export interface TierSummaryResponse {
@@ -503,37 +496,10 @@ export interface InventoryMapping {
   sourceHeaders?: string[];
 }
 
-export interface MessageCategory {
-  _id: string;
-  workspaceId: string;
-  nameEn: string;
-  description?: string;
-  descriptionEn?: string;
-  exampleMessages?: string[];
-  aiPolicy?: 'full_auto' | 'assist_only' | 'escalate';
-  escalationNote?: string;
-  isSystem: boolean;
-  autoReplyEnabled: boolean;
-  messageCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CategoryKnowledge {
-  _id: string;
-  workspaceId: string;
-  categoryId: string;
-  content: string;
-  language: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface EscalationCase {
   escalation: {
     _id: string;
     conversationId: string;
-    categoryId?: string;
     topicSummary: string;
     reason?: string;
     status: 'pending' | 'in_progress' | 'resolved' | 'cancelled';
@@ -711,11 +677,6 @@ export const messageAPI = {
 
   generateAIReply: async (conversationId: string): Promise<Message> => {
     const { data } = await api.post('/api/messages/generate-ai-reply', { conversationId });
-    return data;
-  },
-
-  updateCategory: async (messageId: string, categoryId: string): Promise<Message> => {
-    const { data } = await api.patch(`/api/messages/${messageId}/category`, { categoryId });
     return data;
   },
 
@@ -931,43 +892,6 @@ export const escalationAPI = {
   },
 };
 
-// Categories API (Phase 2)
-export const categoriesAPI = {
-  getByWorkspace: async (workspaceId: string): Promise<MessageCategory[]> => {
-    const { data } = await api.get(`/api/categories/workspace/${workspaceId}`);
-    return data;
-  },
-
-  getById: async (id: string): Promise<MessageCategory> => {
-    const { data } = await api.get(`/api/categories/${id}`);
-    return data;
-  },
-
-  create: async (workspaceId: string, nameEn: string, description?: string): Promise<MessageCategory> => {
-    const { data } = await api.post('/api/categories', { workspaceId, nameEn, description });
-    return data;
-  },
-
-  update: async (id: string, updates: Partial<MessageCategory>): Promise<MessageCategory> => {
-    const { data } = await api.put(`/api/categories/${id}`, updates);
-    return data;
-  },
-
-  delete: async (id: string): Promise<void> => {
-    await api.delete(`/api/categories/${id}`);
-  },
-
-  getKnowledge: async (categoryId: string): Promise<CategoryKnowledge> => {
-    const { data } = await api.get(`/api/categories/${categoryId}/knowledge`);
-    return data;
-  },
-
-  updateKnowledge: async (categoryId: string, content: string): Promise<CategoryKnowledge> => {
-    const { data } = await api.put(`/api/categories/${categoryId}/knowledge`, { content });
-    return data;
-  },
-};
-
 // Workspace Invites API
 export interface WorkspaceInvite {
   _id: string;
@@ -1042,7 +966,6 @@ export interface DashboardAttentionItem {
   handle?: string;
   lastMessagePreview?: string;
   lastMessageAt?: string;
-  category?: string;
   badges?: string[];
   actions?: { canAssign?: boolean; canResolve?: boolean; canSnooze?: boolean };
 }
@@ -1057,7 +980,6 @@ export interface DashboardInsightsResponse {
   aiPerformance: {
     escalationRate: number;
     topReasons: { name: string; count: number }[];
-    topCategories: { name: string; count: number }[];
   };
   knowledge: {
     kbBackedRate: number;

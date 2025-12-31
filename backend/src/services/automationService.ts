@@ -187,7 +187,6 @@ const summarizeTriggerConfig = (config?: TriggerConfig) => {
     keywordMatch: config.keywordMatch || 'any',
     keywordCount: config.keywords?.length || 0,
     excludeKeywordCount: config.excludeKeywords?.length || 0,
-    categoryIdsCount: config.categoryIds?.length || 0,
     outsideBusinessHours: Boolean(config.outsideBusinessHours),
     intentTextPreview: config.intentText ? config.intentText.slice(0, 80) : undefined,
     matchOn: config.matchOn
@@ -208,8 +207,6 @@ const summarizeTriggers = (triggers: FlowTriggerDefinition[]) =>
   }));
 
 const summarizeMessageContext = (context?: AutomationTestContext) => ({
-  categoryId: context?.categoryId,
-  categoryName: context?.categoryName,
   hasLink: Boolean(context?.hasLink),
   hasAttachment: Boolean(context?.hasAttachment),
   forceOutsideBusinessHours: Boolean(context?.forceOutsideBusinessHours),
@@ -705,10 +702,6 @@ async function buildAutomationAiReply(params: {
     conversation,
     workspaceId: conversation.workspaceId,
     latestCustomerMessage: messageText,
-    categoryId: messageContext?.categoryId,
-    categorization: messageContext?.categoryName
-      ? { categoryName: messageContext.categoryName }
-      : undefined,
     historyLimit: aiSettings?.historyLimit,
     goalContext: {
       workspaceGoals: {

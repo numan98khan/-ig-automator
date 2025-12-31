@@ -7,7 +7,6 @@ import {
   LogOut,
   ChevronDown,
   Settings,
-  Tags,
   Menu,
   X as CloseIcon,
   LayoutDashboard,
@@ -48,9 +47,7 @@ const Layout: React.FC = () => {
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
 
-  const aiLinks = useMemo(() => ([
-    { to: '/categories', label: 'Categories & Policies', icon: Tags },
-  ]), []);
+  const aiLinks = useMemo(() => ([]), []);
 
   const navLinks = useMemo(() => {
     const links = [

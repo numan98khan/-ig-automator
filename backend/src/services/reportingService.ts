@@ -81,7 +81,6 @@ export async function rebuildWorkspaceReportForDate(workspaceId: string, date: D
     goalCompletionCounts,
     goalAttemptCounts,
     escalationReasons,
-    categoryCounts,
     tagCounts,
     kbArticleCounts,
     responseAggregation,
@@ -110,10 +109,6 @@ export async function rebuildWorkspaceReportForDate(workspaceId: string, date: D
     Message.aggregate([
       { $match: { ...match, aiEscalationReason: { $exists: true, $ne: null } } },
       { $group: { _id: '$aiEscalationReason', count: { $sum: 1 } } },
-    ]),
-    Message.aggregate([
-      { $match: { ...match, categoryId: { $exists: true, $ne: null } } },
-      { $group: { _id: '$categoryId', count: { $sum: 1 } } },
     ]),
     Message.aggregate([
       { $match: { ...match, aiTags: { $exists: true, $ne: [] } } },
@@ -153,11 +148,6 @@ export async function rebuildWorkspaceReportForDate(workspaceId: string, date: D
   const responseSum = responseAggregation[0]?.sum || 0;
   const responseCount = responseAggregation[0]?.count || 0;
 
-  const categoryCountMap: Record<string, number> = {};
-  for (const row of categoryCounts) {
-    categoryCountMap[row._id?.toString?.() || 'unknown'] = row.count;
-  }
-
   const tagCountMap: Record<string, number> = {};
   for (const row of tagCounts) {
     tagCountMap[row._id || 'unknown'] = row.count;
@@ -192,7 +182,6 @@ export async function rebuildWorkspaceReportForDate(workspaceId: string, date: D
         goalCompletions: goalCompletionsCombined,
         firstResponseTimeSumMs: responseSum,
         firstResponseTimeCount: responseCount,
-        categoryCounts: categoryCountMap,
         tagCounts: tagCountMap,
         escalationReasonCounts: escalationReasonMap,
         kbArticleCounts: kbArticleCountMap,

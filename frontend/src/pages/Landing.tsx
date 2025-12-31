@@ -360,7 +360,7 @@ const Landing: React.FC = () => {
                     <p className="text-xs text-muted-foreground">Flow</p>
                     <div className="space-y-2 mt-2">
                       <div className="p-2 rounded-xl bg-primary/10 text-primary">Intent detected</div>
-                      <div className="p-2 rounded-xl bg-amber-100/10 text-amber-300">Policy check</div>
+                      <div className="p-2 rounded-xl bg-amber-100/10 text-amber-300">Safety check</div>
                       <div className="p-2 rounded-xl bg-emerald-100/10 text-emerald-300">Route to sales</div>
                       <div className="p-2 rounded-xl bg-indigo-100/10 text-indigo-300">Reply + summary</div>
                     </div>
@@ -410,7 +410,7 @@ const Landing: React.FC = () => {
             <div className="grid md:grid-cols-3 gap-4">
               {[
                 { title: 'Connect Instagram', body: 'Auth in minutes to sync your inbox securely.' },
-                { title: 'Import brand voice + FAQs', body: 'Drop policies, offers, and examples to stay on-brand.' },
+                { title: 'Import brand voice + FAQs', body: 'Drop offers and examples to stay on-brand.' },
                 { title: 'Build flows + go live', body: 'Safe defaults with approvals and escalation baked in.' },
               ].map((step) => (
                 <div key={step.title} className={`glass-panel p-5 rounded-2xl ${surfaceSoft}`}>
@@ -429,12 +429,12 @@ const Landing: React.FC = () => {
               {[
                 {
                   title: 'On-brand AI replies',
-                  body: 'Trained on your offers, policies, and examples so every DM sounds like you.',
+                  body: 'Trained on your offers and examples so every DM sounds like you.',
                   icon: MessageSquare,
                 },
                 {
                   title: 'Guardrails + approvals',
-                  body: 'Block forbidden claims, require approval for sensitive categories, keep compliance intact.',
+                  body: 'Block forbidden claims, require approval for sensitive cases, keep compliance intact.',
                   icon: ShieldCheck,
                 },
                 {
@@ -574,7 +574,7 @@ const Landing: React.FC = () => {
             <div className="grid md:grid-cols-2 gap-4">
               {[
                 { q: 'Will it say something risky?', a: 'Guardrails block forbidden claims and approvals catch sensitive topics before they send.' },
-                { q: 'Can I approve messages before they send?', a: 'Yes. Add approval stops for categories or intents that need human review.' },
+                { q: 'Can I approve messages before they send?', a: 'Yes. Add approval stops for intents that need human review.' },
                 { q: 'Can humans take over anytime?', a: 'Yes. Route to humans with summaries and suggested replies to save time.' },
                 { q: 'What permissions do you request from Instagram?', a: 'Only what is required to read inbox messages and send replies for connected accounts.' },
                 { q: 'Does it work with multiple accounts?', a: 'Starter supports one workspace; Pro/Business add multiple workspaces and roles.' },
@@ -609,13 +609,13 @@ const Landing: React.FC = () => {
               </button>
             </div>
             <p className="text-sm text-muted-foreground">
-              Example flow: detect intent → check policy → route or reply → escalate to human when needed. Customize tone, approvals, and handoff notes.
+              Example flow: detect intent → route or reply → escalate to human when needed. Customize tone, approvals, and handoff notes.
             </p>
             <div className="glass-panel rounded-xl border border-border/60 bg-background/70 p-4 text-sm text-foreground">
               <p className="font-semibold mb-2">Steps</p>
               <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
                 <li>Intent detected from incoming DM</li>
-                <li>Policy + safety check</li>
+                <li>Safety check</li>
                 <li>Fetch relevant template answer</li>
                 <li>Offer suggested reply with summary</li>
                 <li>Approval stop if sensitive; otherwise send</li>
