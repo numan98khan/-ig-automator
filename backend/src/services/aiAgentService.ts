@@ -344,10 +344,14 @@ Return JSON with:
     const shouldStop = Boolean(raw.shouldStop);
 
     let finalReply = replyText;
-    if (finalReply && Number.isFinite(maxReplySentences) && maxReplySentences > 0) {
+    const maxReplySentenceLimit =
+      typeof maxReplySentences === 'number' && Number.isFinite(maxReplySentences)
+        ? maxReplySentences
+        : undefined;
+    if (finalReply && maxReplySentenceLimit && maxReplySentenceLimit > 0) {
       const sentences = splitIntoSentences(finalReply);
-      if (sentences.length > maxReplySentences) {
-        finalReply = sentences.slice(0, maxReplySentences).join(' ').trim();
+      if (sentences.length > maxReplySentenceLimit) {
+        finalReply = sentences.slice(0, maxReplySentenceLimit).join(' ').trim();
       }
     }
 
