@@ -842,14 +842,6 @@ const Inbox: React.FC = () => {
 
               <div className="space-y-3">
                 <div className="p-3 rounded-lg border border-border/70 bg-background/70">
-                  <p className="text-xs text-muted-foreground">AI status</p>
-                  <div className="mt-1 flex items-center justify-between text-sm font-medium text-foreground">
-                    <span>{autoReplyEnabled ? 'Auto-reply on' : 'Auto-reply paused'}</span>
-                    <span className="text-xs text-muted-foreground">Assist mode</span>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70">
                   <div className="flex items-center justify-between text-sm font-semibold text-foreground">
                     <span>Automation session</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${sessionMeta.className}`}>
@@ -932,20 +924,6 @@ const Inbox: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-1">
-                  <div className="flex items-center justify-between text-sm font-semibold text-foreground">
-                    <span>Category</span>
-                    {selectedConversation.categoryName ? (
-                      <Badge variant="secondary" className="text-[11px] px-2 py-0 rounded-full">
-                        {selectedConversation.categoryName}
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Unassigned</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Confidence: high</p>
-                </div>
-
                 <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-2">
                   <div className="flex items-center justify-between text-sm font-semibold text-foreground">
                     <span>Escalation</span>
@@ -963,37 +941,6 @@ const Inbox: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-2">
-                  <div className="flex items-center justify-between text-sm font-semibold text-foreground">
-                    <span>Knowledge used</span>
-                    <span className="text-xs text-muted-foreground">Recent</span>
-                  </div>
-                  <ul className="space-y-1 text-xs text-muted-foreground">
-                    {selectedConversation.categoryName ? (
-                      <li className="px-2 py-1 rounded-md bg-muted/50 text-foreground">{selectedConversation.categoryName} playbook</li>
-                    ) : (
-                      <li className="px-2 py-1 rounded-md bg-muted/30">No linked knowledge yet</li>
-                    )}
-                  </ul>
-                </div>
-
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-2">
-                  <p className="text-sm font-semibold text-foreground">Quick actions</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button variant="secondary" className="h-10" leftIcon={<AlertTriangle className="w-4 h-4" />}>
-                      Escalate
-                    </Button>
-                    <Button variant="secondary" className="h-10" onClick={() => setAutoReplyEnabled(false)}>
-                      Pause AI
-                    </Button>
-                    <Button variant="secondary" className="h-10" leftIcon={<Tag className="w-4 h-4" />}>
-                      Change category
-                    </Button>
-                    <Button variant="secondary" className="h-10">
-                      Add to KB
-                    </Button>
-                  </div>
-                </div>
               </div>
             </aside>
           )}
