@@ -73,8 +73,9 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
               } : undefined}
               role={isOpenEnabled ? 'button' : undefined}
               tabIndex={isOpenEnabled ? 0 : undefined}
-              className={`bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-6 shadow-sm backdrop-blur-sm transition-all relative group ${
-                isOpenEnabled ? 'hover:shadow-lg cursor-pointer' : ''
+              className={`group relative glass-panel border border-border rounded-xl p-5 transition-all duration-200 ${
+                // isOpenEnabled ? 'hover:bg-muted/50 hover:shadow-md cursor-pointer' : ''
+                    isOpenEnabled ? 'hover:bg-muted/50 hover:shadow-md cursor-pointer' : ''
               }`}
             >
               {badge && (
@@ -99,12 +100,12 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                 </div>
               </div>
 
-              <div className="mb-4 p-3 bg-muted/30 rounded-lg">
+              <div className="mb-4 p-4 bg-muted/40 rounded-xl border border-border/50">
                 <div className="text-xs font-medium text-muted-foreground mb-1">TRIGGER</div>
                 <div className="text-sm font-medium">{triggerLabel}</div>
               </div>
 
-              <div className="mb-4 p-3 bg-muted/30 rounded-lg">
+              <div className="mb-4 p-4 bg-muted/40 rounded-xl border border-border/50">
                 <div className="text-xs font-medium text-muted-foreground mb-1">REPLY</div>
                 <div className="text-sm font-medium">
                   <span>Template - {template?.name || 'Template'}</span>

@@ -8,7 +8,8 @@ type AutomationsSidebarProps = {
 
 export const AutomationsSidebar: React.FC<AutomationsSidebarProps> = ({ activeSection, onChange }) => (
   <aside className="lg:w-64 flex-shrink-0">
-    <div className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-2 space-y-1 shadow-sm backdrop-blur-sm">
+    {/* <div className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-2 space-y-1 shadow-sm backdrop-blur-sm"> */}
+    <div className="bg-white/50 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-2 space-y-1 shadow-sm backdrop-blur-sm">
       <button
         onClick={() => onChange('automations')}
         className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
