@@ -7,7 +7,6 @@ import {
   Users,
   BarChart3,
   Bot,
-  Settings,
   Menu,
   LogOut,
   X,
