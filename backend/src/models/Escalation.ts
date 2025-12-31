@@ -12,7 +12,6 @@ export interface IEscalationUpdate {
 export interface IEscalation extends Document {
   conversationId: mongoose.Types.ObjectId;
   workspaceId?: mongoose.Types.ObjectId;
-  categoryId?: mongoose.Types.ObjectId;
   topicSummary: string;
   reason?: string;
   severity?: 'normal' | 'high' | 'critical';
@@ -42,7 +41,6 @@ const escalationSchema = new Schema<IEscalation>(
   {
     conversationId: { type: Schema.Types.ObjectId, ref: 'Conversation', required: true, index: true },
     workspaceId: { type: Schema.Types.ObjectId, ref: 'Workspace', index: true },
-    categoryId: { type: Schema.Types.ObjectId, ref: 'MessageCategory' },
     topicSummary: { type: String, required: true, trim: true },
     reason: { type: String, trim: true },
     severity: { type: String, enum: ['normal', 'high', 'critical'], default: 'normal' },

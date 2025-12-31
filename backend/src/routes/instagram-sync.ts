@@ -16,11 +16,6 @@ import {
   fetchMessageDetails,
 } from '../utils/instagram-api';
 
-import {
-  categorizeMessage,
-  getOrCreateCategory,
-  incrementCategoryCount
-} from '../services/aiCategorization';
 import { trackDailyMetric } from '../services/reportingService';
 
 const router = express.Router();
@@ -96,8 +91,6 @@ router.get('/available-conversations', authenticate, async (req: AuthRequest, re
         updatedAt: igConv.updated_time,
         lastMessage: existing?.lastMessage,
         isSynced: !!existing,
-        categoryId: existing?.categoryId,
-        categoryName: existing?.categoryId ? 'Categorized' : 'Uncategorized', // We'd need to populate to get name
       };
     }));
 
@@ -275,26 +268,10 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
           messagesSynced++;
         }
 
-        // Finalize Conversation & Run AI Categorization
+        // Finalize Conversation
         if (messages.length > 0) {
           const lastMsg = messages[0]; // Newest first
           conversation.lastMessage = lastMsg.message || '[Attachment]';
-
-          // If last message is from customer, categorize it
-          if (lastMsg.from.id !== igAccount.instagramUserId && lastMsg.message) {
-            console.log(`🤖 Categorizing conversation ${conversation._id}...`);
-            const catResult = await categorizeMessage(lastMsg.message, workspaceId);
-
-            const categoryId = await getOrCreateCategory(workspaceId, catResult.categoryName);
-
-            conversation.categoryId = categoryId;
-            conversation.detectedLanguage = catResult.detectedLanguage;
-            conversation.categoryConfidence = catResult.confidence;
-
-            // Increment stats
-            await incrementCategoryCount(categoryId);
-            console.log(`✅ Conversation categorized as: ${catResult.categoryName}`);
-          }
 
           await conversation.save();
         }

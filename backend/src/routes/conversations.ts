@@ -3,7 +3,6 @@ import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Workspace from '../models/Workspace';
 import InstagramAccount from '../models/InstagramAccount';
-import MessageCategory from '../models/MessageCategory';
 import AutomationSession from '../models/AutomationSession';
 import AutomationInstance from '../models/AutomationInstance';
 import FlowTemplate from '../models/FlowTemplate';
@@ -158,8 +157,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     }
 
     const conversations = await Conversation.find({ workspaceId })
-      .sort({ lastMessageAt: -1 })
-      .populate('categoryId');
+      .sort({ lastMessageAt: -1 });
 
     const normalizeId = (value: unknown): string | undefined => {
       if (!value) return undefined;
@@ -188,7 +186,6 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
           instagramAccountId: normalizeId(convObj.instagramAccountId),
           lastMessage: lastMessage ? lastMessage.text : '',
           isSynced: true, // Local conversations are synced
-          categoryName: conv.categoryId ? (conv.categoryId as any).name : undefined,
         };
       })
     );

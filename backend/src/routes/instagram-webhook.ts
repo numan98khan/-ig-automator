@@ -8,11 +8,6 @@ import {
   cancelFollowupOnCustomerReply,
   checkAndExecuteAutomations,
 } from '../services/automationService';
-import {
-  categorizeMessage,
-  getOrCreateCategory,
-  incrementCategoryCount,
-} from '../services/aiCategorization';
 import { transcribeAudioFromUrl } from '../services/transcriptionService';
 import { trackDailyMetric } from '../services/reportingService';
 import { getLogSettingsSnapshot } from '../services/adminLogSettingsService';
@@ -401,7 +396,7 @@ async function transcribeVoiceNotes(message: any): Promise<void> {
 }
 
 /**
- * Process message automations (categorization and automation execution)
+ * Process message automations
  */
 async function processMessageAutomations(
   conversation: any,

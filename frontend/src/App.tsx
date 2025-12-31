@@ -5,13 +5,11 @@ import Layout from './components/Layout';
 import Landing from './pages/Landing';
 import Inbox from './pages/Inbox';
 import Settings from './pages/Settings';
-import Categories from './pages/Categories';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import VerifyEmail from './pages/VerifyEmail';
 import AcceptInvite from './pages/AcceptInvite';
 import RequestPasswordReset from './pages/RequestPasswordReset';
 import ResetPassword from './pages/ResetPassword';
-import Sandbox from './pages/Sandbox';
 import Dashboard from './pages/Dashboard';
 import { AccountProvider } from './context/AccountContext';
 import Support from './pages/Support';
@@ -42,11 +40,9 @@ function App() {
             <Route path="inbox" element={<Inbox />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="knowledge" element={<Navigate to="/automations?section=knowledge" replace />} />
-            <Route path="sandbox" element={<Sandbox />} />
             <Route path="settings" element={<Settings />} />
             <Route path="automations" element={<Automations />} />
             <Route path="support" element={<Support />} />
-            <Route path="categories" element={<Categories />} />
             <Route path="alerts" element={<Navigate to="/automations?section=alerts" replace />} />
             <Route path="escalations" element={<Navigate to="/automations?section=alerts" replace />} />
             <Route path="team" element={<Navigate to="/settings?tab=team" replace />} />

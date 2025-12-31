@@ -31,10 +31,6 @@ export interface IMessage extends Document {
   };
   metadata?: Record<string, any>;       // Additional Instagram data
 
-  // Categorization fields (Phase 2)
-  categoryId?: mongoose.Types.ObjectId;  // Reference to MessageCategory
-  detectedLanguage?: string;             // ISO language code (e.g., 'en', 'ar', 'es')
-  translatedText?: string;               // English translation for analysis
   aiTags?: string[];                     // Semantic labels returned by AI
   aiShouldEscalate?: boolean;            // Escalation flag from AI
   aiEscalationReason?: string;           // Short reason for escalation
@@ -111,20 +107,6 @@ const messageSchema = new Schema<IMessage>({
     type: Schema.Types.Mixed,
   },
 
-  // Categorization fields (Phase 2)
-  categoryId: {
-    type: Schema.Types.ObjectId,
-    ref: 'MessageCategory',
-    sparse: true,
-  },
-  detectedLanguage: {
-    type: String,
-    sparse: true,
-  },
-  translatedText: {
-    type: String,
-    sparse: true,
-  },
   aiTags: {
     type: [String],
     default: [],

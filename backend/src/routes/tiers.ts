@@ -5,7 +5,6 @@ import UsageCounter from '../models/UsageCounter';
 import InstagramAccount from '../models/InstagramAccount';
 import WorkspaceMember from '../models/WorkspaceMember';
 import KnowledgeItem from '../models/KnowledgeItem';
-import MessageCategory from '../models/MessageCategory';
 import Workspace from '../models/Workspace';
 import { WorkspaceInvite } from '../models/WorkspaceInvite';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
@@ -13,11 +12,10 @@ import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 const router = express.Router();
 
 const buildWorkspaceUsage = async (workspaceId: string) => {
-  const [accounts, members, knowledge, categories, pendingInvites] = await Promise.all([
+  const [accounts, members, knowledge, pendingInvites] = await Promise.all([
     InstagramAccount.countDocuments({ workspaceId }),
     WorkspaceMember.countDocuments({ workspaceId }),
     KnowledgeItem.countDocuments({ workspaceId }),
-    MessageCategory.countDocuments({ workspaceId }),
     WorkspaceInvite.countDocuments({
       workspaceId,
       accepted: false,
@@ -29,7 +27,6 @@ const buildWorkspaceUsage = async (workspaceId: string) => {
     instagramAccounts: accounts,
     teamMembers: members + pendingInvites,
     knowledgeItems: knowledge,
-    messageCategories: categories,
   };
 };
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowRight, MessageSquare, BookOpen, Tags, TestTube, Users, AlertTriangle } from 'lucide-react';
+import { Search, ArrowRight, MessageSquare, BookOpen, Users, AlertTriangle } from 'lucide-react';
 
 interface GlobalSearchModalProps {
   open: boolean;
@@ -30,20 +30,6 @@ const searchIndex: SearchItem[] = [
     path: '/automations?section=knowledge',
     icon: BookOpen,
     tags: ['docs', 'articles', 'collections'],
-  },
-  {
-    title: 'Categories & Policies',
-    description: 'Adjust AI instructions and escalation rules by topic.',
-    path: '/categories',
-    icon: Tags,
-    tags: ['policy', 'routing', 'automation'],
-  },
-  {
-    title: 'Sandbox (Test)',
-    description: 'Run a live chat test or simulate scripted scenarios.',
-    path: '/sandbox',
-    icon: TestTube,
-    tags: ['testing', 'simulation'],
   },
   {
     title: 'Human Alerts (Automations)',
@@ -120,7 +106,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ open, onClose, on
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search conversations, automations, categories, or teammates"
+            placeholder="Search conversations, automations, or teammates"
             className="flex-1 bg-transparent outline-none text-sm"
           />
           <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-md">ESC</span>
@@ -157,7 +143,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ open, onClose, on
 
           {results.length === 0 && (
             <div className="text-center text-muted-foreground text-sm py-6">
-              No matches yet. Try searching for a conversation topic, policy, or teammate.
+              No matches yet. Try searching for a conversation topic or teammate.
             </div>
           )}
         </div>

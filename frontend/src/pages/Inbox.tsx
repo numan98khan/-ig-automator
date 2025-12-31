@@ -7,13 +7,11 @@ import {
   messageAPI,
   instagramAPI,
   instagramSyncAPI,
-  categoriesAPI,
   tierAPI,
   TierSummaryResponse,
   Conversation,
   Message,
   InstagramAccount,
-  MessageCategory,
   AutomationSessionSummary,
 } from '../services/api';
 import {
@@ -22,7 +20,6 @@ import {
   Instagram,
   Loader2,
   RefreshCw,
-  Tag,
   Check,
   CheckCheck,
   ArrowLeft,
@@ -36,7 +33,6 @@ import {
   Clock3,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { Badge } from '../components/ui/Badge';
 import { ImageAttachment, VideoAttachment, VoiceAttachment, LinkPreviewComponent, FileAttachment } from '../components/MessageMedia';
 
 const Inbox: React.FC = () => {
@@ -47,21 +43,17 @@ const Inbox: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [instagramAccounts, setInstagramAccounts] = useState<InstagramAccount[]>([]);
-  const [categories, setCategories] = useState<MessageCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncingAll, setSyncingAll] = useState(false);
   const [workspaceTier, setWorkspaceTier] = useState<TierSummaryResponse['workspace']>();
-  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
-  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const [previousMessageCount, setPreviousMessageCount] = useState(0);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'unreplied' | 'escalated' | 'highIntent'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'unreplied' | 'escalated'>('all');
   const [contextOpen, setContextOpen] = useState(false);
   const [draftSource, setDraftSource] = useState<'ai' | null>(null);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
@@ -107,17 +99,6 @@ const Inbox: React.FC = () => {
     }
   };
 
-  const handleCategoryChange = async (messageId: string, categoryId: string) => {
-    try {
-      await messageAPI.updateCategory(messageId, categoryId);
-      await loadMessages();
-      await loadConversations();
-      setCategoryDropdownOpen(null);
-    } catch (error) {
-      console.error('Error updating category:', error);
-      alert('Failed to update category. Please try again.');
-    }
-  };
 
   const loadAutomationSession = async (options?: { silent?: boolean }) => {
     if (!selectedConversation?._id) {
@@ -174,16 +155,6 @@ const Inbox: React.FC = () => {
   }, [currentWorkspace, selectedConversation, activeAccount]);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
-        setCategoryDropdownOpen(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('instagram_connected') === 'true') {
       window.history.replaceState({}, '', window.location.pathname);
@@ -197,15 +168,13 @@ const Inbox: React.FC = () => {
     if (!currentWorkspace) return;
     try {
       setLoading(true);
-      const [accountsData, conversationsData, categoriesData, tierData] = await Promise.all([
+      const [accountsData, conversationsData, tierData] = await Promise.all([
         instagramAPI.getByWorkspace(currentWorkspace._id),
         conversationAPI.getByWorkspace(currentWorkspace._id),
-        categoriesAPI.getByWorkspace(currentWorkspace._id),
         tierAPI.getWorkspace(currentWorkspace._id),
       ]);
 
       setInstagramAccounts(accountsData || accountContextList || []);
-      setCategories(categoriesData || []);
       setWorkspaceTier(tierData);
 
       if (!activeAccount) {
@@ -457,12 +426,10 @@ const Inbox: React.FC = () => {
         (conv.lastMessage || '').toLowerCase().includes(term);
 
       const isEscalated = Boolean(conv.humanRequired);
-      const isHighIntent = conv.categoryName ? /lead|booking|order|purchase|pricing/i.test(conv.categoryName) : false;
       const isUnreplied = !conv.isSynced || isEscalated;
 
       if (!matchesSearch) return false;
       if (activeFilter === 'escalated') return isEscalated;
-      if (activeFilter === 'highIntent') return isHighIntent;
       if (activeFilter === 'unreplied') return isUnreplied;
       return true;
     });
@@ -545,11 +512,10 @@ const Inbox: React.FC = () => {
                   { key: 'all', label: 'All' },
                   { key: 'unreplied', label: 'Unreplied' },
                   { key: 'escalated', label: 'Escalated' },
-                  { key: 'highIntent', label: 'High intent' },
                 ].map((filter) => (
                   <button
                     key={filter.key}
-                    onClick={() => setActiveFilter(filter.key as 'all' | 'unreplied' | 'escalated' | 'highIntent')}
+                    onClick={() => setActiveFilter(filter.key as 'all' | 'unreplied' | 'escalated')}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${activeFilter === filter.key
                       ? 'bg-primary/10 text-primary border-primary/40'
                       : 'text-muted-foreground border-border hover:text-foreground hover:border-primary/40'
@@ -609,11 +575,6 @@ const Inbox: React.FC = () => {
                             Escalated
                           </span>
                         )}
-                        {conv.categoryName && (
-                          <Badge variant="primary" className="text-[11px] py-0 px-2 rounded-full">
-                            {conv.categoryName}
-                          </Badge>
-                        )}
                       </div>
                     </div>
                     <span className="text-[11px] text-muted-foreground whitespace-nowrap mt-0.5">{formatTime(conv.lastMessageAt)}</span>
@@ -643,11 +604,6 @@ const Inbox: React.FC = () => {
                       </h2>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                         <span>@{selectedConversation.participantHandle}</span>
-                        {selectedConversation.categoryName && (
-                          <Badge variant="secondary" className="text-[11px] px-2 py-0 rounded-full">
-                            {selectedConversation.categoryName}
-                          </Badge>
-                        )}
                         {selectedConversation.humanRequired && (
                           <span className="px-2 py-0.5 rounded-full text-[11px] bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100">
                             Escalated
@@ -690,8 +646,6 @@ const Inbox: React.FC = () => {
                       <div
                         key={msg._id}
                         className={`flex ${msg.from === 'customer' ? 'justify-start' : 'justify-end'}`}
-                        onMouseEnter={() => msg.from === 'customer' && setHoveredMessageId(msg._id)}
-                        onMouseLeave={() => setHoveredMessageId(null)}
                       >
                         <div className="relative max-w-[85%] md:max-w-2xl group">
                           <div
@@ -749,40 +703,6 @@ const Inbox: React.FC = () => {
                             </div>
                           </div>
 
-                          {msg.from === 'customer' && hoveredMessageId === msg._id && !categoryDropdownOpen && (
-                            <div className="absolute left-0 -bottom-9 animate-fade-in z-10">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                className="text-xs h-7 px-2.5 bg-background border-border"
-                                onClick={() => setCategoryDropdownOpen(msg._id)}
-                                leftIcon={<Tag className="w-3.5 h-3.5" />}
-                              >
-                                {msg.categoryId?.nameEn || 'Categorize'}
-                              </Button>
-                            </div>
-                          )}
-
-                          {categoryDropdownOpen === msg._id && (
-                            <div
-                              ref={categoryDropdownRef}
-                              className="absolute left-0 top-full mt-2 z-20 bg-card border border-border rounded-lg py-1 min-w-[200px] max-h-60 overflow-y-auto animate-fade-in shadow-lg"
-                            >
-                              <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground border-b border-border uppercase tracking-wider">
-                                Select Category
-                              </div>
-                              {categories.map((cat) => (
-                                <button
-                                  key={cat._id}
-                                  onClick={() => handleCategoryChange(msg._id, cat._id)}
-                                  className={`w-full text-left px-3 py-2 text-sm transition hover:bg-muted/50 ${msg.categoryId?._id === cat._id ? 'text-primary font-medium bg-primary/5' : 'text-foreground'
-                                    }`}
-                                >
-                                  {cat.nameEn}
-                                </button>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       </div>
                     ))}

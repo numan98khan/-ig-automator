@@ -7,7 +7,6 @@ import User from '../models/User';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import WorkspaceMember from '../models/WorkspaceMember';
-import MessageCategory from '../models/MessageCategory';
 import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
@@ -304,10 +303,6 @@ router.get('/conversations', authenticate, requireAdmin, async (req, res) => {
     ]);
 
     const workspaceIds = items.map((c: any) => c.workspaceId);
-    const categories = await MessageCategory.find({
-      _id: { $in: items.map((c: any) => c.categoryId).filter(Boolean) },
-    }).lean();
-    const categoryMap = Object.fromEntries(categories.map((c: any) => [String(c._id), c]));
     const workspaceMap = Object.fromEntries(
       (await Workspace.find({ _id: { $in: workspaceIds } }).lean()).map((w: any) => [String(w._id), w])
     );
@@ -317,7 +312,6 @@ router.get('/conversations', authenticate, requireAdmin, async (req, res) => {
         conversations: items.map((c: any) => ({
           ...c,
           workspaceName: workspaceMap[String(c.workspaceId)]?.name,
-          categoryName: c.categoryId ? categoryMap[String(c.categoryId)]?.nameEn : undefined,
         })),
         pagination: {
           currentPage: page,
@@ -420,16 +414,6 @@ router.get('/workspaces/:id/members', authenticate, requireAdmin, async (req, re
     res.json({ data: { members } });
   } catch (error) {
     console.error('Admin workspace members error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-router.get('/workspaces/:id/categories', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const categories = await MessageCategory.find({ workspaceId: req.params.id }).lean();
-    res.json({ data: { categories } });
-  } catch (error) {
-    console.error('Admin workspace categories error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

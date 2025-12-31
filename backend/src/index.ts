@@ -18,9 +18,7 @@ import conversationRoutes from './routes/conversations';
 import messageRoutes from './routes/messages';
 import knowledgeRoutes from './routes/knowledge';
 import settingsRoutes from './routes/settings';
-import categoriesRoutes from './routes/categories';
 import escalationRoutes from './routes/escalations';
-import sandboxRoutes from './routes/sandbox';
 import { scheduler } from './services/scheduler';
 import dashboardRoutes from './routes/dashboard';
 import supportTicketRoutes from './routes/supportTickets';
@@ -32,6 +30,7 @@ import automationRoutes from './routes/automations';
 import flowTemplateRoutes from './routes/flow-templates';
 import automationInstanceRoutes from './routes/automation-instances';
 import integrationsRoutes from './routes/integrations';
+import automationIntentRoutes from './routes/automation-intents';
 import { ensureDefaultAdmin } from './utils/defaultAdmin';
 import { initConsoleLogCapture } from './services/consoleLogCapture';
 
@@ -66,9 +65,7 @@ app.use('/api/conversations', conversationRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/settings', settingsRoutes);
-app.use('/api/categories', categoriesRoutes);
 app.use('/api/escalations', escalationRoutes);
-app.use('/api/sandbox', sandboxRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/support-tickets', supportTicketRoutes);
 app.use('/api/assistant', assistantRoutes);
@@ -77,6 +74,7 @@ app.use('/api/tiers', tierRoutes);
 app.use('/api/automations', automationRoutes);
 app.use('/api/flow-templates', flowTemplateRoutes);
 app.use('/api/automation-instances', automationInstanceRoutes);
+app.use('/api/automation-intents', automationIntentRoutes);
 app.use('/api/integrations', integrationsRoutes);
 
 // Health check
