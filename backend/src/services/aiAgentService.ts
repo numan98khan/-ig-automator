@@ -344,7 +344,7 @@ Return JSON with:
     const shouldStop = Boolean(raw.shouldStop);
 
     let finalReply = replyText;
-    if (finalReply && Number.isFinite(maxReplySentences) && maxReplySentences > 0) {
+    if (finalReply && typeof maxReplySentences === 'number' && Number.isFinite(maxReplySentences) && maxReplySentences > 0) {
       const sentences = splitIntoSentences(finalReply);
       if (sentences.length > maxReplySentences) {
         finalReply = sentences.slice(0, maxReplySentences).join(' ').trim();
