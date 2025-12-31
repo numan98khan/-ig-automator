@@ -3,8 +3,6 @@ import mongoose from 'mongoose';
 import { IConversation } from '../models/Conversation';
 import Message, { IMessage } from '../models/Message';
 import KnowledgeItem from '../models/KnowledgeItem';
-import CategoryKnowledge from '../models/CategoryKnowledge';
-import MessageCategory from '../models/MessageCategory';
 import WorkspaceSettings, { IWorkspaceSettings } from '../models/WorkspaceSettings';
 import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
@@ -32,11 +30,8 @@ export interface AIReplyOptions {
   conversation: IConversation;
   workspaceId: mongoose.Types.ObjectId | string;
   latestCustomerMessage?: string;
-  categoryId?: mongoose.Types.ObjectId | string;
-  categorization?: { categoryName?: string; detectedLanguage?: string; translatedText?: string };
   knowledgeItemIds?: string[];
   historyLimit?: number;
-  mode?: 'live' | 'sandbox';
   messageHistory?: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[];
   goalContext?: {
     workspaceGoals?: {
@@ -163,8 +158,6 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     conversation,
     workspaceId,
     latestCustomerMessage,
-    categoryId,
-    categorization,
     historyLimit = 10,
     messageHistory,
   } = options;
@@ -198,32 +191,17 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
           return ordered;
         });
 
-  const [categoryKnowledge, category] = categoryId
-    ? await Promise.all([
-        CategoryKnowledge.findOne({ workspaceId, categoryId }),
-        MessageCategory.findById(categoryId),
-      ])
-    : [null, null];
-
-  const categoryName = category?.nameEn || categorization?.categoryName;
-  const aiPolicy = category?.aiPolicy || 'assist_only';
   const decisionMode = workspaceSettings?.decisionMode || 'assist';
   const allowHashtags = workspaceSettings?.allowHashtags ?? false;
   const allowEmojis = workspaceSettings?.allowEmojis ?? true;
   const maxReplySentences = (options.maxReplySentences ?? workspaceSettings?.maxReplySentences) || 3;
-  const replyLanguage = workspaceSettings?.defaultReplyLanguage || workspaceSettings?.defaultLanguage || categorization?.detectedLanguage || 'en';
+  const replyLanguage = workspaceSettings?.defaultReplyLanguage || workspaceSettings?.defaultLanguage || 'en';
   const tone = options.tone?.trim();
   let knowledgeItemsUsed = knowledgeItems.slice(0, 5).map(item => ({
     id: item._id.toString(),
     title: item.title,
   }));
 
-  if (categoryKnowledge?.content) {
-    knowledgeItemsUsed.unshift({
-      id: categoryKnowledge._id?.toString() || 'category',
-      title: `Category Guidance: ${category?.nameEn || 'Unspecified'}`,
-    });
-  }
 
   const goalContext = options.goalContext || {};
   const workspaceGoals = goalContext.workspaceGoals;
@@ -299,20 +277,11 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     knowledgeItemsUsed = [...ragUsed, ...knowledgeItemsUsed];
   }
 
-  if (categoryKnowledge?.content) {
-    knowledgeContext += `\n\nCategory Guidance (${category?.nameEn || 'Unspecified'}):\n${categoryKnowledge.content}`;
-  }
-
-  // Category metadata for model
-  const categoryPolicyText = `Category Policy: ${aiPolicy}. ${category?.escalationNote ? `Note: ${category.escalationNote}` : ''}`;
-
-  const workspacePolicyText = `Workspace decision mode: ${decisionMode}. ${
-    workspaceSettings?.escalationGuidelines ? `Escalation guidelines: ${workspaceSettings.escalationGuidelines}` : ''
-  } ${
-    workspaceSettings?.escalationExamples?.length
-      ? `Escalation examples: ${workspaceSettings.escalationExamples.join(' | ')}`
-      : ''
-  }`;
+  const ragMatchPreview = vectorContexts.slice(0, 3).map((ctx) => ({
+    id: ctx.id,
+    title: ctx.title,
+    contentSnippet: truncateText(ctx.content, 240),
+  }));
 
   // Build conversation history with media context and transcriptions
   const conversationHistory = messages.map((msg: any) => {
@@ -439,7 +408,7 @@ You can see and analyze images and videos that customers send. When responding t
 Voice notes and audio messages are automatically transcribed. The transcribed text is included in the message content. Treat transcribed voice notes naturally in your response - you don't need to mention that it was a voice note unless relevant.
 
 Global rules that ALWAYS apply:
-- Strictly obey workspace and category policies provided in the context.
+- Strictly obey workspace guidelines provided in the context.
 - NEVER promise discounts, prices, contracts, special deals, or commitments unless the business's knowledge base explicitly authorizes you to do so.
 - Keep replies short and natural: ${Math.max(1, maxReplySentences)} sentence${maxReplySentences === 1 ? '' : 's'} max, maximum 60–80 words.
 - Use a${tone ? ` ${tone}` : ' professional and friendly'} tone that fits the brand voice.
@@ -448,7 +417,7 @@ Global rules that ALWAYS apply:
 - Do not repeat the opening phrase from your previous reply if there is one.
 - Only use hashtags if the business allows them AND the customer used hashtags first.
 - Use emojis only if the business allows them.
-- When policy or situation is complex/risky/high-stakes, set shouldEscalate=true so a human can handle it.
+- When a situation is complex/risky/high-stakes, set shouldEscalate=true so a human can handle it.
 - Always respond in the language specified in the context (which may differ from the language of the instructions).
 - For escalations: acknowledge the request clearly, explain a human will handle it, avoid making commitments, and keep the door open for other questions.
 
@@ -488,16 +457,7 @@ If a detected intent matches a workspace goal, answer their question then guide 
 KNOWLEDGE BASE:
 ${knowledgeContext || 'No specific knowledge provided. Use general business courtesy.'}
 
-CURRENT MESSAGE CATEGORY: ${categoryName || 'General'}
-Category policy: ${aiPolicy}
-${aiPolicy === 'full_auto' ? '→ Safe to answer completely if you have the information.' : ''}
-${aiPolicy === 'assist_only' ? '→ Help informationally, but do NOT commit to prices, discounts, contracts, or binding decisions.' : ''}
-${aiPolicy === 'escalate' ? '→ ALWAYS escalate to human. Acknowledge request politely, state a human will follow up, do not make commitments.' : ''}
-${category?.escalationNote ? `Note: ${category.escalationNote}` : ''}
-
 CONVERSATION CONTEXT:
-Customer language detected: ${categorization?.detectedLanguage || 'unknown'}
-${categorization?.translatedText ? `(Translated to English: "${categorization.translatedText}")` : ''}
 You must reply in: ${getLanguageName(replyLanguage)}
 
 Recent conversation history:
@@ -592,8 +552,6 @@ Generate a response following all rules above. Return JSON with:
       reasoningEffort: supportsReasoningEffort(model) ? reasoningEffort : undefined,
       maxOutputTokens,
       ragEnabled,
-      category: categoryName || 'General',
-      aiPolicy,
       decisionMode,
       tone: tone || 'default',
       maxReplySentences,
@@ -602,6 +560,7 @@ Generate a response following all rules above. Return JSON with:
       knowledgeItems: knowledgeItems.length,
       knowledgeItemFilter: options.knowledgeItemIds?.length || 0,
       ragMatches: vectorContexts.length,
+      ragMatchPreview: ragMatchPreview.length ? ragMatchPreview : undefined,
     });
 
     requestStart = process.hrtime.bigint();
@@ -704,25 +663,11 @@ Generate a response following all rules above. Return JSON with:
     console.warn('Falling back to escalation reply after AI generation failure', {
       conversationId: conversation._id?.toString(),
       workspaceId: workspaceId.toString(),
-      categoryId: categoryId?.toString(),
     });
   }
 
-  // Enforce policy-based escalation
-  if (aiPolicy === 'escalate') {
-    reply.shouldEscalate = true;
-    reply.escalationReason = reply.escalationReason || category?.escalationNote || 'Category requires human review';
-    reply.replyText = ensureEscalationTone(reply.replyText);
-  } else if (aiPolicy === 'assist_only' && decisionMode === 'info_only') {
-    reply.shouldEscalate = true;
-    reply.escalationReason = reply.escalationReason || 'Decision mode prefers human review for this category';
-  }
-
-  // Ensure tags include category + escalation hints
+  // Ensure tags include escalation hints
   const tagSet = new Set<string>(reply.tags || []);
-  if (categoryName) {
-    tagSet.add(categoryName.toLowerCase().replace(/\s+/g, '_'));
-  }
   if (reply.shouldEscalate) {
     tagSet.add('escalation');
   }
@@ -748,7 +693,6 @@ Generate a response following all rules above. Return JSON with:
   logAiDebug('reply_generated', {
     conversationId: conversation._id?.toString(),
     workspaceId: workspaceId.toString(),
-    categoryId: categoryId?.toString(),
     model,
     replyConfig: {
       maxReplySentences,
@@ -875,15 +819,6 @@ function repairJson(content: string): string {
   }
 
   return repaired;
-}
-
-function ensureEscalationTone(text: string): string {
-  const base = text && text.length > 0 ? text : 'Thanks for your message. A specialist will follow up shortly.';
-  const escalationNotice = 'A human teammate will review this and respond soon.';
-  if (base.toLowerCase().includes('human') || base.toLowerCase().includes('teammate')) {
-    return base;
-  }
-  return `${base} ${escalationNotice}`.trim();
 }
 
 function getLanguageName(code: string): string {

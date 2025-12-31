@@ -36,82 +36,10 @@ router.get('/conversation/:conversationId', authenticate, async (req: AuthReques
     }
 
     const messages = await Message.find({ conversationId })
-      .sort({ createdAt: 1 })
-      .populate('categoryId');
+      .sort({ createdAt: 1 });
     res.json(messages);
   } catch (error) {
     console.error('Get messages error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Update message category
-router.patch('/:messageId/category', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { messageId } = req.params;
-    const { categoryId } = req.body;
-
-    const message = await Message.findById(messageId);
-    if (!message) {
-      return res.status(404).json({ error: 'Message not found' });
-    }
-
-    const conversation = await Conversation.findById(message.conversationId);
-    if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found' });
-    }
-
-    // Check if user has access to this workspace
-    const { hasAccess } = await checkWorkspaceAccess(
-      conversation.workspaceId.toString(),
-      req.userId!
-    );
-
-    if (!hasAccess) {
-      return res.status(403).json({ error: 'Access denied to this workspace' });
-    }
-
-    // Track old category for count updates
-    const oldCategoryId = message.categoryId;
-
-    // Update message category
-    message.categoryId = categoryId;
-    await message.save();
-
-    // Update category counts
-    const MessageCategory = (await import('../models/MessageCategory')).default;
-
-    // Decrement old category count if it exists
-    if (oldCategoryId) {
-      await MessageCategory.findByIdAndUpdate(
-        oldCategoryId,
-        { $inc: { messageCount: -1 } }
-      );
-    }
-
-    // Increment new category count
-    if (categoryId) {
-      await MessageCategory.findByIdAndUpdate(
-        categoryId,
-        { $inc: { messageCount: 1 } }
-      );
-    }
-
-    // Also update conversation category if this is the last customer message
-    const lastCustomerMessage = await Message.findOne({
-      conversationId: conversation._id,
-      from: 'customer'
-    }).sort({ createdAt: -1 }).limit(1);
-
-    if (lastCustomerMessage && lastCustomerMessage._id.toString() === message._id.toString()) {
-      conversation.categoryId = categoryId;
-      await conversation.save();
-    }
-
-    const updatedMessage = await Message.findById(messageId).populate('categoryId');
-    res.json(updatedMessage);
-  } catch (error) {
-    console.error('Update message category error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

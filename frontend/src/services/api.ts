@@ -89,8 +89,6 @@ export interface Conversation {
   lastMessage?: string;
   createdAt: string;
   isSynced?: boolean;
-  categoryName?: string;
-  categoryId?: any;
   humanRequired?: boolean;
   humanRequiredReason?: string;
   humanTriggeredAt?: string;
@@ -125,7 +123,6 @@ export interface Message {
   text: string;
   from: 'customer' | 'user' | 'ai';
   createdAt: string;
-  categoryId?: any;
   seenAt?: string;
   aiTags?: string[];
   aiShouldEscalate?: boolean;
@@ -168,6 +165,20 @@ export interface AutomationSessionSummary {
   instance?: { _id: string; name?: string } | null;
   template?: { _id: string; name?: string } | null;
   version?: { _id: string; version?: number; versionLabel?: string } | null;
+  currentNode?: AutomationSessionNodeSummary | null;
+}
+
+export interface AutomationSessionNodeSummaryItem {
+  label: string;
+  value: string;
+}
+
+export interface AutomationSessionNodeSummary {
+  id: string;
+  type: string;
+  label?: string;
+  preview?: string;
+  summary?: AutomationSessionNodeSummaryItem[];
 }
 
 export interface KnowledgeItem {
@@ -193,8 +204,7 @@ export interface TriggerConfig {
   keywords?: string[];
   excludeKeywords?: string[];
   keywordMatch?: 'any' | 'all';
-  categoryIds?: string[];
-  triggerMode?: 'keywords' | 'categories' | 'any' | 'intent';
+  triggerMode?: 'keywords' | 'any' | 'intent';
   intentText?: string;
   outsideBusinessHours?: boolean;
   businessHours?: BusinessHoursConfig;
@@ -209,6 +219,20 @@ export interface AutomationStats {
   totalRepliesSent: number;
   lastTriggeredAt?: string;
   lastReplySentAt?: string;
+}
+
+export interface AutomationIntent {
+  _id?: string;
+  workspaceId?: string;
+  value: string;
+  description: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AutomationIntentListResponse {
+  systemIntents: AutomationIntent[];
+  customIntents: AutomationIntent[];
 }
 
 export interface FlowFieldOption {
@@ -337,14 +361,12 @@ export interface TierLimits {
   teamMembers?: number;
   automations?: number;
   knowledgeItems?: number;
-  messageCategories?: number;
 }
 
 export interface Tier {
   _id: string;
   name: string;
   description?: string;
-  allowCustomCategories: boolean;
   isDefault: boolean;
   isCustom: boolean;
   status: 'active' | 'inactive' | 'deprecated';
@@ -362,7 +384,6 @@ export interface WorkspaceTierUsage {
   instagramAccounts?: number;
   teamMembers?: number;
   knowledgeItems?: number;
-  messageCategories?: number;
 }
 
 export interface TierSummaryResponse {
@@ -431,7 +452,6 @@ export interface WorkspaceSettings {
   escalationExamples?: string[];
   humanEscalationBehavior?: 'ai_silent' | 'ai_allowed';
   humanHoldMinutes?: number;
-  skipTypingPauseInSandbox?: boolean;
   commentDmEnabled: boolean;
   commentDmTemplate: string;
   dmAutoReplyEnabled: boolean;
@@ -490,110 +510,10 @@ export interface InventoryMapping {
   sourceHeaders?: string[];
 }
 
-export interface MessageCategory {
-  _id: string;
-  workspaceId: string;
-  nameEn: string;
-  description?: string;
-  descriptionEn?: string;
-  exampleMessages?: string[];
-  aiPolicy?: 'full_auto' | 'assist_only' | 'escalate';
-  escalationNote?: string;
-  isSystem: boolean;
-  autoReplyEnabled: boolean;
-  messageCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CategoryKnowledge {
-  _id: string;
-  workspaceId: string;
-  categoryId: string;
-  content: string;
-  language: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface SandboxMessage {
-  role: 'customer';
-  text: string;
-}
-
-export interface SandboxLiveMessage {
-  from: 'customer' | 'ai';
-  text: string;
-  meta?: SandboxRunStepMeta;
-  typing?: boolean;
-}
-
-export interface SandboxLiveChatState {
-  messages: SandboxLiveMessage[];
-  input?: string;
-  selectedTurnIndex?: number | null;
-}
-
-export interface SandboxScenarioDraftState {
-  name?: string;
-  description?: string;
-  messages?: SandboxMessage[];
-  selectedScenarioId?: string | null;
-}
-
-export interface SandboxScenario {
-  _id: string;
-  workspaceId: string;
-  name: string;
-  description?: string;
-  messages: SandboxMessage[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface SandboxRunStepMeta {
-  detectedLanguage?: string;
-  categoryName?: string;
-  goalMatched?: GoalType | 'none';
-  shouldEscalate?: boolean;
-  escalationReason?: string;
-  tags?: string[];
-  knowledgeItemsUsed?: { id: string; title: string }[];
-}
-
-export interface SandboxRunStep {
-  customerText: string;
-  aiReplyText: string;
-  meta?: SandboxRunStepMeta;
-}
-
-export interface SandboxRunResponse {
-  runId: string;
-  steps: SandboxRunStep[];
-  createdAt: string;
-  settingsSnapshot?: Record<string, any>;
-}
-
-export interface SandboxWorkspaceState {
-  _id?: string;
-  workspaceId: string;
-  userId: string;
-  runConfig?: Partial<WorkspaceSettings>;
-  liveChat?: SandboxLiveChatState;
-  scenarioDraft?: SandboxScenarioDraftState;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface SandboxRun extends SandboxRunResponse {
-  _id: string;
-}
-
 export interface EscalationCase {
   escalation: {
     _id: string;
     conversationId: string;
-    categoryId?: string;
     topicSummary: string;
     reason?: string;
     status: 'pending' | 'in_progress' | 'resolved' | 'cancelled';
@@ -774,11 +694,6 @@ export const messageAPI = {
     return data;
   },
 
-  updateCategory: async (messageId: string, categoryId: string): Promise<Message> => {
-    const { data } = await api.patch(`/api/messages/${messageId}/category`, { categoryId });
-    return data;
-  },
-
   markSeen: async (conversationId: string): Promise<{ success: boolean; markedCount: number }> => {
     const { data } = await api.post('/api/messages/mark-seen', { conversationId });
     return data;
@@ -841,6 +756,24 @@ export const automationAPI = {
 
   delete: async (id: string): Promise<void> => {
     await api.delete(`/api/automations/${id}`);
+  },
+};
+
+export const automationIntentAPI = {
+  list: async (workspaceId: string): Promise<AutomationIntentListResponse> => {
+    const { data } = await api.get('/api/automation-intents', { params: { workspaceId } });
+    return data;
+  },
+  create: async (payload: { workspaceId: string; value: string; description: string }): Promise<AutomationIntent> => {
+    const { data } = await api.post('/api/automation-intents', payload);
+    return data;
+  },
+  update: async (id: string, payload: { value?: string; description?: string }): Promise<AutomationIntent> => {
+    const { data } = await api.put(`/api/automation-intents/${id}`, payload);
+    return data;
+  },
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/api/automation-intents/${id}`);
   },
 };
 
@@ -991,113 +924,6 @@ export const escalationAPI = {
   },
 };
 
-// Categories API (Phase 2)
-export const categoriesAPI = {
-  getByWorkspace: async (workspaceId: string): Promise<MessageCategory[]> => {
-    const { data } = await api.get(`/api/categories/workspace/${workspaceId}`);
-    return data;
-  },
-
-  getById: async (id: string): Promise<MessageCategory> => {
-    const { data } = await api.get(`/api/categories/${id}`);
-    return data;
-  },
-
-  create: async (workspaceId: string, nameEn: string, description?: string): Promise<MessageCategory> => {
-    const { data } = await api.post('/api/categories', { workspaceId, nameEn, description });
-    return data;
-  },
-
-  update: async (id: string, updates: Partial<MessageCategory>): Promise<MessageCategory> => {
-    const { data } = await api.put(`/api/categories/${id}`, updates);
-    return data;
-  },
-
-  delete: async (id: string): Promise<void> => {
-    await api.delete(`/api/categories/${id}`);
-  },
-
-  getKnowledge: async (categoryId: string): Promise<CategoryKnowledge> => {
-    const { data } = await api.get(`/api/categories/${categoryId}/knowledge`);
-    return data;
-  },
-
-  updateKnowledge: async (categoryId: string, content: string): Promise<CategoryKnowledge> => {
-    const { data } = await api.put(`/api/categories/${categoryId}/knowledge`, { content });
-    return data;
-  },
-};
-
-export const sandboxAPI = {
-  getState: async (workspaceId: string): Promise<SandboxWorkspaceState | null> => {
-    const { data } = await api.get('/api/sandbox/state', { params: { workspaceId } });
-    return data || null;
-  },
-
-  saveState: async (
-    workspaceId: string,
-    payload: Partial<Pick<SandboxWorkspaceState, 'runConfig' | 'liveChat' | 'scenarioDraft'>>
-  ): Promise<SandboxWorkspaceState> => {
-    const { data } = await api.put('/api/sandbox/state', { workspaceId, ...payload });
-    return data;
-  },
-
-  listScenarios: async (workspaceId: string): Promise<SandboxScenario[]> => {
-    const { data } = await api.get('/api/sandbox/scenarios', { params: { workspaceId } });
-    return data;
-  },
-
-  createScenario: async (payload: {
-    workspaceId: string;
-    name: string;
-    description?: string;
-    messages: SandboxMessage[];
-  }): Promise<SandboxScenario> => {
-    const { data } = await api.post('/api/sandbox/scenarios', payload);
-    return data;
-  },
-
-  updateScenario: async (
-    scenarioId: string,
-    payload: Partial<Pick<SandboxScenario, 'name' | 'description' | 'messages'>>
-  ): Promise<SandboxScenario> => {
-    const { data } = await api.put(`/api/sandbox/scenarios/${scenarioId}`, payload);
-    return data;
-  },
-
-  deleteScenario: async (scenarioId: string): Promise<void> => {
-    await api.delete(`/api/sandbox/scenarios/${scenarioId}`);
-  },
-
-  runScenario: async (
-    scenarioId: string,
-    overrideSettings?: Partial<WorkspaceSettings>
-  ): Promise<SandboxRunResponse> => {
-    const { data } = await api.post(`/api/sandbox/scenarios/${scenarioId}/run`, {
-      overrideSettings,
-    });
-    return data;
-  },
-
-  listRuns: async (scenarioId: string): Promise<SandboxRun[]> => {
-    const { data } = await api.get(`/api/sandbox/scenarios/${scenarioId}/runs`);
-    return data;
-  },
-
-  quickRun: async (
-    workspaceId: string,
-    messages: string[] | string,
-    overrideSettings?: Partial<WorkspaceSettings>
-  ): Promise<SandboxRunResponse> => {
-    const { data } = await api.post('/api/sandbox/quick-run', {
-      workspaceId,
-      messages: Array.isArray(messages) ? messages : [messages],
-      overrideSettings,
-    });
-    return data;
-  },
-};
-
 // Workspace Invites API
 export interface WorkspaceInvite {
   _id: string;
@@ -1172,7 +998,6 @@ export interface DashboardAttentionItem {
   handle?: string;
   lastMessagePreview?: string;
   lastMessageAt?: string;
-  category?: string;
   badges?: string[];
   actions?: { canAssign?: boolean; canResolve?: boolean; canSnooze?: boolean };
 }
@@ -1187,7 +1012,6 @@ export interface DashboardInsightsResponse {
   aiPerformance: {
     escalationRate: number;
     topReasons: { name: string; count: number }[];
-    topCategories: { name: string; count: number }[];
   };
   knowledge: {
     kbBackedRate: number;

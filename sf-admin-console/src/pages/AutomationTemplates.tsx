@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { adminApi, unwrapData } from '../services/api'
+import AutomationsTabs from '../components/AutomationsTabs'
 import {
   ArrowLeft,
   Plus,
@@ -9,16 +10,11 @@ import {
   RefreshCw,
   UploadCloud,
   Trash2,
-  MessageSquare,
-  Sparkles,
-  Flag,
   Play,
   Network,
   Copy,
   Eraser,
   Maximize2,
-  Zap,
-  Search,
 } from 'lucide-react'
 import {
   ReactFlow,
@@ -29,721 +25,99 @@ import {
   addEdge,
   useEdgesState,
   useNodesState,
-  Handle,
-  Position,
   type Connection,
-  type Edge,
-  type Node,
-  type NodeProps,
   type NodeTypes,
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import {
+  AI_MODEL_SUGGESTIONS,
+  DEFAULT_TRIGGER_TYPE,
+  FIELD_TYPES,
+  FLOW_NODE_LABELS,
+  FLOW_NODE_LIBRARY,
+  GOAL_OPTIONS,
+  INDUSTRY_OPTIONS,
+  MESSAGE_STATE_VARIABLES,
+  REASONING_EFFORT_OPTIONS,
+  TRIGGER_LIBRARY,
+  TRIGGER_METADATA,
+} from './automation-templates/constants'
+import { buildFlowNodeTypes } from './automation-templates/components/FlowNodes'
+import type {
+  DraftForm,
+  FieldForm,
+  FlowAiSettings,
+  FlowDisplay,
+  FlowDraft,
+  FlowEdge,
+  FlowField,
+  FlowIntentSettings,
+  FlowNode,
+  FlowNodeType,
+  FlowTemplate,
+  FlowTrigger,
+  FlowTriggerConfig,
+  RouterCondition,
+  RouterRule,
+  RouterRuleOperator,
+  RouterRuleSource,
+  TriggerType,
+} from './automation-templates/types'
+import {
+  buildEmptyDraftForm,
+  buildFieldForm,
+  buildFlowDsl,
+  buildNodeData,
+  buildTriggerForm,
+  formatButtonList,
+  formatJson,
+  formatKeywordList,
+  formatKnowledgeIds,
+  formatTags,
+  normalizeTriggerConfig,
+  parseButtonList,
+  parseDefaultValue,
+  parseFlowDsl,
+  parseKeywordList,
+  parseKnowledgeIds,
+  parseOptionalNumber,
+  parseOptionsText,
+  parseTags,
+} from './automation-templates/utils'
 
-type TriggerType =
-  | 'post_comment'
-  | 'story_reply'
-  | 'dm_message'
-  | 'story_share'
-  | 'instagram_ads'
-  | 'live_comment'
-  | 'ref_url'
-
-type FlowTrigger = {
-  type: TriggerType
-  label?: string
-  description?: string
-  config?: Record<string, any>
-}
-
-type FlowField = {
-  key: string
-  label: string
-  type: 'string' | 'number' | 'boolean' | 'select' | 'multi_select' | 'json' | 'text'
-  description?: string
-  required?: boolean
-  defaultValue?: any
-  options?: Array<{ label: string; value: string }>
-  ui?: {
-    placeholder?: string
-    helpText?: string
-    group?: string
-    order?: number
-  }
-  validation?: {
-    min?: number
-    max?: number
-    pattern?: string
-  }
-  source?: {
-    nodeId?: string
-    path?: string
-  }
-}
-
-type FlowDisplay = {
-  outcome?: string
-  goal?: 'Bookings' | 'Sales' | 'Leads' | 'Support' | 'General'
-  industry?: 'Clinics' | 'Salons' | 'Retail' | 'Restaurants' | 'Real Estate' | 'General'
-  setupTime?: string
-  collects?: string[]
-  icon?: string
-  previewConversation?: Array<{ from: 'bot' | 'customer'; message: string }>
-}
-
-type FlowDraft = {
-  _id: string
-  name: string
-  description?: string
-  status: 'draft' | 'archived'
-  templateId?: string
-  dsl: Record<string, any>
-  triggers?: FlowTrigger[]
-  exposedFields?: FlowField[]
-  display?: FlowDisplay
-  updatedAt?: string
-}
-
-type FlowTemplate = {
-  _id: string
-  name: string
-  description?: string
-  status: 'active' | 'archived'
-  currentVersionId?: string
-}
-
-type FlowNodeType = 'trigger' | 'detect_intent' | 'send_message' | 'ai_reply' | 'handoff'
-
-type FlowAiSettings = {
-  tone?: string
-  maxReplySentences?: number
-  historyLimit?: number
-  ragEnabled?: boolean
-  model?: string
-  temperature?: number
-  maxOutputTokens?: number
-  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
-}
-
-type FlowIntentSettings = {
-  model?: string
-  temperature?: number
-  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
-}
-
-type FlowTriggerConfig = {
-  keywords?: string[]
-  excludeKeywords?: string[]
-  keywordMatch?: 'any' | 'all'
-  triggerMode?: 'keywords' | 'categories' | 'any' | 'intent'
-  intentText?: string
-}
-
-type FlowButton = {
-  title: string
-  payload?: string
-}
-
-type FlowNodeData = {
-  label: string
-  subtitle?: string
-  isStart?: boolean
-}
-
-type FlowNode = Node<FlowNodeData> & {
-  type: FlowNodeType
-  triggerType?: TriggerType
-  triggerDescription?: string
-  triggerConfig?: FlowTriggerConfig
-  intentSettings?: FlowIntentSettings
-  logEnabled?: boolean
-  text?: string
-  message?: string
-  buttons?: FlowButton[]
-  tags?: string[]
-  aiSettings?: FlowAiSettings
-  knowledgeItemIds?: string[]
-  handoff?: {
-    topic?: string
-    summary?: string
-    recommendedNextAction?: string
-    message?: string
-  }
-  waitForReply?: boolean
-}
-
-type FlowEdge = Edge
-
-type TriggerForm = {
-  id: string
-  type: TriggerType
-  label: string
-  description: string
-  configText: string
-}
-
-const TRIGGER_LIBRARY: Array<{ type: TriggerType; label: string; description: string }> = [
-  {
-    type: 'post_comment',
-    label: 'Post or Reel Comments',
-    description: 'User comments on your Post or Reel',
-  },
-  {
-    type: 'story_reply',
-    label: 'Story Reply',
-    description: 'User replies to your Story',
-  },
-  {
-    type: 'dm_message',
-    label: 'Instagram Message',
-    description: 'User sends a message',
-  },
-  {
-    type: 'story_share',
-    label: 'Story Share',
-    description: 'User shares your Post or Reel as a Story',
-  },
-  {
-    type: 'instagram_ads',
-    label: 'Instagram Ads',
-    description: 'User clicks an Instagram Ad',
-  },
-  {
-    type: 'live_comment',
-    label: 'Live Comments',
-    description: 'User comments on your Live',
-  },
-  {
-    type: 'ref_url',
-    label: 'Instagram Ref URL',
-    description: 'User clicks a referral link',
-  },
+const ROUTER_SOURCE_OPTIONS: Array<{ value: RouterRuleSource; label: string }> = [
+  { value: 'vars', label: 'Vars (session)' },
+  { value: 'message', label: 'Message text' },
+  { value: 'config', label: 'User config' },
+  { value: 'context', label: 'Message context' },
 ]
 
-const TRIGGER_METADATA = TRIGGER_LIBRARY.reduce((acc, trigger) => {
-  acc[trigger.type] = { label: trigger.label, description: trigger.description }
-  return acc
-}, {} as Record<TriggerType, { label: string; description: string }>)
-
-const DEFAULT_TRIGGER_TYPE: TriggerType = 'dm_message'
-
-const AI_MODEL_SUGGESTIONS = [
-  'gpt-5',
-  'gpt-5-mini',
-  'gpt-5-nano',
-  'gpt-4o',
-  'gpt-4o-mini',
-  'o1',
-  'o1-mini',
-  'o1-preview',
+const ROUTER_OPERATOR_OPTIONS: Array<{ value: RouterRuleOperator; label: string }> = [
+  { value: 'equals', label: 'Equals' },
+  { value: 'contains', label: 'Contains' },
+  { value: 'gt', label: 'Greater than' },
+  { value: 'lt', label: 'Less than' },
 ]
 
-const MESSAGE_STATE_VARIABLES = [
-  { key: 'detectedIntent', label: 'Detected intent', token: '{{ vars.detectedIntent }}' },
+const ROUTER_MESSAGE_OPERATORS: Array<{ value: RouterRuleOperator; label: string }> = [
+  { value: 'keywords', label: 'Keywords' },
+  { value: 'contains', label: 'Contains' },
+  { value: 'equals', label: 'Equals' },
 ]
 
-const REASONING_EFFORT_OPTIONS: Array<FlowAiSettings['reasoningEffort']> = [
-  'none',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-]
-
-type FieldForm = {
-  id: string
-  key: string
-  label: string
-  type: FlowField['type']
-  description: string
-  required: boolean
-  defaultValue: string | boolean
-  optionsText: string
-  uiGroup: string
-  uiOrder: string
-  uiPlaceholder: string
-  uiHelpText: string
-  validationMin: string
-  validationMax: string
-  validationPattern: string
-  sourceNodeId: string
-  sourcePath: string
+const ROUTER_DEFAULT_CONDITION: RouterCondition = {
+  type: 'rules',
+  op: 'all',
+  rules: [],
 }
 
-type DraftForm = {
-  name: string
-  description: string
-  status: 'draft' | 'archived'
-  templateId: string
-  dslText: string
-  triggers: TriggerForm[]
-  fields: FieldForm[]
-  display: {
-    outcome: string
-    goal: FlowDisplay['goal'] | ''
-    industry: FlowDisplay['industry'] | ''
-    setupTime: string
-    collectsText: string
-    icon: string
-    previewText: string
-  }
+const ROUTER_DEFAULT_RULE: RouterRule = {
+  source: 'vars',
+  path: 'detectedIntent',
+  operator: 'equals',
+  value: '',
 }
-
-const FIELD_TYPES: FlowField['type'][] = [
-  'string',
-  'number',
-  'boolean',
-  'select',
-  'multi_select',
-  'json',
-  'text',
-]
-
-const GOAL_OPTIONS: Array<FlowDisplay['goal']> = ['Bookings', 'Sales', 'Leads', 'Support', 'General']
-const INDUSTRY_OPTIONS: Array<FlowDisplay['industry']> = [
-  'Clinics',
-  'Salons',
-  'Retail',
-  'Restaurants',
-  'Real Estate',
-  'General',
-]
-
-const formatJson = (value: any) => {
-  if (value === undefined || value === null) return ''
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return ''
-  }
-}
-
-const formatDefaultValue = (value: any, type: FlowField['type']) => {
-  if (type === 'boolean') return Boolean(value)
-  if (value === undefined || value === null) return ''
-  if (typeof value === 'string' || typeof value === 'number') return String(value)
-  return formatJson(value)
-}
-
-const parseOptionsText = (text: string) => {
-  const lines = text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-  return lines.map((line) => {
-    const [labelPart, valuePart] = line.includes('|') ? line.split('|') : line.split(':')
-    const label = (labelPart || '').trim()
-    const value = (valuePart || labelPart || '').trim()
-    return { label: label || value, value }
-  }).filter((option) => option.value)
-}
-
-const parseDefaultValue = (field: FieldForm) => {
-  const raw = field.defaultValue
-  if (raw === '' || raw === undefined || raw === null) return undefined
-  if (field.type === 'boolean') return Boolean(raw)
-  if (field.type === 'number') {
-    const parsed = Number(raw)
-    if (Number.isNaN(parsed)) return undefined
-    return parsed
-  }
-  if (field.type === 'json') {
-    if (typeof raw !== 'string') return raw
-    return JSON.parse(raw)
-  }
-  if (field.type === 'multi_select') {
-    if (Array.isArray(raw)) return raw
-    if (typeof raw === 'string' && raw.trim().startsWith('[')) {
-      return JSON.parse(raw)
-    }
-    return String(raw)
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean)
-  }
-  return raw
-}
-
-const FLOW_NODE_LIBRARY: Array<{
-  type: FlowNodeType
-  label: string
-  description: string
-  icon: typeof MessageSquare
-}> = [
-  {
-    type: 'trigger',
-    label: 'Trigger',
-    description: 'Starts the flow when a trigger fires.',
-    icon: Zap,
-  },
-  {
-    type: 'detect_intent',
-    label: 'Detect intent',
-    description: 'Analyze the latest message and capture intent.',
-    icon: Search,
-  },
-  {
-    type: 'send_message',
-    label: 'Message',
-    description: 'Send a static message.',
-    icon: MessageSquare,
-  },
-  {
-    type: 'ai_reply',
-    label: 'AI Reply',
-    description: 'Generate a response with AI.',
-    icon: Sparkles,
-  },
-  {
-    type: 'handoff',
-    label: 'Handoff',
-    description: 'Escalate to a human teammate.',
-    icon: Flag,
-  },
-]
-
-const FLOW_NODE_LABELS: Record<FlowNodeType, string> = {
-  trigger: 'Trigger',
-  detect_intent: 'Detect intent',
-  send_message: 'Message',
-  ai_reply: 'AI Reply',
-  handoff: 'Handoff',
-}
-
-const formatButtonList = (buttons?: FlowButton[]) => {
-  if (!buttons || buttons.length === 0) return ''
-  return buttons
-    .map((button) => (button.payload ? `${button.title}|${button.payload}` : button.title))
-    .join('\n')
-}
-
-const parseButtonList = (value: string): FlowButton[] => {
-  if (!value.trim()) return []
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [titlePart, payloadPart] = line.includes('|') ? line.split('|') : line.split(':')
-      const title = (titlePart || '').trim()
-      const payload = payloadPart ? payloadPart.trim() : undefined
-      return title ? { title, payload } : null
-    })
-    .filter(Boolean) as FlowButton[]
-}
-
-const formatTags = (tags?: string[]) => (tags || []).join(', ')
-
-const parseTags = (value: string) =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-const formatKeywordList = (keywords?: string[]) => (keywords || []).join(', ')
-
-const parseKeywordList = (value: string) =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-const formatKnowledgeIds = (ids?: string[]) => (ids || []).join(', ')
-
-const parseKnowledgeIds = (value: string) =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-const parseOptionalNumber = (value: string) => {
-  if (!value) return undefined
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : undefined
-}
-
-const normalizeTriggerConfig = (config?: FlowTriggerConfig) => {
-  if (!config) return undefined
-  const keywords = Array.isArray(config.keywords) ? config.keywords.filter(Boolean) : []
-  const excludeKeywords = Array.isArray(config.excludeKeywords) ? config.excludeKeywords.filter(Boolean) : []
-  const intentText = config.intentText?.trim()
-  const output: FlowTriggerConfig = {}
-
-  if (config.triggerMode) output.triggerMode = config.triggerMode
-  if (config.keywordMatch) output.keywordMatch = config.keywordMatch
-  if (keywords.length > 0) output.keywords = keywords
-  if (excludeKeywords.length > 0) output.excludeKeywords = excludeKeywords
-  if (intentText) output.intentText = intentText
-
-  return Object.keys(output).length > 0 ? output : undefined
-}
-
-const buildNodeSubtitle = (node: FlowNode) => {
-  if (node.type === 'send_message') {
-    const text = node.text || node.message || ''
-    return text ? text.slice(0, 80) : 'No message yet'
-  }
-  if (node.type === 'trigger') {
-    const triggerType = node.triggerType || DEFAULT_TRIGGER_TYPE
-    const meta = TRIGGER_METADATA[triggerType]
-    return node.triggerDescription?.trim() || meta?.description || 'Entry trigger for this flow'
-  }
-  if (node.type === 'detect_intent') {
-    return 'Detects intent from the latest message'
-  }
-  if (node.type === 'ai_reply') {
-    const details = []
-    if (node.aiSettings?.model) details.push(`Model: ${node.aiSettings.model}`)
-    if (node.aiSettings?.tone) details.push(`Tone: ${node.aiSettings.tone}`)
-    if (node.aiSettings?.historyLimit) {
-      details.push(`History: ${node.aiSettings.historyLimit}`)
-    }
-    if (node.aiSettings?.ragEnabled === false) {
-      details.push('RAG: off')
-    }
-    if (node.aiSettings?.maxOutputTokens) {
-      details.push(`Max tokens: ${node.aiSettings.maxOutputTokens}`)
-    }
-    return details.length > 0 ? details.join(' · ') : 'Uses AI defaults'
-  }
-  if (node.type === 'handoff') {
-    return node.handoff?.topic ? `Topic: ${node.handoff.topic}` : 'No topic set'
-  }
-  return ''
-}
-
-const buildNodeData = (node: FlowNode): FlowNodeData => ({
-  label: node.data?.label || FLOW_NODE_LABELS[node.type] || 'Node',
-  subtitle: buildNodeSubtitle(node),
-  isStart: node.data?.isStart,
-})
-
-const normalizeFlowNode = (node: any, index: number): FlowNode => {
-  const id = node?.id || `node-${index + 1}`
-  const rawType = node?.type as FlowNodeType | undefined
-  const type = rawType && FLOW_NODE_LABELS[rawType] ? rawType : 'send_message'
-  const triggerTypeCandidate = node?.triggerType as TriggerType | undefined
-  const triggerType = triggerTypeCandidate && TRIGGER_METADATA[triggerTypeCandidate]
-    ? triggerTypeCandidate
-    : undefined
-  const position = node?.position || { x: 120 + index * 60, y: 80 + index * 40 }
-  const normalized: FlowNode = {
-    id,
-    type,
-    position,
-    data: {
-      ...(node?.data || {}),
-      label: node?.data?.label || node?.label || FLOW_NODE_LABELS[type] || 'Node',
-    },
-    triggerType: type === 'trigger' ? triggerType || DEFAULT_TRIGGER_TYPE : undefined,
-    triggerDescription: typeof node?.triggerDescription === 'string' ? node.triggerDescription : undefined,
-    triggerConfig: node?.triggerConfig ?? node?.data?.triggerConfig,
-    intentSettings: node?.intentSettings ?? node?.data?.intentSettings,
-    logEnabled: typeof node?.logEnabled === 'boolean'
-      ? node.logEnabled
-      : typeof node?.data?.logEnabled === 'boolean'
-        ? node.data.logEnabled
-        : undefined,
-    text: node?.text,
-    message: node?.message,
-    buttons: node?.buttons,
-    tags: node?.tags,
-    aiSettings: node?.aiSettings,
-    knowledgeItemIds: node?.knowledgeItemIds,
-    handoff: node?.handoff,
-    waitForReply: node?.waitForReply,
-  }
-  normalized.data = buildNodeData(normalized)
-  return normalized
-}
-
-const normalizeFlowEdge = (edge: any, index: number): FlowEdge | null => {
-  if (!edge?.source || !edge?.target) {
-    return null
-  }
-  return {
-    id: edge?.id || `edge-${index + 1}-${edge?.source}-${edge?.target}`,
-    source: edge.source,
-    target: edge.target,
-    type: edge?.type || 'smoothstep',
-    label: edge?.label,
-  }
-}
-
-const parseFlowDsl = (dsl: any): { nodes: FlowNode[]; edges: FlowEdge[]; startNodeId: string } => {
-  const base = dsl && typeof dsl === 'object' ? dsl : { nodes: [], edges: [] }
-  const nodes = Array.isArray(base.nodes) ? base.nodes.map(normalizeFlowNode) : []
-  const edges = Array.isArray(base.edges)
-    ? base.edges.map(normalizeFlowEdge).filter(Boolean) as FlowEdge[]
-    : []
-  const startNodeId = typeof base.startNodeId === 'string'
-    ? base.startNodeId
-    : nodes[0]?.id || ''
-  return { nodes, edges, startNodeId }
-}
-
-const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?: string) => ({
-  nodes: nodes.map((node) => ({
-    id: node.id,
-    type: node.type,
-    position: node.position,
-    data: node.data,
-    triggerType: node.triggerType,
-    triggerDescription: node.triggerDescription,
-    triggerConfig: node.triggerConfig,
-    intentSettings: node.intentSettings,
-    logEnabled: node.logEnabled,
-    text: node.text,
-    message: node.message,
-    buttons: node.buttons,
-    tags: node.tags,
-    aiSettings: node.aiSettings,
-    knowledgeItemIds: node.knowledgeItemIds,
-    handoff: node.handoff,
-    waitForReply: node.waitForReply,
-  })),
-  edges: edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    type: edge.type,
-    label: edge.label,
-  })),
-  ...(startNodeId ? { startNodeId } : {}),
-})
-
-const buildEmptyDraftForm = (): DraftForm => ({
-  name: '',
-  description: '',
-  status: 'draft',
-  templateId: '',
-  dslText: '{\n  "nodes": [],\n  "edges": []\n}',
-  triggers: [],
-  fields: [],
-  display: {
-    outcome: '',
-    goal: '',
-    industry: '',
-    setupTime: '',
-    collectsText: '',
-    icon: '',
-    previewText: '',
-  },
-})
-
-const buildFieldForm = (field?: FlowField): FieldForm => ({
-  id: `${Date.now()}-${Math.random()}`,
-  key: field?.key || '',
-  label: field?.label || '',
-  type: field?.type || 'string',
-  description: field?.description || '',
-  required: Boolean(field?.required),
-  defaultValue: formatDefaultValue(field?.defaultValue, field?.type || 'string'),
-  optionsText: (field?.options || [])
-    .map((option) => `${option.label}|${option.value}`)
-    .join('\n'),
-  uiGroup: field?.ui?.group || '',
-  uiOrder: field?.ui?.order !== undefined ? String(field.ui.order) : '',
-  uiPlaceholder: field?.ui?.placeholder || '',
-  uiHelpText: field?.ui?.helpText || '',
-  validationMin: field?.validation?.min !== undefined ? String(field.validation.min) : '',
-  validationMax: field?.validation?.max !== undefined ? String(field.validation.max) : '',
-  validationPattern: field?.validation?.pattern || '',
-  sourceNodeId: field?.source?.nodeId || '',
-  sourcePath: field?.source?.path || '',
-})
-
-const buildTriggerForm = (trigger?: FlowTrigger): TriggerForm => ({
-  id: `${Date.now()}-${Math.random()}`,
-  type: trigger?.type || 'dm_message',
-  label: trigger?.label || '',
-  description: trigger?.description || '',
-  configText: formatJson(trigger?.config),
-})
-
-const NodeShell = ({
-  title,
-  subtitle,
-  icon: Icon,
-  selected,
-  isStart,
-}: {
-  title: string
-  subtitle?: string
-  icon: typeof MessageSquare
-  selected?: boolean
-  isStart?: boolean
-}) => (
-  <div
-    className={`rounded-lg border bg-card px-3 py-2 shadow-sm min-w-[190px] ${
-      selected ? 'ring-2 ring-primary/50 border-primary/70' : 'border-border'
-    }`}
-  >
-    <Handle type="target" position={Position.Left} className="!bg-primary !border-primary" />
-    <Handle type="source" position={Position.Right} className="!bg-primary !border-primary" />
-    <div className="flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-primary" />
-        <span className="text-sm font-semibold text-foreground">{title}</span>
-      </div>
-      {isStart && (
-        <span className="text-[10px] rounded-full bg-primary/10 px-2 py-0.5 text-primary">Start</span>
-      )}
-    </div>
-    <div className="mt-1 text-xs text-muted-foreground">{subtitle || 'No details yet.'}</div>
-  </div>
-)
-
-const MessageNode = ({ data, selected }: NodeProps<FlowNode>) => (
-  <NodeShell
-    title={data.label || FLOW_NODE_LABELS.send_message}
-    subtitle={data.subtitle}
-    icon={MessageSquare}
-    selected={selected}
-    isStart={data.isStart}
-  />
-)
-
-const TriggerNode = ({ data, selected }: NodeProps<FlowNode>) => (
-  <NodeShell
-    title={data.label || FLOW_NODE_LABELS.trigger}
-    subtitle={data.subtitle}
-    icon={Zap}
-    selected={selected}
-    isStart={data.isStart}
-  />
-)
-
-const DetectIntentNode = ({ data, selected }: NodeProps<FlowNode>) => (
-  <NodeShell
-    title={data.label || FLOW_NODE_LABELS.detect_intent}
-    subtitle={data.subtitle}
-    icon={Search}
-    selected={selected}
-    isStart={data.isStart}
-  />
-)
-
-const AiReplyNode = ({ data, selected }: NodeProps<FlowNode>) => (
-  <NodeShell
-    title={data.label || FLOW_NODE_LABELS.ai_reply}
-    subtitle={data.subtitle}
-    icon={Sparkles}
-    selected={selected}
-    isStart={data.isStart}
-  />
-)
-
-const HandoffNode = ({ data, selected }: NodeProps<FlowNode>) => (
-  <NodeShell
-    title={data.label || FLOW_NODE_LABELS.handoff}
-    subtitle={data.subtitle}
-    icon={Flag}
-    selected={selected}
-    isStart={data.isStart}
-  />
-)
 
 export default function AutomationTemplates() {
   const queryClient = useQueryClient()
@@ -768,16 +142,7 @@ export default function AutomationTemplates() {
   const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<FlowNode, FlowEdge> | null>(null)
   const syncingRef = useRef(false)
 
-  const nodeTypes = useMemo<NodeTypes>(
-    () => ({
-      trigger: TriggerNode,
-      detect_intent: DetectIntentNode,
-      send_message: MessageNode,
-      ai_reply: AiReplyNode,
-      handoff: HandoffNode,
-    }),
-    [],
-  )
+  const nodeTypes = useMemo<NodeTypes>(() => buildFlowNodeTypes(), [])
 
   const { data: draftData, isLoading } = useQuery({
     queryKey: ['flow-drafts'],
@@ -789,6 +154,11 @@ export default function AutomationTemplates() {
     queryFn: () => adminApi.getFlowTemplates(),
   })
 
+  const { data: intentData } = useQuery({
+    queryKey: ['automation-intents'],
+    queryFn: () => adminApi.getAutomationIntents(),
+  })
+
   const drafts = useMemo(() => {
     const payload = unwrapData<any>(draftData)
     return Array.isArray(payload) ? (payload as FlowDraft[]) : []
@@ -798,6 +168,11 @@ export default function AutomationTemplates() {
     const payload = unwrapData<any>(templateData)
     return Array.isArray(payload) ? (payload as FlowTemplate[]) : []
   }, [templateData])
+
+  const intentOptions = useMemo(() => {
+    const payload = unwrapData<any>(intentData)
+    return Array.isArray(payload) ? payload : []
+  }, [intentData])
 
   const templateMap = useMemo(() => {
     const map = new Map<string, FlowTemplate>()
@@ -815,6 +190,111 @@ export default function AutomationTemplates() {
     () => ({ nodes: flowNodes.length, edges: flowEdges.length }),
     [flowNodes.length, flowEdges.length],
   )
+  const routerEdges = useMemo(() => {
+    if (!selectedNode || selectedNode.type !== 'router') return []
+    const getOrder = (edge: FlowEdge) => {
+      if (typeof edge.order === 'number') return edge.order
+      const target = flowNodes.find((node) => node.id === edge.target)
+      return typeof target?.position?.y === 'number' ? target.position.y : 0
+    }
+    return flowEdges
+      .filter((edge) => edge.source === selectedNode.id)
+      .slice()
+      .sort((a, b) => getOrder(a) - getOrder(b))
+  }, [flowEdges, flowNodes, selectedNode])
+  const configFieldKeys = useMemo(
+    () => draftForm.fields.map((field) => field.key).filter(Boolean),
+    [draftForm.fields],
+  )
+
+  useEffect(() => {
+    if (flowNodes.length === 0) return
+    const nodeMap = new Map(flowNodes.map((node) => [node.id, node]))
+    const routerIds = new Set(flowNodes.filter((node) => node.type === 'router').map((node) => node.id))
+
+    const branchTags = new Map<string, string | undefined>()
+    routerIds.forEach((routerId) => {
+      const outgoing = flowEdges.filter((edge) => edge.source === routerId)
+      const sorted = outgoing
+        .map((edge, index) => ({ edge, index }))
+        .sort((a, b) => {
+          const aOrder = typeof a.edge.order === 'number'
+            ? a.edge.order
+            : (nodeMap.get(a.edge.target)?.position?.y ?? a.index)
+          const bOrder = typeof b.edge.order === 'number'
+            ? b.edge.order
+            : (nodeMap.get(b.edge.target)?.position?.y ?? b.index)
+          return aOrder - bOrder
+        })
+        .map((entry) => entry.edge)
+
+      let routeIndex = 1
+      sorted.forEach((edge) => {
+        const condition = normalizeRouterCondition(edge.condition)
+        const isDefault = condition.type === 'else'
+        const sourceLabels: string[] = []
+        const seenSources = new Set<string>()
+        if (!isDefault) {
+          (condition.rules || []).forEach((rule) => {
+            const label = rule.source === 'vars'
+              ? 'vars'
+              : rule.source === 'message'
+                ? 'message'
+                : rule.source === 'config'
+                  ? 'config'
+                  : rule.source === 'context'
+                    ? 'context'
+                    : ''
+            if (label && !seenSources.has(label)) {
+              sourceLabels.push(label)
+              seenSources.add(label)
+            }
+          })
+        }
+        const sourceText = sourceLabels.length > 0 ? sourceLabels.join(' + ') : 'rules'
+        const tag = isDefault ? 'default' : `${routeIndex} | ${sourceText}`
+        if (!isDefault) {
+          routeIndex += 1
+        }
+        if (edge.target) {
+          branchTags.set(edge.target, tag)
+        }
+      })
+    })
+
+    setFlowNodes((nodes) => {
+      let changed = false
+      const nextNodes = nodes.map((node) => {
+        const branchTag = branchTags.get(node.id)
+        if (node.data?.branchTag === branchTag) return node
+        changed = true
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            branchTag,
+          },
+        }
+      })
+      return changed ? nextNodes : nodes
+    })
+
+    if (routerIds.size === 0) return
+    setFlowEdges((edges) => {
+      let changed = false
+      const nextEdges = edges.map((edge) => {
+        if (!routerIds.has(edge.source)) return edge
+        if (edge.type !== 'router' && !edge.label) return edge
+        changed = true
+        return {
+          ...edge,
+          type: 'smoothstep',
+          label: undefined,
+        }
+      })
+      return changed ? nextEdges : edges
+    })
+  }, [flowEdges, flowNodes, setFlowEdges, setFlowNodes])
   const startNodeLabel = useMemo(() => {
     if (!startNodeId) return ''
     const node = flowNodes.find((item) => item.id === startNodeId)
@@ -1135,18 +615,21 @@ export default function AutomationTemplates() {
 
   const handleConnect = useCallback(
     (connection: Connection) => {
+      const sourceNode = flowNodes.find((node) => node.id === connection.source)
+      const isRouter = sourceNode?.type === 'router'
       setFlowEdges((edges) =>
         addEdge(
           {
             ...connection,
             id: `edge-${connection.source}-${connection.target}-${Date.now()}`,
             type: 'smoothstep',
+            condition: isRouter ? { ...ROUTER_DEFAULT_CONDITION, rules: [] } : undefined,
           },
           edges,
         ),
       )
     },
-    [setFlowEdges],
+    [flowNodes, setFlowEdges],
   )
 
   const handleAddNode = useCallback(
@@ -1169,11 +652,23 @@ export default function AutomationTemplates() {
       if (type === 'ai_reply') {
         node.aiSettings = {}
       }
+      if (type === 'ai_agent') {
+        node.aiSettings = {}
+        node.agentSteps = []
+        node.agentSystemPrompt = ''
+        node.agentEndCondition = ''
+        node.agentStopCondition = ''
+        node.agentMaxQuestions = undefined
+        node.agentSlots = []
+      }
       if (type === 'handoff') {
         node.handoff = {
           topic: '',
           summary: '',
         }
+      }
+      if (type === 'router') {
+        node.routing = { matchMode: 'first' }
       }
 
       node.data = buildNodeData(node)
@@ -1207,6 +702,111 @@ export default function AutomationTemplates() {
       )
     },
     [setFlowNodes],
+  )
+
+  const updateEdge = useCallback(
+    (edgeId: string, updater: (edge: FlowEdge) => FlowEdge) => {
+      setFlowEdges((edges) => edges.map((edge) => (edge.id === edgeId ? updater(edge) : edge)))
+    },
+    [setFlowEdges],
+  )
+
+  const normalizeRouterCondition = useCallback((condition?: RouterCondition): RouterCondition => {
+    if (!condition) {
+      return { ...ROUTER_DEFAULT_CONDITION, rules: [...(ROUTER_DEFAULT_CONDITION.rules || [])] }
+    }
+    if (condition.type === 'else') {
+      return { type: 'else' }
+    }
+    return {
+      type: 'rules',
+      op: condition.op === 'any' ? 'any' : 'all',
+      rules: Array.isArray(condition.rules) ? condition.rules : [],
+    }
+  }, [])
+
+  const buildRouterRule = useCallback((rule?: Partial<RouterRule>): RouterRule => ({
+    ...ROUTER_DEFAULT_RULE,
+    ...(rule || {}),
+  }), [])
+
+  const updateRouterEdgeCondition = useCallback(
+    (edgeId: string, updater: (condition: RouterCondition) => RouterCondition) => {
+      updateEdge(edgeId, (edge) => ({
+        ...edge,
+        condition: updater(normalizeRouterCondition(edge.condition)),
+      }))
+    },
+    [normalizeRouterCondition, updateEdge],
+  )
+
+  const updateRouterRule = useCallback(
+    (edgeId: string, ruleIndex: number, updater: (rule: RouterRule) => RouterRule) => {
+      updateRouterEdgeCondition(edgeId, (condition) => {
+        if (condition.type === 'else') return condition
+        const rules = Array.isArray(condition.rules) ? [...condition.rules] : []
+        const current = rules[ruleIndex] || buildRouterRule()
+        rules[ruleIndex] = updater(current)
+        return { ...condition, rules }
+      })
+    },
+    [buildRouterRule, updateRouterEdgeCondition],
+  )
+
+  const addRouterRule = useCallback(
+    (edgeId: string) => {
+      updateRouterEdgeCondition(edgeId, (condition) => {
+        if (condition.type === 'else') return condition
+        const rules = Array.isArray(condition.rules) ? [...condition.rules] : []
+        rules.push(buildRouterRule())
+        return { ...condition, rules }
+      })
+    },
+    [buildRouterRule, updateRouterEdgeCondition],
+  )
+
+  const removeRouterRule = useCallback(
+    (edgeId: string, ruleIndex: number) => {
+      updateRouterEdgeCondition(edgeId, (condition) => {
+        if (condition.type === 'else') return condition
+        const rules = Array.isArray(condition.rules) ? [...condition.rules] : []
+        rules.splice(ruleIndex, 1)
+        return { ...condition, rules }
+      })
+    },
+    [updateRouterEdgeCondition],
+  )
+
+  const setRouterConditionType = useCallback(
+    (edgeId: string, type: RouterCondition['type'], sourceId?: string) => {
+      setFlowEdges((edges) =>
+        edges.map((edge) => {
+          if (edge.id === edgeId) {
+            if (type === 'else') {
+              return { ...edge, condition: { type: 'else' } }
+            }
+            const normalized = normalizeRouterCondition(edge.condition)
+            if (normalized.type === 'else') {
+              return { ...edge, condition: { type: 'rules', op: 'all', rules: [] } }
+            }
+            return { ...edge, condition: normalized }
+          }
+          if (type === 'else' && edge.condition?.type === 'else' && edge.source === sourceId) {
+            const normalized = normalizeRouterCondition(edge.condition)
+            return {
+              ...edge,
+              condition: {
+                type: 'rules',
+                op: normalized.op || 'all',
+                rules: normalized.rules || [],
+              },
+            }
+          }
+          return edge
+        }),
+      )
+    },
+    [normalizeRouterCondition, setFlowEdges],
   )
 
   const insertMessageToken = useCallback(
@@ -1318,7 +918,9 @@ export default function AutomationTemplates() {
             nodeColor={(node) => {
               if (node.type === 'trigger') return '#2FB16B'
               if (node.type === 'detect_intent') return '#6B7FD6'
+              if (node.type === 'router') return '#4FA3B8'
               if (node.type === 'ai_reply') return '#7C8EA4'
+              if (node.type === 'ai_agent') return '#7B6CB6'
               if (node.type === 'handoff') return '#C96A4A'
               return '#4B9AD5'
             }}
@@ -1382,6 +984,16 @@ export default function AutomationTemplates() {
             <datalist id="ai-model-options">
               {AI_MODEL_SUGGESTIONS.map((model) => (
                 <option key={model} value={model} />
+              ))}
+            </datalist>
+            <datalist id="router-config-keys">
+              {configFieldKeys.map((key) => (
+                <option key={key} value={key} />
+              ))}
+            </datalist>
+            <datalist id="router-var-keys">
+              {MESSAGE_STATE_VARIABLES.map((item) => (
+                <option key={item.key} value={item.key} />
               ))}
             </datalist>
             <div className="mt-4 space-y-4">
@@ -1540,7 +1152,338 @@ export default function AutomationTemplates() {
                 </div>
               </>
             )}
-            {selectedNode.type !== 'trigger' && selectedNode.type !== 'detect_intent' && (
+            {selectedNode.type === 'router' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Match behavior</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.routing?.matchMode || 'first'}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        routing: {
+                          ...(node.routing || {}),
+                          matchMode: event.target.value as 'first' | 'all',
+                        },
+                      }))
+                    }
+                  >
+                    <option value="first">First matching route (top to bottom)</option>
+                    <option value="all">All matching routes (sequential)</option>
+                  </select>
+                  <div className="text-xs text-muted-foreground">
+                    If multiple routes match, the top-most route wins in first-match mode.
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-muted-foreground">Routes</label>
+                    <span className="text-[11px] text-muted-foreground">Top to bottom order</span>
+                  </div>
+                  {routerEdges.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border/70 bg-background/60 px-3 py-3 text-xs text-muted-foreground">
+                      Connect this router to nodes to define branches.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {routerEdges.map((edge, edgeIndex) => {
+                        const target = flowNodes.find((node) => node.id === edge.target)
+                        const condition = normalizeRouterCondition(edge.condition)
+                        const isElse = condition.type === 'else'
+                        const rules = condition.type === 'else' ? [] : condition.rules || []
+                        return (
+                          <div key={edge.id} className="rounded-lg border border-border/70 bg-background/70 p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="text-sm font-medium text-foreground">
+                                {edgeIndex + 1}. {target?.data?.label || edge.target}
+                              </div>
+                              <select
+                                className="input h-8 text-xs"
+                                value={isElse ? 'else' : 'rules'}
+                                onChange={(event) =>
+                                  setRouterConditionType(
+                                    edge.id,
+                                    event.target.value as RouterCondition['type'],
+                                    selectedNode.id,
+                                  )
+                                }
+                              >
+                                <option value="rules">Rules</option>
+                                <option value="else">Default (else)</option>
+                              </select>
+                            </div>
+
+                            {!isElse && (
+                              <div className="mt-3 space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Match</span>
+                                  <select
+                                    className="input h-8 text-xs"
+                                    value={condition.op || 'all'}
+                                    onChange={(event) =>
+                                      updateRouterEdgeCondition(edge.id, (current) => ({
+                                        ...current,
+                                        op: event.target.value as 'all' | 'any',
+                                      }))
+                                    }
+                                  >
+                                    <option value="all">All rules</option>
+                                    <option value="any">Any rule</option>
+                                  </select>
+                                </div>
+
+                                {rules.length === 0 ? (
+                                  <div className="text-xs text-muted-foreground">
+                                    Add rules so this branch can match.
+                                  </div>
+                                ) : (
+                                  <div className="space-y-3">
+                                    {rules.map((rule, ruleIndex) => {
+                                      const operatorOptions = rule.source === 'message'
+                                        ? ROUTER_MESSAGE_OPERATORS
+                                        : rule.source === 'context'
+                                          ? [{ value: 'equals', label: 'Equals' }]
+                                          : ROUTER_OPERATOR_OPTIONS
+                                      const isKeywordRule = rule.operator === 'keywords'
+                                      const normalizedPath = (rule.path || '').replace(/^vars\./, '')
+                                      const isDetectedIntent = rule.source === 'vars'
+                                        && normalizedPath === 'detectedIntent'
+                                      return (
+                                        <div key={`${edge.id}-rule-${ruleIndex}`} className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-2">
+                                          <div className="flex items-center gap-2">
+                                            <select
+                                              className="input h-8 text-xs"
+                                              value={rule.source}
+                                              onChange={(event) => {
+                                                const nextSource = event.target.value as RouterRuleSource
+                                                const nextOperator = nextSource === 'context'
+                                                  ? 'equals'
+                                                  : nextSource === 'message'
+                                                    ? (rule.operator === 'keywords' || rule.operator === 'contains' || rule.operator === 'equals'
+                                                      ? rule.operator
+                                                      : 'contains')
+                                                    : (rule.operator === 'keywords' ? 'equals' : rule.operator)
+                                                const nextPath = nextSource === 'context'
+                                                  ? (rule.path === 'hasLink' || rule.path === 'hasAttachment' ? rule.path : 'hasLink')
+                                                  : nextSource === 'message'
+                                                    ? undefined
+                                                    : rule.path
+                                                updateRouterRule(edge.id, ruleIndex, () => ({
+                                                  ...rule,
+                                                  source: nextSource,
+                                                  operator: nextOperator,
+                                                  path: nextPath,
+                                                  match: nextOperator === 'keywords' ? (rule.match || 'any') : undefined,
+                                                }))
+                                              }}
+                                            >
+                                              {ROUTER_SOURCE_OPTIONS.map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                  {option.label}
+                                                </option>
+                                              ))}
+                                            </select>
+                                            {rule.source === 'context' ? (
+                                              <select
+                                                className="input h-8 text-xs"
+                                                value={rule.path || 'hasLink'}
+                                                onChange={(event) =>
+                                                  updateRouterRule(edge.id, ruleIndex, () => ({
+                                                    ...rule,
+                                                    path: event.target.value,
+                                                  }))
+                                                }
+                                              >
+                                                <option value="hasLink">Has link</option>
+                                                <option value="hasAttachment">Has attachment</option>
+                                              </select>
+                                            ) : rule.source === 'vars' ? (
+                                              <input
+                                                className="input h-8 text-xs flex-1"
+                                                list="router-var-keys"
+                                                placeholder="vars path (e.g. detectedIntent)"
+                                                value={rule.path || ''}
+                                                onChange={(event) =>
+                                                  updateRouterRule(edge.id, ruleIndex, () => ({
+                                                    ...rule,
+                                                    path: event.target.value,
+                                                  }))
+                                                }
+                                              />
+                                            ) : rule.source === 'config' ? (
+                                              <input
+                                                className="input h-8 text-xs flex-1"
+                                                list="router-config-keys"
+                                                placeholder="config path (e.g. package.tier)"
+                                                value={rule.path || ''}
+                                                onChange={(event) =>
+                                                  updateRouterRule(edge.id, ruleIndex, () => ({
+                                                    ...rule,
+                                                    path: event.target.value,
+                                                  }))
+                                                }
+                                              />
+                                            ) : (
+                                              <div className="text-[11px] text-muted-foreground">Message text</div>
+                                            )}
+                                          </div>
+
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <select
+                                              className="input h-8 text-xs"
+                                              value={rule.operator}
+                                              onChange={(event) => {
+                                                const nextOperator = event.target.value as RouterRuleOperator
+                                                updateRouterRule(edge.id, ruleIndex, () => ({
+                                                  ...rule,
+                                                  operator: nextOperator,
+                                                  match: nextOperator === 'keywords' ? (rule.match || 'any') : undefined,
+                                                  value: nextOperator === 'keywords' && !Array.isArray(rule.value) ? [] : rule.value,
+                                                }))
+                                              }}
+                                            >
+                                              {operatorOptions.map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                  {option.label}
+                                                </option>
+                                              ))}
+                                            </select>
+                                            {rule.source === 'context' ? (
+                                              <select
+                                                className="input h-8 text-xs"
+                                                value={rule.value === false ? 'false' : 'true'}
+                                                onChange={(event) =>
+                                                  updateRouterRule(edge.id, ruleIndex, () => ({
+                                                    ...rule,
+                                                    value: event.target.value === 'true',
+                                                  }))
+                                                }
+                                              >
+                                                <option value="true">True</option>
+                                                <option value="false">False</option>
+                                              </select>
+                                            ) : isKeywordRule ? (
+                                              <>
+                                                <input
+                                                  className="input h-8 text-xs flex-1"
+                                                  placeholder="Keywords, comma-separated"
+                                                  value={formatKeywordList(
+                                                    Array.isArray(rule.value) ? rule.value : [],
+                                                  )}
+                                                  onChange={(event) =>
+                                                    updateRouterRule(edge.id, ruleIndex, () => ({
+                                                      ...rule,
+                                                      value: parseKeywordList(event.target.value),
+                                                    }))
+                                                  }
+                                                />
+                                                <select
+                                                  className="input h-8 text-xs"
+                                                  value={rule.match || 'any'}
+                                                  onChange={(event) =>
+                                                    updateRouterRule(edge.id, ruleIndex, () => ({
+                                                      ...rule,
+                                                      match: event.target.value as 'any' | 'all',
+                                                    }))
+                                                  }
+                                                >
+                                                  <option value="any">Any</option>
+                                                  <option value="all">All</option>
+                                                </select>
+                                              </>
+                                            ) : isDetectedIntent && rule.operator === 'equals' && intentOptions.length > 0 ? (
+                                              <select
+                                                className="input h-8 text-xs flex-1"
+                                                value={typeof rule.value === 'string' ? rule.value : ''}
+                                                onChange={(event) =>
+                                                  updateRouterRule(edge.id, ruleIndex, () => ({
+                                                    ...rule,
+                                                    value: event.target.value,
+                                                  }))
+                                                }
+                                              >
+                                                <option value="">Select intent</option>
+                                                {intentOptions.map((option: any) => (
+                                                  <option key={option.value} value={option.value}>
+                                                    {option.value}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            ) : rule.operator === 'gt' || rule.operator === 'lt' ? (
+                                              <input
+                                                className="input h-8 text-xs w-28"
+                                                type="number"
+                                                value={
+                                                  typeof rule.value === 'number' || typeof rule.value === 'string'
+                                                    ? rule.value
+                                                    : ''
+                                                }
+                                                onChange={(event) =>
+                                                  updateRouterRule(edge.id, ruleIndex, () => ({
+                                                    ...rule,
+                                                    value: parseOptionalNumber(event.target.value),
+                                                  }))
+                                                }
+                                              />
+                                            ) : (
+                                              <input
+                                                className="input h-8 text-xs flex-1"
+                                                value={
+                                                  typeof rule.value === 'string' || typeof rule.value === 'number'
+                                                    ? rule.value
+                                                    : typeof rule.value === 'boolean'
+                                                      ? (rule.value ? 'true' : 'false')
+                                                      : ''
+                                                }
+                                                onChange={(event) =>
+                                                  updateRouterRule(edge.id, ruleIndex, () => ({
+                                                    ...rule,
+                                                    value: event.target.value,
+                                                  }))
+                                                }
+                                              />
+                                            )}
+                                            <button
+                                              type="button"
+                                              className="text-xs text-red-400 hover:text-red-300"
+                                              onClick={() => removeRouterRule(edge.id, ruleIndex)}
+                                            >
+                                              Remove
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary h-8 text-xs"
+                                  onClick={() => addRouterRule(edge.id)}
+                                >
+                                  Add rule
+                                </button>
+                              </div>
+                            )}
+
+                            {isElse && (
+                              <div className="mt-2 text-xs text-muted-foreground">
+                                Default branch when no other routes match.
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+            {selectedNode.type !== 'trigger'
+              && selectedNode.type !== 'detect_intent'
+              && selectedNode.type !== 'router' && (
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Wait for reply</label>
                 <select
@@ -1682,7 +1625,7 @@ export default function AutomationTemplates() {
                     ))}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    Available after a Detect intent step runs.
+                    Available after a Detect intent or AI Agent step runs.
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -1719,6 +1662,388 @@ export default function AutomationTemplates() {
 
             {selectedNode.type === 'ai_reply' && (
               <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Tone</label>
+                  <input
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.tone || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          tone: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Max reply sentences</label>
+                  <input
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.maxReplySentences ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          maxReplySentences: event.target.value
+                            ? Number(event.target.value)
+                            : undefined,
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">History limit</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={selectedNode.aiSettings?.historyLimit ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          historyLimit: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Number of recent messages sent to the model.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={selectedNode.aiSettings?.ragEnabled !== false}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          aiSettings: {
+                            ...(node.aiSettings || {}),
+                            ragEnabled: event.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Enable semantic RAG (vector search)
+                  </label>
+                  <div className="text-[11px] text-muted-foreground">
+                    Disable to ignore vector matches in replies.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Model</label>
+                  <input
+                    className="input w-full"
+                    list="ai-model-options"
+                    value={selectedNode.aiSettings?.model || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          model: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Leave blank to use the workspace default model.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Reasoning effort</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.reasoningEffort || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          reasoningEffort: event.target.value
+                            ? (event.target.value as FlowAiSettings['reasoningEffort'])
+                            : undefined,
+                        },
+                      }))
+                    }
+                  >
+                    <option value="">Auto (model default)</option>
+                    {REASONING_EFFORT_OPTIONS.map((effort) => (
+                      <option key={effort} value={effort}>
+                        {effort}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-[11px] text-muted-foreground">
+                    Applied only for reasoning-capable models (gpt-5, o-series).
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Temperature</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    step="0.1"
+                    value={selectedNode.aiSettings?.temperature ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          temperature: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Max output tokens</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={selectedNode.aiSettings?.maxOutputTokens ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          maxOutputTokens: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Knowledge item IDs</label>
+                  <input
+                    className="input w-full"
+                    value={formatKnowledgeIds(selectedNode.knowledgeItemIds)}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        knowledgeItemIds: parseKnowledgeIds(event.target.value),
+                      }))
+                    }
+                  />
+                </div>
+              </>
+            )}
+
+            {selectedNode.type === 'ai_agent' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">System prompt</label>
+                  <textarea
+                    className="input w-full h-28 text-sm"
+                    value={selectedNode.agentSystemPrompt || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        agentSystemPrompt: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-muted-foreground">Agent steps</label>
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:text-primary/80"
+                      onClick={() =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          agentSteps: [...(node.agentSteps || []), ''],
+                        }))
+                      }
+                    >
+                      + Add step
+                    </button>
+                  </div>
+                  {Array.isArray(selectedNode.agentSteps) && selectedNode.agentSteps.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedNode.agentSteps.map((step, index) => (
+                        <div key={`${selectedNode.id}-agent-step-${index}`} className="flex items-start gap-2">
+                          <span className="mt-2 text-xs text-muted-foreground">{index + 1}.</span>
+                          <input
+                            className="input flex-1"
+                            value={step}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextSteps = Array.isArray(node.agentSteps)
+                                  ? [...node.agentSteps]
+                                  : []
+                                nextSteps[index] = event.target.value
+                                return { ...node, agentSteps: nextSteps }
+                              })
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="mt-2 text-xs text-rose-400 hover:text-rose-300"
+                            onClick={() =>
+                              updateNode(selectedNode.id, (node) => ({
+                                ...node,
+                                agentSteps: (node.agentSteps || []).filter((_, i) => i !== index),
+                              }))
+                            }
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">No steps yet.</div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">End conversation prompt</label>
+                  <textarea
+                    className="input w-full h-20 text-sm"
+                    value={selectedNode.agentEndCondition || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        agentEndCondition: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Stop condition prompt</label>
+                  <textarea
+                    className="input w-full h-20 text-sm"
+                    value={selectedNode.agentStopCondition || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        agentStopCondition: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    When this condition is met, the agent ends immediately and continues the flow.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Max questions</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={selectedNode.agentMaxQuestions ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        agentMaxQuestions: parseOptionalNumber(event.target.value),
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Leave blank for unlimited follow-up questions.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-muted-foreground">Agent slots</label>
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:text-primary/80"
+                      onClick={() =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          agentSlots: [
+                            ...(node.agentSlots || []),
+                            { key: '', question: '', defaultValue: '' },
+                          ],
+                        }))
+                      }
+                    >
+                      + Add slot
+                    </button>
+                  </div>
+                  {Array.isArray(selectedNode.agentSlots) && selectedNode.agentSlots.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedNode.agentSlots.map((slot, index) => (
+                        <div key={`${selectedNode.id}-agent-slot-${index}`} className="rounded-lg border border-border p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">Slot {index + 1}</span>
+                            <button
+                              type="button"
+                              className="text-xs text-rose-400 hover:text-rose-300"
+                              onClick={() =>
+                                updateNode(selectedNode.id, (node) => ({
+                                  ...node,
+                                  agentSlots: (node.agentSlots || []).filter((_, i) => i !== index),
+                                }))
+                              }
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          <input
+                            className="input w-full"
+                            placeholder="Slot key (e.g., productType)"
+                            value={slot.key}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextSlots = Array.isArray(node.agentSlots)
+                                  ? [...node.agentSlots]
+                                  : []
+                                nextSlots[index] = { ...nextSlots[index], key: event.target.value }
+                                return { ...node, agentSlots: nextSlots }
+                              })
+                            }
+                          />
+                          <input
+                            className="input w-full"
+                            placeholder="Question to ask when missing"
+                            value={slot.question || ''}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextSlots = Array.isArray(node.agentSlots)
+                                  ? [...node.agentSlots]
+                                  : []
+                                nextSlots[index] = { ...nextSlots[index], question: event.target.value }
+                                return { ...node, agentSlots: nextSlots }
+                              })
+                            }
+                          />
+                          <input
+                            className="input w-full"
+                            placeholder="Default value (optional)"
+                            value={slot.defaultValue || ''}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextSlots = Array.isArray(node.agentSlots)
+                                  ? [...node.agentSlots]
+                                  : []
+                                nextSlots[index] = { ...nextSlots[index], defaultValue: event.target.value }
+                                return { ...node, agentSlots: nextSlots }
+                              })
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">No slots yet.</div>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Tone</label>
                   <input
@@ -2032,30 +2357,31 @@ export default function AutomationTemplates() {
   return (
     <>
       <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Flow Builder</h1>
-          <p className="text-muted-foreground mt-1">
-            Author internal flow drafts, control display metadata, and expose configurable fields.
-          </p>
+        <AutomationsTabs />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Flow Builder</h1>
+            <p className="text-muted-foreground mt-1">
+              Author internal flow drafts, control display metadata, and expose configurable fields.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="btn btn-secondary flex items-center gap-2"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['flow-drafts'] })}
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </button>
+            <button
+              className="btn btn-primary flex items-center gap-2"
+              onClick={() => setNewDraftOpen((prev) => !prev)}
+            >
+              <Plus className="w-4 h-4" />
+              New draft
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="btn btn-secondary flex items-center gap-2"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ['flow-drafts'] })}
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-          <button
-            className="btn btn-primary flex items-center gap-2"
-            onClick={() => setNewDraftOpen((prev) => !prev)}
-          >
-            <Plus className="w-4 h-4" />
-            New draft
-          </button>
-        </div>
-      </div>
 
       {error && (
         <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">

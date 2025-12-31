@@ -14,6 +14,12 @@ type FlowRuntimeStep = {
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
   aiSettings?: AutomationAiSettings;
+  agentSystemPrompt?: string;
+  agentSteps?: string[];
+  agentEndCondition?: string;
+  agentStopCondition?: string;
+  agentMaxQuestions?: number;
+  agentSlots?: Array<{ key: string; question?: string; defaultValue?: string }>;
   intentSettings?: {
     model?: string;
     temperature?: number;
@@ -30,12 +36,17 @@ type FlowRuntimeStep = {
     message?: string;
   };
   rateLimit?: AutomationRateLimit;
+  routing?: {
+    matchMode?: 'first' | 'all';
+    defaultTarget?: string;
+  };
 };
 
 type FlowRuntimeEdge = {
   from: string;
   to: string;
   condition?: Record<string, any>;
+  order?: number;
 };
 
 type FlowCompileIssue = {
@@ -69,6 +80,18 @@ const normalizeTags = (node: Record<string, any>) => node.tags ?? node.data?.tag
 const normalizeAiSettings = (node: Record<string, any>) => node.aiSettings ?? node.data?.aiSettings;
 const normalizeIntentSettings = (node: Record<string, any>) =>
   node.intentSettings ?? node.data?.intentSettings;
+const normalizeAgentSystemPrompt = (node: Record<string, any>) =>
+  node.agentSystemPrompt ?? node.data?.agentSystemPrompt;
+const normalizeAgentSteps = (node: Record<string, any>) =>
+  node.agentSteps ?? node.data?.agentSteps;
+const normalizeAgentEndCondition = (node: Record<string, any>) =>
+  node.agentEndCondition ?? node.data?.agentEndCondition;
+const normalizeAgentStopCondition = (node: Record<string, any>) =>
+  node.agentStopCondition ?? node.data?.agentStopCondition;
+const normalizeAgentMaxQuestions = (node: Record<string, any>) =>
+  node.agentMaxQuestions ?? node.data?.agentMaxQuestions;
+const normalizeAgentSlots = (node: Record<string, any>) =>
+  node.agentSlots ?? node.data?.agentSlots;
 
 const normalizeKnowledgeItemIds = (node: Record<string, any>) =>
   node.knowledgeItemIds ?? node.data?.knowledgeItemIds;
@@ -87,6 +110,8 @@ const normalizeLogEnabled = (node: Record<string, any>) => {
   if (typeof node.data?.logEnabled === 'boolean') return node.data.logEnabled;
   return undefined;
 };
+
+const normalizeRouting = (node: Record<string, any>) => node.routing ?? node.data?.routing;
 
 const normalizeType = (node: Record<string, any>) =>
   typeof node.type === 'string'
@@ -148,6 +173,8 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
 
   const normalizedNodes: FlowRuntimeStep[] = [];
   const nodeIds = new Set<string>();
+  const nodeTypeById = new Map<string, string>();
+  const nodeYById = new Map<string, number>();
 
   rawNodes?.forEach((node: any, index: number) => {
     if (!node || typeof node !== 'object') {
@@ -191,6 +218,12 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const buttons = normalizeButtons(node);
     const tags = normalizeTags(node);
     const aiSettings = normalizeAiSettings(node);
+    const agentSystemPrompt = normalizeAgentSystemPrompt(node);
+    const agentSteps = normalizeAgentSteps(node);
+    const agentEndCondition = normalizeAgentEndCondition(node);
+    const agentStopCondition = normalizeAgentStopCondition(node);
+    const agentMaxQuestions = normalizeAgentMaxQuestions(node);
+    const agentSlots = normalizeAgentSlots(node);
     const intentSettings = normalizeIntentSettings(node);
     const knowledgeItemIds = normalizeKnowledgeItemIds(node);
     const waitForReply = normalizeWaitForReply(node);
@@ -198,6 +231,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const rateLimit = normalizeRateLimit(node);
     const next = normalizeNext(node);
     const logEnabled = normalizeLogEnabled(node);
+    const routing = normalizeRouting(node);
 
     if (type.toLowerCase() === 'send_message' && !text && !message) {
       warnings.push({
@@ -209,6 +243,10 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     }
 
     nodeIds.add(id);
+    nodeTypeById.set(id, type.toLowerCase());
+    if (typeof node.position?.y === 'number') {
+      nodeYById.set(id, node.position.y);
+    }
     normalizedNodes.push({
       id,
       type,
@@ -217,6 +255,22 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       buttons,
       tags,
       aiSettings,
+      agentSystemPrompt: typeof agentSystemPrompt === 'string' ? agentSystemPrompt : undefined,
+      agentSteps: Array.isArray(agentSteps)
+        ? agentSteps.filter((step) => typeof step === 'string' && step.trim())
+        : undefined,
+      agentEndCondition: typeof agentEndCondition === 'string' ? agentEndCondition : undefined,
+      agentStopCondition: typeof agentStopCondition === 'string' ? agentStopCondition : undefined,
+      agentMaxQuestions: typeof agentMaxQuestions === 'number' ? agentMaxQuestions : undefined,
+      agentSlots: Array.isArray(agentSlots)
+        ? agentSlots
+          .map((slot: any) => ({
+            key: typeof slot?.key === 'string' ? slot.key.trim() : '',
+            question: typeof slot?.question === 'string' ? slot.question.trim() : undefined,
+            defaultValue: typeof slot?.defaultValue === 'string' ? slot.defaultValue.trim() : undefined,
+          }))
+          .filter((slot: any) => slot.key)
+        : undefined,
       intentSettings,
       knowledgeItemIds,
       waitForReply,
@@ -224,6 +278,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       logEnabled,
       handoff,
       rateLimit,
+      routing,
     });
   });
 
@@ -264,10 +319,15 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       return;
     }
 
+    const order = typeof edge.order === 'number'
+      ? edge.order
+      : (nodeTypeById.get(from) === 'router' ? nodeYById.get(to) : undefined);
+
     normalizedEdges.push({
       from,
       to,
       condition: edge.condition,
+      order,
     });
   });
 

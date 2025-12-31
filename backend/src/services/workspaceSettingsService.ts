@@ -4,6 +4,10 @@ import WorkspaceSettings from '../models/WorkspaceSettings';
 import { AutomationIntentSettings } from '../types/automation';
 import { GoalConfigurations, GoalType } from '../types/automationGoals';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
+import {
+  DEFAULT_AUTOMATION_INTENTS,
+  listAutomationIntentLabels,
+} from './automationIntentService';
 
 const DEFAULT_GOAL_CONFIGS: GoalConfigurations = {
   leadCapture: {
@@ -52,48 +56,8 @@ const INTENT_MODEL = process.env.OPENAI_INTENT_MODEL || 'gpt-4o-mini';
 const INTENT_TEMPERATURE = 0;
 const INTENT_REASONING_EFFORT: AutomationIntentSettings['reasoningEffort'] = 'none';
 
-const intentLabels: Array<{ value: GoalType; description: string }> = [
-  {
-    value: 'product_inquiry',
-    description: 'Asking about price, availability, sizes, colors, or variants.',
-  },
-  {
-    value: 'delivery',
-    description: 'Shipping, COD, delivery time, ETA, or logistics questions.',
-  },
-  {
-    value: 'order_now',
-    description: 'Ready to buy now, proceed to checkout, or place an order.',
-  },
-  {
-    value: 'order_status',
-    description: 'Order tracking, status, where is my order, or past order update.',
-  },
-  {
-    value: 'refund_exchange',
-    description: 'Refund, exchange, return, or replacement requests.',
-  },
-  {
-    value: 'human',
-    description: 'Asking for a human agent, representative, or handoff.',
-  },
-  {
-    value: 'handle_support',
-    description: 'Problems, complaints, cancellations, or support requests not covered above.',
-  },
-  {
-    value: 'capture_lead',
-    description: 'Asking for a quote, requesting a call/email, or leaving contact details.',
-  },
-  {
-    value: 'book_appointment',
-    description: 'Scheduling or booking a service, appointment, or reservation.',
-  },
-  {
-    value: 'none',
-    description: 'Greeting, unclear, or does not match any intent.',
-  },
-];
+const goalIntentLabels: Array<{ value: GoalType; description: string }> =
+  DEFAULT_AUTOMATION_INTENTS as Array<{ value: GoalType; description: string }>;
 
 const detectGoalIntentFallback = (text: string): GoalType => {
   const lower = text.toLowerCase();
@@ -118,21 +82,27 @@ const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model |
 const supportsReasoningEffort = (model?: string): boolean => /^(gpt-5|o)/i.test(model || '');
 const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
 
-const normalizeGoalType = (value?: string | null): GoalType | 'none' => {
-  if (!value) return 'none';
-  if (value === 'start_order') return 'order_now';
-  if (value === 'drive_to_channel') return 'none';
-  return value as GoalType;
-};
+type IntentLabel = { value: string; description: string };
 
-export async function detectGoalIntent(
+const detectIntentFromLabels = async (
   text: string,
+  intentLabels: IntentLabel[],
   settings?: AutomationIntentSettings,
-): Promise<GoalType> {
+): Promise<string> => {
   const trimmed = text.trim();
   if (!trimmed) return 'none';
+
+  const labels = Array.isArray(intentLabels)
+    ? intentLabels.filter((label) => label?.value && typeof label.value === 'string')
+    : [];
+  if (labels.length === 0) return 'none';
+
+  const allowedValues = labels.map((intent) => intent.value);
+  const allowedSet = new Set(allowedValues);
+
   if (!process.env.OPENAI_API_KEY) {
-    return detectGoalIntentFallback(trimmed);
+    const fallback = detectGoalIntentFallback(trimmed);
+    return allowedSet.has(fallback) ? fallback : 'none';
   }
 
   try {
@@ -140,14 +110,14 @@ export async function detectGoalIntent(
       type: 'object',
       additionalProperties: false,
       properties: {
-        intent: { type: 'string', enum: intentLabels.map((item) => item.value) },
+        intent: { type: 'string', enum: allowedValues },
         confidence: { type: 'number', minimum: 0, maximum: 1 },
       },
       required: ['intent', 'confidence'],
     };
 
-    const intentText = intentLabels
-      .map((intent) => `- ${intent.value}: ${intent.description}`)
+    const intentText = labels
+      .map((intent) => `- ${intent.value}: ${intent.description || ''}`)
       .join('\n');
 
     const model = settings?.model || INTENT_MODEL;
@@ -189,29 +159,61 @@ export async function detectGoalIntent(
     const response = await openai.responses.create(requestPayload);
     const responseText = response.output_text?.trim() || '{}';
 
-    let intent: GoalType | null = null;
+    let intent: string | null = null;
+    let confidence: number | null = null;
     try {
       const parsed = JSON.parse(responseText);
-      if (intentLabels.some((item) => item.value === parsed.intent)) {
-        intent = parsed.intent as GoalType;
+      if (allowedSet.has(parsed.intent)) {
+        intent = parsed.intent as string;
       }
-    if (shouldLogAutomation()) {
-      console.log('[AI] intent_detect', {
-        intent,
-        confidence: parsed.confidence,
-        model,
-        reasoningEffort,
-      });
-    }
+      if (typeof parsed.confidence === 'number') {
+        confidence = parsed.confidence;
+      }
+      if (shouldLogAutomation()) {
+        console.log('[AI] intent_detect', {
+          intent,
+          confidence,
+          model,
+          reasoningEffort,
+        });
+      }
     } catch (parseError) {
       console.error('Failed to parse intent detection response:', responseText);
     }
 
-    return intent || detectGoalIntentFallback(trimmed);
+    if (intent && allowedSet.has(intent)) return intent;
+    const fallback = detectGoalIntentFallback(trimmed);
+    return allowedSet.has(fallback) ? fallback : 'none';
   } catch (error: any) {
     console.error('AI intent detection failed:', error?.message || error);
-    return detectGoalIntentFallback(trimmed);
+    const fallback = detectGoalIntentFallback(trimmed);
+    return allowedSet.has(fallback) ? fallback : 'none';
   }
+};
+
+const normalizeGoalType = (value?: string | null): GoalType | 'none' => {
+  if (!value) return 'none';
+  if (value === 'start_order') return 'order_now';
+  if (value === 'drive_to_channel') return 'none';
+  return value as GoalType;
+};
+
+export async function detectGoalIntent(
+  text: string,
+  settings?: AutomationIntentSettings,
+): Promise<GoalType> {
+  const intent = await detectIntentFromLabels(text, goalIntentLabels, settings);
+  return (goalIntentLabels.some((label) => label.value === intent)
+    ? intent
+    : 'none') as GoalType;
+}
+
+export async function detectAutomationIntent(
+  text: string,
+  settings?: AutomationIntentSettings,
+): Promise<string> {
+  const labels = await listAutomationIntentLabels();
+  return detectIntentFromLabels(text, labels, settings);
 }
 
 export function goalMatchesWorkspace(goal: GoalType, primary?: GoalType, secondary?: GoalType): boolean {

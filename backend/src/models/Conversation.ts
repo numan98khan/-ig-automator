@@ -19,11 +19,6 @@ export interface IConversation extends Document {
   lastBusinessMessageAt?: Date;          // Last message from business/AI
   autoReplyDisabled?: boolean;           // Manually disable auto-reply for this conversation
 
-  // AI Categorization
-  categoryId?: mongoose.Types.ObjectId;
-  detectedLanguage?: string;
-  categoryConfidence?: number;
-
   // Human-in-the-loop / escalation tracking
   humanRequired?: boolean;
   humanRequiredReason?: string;
@@ -95,18 +90,6 @@ const conversationSchema = new Schema<IConversation>({
   autoReplyDisabled: {
     type: Boolean,
     default: false,
-  },
-
-  // AI Categorization
-  categoryId: {
-    type: Schema.Types.ObjectId,
-    ref: 'MessageCategory',
-  },
-  detectedLanguage: {
-    type: String,
-  },
-  categoryConfidence: {
-    type: Number,
   },
 
   // Human-in-the-loop / escalation tracking

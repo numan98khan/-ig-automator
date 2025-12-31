@@ -7,13 +7,11 @@ import {
   messageAPI,
   instagramAPI,
   instagramSyncAPI,
-  categoriesAPI,
   tierAPI,
   TierSummaryResponse,
   Conversation,
   Message,
   InstagramAccount,
-  MessageCategory,
   AutomationSessionSummary,
 } from '../services/api';
 import {
@@ -22,7 +20,6 @@ import {
   Instagram,
   Loader2,
   RefreshCw,
-  Tag,
   Check,
   CheckCheck,
   ArrowLeft,
@@ -36,7 +33,6 @@ import {
   Clock3,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { Badge } from '../components/ui/Badge';
 import { ImageAttachment, VideoAttachment, VoiceAttachment, LinkPreviewComponent, FileAttachment } from '../components/MessageMedia';
 
 const Inbox: React.FC = () => {
@@ -47,21 +43,17 @@ const Inbox: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [instagramAccounts, setInstagramAccounts] = useState<InstagramAccount[]>([]);
-  const [categories, setCategories] = useState<MessageCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncingAll, setSyncingAll] = useState(false);
   const [workspaceTier, setWorkspaceTier] = useState<TierSummaryResponse['workspace']>();
-  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
-  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const [previousMessageCount, setPreviousMessageCount] = useState(0);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'unreplied' | 'escalated' | 'highIntent'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'unreplied' | 'escalated'>('all');
   const [contextOpen, setContextOpen] = useState(false);
   const [draftSource, setDraftSource] = useState<'ai' | null>(null);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(true);
@@ -107,32 +99,29 @@ const Inbox: React.FC = () => {
     }
   };
 
-  const handleCategoryChange = async (messageId: string, categoryId: string) => {
-    try {
-      await messageAPI.updateCategory(messageId, categoryId);
-      await loadMessages();
-      await loadConversations();
-      setCategoryDropdownOpen(null);
-    } catch (error) {
-      console.error('Error updating category:', error);
-      alert('Failed to update category. Please try again.');
-    }
-  };
 
-  const loadAutomationSession = async () => {
+  const loadAutomationSession = async (options?: { silent?: boolean }) => {
     if (!selectedConversation?._id) {
       setAutomationSession(null);
+      setSessionLoading(false);
       return;
     }
-    setSessionLoading(true);
+    const shouldShowLoading = !options?.silent && !automationSession;
+    if (shouldShowLoading) {
+      setSessionLoading(true);
+    }
     try {
       const data = await conversationAPI.getAutomationSession(selectedConversation._id);
       setAutomationSession(data);
     } catch (error) {
       console.error('Error loading automation session:', error);
-      setAutomationSession(null);
+      if (!automationSession) {
+        setAutomationSession(null);
+      }
     } finally {
-      setSessionLoading(false);
+      if (shouldShowLoading) {
+        setSessionLoading(false);
+      }
     }
   };
 
@@ -159,21 +148,11 @@ const Inbox: React.FC = () => {
       loadConversations();
       if (selectedConversation) {
         loadMessages();
-        loadAutomationSession();
+        loadAutomationSession({ silent: true });
       }
     }, 5000);
     return () => clearInterval(interval);
   }, [currentWorkspace, selectedConversation, activeAccount]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
-        setCategoryDropdownOpen(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -189,15 +168,13 @@ const Inbox: React.FC = () => {
     if (!currentWorkspace) return;
     try {
       setLoading(true);
-      const [accountsData, conversationsData, categoriesData, tierData] = await Promise.all([
+      const [accountsData, conversationsData, tierData] = await Promise.all([
         instagramAPI.getByWorkspace(currentWorkspace._id),
         conversationAPI.getByWorkspace(currentWorkspace._id),
-        categoriesAPI.getByWorkspace(currentWorkspace._id),
         tierAPI.getWorkspace(currentWorkspace._id),
       ]);
 
       setInstagramAccounts(accountsData || accountContextList || []);
-      setCategories(categoriesData || []);
       setWorkspaceTier(tierData);
 
       if (!activeAccount) {
@@ -266,7 +243,7 @@ const Inbox: React.FC = () => {
       } else {
         loadMessages();
       }
-      loadAutomationSession();
+      loadAutomationSession({ silent: true });
       setShouldAutoScroll(true);
     }
   }, [selectedConversation]);
@@ -306,7 +283,7 @@ const Inbox: React.FC = () => {
       setDraftSource(null);
       setShouldAutoScroll(true);
       setTimeout(scrollToBottom, 100);
-      loadAutomationSession();
+      loadAutomationSession({ silent: true });
     } catch (error: any) {
       console.error('Error sending message:', error);
       alert(error.response?.data?.error || 'Failed to send message. Please try again.');
@@ -322,7 +299,7 @@ const Inbox: React.FC = () => {
       const message = await messageAPI.generateAIReply(selectedConversation._id);
       setNewMessage(message.text || '');
       setDraftSource('ai');
-      loadAutomationSession();
+      loadAutomationSession({ silent: true });
     } catch (error) {
       console.error('Error generating AI reply:', error);
       alert('Failed to generate AI reply. Please try again.');
@@ -336,7 +313,7 @@ const Inbox: React.FC = () => {
     setSessionAction('pause');
     try {
       await conversationAPI.pauseAutomationSession(selectedConversation._id, 'manual_pause');
-      await loadAutomationSession();
+      await loadAutomationSession({ silent: true });
     } catch (error) {
       console.error('Error pausing automation session:', error);
       alert('Failed to pause automation session.');
@@ -351,7 +328,7 @@ const Inbox: React.FC = () => {
     setSessionAction('stop');
     try {
       await conversationAPI.stopAutomationSession(selectedConversation._id, 'manual_stop');
-      await loadAutomationSession();
+      await loadAutomationSession({ silent: true });
     } catch (error) {
       console.error('Error stopping automation session:', error);
       alert('Failed to stop automation session.');
@@ -397,6 +374,25 @@ const Inbox: React.FC = () => {
   const sessionTemplateName = automationSession?.template?.name;
   const sessionVersionLabel = automationSession?.version?.versionLabel;
   const sessionVersionNumber = automationSession?.version?.version;
+  const sessionNode = automationSession?.currentNode;
+  const sessionVars = session?.state?.vars && typeof session.state.vars === 'object'
+    ? session.state.vars
+    : undefined;
+  const detectedIntent = typeof sessionVars?.detectedIntent === 'string'
+    ? sessionVars.detectedIntent
+    : undefined;
+  const agentStep = typeof sessionVars?.agentStep === 'string' ? sessionVars.agentStep : undefined;
+  const agentStepIndex = typeof sessionVars?.agentStepIndex === 'number' ? sessionVars.agentStepIndex : undefined;
+  const agentStepCount = typeof sessionVars?.agentStepCount === 'number' ? sessionVars.agentStepCount : undefined;
+  const agentQuestionsAsked = typeof sessionVars?.agentQuestionsAsked === 'number'
+    ? sessionVars.agentQuestionsAsked
+    : undefined;
+  const agentProgress = typeof agentStepIndex === 'number'
+    ? `${agentStepIndex + 1}${typeof agentStepCount === 'number' ? `/${agentStepCount}` : ''}`
+    : undefined;
+  const agentMissingSlots = Array.isArray(sessionVars?.agentMissingSlots)
+    ? sessionVars.agentMissingSlots.filter((slot) => typeof slot === 'string' && slot.trim())
+    : [];
 
   const handleConnectInstagram = async () => {
     if (!currentWorkspace) return;
@@ -430,12 +426,10 @@ const Inbox: React.FC = () => {
         (conv.lastMessage || '').toLowerCase().includes(term);
 
       const isEscalated = Boolean(conv.humanRequired);
-      const isHighIntent = conv.categoryName ? /lead|booking|order|purchase|pricing/i.test(conv.categoryName) : false;
       const isUnreplied = !conv.isSynced || isEscalated;
 
       if (!matchesSearch) return false;
       if (activeFilter === 'escalated') return isEscalated;
-      if (activeFilter === 'highIntent') return isHighIntent;
       if (activeFilter === 'unreplied') return isUnreplied;
       return true;
     });
@@ -518,11 +512,10 @@ const Inbox: React.FC = () => {
                   { key: 'all', label: 'All' },
                   { key: 'unreplied', label: 'Unreplied' },
                   { key: 'escalated', label: 'Escalated' },
-                  { key: 'highIntent', label: 'High intent' },
                 ].map((filter) => (
                   <button
                     key={filter.key}
-                    onClick={() => setActiveFilter(filter.key as 'all' | 'unreplied' | 'escalated' | 'highIntent')}
+                    onClick={() => setActiveFilter(filter.key as 'all' | 'unreplied' | 'escalated')}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${activeFilter === filter.key
                       ? 'bg-primary/10 text-primary border-primary/40'
                       : 'text-muted-foreground border-border hover:text-foreground hover:border-primary/40'
@@ -582,11 +575,6 @@ const Inbox: React.FC = () => {
                             Escalated
                           </span>
                         )}
-                        {conv.categoryName && (
-                          <Badge variant="primary" className="text-[11px] py-0 px-2 rounded-full">
-                            {conv.categoryName}
-                          </Badge>
-                        )}
                       </div>
                     </div>
                     <span className="text-[11px] text-muted-foreground whitespace-nowrap mt-0.5">{formatTime(conv.lastMessageAt)}</span>
@@ -616,11 +604,6 @@ const Inbox: React.FC = () => {
                       </h2>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                         <span>@{selectedConversation.participantHandle}</span>
-                        {selectedConversation.categoryName && (
-                          <Badge variant="secondary" className="text-[11px] px-2 py-0 rounded-full">
-                            {selectedConversation.categoryName}
-                          </Badge>
-                        )}
                         {selectedConversation.humanRequired && (
                           <span className="px-2 py-0.5 rounded-full text-[11px] bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100">
                             Escalated
@@ -663,8 +646,6 @@ const Inbox: React.FC = () => {
                       <div
                         key={msg._id}
                         className={`flex ${msg.from === 'customer' ? 'justify-start' : 'justify-end'}`}
-                        onMouseEnter={() => msg.from === 'customer' && setHoveredMessageId(msg._id)}
-                        onMouseLeave={() => setHoveredMessageId(null)}
                       >
                         <div className="relative max-w-[85%] md:max-w-2xl group">
                           <div
@@ -722,40 +703,6 @@ const Inbox: React.FC = () => {
                             </div>
                           </div>
 
-                          {msg.from === 'customer' && hoveredMessageId === msg._id && !categoryDropdownOpen && (
-                            <div className="absolute left-0 -bottom-9 animate-fade-in z-10">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                className="text-xs h-7 px-2.5 bg-background border-border"
-                                onClick={() => setCategoryDropdownOpen(msg._id)}
-                                leftIcon={<Tag className="w-3.5 h-3.5" />}
-                              >
-                                {msg.categoryId?.nameEn || 'Categorize'}
-                              </Button>
-                            </div>
-                          )}
-
-                          {categoryDropdownOpen === msg._id && (
-                            <div
-                              ref={categoryDropdownRef}
-                              className="absolute left-0 top-full mt-2 z-20 bg-card border border-border rounded-lg py-1 min-w-[200px] max-h-60 overflow-y-auto animate-fade-in shadow-lg"
-                            >
-                              <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground border-b border-border uppercase tracking-wider">
-                                Select Category
-                              </div>
-                              {categories.map((cat) => (
-                                <button
-                                  key={cat._id}
-                                  onClick={() => handleCategoryChange(msg._id, cat._id)}
-                                  className={`w-full text-left px-3 py-2 text-sm transition hover:bg-muted/50 ${msg.categoryId?._id === cat._id ? 'text-primary font-medium bg-primary/5' : 'text-foreground'
-                                    }`}
-                                >
-                                  {cat.nameEn}
-                                </button>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       </div>
                     ))}
@@ -829,7 +776,7 @@ const Inbox: React.FC = () => {
 
           {/* Context Drawer */}
           {contextOpen && selectedConversation && (
-            <aside className="hidden lg:flex w-[320px] flex-shrink-0 flex-col rounded-xl border border-border glass-panel shadow-sm min-h-0 p-4 gap-4">
+            <aside className="hidden lg:flex w-[320px] flex-shrink-0 flex-col rounded-xl border border-border glass-panel shadow-sm min-h-0 p-4 gap-4 overflow-hidden">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-foreground">Context</h3>
                 <button
@@ -840,25 +787,16 @@ const Inbox: React.FC = () => {
                 </button>
               </div>
 
-              <div className="space-y-3">
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70">
-                  <p className="text-xs text-muted-foreground">AI status</p>
-                  <div className="mt-1 flex items-center justify-between text-sm font-medium text-foreground">
-                    <span>{autoReplyEnabled ? 'Auto-reply on' : 'Auto-reply paused'}</span>
-                    <span className="text-xs text-muted-foreground">Assist mode</span>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70">
-                  <div className="flex items-center justify-between text-sm font-semibold text-foreground">
-                    <span>Automation session</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${sessionMeta.className}`}>
-                      {sessionMeta.label}
-                    </span>
-                  </div>
-                  {sessionLoading ? (
-                    <p className="mt-2 text-xs text-muted-foreground">Loading session...</p>
-                  ) : session ? (
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1 custom-scrollbar">
+                <div className="space-y-3">
+                  <div className="p-3 rounded-lg border border-border/70 bg-background/70">
+                    <div className="flex items-center justify-between text-sm font-semibold text-foreground">
+                      <span>Automation session</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${sessionMeta.className}`}>
+                        {sessionMeta.label}
+                      </span>
+                    </div>
+                  {session ? (
                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                       <div>
                         Instance:{' '}
@@ -893,6 +831,31 @@ const Inbox: React.FC = () => {
                           <span className="text-foreground">{Object.keys(session.state.vars || {}).length}</span>
                         </div>
                       )}
+                      {detectedIntent && (
+                        <div>
+                          Detected intent: <span className="text-foreground">{detectedIntent}</span>
+                        </div>
+                      )}
+                      {agentProgress && (
+                        <div>
+                          Agent progress: <span className="text-foreground">{agentProgress}</span>
+                        </div>
+                      )}
+                      {agentStep && (
+                        <div>
+                          Agent step: <span className="text-foreground">{agentStep}</span>
+                        </div>
+                      )}
+                      {typeof agentQuestionsAsked === 'number' && (
+                        <div>
+                          Questions asked: <span className="text-foreground">{agentQuestionsAsked}</span>
+                        </div>
+                      )}
+                      {agentMissingSlots.length > 0 && (
+                        <div>
+                          Missing slots: <span className="text-foreground">{agentMissingSlots.join(', ')}</span>
+                        </div>
+                      )}
                       {session.lastAutomationMessageAt && (
                         <div>
                           Last automation: <span className="text-foreground">{formatTime(session.lastAutomationMessageAt)}</span>
@@ -908,90 +871,67 @@ const Inbox: React.FC = () => {
                           Reason: <span className="text-foreground">{session.pauseReason}</span>
                         </div>
                       )}
+                      {sessionNode && (
+                        <div className="mt-2 rounded-md border border-border/60 bg-muted/30 px-2 py-2 space-y-1">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-foreground">
+                            <span>Current node</span>
+                            <span className="text-muted-foreground">{sessionNode.label || sessionNode.type}</span>
+                          </div>
+                          <div>
+                            ID: <span className="text-foreground">{sessionNode.id}</span>
+                          </div>
+                          <div>
+                            Type: <span className="text-foreground">{sessionNode.type}</span>
+                          </div>
+                          {sessionNode.preview && (
+                            <div className="text-foreground">{sessionNode.preview}</div>
+                          )}
+                          {sessionNode.summary?.map((item, index) => (
+                            <div key={`${item.label}-${index}`}>
+                              {item.label}: <span className="text-foreground">{item.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <p className="mt-2 text-xs text-muted-foreground">No active session.</p>
                   )}
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Button
-                      variant="secondary"
-                      className="h-9"
-                      disabled={!session || session.status !== 'active' || sessionAction === 'pause' || sessionLoading}
-                      onClick={handlePauseSession}
-                    >
-                      {sessionAction === 'pause' ? 'Pausing...' : 'Pause'}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      className="h-9"
-                      disabled={!session || sessionAction === 'stop' || sessionLoading}
-                      onClick={handleStopSession}
-                    >
-                      {sessionAction === 'stop' ? 'Stopping...' : 'Stop'}
-                    </Button>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <Button
+                        variant="secondary"
+                        className="h-9"
+                        disabled={!session || session.status !== 'active' || sessionAction === 'pause' || sessionLoading}
+                        onClick={handlePauseSession}
+                      >
+                        {sessionAction === 'pause' ? 'Pausing...' : 'Pause'}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="h-9"
+                        disabled={!session || sessionAction === 'stop' || sessionLoading}
+                        onClick={handleStopSession}
+                      >
+                        {sessionAction === 'stop' ? 'Stopping...' : 'Stop'}
+                      </Button>
+                    </div>
                   </div>
-                </div>
 
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-1">
-                  <div className="flex items-center justify-between text-sm font-semibold text-foreground">
-                    <span>Category</span>
-                    {selectedConversation.categoryName ? (
-                      <Badge variant="secondary" className="text-[11px] px-2 py-0 rounded-full">
-                        {selectedConversation.categoryName}
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Unassigned</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Confidence: high</p>
-                </div>
-
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-2">
-                  <div className="flex items-center justify-between text-sm font-semibold text-foreground">
-                    <span>Escalation</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${selectedConversation.humanRequired
-                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100'
-                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100'
-                      }`}>
-                      {selectedConversation.humanRequired ? 'Open' : 'Clear'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Reason: {selectedConversation.humanRequiredReason || 'Not escalated'}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Clock3 className="w-4 h-4" />
-                    <span>SLA timer: 15m</span>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-2">
-                  <div className="flex items-center justify-between text-sm font-semibold text-foreground">
-                    <span>Knowledge used</span>
-                    <span className="text-xs text-muted-foreground">Recent</span>
-                  </div>
-                  <ul className="space-y-1 text-xs text-muted-foreground">
-                    {selectedConversation.categoryName ? (
-                      <li className="px-2 py-1 rounded-md bg-muted/50 text-foreground">{selectedConversation.categoryName} playbook</li>
-                    ) : (
-                      <li className="px-2 py-1 rounded-md bg-muted/30">No linked knowledge yet</li>
-                    )}
-                  </ul>
-                </div>
-
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-2">
-                  <p className="text-sm font-semibold text-foreground">Quick actions</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button variant="secondary" className="h-10" leftIcon={<AlertTriangle className="w-4 h-4" />}>
-                      Escalate
-                    </Button>
-                    <Button variant="secondary" className="h-10" onClick={() => setAutoReplyEnabled(false)}>
-                      Pause AI
-                    </Button>
-                    <Button variant="secondary" className="h-10" leftIcon={<Tag className="w-4 h-4" />}>
-                      Change category
-                    </Button>
-                    <Button variant="secondary" className="h-10">
-                      Add to KB
-                    </Button>
+                  <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-2">
+                    <div className="flex items-center justify-between text-sm font-semibold text-foreground">
+                      <span>Escalation</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${selectedConversation.humanRequired
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100'
+                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100'
+                        }`}>
+                        {selectedConversation.humanRequired ? 'Open' : 'Clear'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Reason: {selectedConversation.humanRequiredReason || 'Not escalated'}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock3 className="w-4 h-4" />
+                      <span>SLA timer: 15m</span>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -12,8 +12,6 @@ interface ConversationItem {
   participantName: string;
   updatedAt: string;
   isSynced: boolean;
-  categoryId?: string;
-  categoryName?: string;
 }
 
 function timeAgo(date: Date) {
@@ -63,7 +61,7 @@ const SyncConversations: React.FC = () => {
       setSyncing(conv.instagramConversationId);
       await instagramSyncAPI.syncMessages(currentWorkspace!._id, conv.instagramConversationId);
 
-      // Refresh list to see updated status/category
+      // Refresh list to see updated status
       await fetchConversations();
     } catch (err) {
       console.error('Sync failed:', err);
@@ -97,10 +95,6 @@ const SyncConversations: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">Sync Conversations</h1>
           <p className="text-gray-500 mt-1">
             View available conversations on Instagram and sync them to your inbox.
-            <br />
-            <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-              ✨ Includes AI Auto-Categorization
-            </span>
           </p>
         </div>
         <div className="flex gap-4">
@@ -142,14 +136,13 @@ const SyncConversations: React.FC = () => {
                 <th className="px-6 py-4 text-sm font-semibold text-gray-900">Participant</th>
                 <th className="px-6 py-4 text-sm font-semibold text-gray-900">Last Activity</th>
                 <th className="px-6 py-4 text-sm font-semibold text-gray-900">Status</th>
-                <th className="px-6 py-4 text-sm font-semibold text-gray-900">Category</th>
                 <th className="px-6 py-4 text-sm font-semibold text-gray-900 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {conversations.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
                     No conversations found on Instagram.
                   </td>
                 </tr>
@@ -177,15 +170,6 @@ const SyncConversations: React.FC = () => {
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                           New
                         </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {conv.isSynced ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                          {conv.categoryName || 'General'}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 text-sm">-</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">

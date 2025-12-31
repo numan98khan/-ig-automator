@@ -12,6 +12,7 @@ import {
   LogOut,
   X,
   Bug,
+  ScrollText,
 } from 'lucide-react'
 import { useAdminAuth } from '../context/AdminAuthContext'
 
@@ -33,6 +34,7 @@ export default function Layout({ children }: LayoutProps) {
     { name: 'AI Assistant', href: '/ai-assistant', icon: Bot },
     { name: 'Automations', href: '/automations', icon: Settings },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+    { name: 'Logging', href: '/logging', icon: ScrollText },
     { name: 'Debug', href: '/debug', icon: Bug },
   ]
 
@@ -88,7 +90,9 @@ export default function Layout({ children }: LayoutProps) {
           {/* Navigation */}
           <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto lg:px-2 lg:group-hover:px-3">
             {navigation.map((item) => {
-              const isActive = location.pathname === item.href
+              const isActive = item.href === '/'
+                ? location.pathname === '/'
+                : location.pathname.startsWith(item.href)
               const Icon = item.icon
               return (
                 <Link

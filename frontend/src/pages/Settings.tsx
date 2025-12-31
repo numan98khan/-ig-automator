@@ -471,12 +471,6 @@ export default function Settings() {
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <div className="text-sm text-muted-foreground">Custom categories</div>
-                      <Badge variant={tierSummary?.tier?.allowCustomCategories === false ? 'secondary' : 'success'}>
-                        {tierSummary?.tier?.allowCustomCategories === false ? 'Disabled' : 'Allowed'}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
                       <div className="text-sm text-muted-foreground">AI messages</div>
                       <div className="text-sm font-semibold">{usagePill(aiUsage?.used, aiUsage?.limit ?? combinedLimits.aiMessages)}</div>
                     </div>
@@ -484,7 +478,6 @@ export default function Settings() {
                       <UsageStat label="Instagram" value={usagePill(workspaceUsage.instagramAccounts, combinedLimits.instagramAccounts)} />
                       <UsageStat label="Team" value={usagePill(workspaceUsage.teamMembers, combinedLimits.teamMembers)} />
                       <UsageStat label="Knowledge" value={usagePill(workspaceUsage.knowledgeItems, combinedLimits.knowledgeItems)} />
-                      <UsageStat label="Categories" value={usagePill(workspaceUsage.messageCategories, combinedLimits.messageCategories)} />
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Gauge className="w-4 h-4" />

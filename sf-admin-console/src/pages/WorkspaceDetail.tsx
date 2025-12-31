@@ -7,14 +7,13 @@ import {
   Building2,
   Users,
   MessageSquare,
-  Settings,
   Activity,
   Calendar,
   TrendingUp,
   AlertCircle,
 } from 'lucide-react'
 
-type TabType = 'overview' | 'conversations' | 'members' | 'automations'
+type TabType = 'overview' | 'conversations' | 'members'
 
 export default function WorkspaceDetail() {
   const { id } = useParams<{ id: string }>()
@@ -37,20 +36,13 @@ export default function WorkspaceDetail() {
     queryFn: () => adminApi.getWorkspaceMembers(id!),
   })
 
-  const { data: categoriesData, isLoading: loadingCategories } = useQuery({
-    queryKey: ['workspace-categories', id],
-    queryFn: () => adminApi.getWorkspaceCategories(id!),
-  })
-
   const workspacePayload = unwrapData<any>(workspaceData)
   const conversationsPayload = unwrapData<any>(conversationsData)
   const membersPayload = unwrapData<any>(membersData)
-  const categoriesPayload = unwrapData<any>(categoriesData)
 
   const workspace = workspacePayload
   const conversations = conversationsPayload?.conversations || []
   const members = membersPayload?.members || []
-  const categories = categoriesPayload?.categories || []
 
   if (loadingWorkspace) {
     return (
@@ -73,7 +65,6 @@ export default function WorkspaceDetail() {
     { id: 'overview', label: 'Overview', icon: Building2 },
     { id: 'conversations', label: 'Conversations', icon: MessageSquare },
     { id: 'members', label: 'Members', icon: Users },
-    { id: 'automations', label: 'Automations', icon: Settings },
   ]
 
   return (
@@ -316,11 +307,6 @@ export default function WorkspaceDetail() {
                               Escalated
                             </span>
                           )}
-                          {conv.categoryName && (
-                            <span className="px-2 py-0.5 rounded-full text-[11px] bg-primary/10 text-primary border border-primary/40">
-                              {conv.categoryName}
-                            </span>
-                          )}
                           <span className="text-[11px] text-muted-foreground">
                             {conv.messageCount || 0} messages
                           </span>
@@ -392,108 +378,6 @@ export default function WorkspaceDetail() {
           </div>
         )}
 
-        {activeTab === 'automations' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground">
-                Automation Settings ({categories.length} categories)
-              </h3>
-            </div>
-
-            {loadingCategories ? (
-              <div className="text-center py-12 text-muted-foreground">
-                Loading automation settings...
-              </div>
-            ) : categories.length === 0 ? (
-              <div className="card text-center py-12">
-                <Settings className="w-12 h-12 mx-auto text-muted-foreground/70 mb-4" />
-                <p className="text-muted-foreground">No automation categories configured</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {categories.map((category: any) => (
-                  <div key={category._id} className="card">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h4 className="font-semibold text-foreground text-lg">
-                            {category.nameEn}
-                          </h4>
-                          {category.isSystem && (
-                            <span className="badge badge-secondary text-xs">System</span>
-                          )}
-                        </div>
-                        {category.descriptionEn && (
-                          <p className="text-sm text-muted-foreground mb-3">
-                            {category.descriptionEn}
-                          </p>
-                        )}
-                        {category.exampleMessages && category.exampleMessages.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mb-3">
-                            {category.exampleMessages.slice(0, 3).map((example: string, idx: number) => (
-                              <span
-                                key={idx}
-                                className="px-2 py-1 bg-muted rounded text-xs text-muted-foreground"
-                              >
-                                "{example}"
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-border">
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-2">AI Policy</p>
-                        <span
-                          className={`badge ${
-                            category.aiPolicy === 'full_auto'
-                              ? 'badge-success'
-                              : category.aiPolicy === 'assist_only'
-                              ? 'badge-warning'
-                              : 'badge-error'
-                          }`}
-                        >
-                          {category.aiPolicy === 'full_auto'
-                            ? 'Full Auto'
-                            : category.aiPolicy === 'assist_only'
-                            ? 'Assist Only'
-                            : 'Escalate'}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-2">Auto-Reply</p>
-                        <span
-                          className={`badge ${
-                            category.autoReplyEnabled ? 'badge-success' : 'badge-error'
-                          }`}
-                        >
-                          {category.autoReplyEnabled ? 'Enabled' : 'Disabled'}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-2">Messages</p>
-                        <p className="text-foreground font-semibold">
-                          {category.messageCount || 0}
-                        </p>
-                      </div>
-                    </div>
-
-                    {category.escalationNote && (
-                      <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                        <p className="text-sm text-foreground">
-                          <span className="font-semibold">Escalation Note: </span>
-                          {category.escalationNote}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   )

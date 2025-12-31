@@ -7,7 +7,6 @@ import User from '../models/User';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import WorkspaceMember from '../models/WorkspaceMember';
-import MessageCategory from '../models/MessageCategory';
 import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
@@ -15,10 +14,13 @@ import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalA
 import FlowDraft from '../models/FlowDraft';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
+import AutomationIntent from '../models/AutomationIntent';
 import Tier from '../models/Tier';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
+import { deleteAdminLogEvents, getAdminLogEvents } from '../services/adminLogEventService';
 import { compileFlow } from '../services/flowCompiler';
+import { listAutomationIntents } from '../services/automationIntentService';
 import {
   GLOBAL_WORKSPACE_KEY,
   deleteKnowledgeEmbedding,
@@ -301,10 +303,6 @@ router.get('/conversations', authenticate, requireAdmin, async (req, res) => {
     ]);
 
     const workspaceIds = items.map((c: any) => c.workspaceId);
-    const categories = await MessageCategory.find({
-      _id: { $in: items.map((c: any) => c.categoryId).filter(Boolean) },
-    }).lean();
-    const categoryMap = Object.fromEntries(categories.map((c: any) => [String(c._id), c]));
     const workspaceMap = Object.fromEntries(
       (await Workspace.find({ _id: { $in: workspaceIds } }).lean()).map((w: any) => [String(w._id), w])
     );
@@ -314,7 +312,6 @@ router.get('/conversations', authenticate, requireAdmin, async (req, res) => {
         conversations: items.map((c: any) => ({
           ...c,
           workspaceName: workspaceMap[String(c.workspaceId)]?.name,
-          categoryName: c.categoryId ? categoryMap[String(c.categoryId)]?.nameEn : undefined,
         })),
         pagination: {
           currentPage: page,
@@ -417,16 +414,6 @@ router.get('/workspaces/:id/members', authenticate, requireAdmin, async (req, re
     res.json({ data: { members } });
   } catch (error) {
     console.error('Admin workspace members error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-router.get('/workspaces/:id/categories', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const categories = await MessageCategory.find({ workspaceId: req.params.id }).lean();
-    res.json({ data: { categories } });
-  } catch (error) {
-    console.error('Admin workspace categories error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -645,20 +632,132 @@ router.get('/log-settings', authenticate, requireAdmin, async (_req, res) => {
 router.put('/log-settings', authenticate, requireAdmin, async (req, res) => {
   try {
     const aiTimingEnabled = toOptionalBoolean(req.body?.aiTimingEnabled);
+    const aiLogsEnabled = toOptionalBoolean(req.body?.aiLogsEnabled);
     const automationLogsEnabled = toOptionalBoolean(req.body?.automationLogsEnabled);
     const automationStepsEnabled = toOptionalBoolean(req.body?.automationStepsEnabled);
+    const instagramWebhookLogsEnabled = toOptionalBoolean(req.body?.instagramWebhookLogsEnabled);
+    const igApiLogsEnabled = toOptionalBoolean(req.body?.igApiLogsEnabled);
     const openaiApiLogsEnabled = toOptionalBoolean(req.body?.openaiApiLogsEnabled);
+    const consoleLogsEnabled = toOptionalBoolean(req.body?.consoleLogsEnabled);
 
     const settings = await updateLogSettings({
       ...(aiTimingEnabled === undefined ? {} : { aiTimingEnabled }),
+      ...(aiLogsEnabled === undefined ? {} : { aiLogsEnabled }),
       ...(automationLogsEnabled === undefined ? {} : { automationLogsEnabled }),
       ...(automationStepsEnabled === undefined ? {} : { automationStepsEnabled }),
+      ...(instagramWebhookLogsEnabled === undefined ? {} : { instagramWebhookLogsEnabled }),
+      ...(igApiLogsEnabled === undefined ? {} : { igApiLogsEnabled }),
       ...(openaiApiLogsEnabled === undefined ? {} : { openaiApiLogsEnabled }),
+      ...(consoleLogsEnabled === undefined ? {} : { consoleLogsEnabled }),
     });
     res.json({ data: settings });
   } catch (error) {
     console.error('Admin log settings update error:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Admin log events (stored in Mongo with TTL)
+router.get('/log-events', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(500, Math.max(1, toInt(req.query.limit, 200)));
+    const category = typeof req.query.category === 'string' ? req.query.category.trim() : undefined;
+    const level = typeof req.query.level === 'string' ? req.query.level.trim() : undefined;
+    const workspaceId = typeof req.query.workspaceId === 'string'
+      ? req.query.workspaceId.trim()
+      : undefined;
+    const beforeRaw = typeof req.query.before === 'string' ? req.query.before.trim() : undefined;
+    const before = beforeRaw ? new Date(beforeRaw) : undefined;
+    const beforeDate = before && !Number.isNaN(before.getTime()) ? before : undefined;
+
+    const events = await getAdminLogEvents({
+      limit,
+      category,
+      level: level === 'warn' || level === 'error' || level === 'info' ? level : undefined,
+      workspaceId,
+      before: beforeDate,
+    });
+
+    res.json({ data: events });
+  } catch (error) {
+    console.error('Admin log events get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.delete('/log-events', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    await deleteAdminLogEvents();
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin log events delete error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Automation intents (used by internal flow router)
+router.get('/automation-intents', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const intents = await listAutomationIntents();
+    res.json({ data: intents });
+  } catch (error) {
+    console.error('Admin automation intents list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/automation-intents', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const value = typeof req.body?.value === 'string' ? req.body.value.trim() : '';
+    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+    if (!value || !description) {
+      return res.status(400).json({ error: 'value and description are required' });
+    }
+
+    const exists = await AutomationIntent.findOne({ value }).lean();
+    if (exists) {
+      return res.status(409).json({ error: 'Intent value already exists' });
+    }
+
+    const intent = await AutomationIntent.create({ value, description });
+    res.status(201).json({ data: intent });
+  } catch (error: any) {
+    console.error('Admin automation intent create error:', error);
+    res.status(400).json({ error: error.message || 'Failed to create automation intent' });
+  }
+});
+
+router.put('/automation-intents/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const intent = await AutomationIntent.findById(req.params.id);
+    if (!intent) return res.status(404).json({ error: 'Automation intent not found' });
+
+    const value = typeof req.body?.value === 'string' ? req.body.value.trim() : '';
+    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+
+    if (value) {
+      intent.value = value;
+    }
+    if (description) {
+      intent.description = description;
+    }
+
+    await intent.save();
+    res.json({ data: intent });
+  } catch (error: any) {
+    console.error('Admin automation intent update error:', error);
+    res.status(400).json({ error: error.message || 'Failed to update automation intent' });
+  }
+});
+
+router.delete('/automation-intents/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const intent = await AutomationIntent.findByIdAndDelete(req.params.id);
+    if (!intent) return res.status(404).json({ error: 'Automation intent not found' });
+    res.json({ data: { success: true } });
+  } catch (error: any) {
+    console.error('Admin automation intent delete error:', error);
+    res.status(400).json({ error: error.message || 'Failed to delete automation intent' });
   }
 });
 

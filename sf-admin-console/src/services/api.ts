@@ -44,7 +44,6 @@ export const adminApi = {
     api.get('/workspaces', { params }),
   getWorkspaceById: (id: string) => api.get(`/workspaces/${id}`),
   getWorkspaceMembers: (id: string) => api.get(`/workspaces/${id}/members`),
-  getWorkspaceCategories: (id: string) => api.get(`/workspaces/${id}/categories`),
 
   // Users
   getUsers: (params?: { page?: number; limit?: number; search?: string }) =>
@@ -108,10 +107,24 @@ export const adminApi = {
     api.get(`/flow-templates/${templateId}/versions`),
   getFlowTemplateVersion: (templateId: string, versionId: string) =>
     api.get(`/flow-templates/${templateId}/versions/${versionId}`),
+  getAutomationIntents: () => api.get('/automation-intents'),
+  createAutomationIntent: (payload: { value: string; description: string }) =>
+    api.post('/automation-intents', payload),
+  updateAutomationIntent: (id: string, payload: { value?: string; description?: string }) =>
+    api.put(`/automation-intents/${id}`, payload),
+  deleteAutomationIntent: (id: string) => api.delete(`/automation-intents/${id}`),
 
   // Log settings
   getLogSettings: () => api.get('/log-settings'),
   updateLogSettings: (payload: any) => api.put('/log-settings', payload),
+  getLogEvents: (params?: {
+    limit?: number
+    category?: string
+    level?: 'info' | 'warn' | 'error'
+    workspaceId?: string
+    before?: string
+  }) => api.get('/log-events', { params }),
+  deleteLogEvents: () => api.delete('/log-events'),
 
   // Tiers
   getTiers: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>

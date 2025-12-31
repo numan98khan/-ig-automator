@@ -12,7 +12,6 @@ export async function getActiveTicket(conversationId: mongoose.Types.ObjectId | 
 
 export async function createTicket(params: {
   conversationId: mongoose.Types.ObjectId | string;
-  categoryId?: mongoose.Types.ObjectId | string;
   topicSummary: string;
   reason?: string;
   createdBy?: 'ai' | 'human' | 'system';
@@ -29,7 +28,6 @@ export async function createTicket(params: {
   const ticket = await Escalation.create({
     conversationId: params.conversationId,
     workspaceId,
-    categoryId: params.categoryId,
     topicSummary: params.topicSummary,
     reason: params.reason,
     createdBy: params.createdBy || 'ai',

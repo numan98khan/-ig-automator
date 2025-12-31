@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { logAdminEvent } from '../services/adminLogEventService';
 
 interface LogEntry {
   timestamp: string;
@@ -73,6 +74,12 @@ class WebhookLogger {
     // DISABLED: console.log('\n📨 WEBHOOK RECEIVED');
     // DISABLED: console.log('RAW HEADERS:', JSON.stringify(headers, null, 2));
     // DISABLED: console.log('RAW BODY:', JSON.stringify(body, null, 2));
+
+    void logAdminEvent({
+      category: 'instagram_webhook',
+      message: '📥 Instagram webhook received',
+      details: { headers, body },
+    });
 
     this.log({
       timestamp: new Date().toISOString(),

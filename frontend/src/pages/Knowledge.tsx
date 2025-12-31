@@ -269,7 +269,7 @@ const Knowledge: React.FC = () => {
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Return Policy"
+              placeholder="e.g., Returns & exchanges"
               autoFocus
               required
             />

@@ -83,9 +83,6 @@ const formatTriggerConfigSummary = (config?: TriggerConfig) => {
   if (config.excludeKeywords && config.excludeKeywords.length > 0) {
     parts.push(`Exclude: ${config.excludeKeywords.join(', ')}`);
   }
-  if (config.categoryIds && config.categoryIds.length > 0) {
-    parts.push('Category filters');
-  }
   if (config.outsideBusinessHours) {
     parts.push('Outside business hours');
   }

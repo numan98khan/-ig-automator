@@ -8,6 +8,7 @@ import AutomationSession from '../models/AutomationSession';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import { generateAIReply } from './aiReplyService';
+import { generateAIAgentReply } from './aiAgentService';
 import {
   sendMessage as sendInstagramMessage,
   sendButtonMessage,
@@ -15,6 +16,7 @@ import {
 import { addTicketUpdate, createTicket, getActiveTicket } from './escalationService';
 import { addCountIncrement, trackDailyMetric } from './reportingService';
 import {
+  detectAutomationIntent,
   detectGoalIntent,
   getGoalConfigs,
   getWorkspaceSettings,
@@ -22,7 +24,9 @@ import {
 } from './workspaceSettingsService';
 import { pauseForTypingIfNeeded } from './automation/typing';
 import { matchesTriggerConfig } from './automation/triggerMatcher';
+import { matchesKeywords, normalizeText } from './automation/utils';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
+import { logAdminEvent } from './adminLogEventService';
 import {
   AutomationAiSettings,
   AutomationIntentSettings,
@@ -36,7 +40,8 @@ import { AutomationTestContext } from './automation/types';
 type FlowRuntimeEdge = {
   from: string;
   to: string;
-  condition?: Record<string, any>;
+  condition?: RouterCondition;
+  order?: number;
 };
 
 type FlowRuntimeStep = {
@@ -47,6 +52,12 @@ type FlowRuntimeStep = {
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
   aiSettings?: AutomationAiSettings;
+  agentSystemPrompt?: string;
+  agentSteps?: string[];
+  agentEndCondition?: string;
+  agentStopCondition?: string;
+  agentMaxQuestions?: number;
+  agentSlots?: Array<{ key: string; question?: string; defaultValue?: string }>;
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
   next?: string;
@@ -59,6 +70,7 @@ type FlowRuntimeStep = {
   };
   rateLimit?: AutomationRateLimit;
   intentSettings?: AutomationIntentSettings;
+  routing?: RouterRouting;
 };
 
 type FlowRuntimeGraph = {
@@ -82,13 +94,61 @@ type ExecutionPlan = {
   graph: FlowRuntimeGraph;
 };
 
+type RouterMatchMode = 'first' | 'all';
+
+type RouterRuleOperator = 'equals' | 'contains' | 'gt' | 'lt' | 'keywords';
+type RouterRuleSource = 'vars' | 'message' | 'config' | 'context';
+
+type RouterRule = {
+  source: RouterRuleSource;
+  path?: string;
+  operator: RouterRuleOperator;
+  value?: any;
+  match?: 'any' | 'all';
+};
+
+type RouterCondition = {
+  type?: 'rules' | 'else';
+  op?: 'all' | 'any';
+  rules?: RouterRule[];
+};
+
+type RouterRouting = {
+  matchMode?: RouterMatchMode;
+  defaultTarget?: string;
+};
+
+type RouterContext = {
+  messageText: string;
+  messageContext?: AutomationTestContext;
+  config: Record<string, any>;
+  vars: Record<string, any>;
+};
+
 const nowMs = () => Date.now();
 
 const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
 const shouldLogAutomationSteps = () => getLogSettingsSnapshot().automationStepsEnabled;
 
+const resolveWorkspaceId = (details?: Record<string, any>) => {
+  const candidate = details?.workspaceId;
+  if (!candidate) return undefined;
+  if (typeof candidate === 'string') return candidate;
+  if (candidate instanceof mongoose.Types.ObjectId) return candidate;
+  if (typeof candidate === 'object' && typeof candidate.toString === 'function') {
+    return candidate.toString();
+  }
+  return undefined;
+};
+
 const logAutomation = (message: string, details?: Record<string, any>) => {
   if (!shouldLogAutomation()) return;
+  void logAdminEvent({
+    category: 'automation',
+    message,
+    details,
+    workspaceId: resolveWorkspaceId(details),
+  });
   if (details) {
     console.log(message, details);
     return;
@@ -99,12 +159,24 @@ const logAutomation = (message: string, details?: Record<string, any>) => {
 const logAutomationStep = (step: string, startMs: number, details?: Record<string, any>) => {
   if (!shouldLogAutomationSteps()) return;
   const ms = Math.max(0, Math.round(nowMs() - startMs));
+  void logAdminEvent({
+    category: 'automation_step',
+    message: 'Automation step timing',
+    details: { step, ms, ...(details || {}) },
+    workspaceId: resolveWorkspaceId(details),
+  });
   console.log('⏱️ [AUTOMATION] Step', { step, ms, ...(details || {}) });
 };
 
 const shouldLogNode = (step?: FlowRuntimeStep) => step?.logEnabled !== false;
 
 const logNodeEvent = (message: string, details?: Record<string, any>) => {
+  void logAdminEvent({
+    category: 'flow_node',
+    message: `🧩 [FLOW NODE] ${message}`,
+    details,
+    workspaceId: resolveWorkspaceId(details),
+  });
   console.log(`🧩 [FLOW NODE] ${message}`, details || {});
 };
 
@@ -115,7 +187,6 @@ const summarizeTriggerConfig = (config?: TriggerConfig) => {
     keywordMatch: config.keywordMatch || 'any',
     keywordCount: config.keywords?.length || 0,
     excludeKeywordCount: config.excludeKeywords?.length || 0,
-    categoryIdsCount: config.categoryIds?.length || 0,
     outsideBusinessHours: Boolean(config.outsideBusinessHours),
     intentTextPreview: config.intentText ? config.intentText.slice(0, 80) : undefined,
     matchOn: config.matchOn
@@ -136,8 +207,6 @@ const summarizeTriggers = (triggers: FlowTriggerDefinition[]) =>
   }));
 
 const summarizeMessageContext = (context?: AutomationTestContext) => ({
-  categoryId: context?.categoryId,
-  categoryName: context?.categoryName,
   hasLink: Boolean(context?.hasLink),
   hasAttachment: Boolean(context?.hasAttachment),
   forceOutsideBusinessHours: Boolean(context?.forceOutsideBusinessHours),
@@ -401,7 +470,7 @@ const buildExecutionPlan = (graph: FlowRuntimeGraph): ExecutionPlan | null => {
 
 const normalizeStepType = (
   step?: FlowRuntimeStep,
-): 'send_message' | 'ai_reply' | 'handoff' | 'trigger' | 'detect_intent' | 'unknown' => {
+): 'send_message' | 'ai_reply' | 'ai_agent' | 'handoff' | 'trigger' | 'detect_intent' | 'router' | 'unknown' => {
   const raw = (step?.type || '').toLowerCase();
   if (raw === 'send_message' || raw === 'message' || raw === 'send' || raw === 'reply') {
     return 'send_message';
@@ -409,11 +478,17 @@ const normalizeStepType = (
   if (raw === 'ai_reply' || raw === 'ai' || raw === 'ai_message') {
     return 'ai_reply';
   }
+  if (raw === 'ai_agent' || raw === 'agent') {
+    return 'ai_agent';
+  }
   if (raw === 'handoff' || raw === 'escalate') {
     return 'handoff';
   }
   if (raw === 'trigger' || raw === 'start' || raw === 'entry') {
     return 'trigger';
+  }
+  if (raw === 'router' || raw === 'branch' || raw === 'switch') {
+    return 'router';
   }
   if (raw === 'detect_intent' || raw === 'intent' || raw === 'intent_detection') {
     return 'detect_intent';
@@ -538,7 +613,7 @@ async function sendFlowMessage(params: {
     aiMeta,
   } = params;
 
-  await pauseForTypingIfNeeded(platform || conversation.platform);
+  await pauseForTypingIfNeeded();
 
   const normalizedButtons = normalizeButtons(buttons);
   let result;
@@ -627,10 +702,6 @@ async function buildAutomationAiReply(params: {
     conversation,
     workspaceId: conversation.workspaceId,
     latestCustomerMessage: messageText,
-    categoryId: messageContext?.categoryId,
-    categorization: messageContext?.categoryName
-      ? { categoryName: messageContext.categoryName }
-      : undefined,
     historyLimit: aiSettings?.historyLimit,
     goalContext: {
       workspaceGoals: {
@@ -754,11 +825,178 @@ async function handleAiReplyStep(params: {
   return { success: true };
 }
 
-const resolveNextNodeId = (step: FlowRuntimeStep, plan: ExecutionPlan): string | undefined => {
-  if (step.next) return step.next;
-  if (!step.id || !plan.edges) return undefined;
+const normalizeRouterCondition = (condition?: RouterCondition): RouterCondition => {
+  if (!condition) return { type: 'rules', op: 'all', rules: [] };
+  if (condition.type === 'else') return { type: 'else' };
+  return {
+    type: 'rules',
+    op: condition.op === 'any' ? 'any' : 'all',
+    rules: Array.isArray(condition.rules) ? condition.rules : [],
+  };
+};
+
+const normalizeRouterValue = (value: any): string => {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  return String(value);
+};
+
+const coerceBoolean = (value: any): boolean | null => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed === 'true') return true;
+    if (trimmed === 'false') return false;
+  }
+  return null;
+};
+
+const coerceNumber = (value: any): number | null => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const getRouterValue = (rule: RouterRule, context: RouterContext): any => {
+  if (rule.source === 'message') {
+    return context.messageText;
+  }
+  if (rule.source === 'context') {
+    if (!rule.path) return undefined;
+    return context.messageContext?.[rule.path as keyof AutomationTestContext];
+  }
+  if (rule.source === 'vars') {
+    const path = rule.path?.replace(/^vars\./, '') || '';
+    return path ? getConfigValue(context.vars, path) : undefined;
+  }
+  if (rule.source === 'config') {
+    const path = rule.path?.replace(/^config\./, '') || '';
+    return path ? getConfigValue(context.config, path) : undefined;
+  }
+  return undefined;
+};
+
+const evaluateRouterRule = (rule: RouterRule, context: RouterContext): boolean => {
+  const left = getRouterValue(rule, context);
+  const operator = rule.operator;
+
+  if (operator === 'keywords') {
+    const keywords = Array.isArray(rule.value)
+      ? rule.value.map((value) => String(value).trim()).filter(Boolean)
+      : typeof rule.value === 'string'
+        ? rule.value.split(',').map((value) => value.trim()).filter(Boolean)
+        : [];
+    return matchesKeywords(normalizeRouterValue(left), keywords, rule.match || 'any');
+  }
+
+  if (operator === 'gt' || operator === 'lt') {
+    const leftNumber = coerceNumber(left);
+    const rightNumber = coerceNumber(rule.value);
+    if (leftNumber === null || rightNumber === null) return false;
+    return operator === 'gt' ? leftNumber > rightNumber : leftNumber < rightNumber;
+  }
+
+  if (operator === 'contains') {
+    if (Array.isArray(left)) {
+      return left.some((item) => {
+        if (typeof item === 'string' && typeof rule.value === 'string') {
+          return normalizeText(item).includes(normalizeText(rule.value));
+        }
+        return item === rule.value;
+      });
+    }
+    const leftText = normalizeText(normalizeRouterValue(left));
+    const rightText = normalizeText(normalizeRouterValue(rule.value));
+    if (!rightText) return false;
+    return leftText.includes(rightText);
+  }
+
+  if (operator === 'equals') {
+    if (typeof left === 'boolean') {
+      const rightBool = coerceBoolean(rule.value);
+      return rightBool !== null ? left === rightBool : false;
+    }
+    const leftNumber = coerceNumber(left);
+    const rightNumber = coerceNumber(rule.value);
+    if (leftNumber !== null && rightNumber !== null) {
+      return leftNumber === rightNumber;
+    }
+    return normalizeText(normalizeRouterValue(left)) === normalizeText(normalizeRouterValue(rule.value));
+  }
+
+  return false;
+};
+
+const evaluateRouterCondition = (condition: RouterCondition, context: RouterContext): boolean => {
+  if (condition.type === 'else') return false;
+  const op = condition.op === 'any' ? 'any' : 'all';
+  const rules = Array.isArray(condition.rules) ? condition.rules : [];
+  if (rules.length === 0) return false;
+  const results = rules.map((rule) => evaluateRouterRule(rule, context));
+  return op === 'any' ? results.some(Boolean) : results.every(Boolean);
+};
+
+const sortRouterEdges = (edges: FlowRuntimeEdge[]): FlowRuntimeEdge[] => {
+  return edges
+    .map((edge, index) => ({ edge, index }))
+    .sort((a, b) => {
+      const aOrder = typeof a.edge.order === 'number' ? a.edge.order : a.index;
+      const bOrder = typeof b.edge.order === 'number' ? b.edge.order : b.index;
+      return aOrder - bOrder;
+    })
+    .map((entry) => entry.edge);
+};
+
+const resolveRouterTargets = (
+  step: FlowRuntimeStep,
+  plan: ExecutionPlan,
+  context: RouterContext,
+): { nextNodeId?: string; queuedNodeIds?: string[] } => {
+  if (!step.id || !plan.edges) return {};
+  const edges = plan.edges.filter((edge) => edge.from === step.id);
+  if (edges.length === 0) return {};
+  const sorted = sortRouterEdges(edges);
+  const matchMode: RouterMatchMode = step.routing?.matchMode === 'all' ? 'all' : 'first';
+
+  const defaultEdge = sorted.find((edge) => normalizeRouterCondition(edge.condition).type === 'else');
+  const matched = sorted.filter((edge) =>
+    evaluateRouterCondition(normalizeRouterCondition(edge.condition), context),
+  );
+
+  if (matched.length > 0) {
+    const targets = matched.map((edge) => edge.to).filter(Boolean);
+    const uniqueTargets = Array.from(new Set(targets));
+    if (uniqueTargets.length === 0) return {};
+    if (matchMode === 'all') {
+      return { nextNodeId: uniqueTargets[0], queuedNodeIds: uniqueTargets.slice(1) };
+    }
+    return { nextNodeId: uniqueTargets[0] };
+  }
+
+  if (defaultEdge?.to) {
+    return { nextNodeId: defaultEdge.to };
+  }
+
+  return {};
+};
+
+const resolveNextNodeId = (
+  step: FlowRuntimeStep,
+  plan: ExecutionPlan,
+  stepType: ReturnType<typeof normalizeStepType>,
+  context: RouterContext,
+): { nextNodeId?: string; queuedNodeIds?: string[] } => {
+  if (stepType === 'router') {
+    return resolveRouterTargets(step, plan, context);
+  }
+  if (step.next) return { nextNodeId: step.next };
+  if (!step.id || !plan.edges) return {};
   const edge = plan.edges.find((candidate) => candidate.from === step.id);
-  return edge?.to;
+  return { nextNodeId: edge?.to };
 };
 
 async function executeFlowPlan(params: {
@@ -770,6 +1008,7 @@ async function executeFlowPlan(params: {
   messageText: string;
   platform?: string;
   messageContext?: AutomationTestContext;
+  config?: Record<string, any>;
 }): Promise<{ success: boolean; error?: string; sentCount: number; executedSteps: number }> {
   const {
     plan,
@@ -780,12 +1019,16 @@ async function executeFlowPlan(params: {
     messageText,
     platform,
     messageContext,
+    config,
   } = params;
 
+  const runtimeConfig = config && typeof config === 'object' ? config : {};
   const maxSteps = 12;
   let sentCount = 0;
   let executedSteps = 0;
   let triggered = false;
+  let nodeQueue = Array.isArray(session.state?.nodeQueue) ? [...session.state.nodeQueue] : [];
+  let fallbackToStart = false;
 
   const markTriggeredOnce = async () => {
     if (triggered) return;
@@ -793,10 +1036,14 @@ async function executeFlowPlan(params: {
     await markAutomationTriggered(instance._id, new Date());
   };
   const buildNextState = (nextState: Record<string, any>) => {
-    if (session.state?.vars) {
-      return { ...nextState, vars: session.state.vars };
+    const base = { ...nextState };
+    if (!('vars' in base) && session.state?.vars) {
+      base.vars = session.state.vars;
     }
-    return nextState;
+    if (!('agent' in base) && session.state?.agent) {
+      base.agent = session.state.agent;
+    }
+    return base;
   };
   const completeWithError = async (error: string) => {
     session.status = 'completed';
@@ -824,6 +1071,20 @@ async function executeFlowPlan(params: {
       step = plan.nodeMap.get(nodeId) || plan.steps.find(candidate => candidate.id === nodeId);
     }
 
+    if (!step && plan.mode === 'nodes' && nodeId && plan.startNodeId && nodeId !== plan.startNodeId) {
+      if (!fallbackToStart) {
+        const missingNodeId = nodeId;
+        fallbackToStart = true;
+        nodeId = plan.startNodeId;
+        nodeQueue = [];
+        logAutomation('⚠️ [AUTOMATION] Flow node pointer missing, restarting at start node', {
+          nodeId: missingNodeId,
+          startNodeId: plan.startNodeId,
+        });
+        continue;
+      }
+    }
+
     if (!step) {
       break;
     }
@@ -831,6 +1092,8 @@ async function executeFlowPlan(params: {
     const stepType = normalizeStepType(step);
     const rateLimit = resolveRateLimit(step.rateLimit, plan.graph.rateLimit);
     const nodeStart = nowMs();
+    let forceWaitForReply = false;
+    let forcedNextNodeId: string | undefined;
 
     if (shouldLogNode(step)) {
       logNodeEvent('Node start', {
@@ -881,6 +1144,143 @@ async function executeFlowPlan(params: {
         return { success: false, error: aiResult.error || 'AI reply failed', sentCount, executedSteps };
       }
       sentCount += 1;
+    } else if (stepType === 'ai_agent') {
+      if (rateLimit && !updateRateLimit(session, rateLimit)) {
+        return { success: false, error: 'Rate limit exceeded', sentCount, executedSteps };
+      }
+      await markTriggeredOnce();
+      if (!step.id) {
+        return { success: false, error: 'AI agent node missing id', sentCount, executedSteps };
+      }
+
+      const aiSettings = {
+        ...(plan.graph.aiSettings || {}),
+        ...(step.aiSettings || {}),
+      };
+      const agentSteps = Array.isArray(step.agentSteps)
+        ? step.agentSteps.map((agentStep) => String(agentStep || '').trim()).filter(Boolean)
+        : [];
+      const agentSlots = Array.isArray(step.agentSlots)
+        ? step.agentSlots
+          .map((slot) => ({
+            key: typeof slot?.key === 'string' ? slot.key.trim() : '',
+            question: typeof slot?.question === 'string' ? slot.question.trim() : undefined,
+            defaultValue: typeof slot?.defaultValue === 'string' ? slot.defaultValue.trim() : undefined,
+          }))
+          .filter((slot) => slot.key)
+        : [];
+      const storedAgent = session.state?.agent?.nodeId === step.id ? session.state.agent : {};
+      const agentStepIndex = typeof storedAgent?.stepIndex === 'number' ? storedAgent.stepIndex : 0;
+      const agentSlotValues = storedAgent?.slots && typeof storedAgent.slots === 'object'
+        ? { ...storedAgent.slots }
+        : {};
+      const questionsAsked = typeof storedAgent?.questionsAsked === 'number' ? storedAgent.questionsAsked : 0;
+      const maxQuestions = typeof step.agentMaxQuestions === 'number' ? step.agentMaxQuestions : undefined;
+      const maxQuestionsReached = typeof maxQuestions === 'number' ? questionsAsked >= maxQuestions : false;
+
+      const agentStart = nowMs();
+      const agentResult = await generateAIAgentReply({
+        conversation,
+        workspaceId: conversation.workspaceId,
+        latestCustomerMessage: messageText,
+        systemPrompt: step.agentSystemPrompt,
+        steps: agentSteps,
+        stepIndex: agentStepIndex,
+        endCondition: step.agentEndCondition,
+        stopCondition: step.agentStopCondition,
+        slotDefinitions: agentSlots,
+        slotValues: agentSlotValues,
+        maxQuestions,
+        questionsAsked,
+        maxQuestionsReached,
+        aiSettings,
+        knowledgeItemIds: step.knowledgeItemIds,
+      });
+      logAutomationStep('flow_ai_agent', agentStart, {
+        stepIndex: agentStepIndex,
+        advanceStep: agentResult.advanceStep,
+        endConversation: agentResult.endConversation,
+      });
+
+      if (!agentResult.replyText) {
+        return { success: false, error: 'AI agent reply missing', sentCount, executedSteps };
+      }
+
+      await sendFlowMessage({
+        conversation,
+        instance,
+        igAccount,
+        recipientId: conversation.participantInstagramId,
+        text: agentResult.replyText,
+        platform,
+        source: 'ai_reply',
+      });
+      sentCount += 1;
+
+      const collectedFields = agentResult.collectedFields || {};
+      Object.entries(collectedFields).forEach(([key, value]) => {
+        if (!key) return;
+        if (value === null) return;
+        if (typeof value === 'string' && value.trim()) {
+          agentSlotValues[key] = value.trim();
+        }
+      });
+      agentSlots.forEach((slot) => {
+        if (!slot.defaultValue) return;
+        if (!agentSlotValues[slot.key]) {
+          agentSlotValues[slot.key] = slot.defaultValue;
+        }
+      });
+
+      const missingFields = Array.isArray(agentResult.missingFields)
+        ? agentResult.missingFields
+        : agentSlots
+          .map((slot) => slot.key)
+          .filter((key) => !agentSlotValues[key]);
+
+      const nextQuestionsAsked = agentResult.askedQuestion ? questionsAsked + 1 : questionsAsked;
+
+      const stepCount = agentSteps.length;
+      const nextStepIndex = agentResult.advanceStep && stepCount > 0
+        ? Math.min(agentStepIndex + 1, stepCount - 1)
+        : agentStepIndex;
+      const agentStop = Boolean(agentResult.shouldStop);
+      const agentDone = Boolean(agentResult.endConversation) || agentStop || maxQuestionsReached;
+
+      const nextVars = {
+        ...(session.state?.vars || {}),
+        agentNodeId: step.id,
+        agentStepIndex: nextStepIndex,
+        agentStepCount: stepCount,
+        agentStep: agentSteps[nextStepIndex] || '',
+        agentDone,
+        agentStepSummary: agentResult.stepSummary,
+        agentSlots: agentSlotValues,
+        agentMissingSlots: missingFields,
+        agentQuestionsAsked: nextQuestionsAsked,
+      };
+
+      session.state = {
+        ...(session.state || {}),
+        vars: nextVars,
+      };
+
+      if (agentDone) {
+        if (session.state?.agent) {
+          delete session.state.agent;
+        }
+      } else {
+        session.state.agent = {
+          nodeId: step.id,
+          stepIndex: nextStepIndex,
+          stepCount,
+          lastStepSummary: agentResult.stepSummary,
+          slots: agentSlotValues,
+          questionsAsked: nextQuestionsAsked,
+        };
+        forceWaitForReply = true;
+        forcedNextNodeId = step.id;
+      }
     } else if (stepType === 'handoff') {
       await markTriggeredOnce();
       const topic = step.handoff?.topic || 'Handoff requested';
@@ -916,7 +1316,7 @@ async function executeFlowPlan(params: {
       }
     } else if (stepType === 'detect_intent') {
       const intentStart = nowMs();
-      const detectedIntent = await detectGoalIntent(messageText || '', step.intentSettings);
+      const detectedIntent = await detectAutomationIntent(messageText || '', step.intentSettings);
       await markTriggeredOnce();
       session.state = {
         ...(session.state || {}),
@@ -926,6 +1326,8 @@ async function executeFlowPlan(params: {
         },
       };
       logAutomationStep('flow_detect_intent', intentStart, { detectedIntent });
+    } else if (stepType === 'router') {
+      // Router nodes only decide the next path.
     } else if (stepType === 'trigger') {
       // Triggers are metadata-only anchors and do not execute at runtime.
     } else {
@@ -950,16 +1352,35 @@ async function executeFlowPlan(params: {
     if (plan.mode === 'steps') {
       nextStepIndex = stepIndex + 1;
     } else {
-      nextNodeId = resolveNextNodeId(step, plan);
+      const routing = resolveNextNodeId(step, plan, stepType, {
+        messageText,
+        messageContext,
+        config: runtimeConfig,
+        vars: session.state?.vars || {},
+      });
+      nextNodeId = routing.nextNodeId;
+      if (routing.queuedNodeIds && routing.queuedNodeIds.length > 0) {
+        nodeQueue = nodeQueue.concat(routing.queuedNodeIds);
+      }
+      if (!nextNodeId && nodeQueue.length > 0) {
+        nextNodeId = nodeQueue.shift();
+      }
     }
 
-    if (step.waitForReply) {
+    if (forcedNextNodeId) {
+      nextNodeId = forcedNextNodeId;
+    }
+
+    const shouldPause = forceWaitForReply || (step.waitForReply && stepType !== 'ai_agent');
+    if (shouldPause) {
       const hasNext = plan.mode === 'steps'
         ? (nextStepIndex !== undefined && Boolean(plan.steps[nextStepIndex]))
         : (Boolean(nextNodeId)
           && Boolean(plan.nodeMap?.get(nextNodeId as string) || plan.steps.find(candidate => candidate.id === nextNodeId)));
       const nextState = hasNext
-        ? (plan.mode === 'steps' ? { stepIndex: nextStepIndex } : { nodeId: nextNodeId })
+        ? (plan.mode === 'steps'
+          ? { stepIndex: nextStepIndex, nodeQueue: nodeQueue.length > 0 ? nodeQueue : undefined }
+          : { nodeId: nextNodeId, nodeQueue: nodeQueue.length > 0 ? nodeQueue : undefined })
         : {};
       session.state = buildNextState(nextState);
       session.status = hasNext ? 'active' : 'completed';
@@ -1006,7 +1427,7 @@ async function executeFlowForInstance(params: {
   messageText: string;
   platform?: string;
   messageContext?: AutomationTestContext;
-  runtime?: { graph: FlowRuntimeGraph; triggers: FlowTriggerDefinition[] } | null;
+  runtime?: { graph: FlowRuntimeGraph; triggers: FlowTriggerDefinition[]; config: Record<string, any> } | null;
 }): Promise<{ success: boolean; error?: string }> {
   const {
     instance,
@@ -1085,6 +1506,7 @@ async function executeFlowForInstance(params: {
     messageText,
     platform,
     messageContext,
+    config: resolvedRuntime.config,
   });
   logAutomationStep('flow_execute', runStart, { success: result.success, steps: result.executedSteps });
 

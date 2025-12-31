@@ -16,6 +16,7 @@ import { AutomationsCreateView } from './automations/AutomationsCreateView';
 import { AutomationPlaceholderSection } from './automations/AutomationPlaceholderSection';
 import { AutomationsHumanAlerts } from './automations/AutomationsHumanAlerts';
 import Knowledge from './Knowledge';
+import { AutomationsIntentions } from './automations/AutomationsIntentions';
 import { AutomationsIntegrationsView } from './automations/AutomationsIntegrationsView';
 import { FLOW_GOAL_FILTERS } from './automations/constants';
 
@@ -99,7 +100,7 @@ const Automations: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const { activeAccount } = useAccountContext();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeSection, setActiveSection] = useState<'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'>('automations');
+  const [activeSection, setActiveSection] = useState<'automations' | 'knowledge' | 'intentions' | 'alerts' | 'routing' | 'followups' | 'integrations'>('automations');
   const [automationView, setAutomationView] = useState<'list' | 'create' | 'edit'>('list');
   const [automations, setAutomations] = useState<AutomationInstance[]>([]);
   const [templates, setTemplates] = useState<FlowTemplate[]>([]);
@@ -144,7 +145,7 @@ const Automations: React.FC = () => {
 
   useEffect(() => {
     const section = searchParams.get('section');
-    if (section === 'knowledge' || section === 'alerts') {
+    if (section === 'knowledge' || section === 'intentions' || section === 'alerts') {
       setActiveSection(section);
     }
   }, [searchParams]);
@@ -188,9 +189,9 @@ const Automations: React.FC = () => {
     setAutomationView('create');
   };
 
-  const handleSectionChange = (section: 'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations') => {
+  const handleSectionChange = (section: 'automations' | 'knowledge' | 'intentions' | 'alerts' | 'routing' | 'followups' | 'integrations') => {
     setActiveSection(section);
-    if (section === 'knowledge' || section === 'alerts') {
+    if (section === 'knowledge' || section === 'intentions' || section === 'alerts') {
       setSearchParams({ section });
     } else if (searchParams.get('section')) {
       setSearchParams({});
@@ -407,6 +408,10 @@ const Automations: React.FC = () => {
 
           {activeSection === 'knowledge' && (
             <Knowledge />
+          )}
+
+          {activeSection === 'intentions' && (
+            <AutomationsIntentions />
           )}
 
           {activeSection === 'alerts' && (

@@ -11,9 +11,7 @@ const DEFAULT_TIERS = [
       teamMembers: 3,
       automations: 5,
       knowledgeItems: 25,
-      messageCategories: 10,
     },
-    allowCustomCategories: true,
   },
   {
     name: 'Pro',
@@ -24,9 +22,7 @@ const DEFAULT_TIERS = [
       teamMembers: 15,
       automations: 20,
       knowledgeItems: 200,
-      messageCategories: 50,
     },
-    allowCustomCategories: true,
   },
   {
     name: 'Enterprise',
@@ -37,9 +33,7 @@ const DEFAULT_TIERS = [
       teamMembers: 100,
       automations: 100,
       knowledgeItems: 1000,
-      messageCategories: 100,
     },
-    allowCustomCategories: true,
   },
 ];
 

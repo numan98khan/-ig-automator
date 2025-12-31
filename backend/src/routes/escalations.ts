@@ -41,7 +41,6 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     })
       .sort({ createdAt: -1 })
       .limit(50)
-      .populate('categoryId')
       .lean();
 
     const payload = await Promise.all(
