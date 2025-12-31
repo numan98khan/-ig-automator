@@ -11,6 +11,7 @@ import {
   UploadCloud,
   Trash2,
   Play,
+  LayoutGrid,
   Network,
   Copy,
   Eraser,
@@ -878,6 +879,90 @@ export default function AutomationTemplates() {
     setStartNodeId('')
     setSelectedNodeId(null)
   }
+
+  const handleArrangeFlow = useCallback(() => {
+    if (flowNodes.length === 0) return
+
+    const columnSpacing = 260
+    const rowSpacing = 140
+    const nodeMap = new Map(flowNodes.map((node) => [node.id, node]))
+    const edgesBySource = new Map<string, string[]>()
+
+    flowEdges.forEach((edge) => {
+      if (!edge.source || !edge.target) return
+      const targets = edgesBySource.get(edge.source) ?? []
+      targets.push(edge.target)
+      edgesBySource.set(edge.source, targets)
+    })
+
+    const depthMap = new Map<string, number>()
+    const queue: string[] = []
+
+    if (startNodeId && nodeMap.has(startNodeId)) {
+      depthMap.set(startNodeId, 0)
+      queue.push(startNodeId)
+    } else if (flowNodes[0]?.id) {
+      depthMap.set(flowNodes[0].id, 0)
+      queue.push(flowNodes[0].id)
+    }
+
+    while (queue.length > 0) {
+      const nodeId = queue.shift()
+      if (!nodeId) continue
+      const depth = depthMap.get(nodeId) ?? 0
+      const targets = edgesBySource.get(nodeId) ?? []
+      targets.forEach((targetId) => {
+        const nextDepth = depth + 1
+        const existingDepth = depthMap.get(targetId)
+        if (existingDepth === undefined || nextDepth < existingDepth) {
+          depthMap.set(targetId, nextDepth)
+          queue.push(targetId)
+        }
+      })
+    }
+
+    const maxDepth = depthMap.size ? Math.max(...Array.from(depthMap.values())) : 0
+    flowNodes.forEach((node) => {
+      if (!depthMap.has(node.id)) {
+        depthMap.set(node.id, maxDepth + 1)
+      }
+    })
+
+    const grouped = new Map<number, FlowNode[]>()
+    flowNodes.forEach((node) => {
+      const depth = depthMap.get(node.id) ?? 0
+      const group = grouped.get(depth) ?? []
+      group.push(node)
+      grouped.set(depth, group)
+    })
+
+    const arrangedPositions = new Map<string, { x: number; y: number }>()
+    Array.from(grouped.entries())
+      .sort(([depthA], [depthB]) => depthA - depthB)
+      .forEach(([depth, nodes]) => {
+        nodes
+          .slice()
+          .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))
+          .forEach((node, index) => {
+            arrangedPositions.set(node.id, {
+              x: depth * columnSpacing,
+              y: index * rowSpacing,
+            })
+          })
+      })
+
+    setFlowNodes((nodes) =>
+      nodes.map((node) => {
+        const position = arrangedPositions.get(node.id)
+        if (!position) return node
+        return { ...node, position }
+      }),
+    )
+
+    requestAnimationFrame(() => {
+      flowInstance?.fitView({ padding: 0.2, duration: 200 })
+    })
+  }, [flowEdges, flowInstance, flowNodes, setFlowNodes, startNodeId])
 
   const handleOpenBuilder = () => {
     if (!selectedDraftId) return
@@ -3074,6 +3159,13 @@ export default function AutomationTemplates() {
                 >
                   <Network className="w-4 h-4" />
                   Fit view
+                </button>
+                <button
+                  className="btn btn-secondary flex items-center gap-2"
+                  onClick={handleArrangeFlow}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                  Arrange
                 </button>
                 <button
                   className="btn btn-secondary flex items-center gap-2"
