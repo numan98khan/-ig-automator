@@ -33,7 +33,9 @@ const NodeShell = ({
         selected ? `ring-2 ${style.ring}` : 'border-border'
       }`}
     >
-      <Handle type="target" position={Position.Left} className={`!border-2 ${style.handle}`} />
+      {!isStart && (
+        <Handle type="target" position={Position.Left} className={`!border-2 ${style.handle}`} />
+      )}
       <Handle type="source" position={Position.Right} className={`!border-2 ${style.handle}`} />
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">

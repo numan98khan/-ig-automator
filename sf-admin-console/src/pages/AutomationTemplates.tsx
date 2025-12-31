@@ -910,7 +910,7 @@ export default function AutomationTemplates() {
           defaultEdgeOptions={{ type: 'smoothstep' }}
           minZoom={0.2}
           maxZoom={1.5}
-          className="h-full w-full"
+          className="h-full w-full touch-none"
         >
           <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="rgb(var(--muted-foreground) / 0.25)" />
           <MiniMap
