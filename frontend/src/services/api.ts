@@ -445,7 +445,6 @@ export interface WorkspaceSettings {
   escalationExamples?: string[];
   humanEscalationBehavior?: 'ai_silent' | 'ai_allowed';
   humanHoldMinutes?: number;
-  skipTypingPauseInSandbox?: boolean;
   commentDmEnabled: boolean;
   commentDmTemplate: string;
   dmAutoReplyEnabled: boolean;
@@ -528,79 +527,6 @@ export interface CategoryKnowledge {
   language: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface SandboxMessage {
-  role: 'customer';
-  text: string;
-}
-
-export interface SandboxLiveMessage {
-  from: 'customer' | 'ai';
-  text: string;
-  meta?: SandboxRunStepMeta;
-  typing?: boolean;
-}
-
-export interface SandboxLiveChatState {
-  messages: SandboxLiveMessage[];
-  input?: string;
-  selectedTurnIndex?: number | null;
-}
-
-export interface SandboxScenarioDraftState {
-  name?: string;
-  description?: string;
-  messages?: SandboxMessage[];
-  selectedScenarioId?: string | null;
-}
-
-export interface SandboxScenario {
-  _id: string;
-  workspaceId: string;
-  name: string;
-  description?: string;
-  messages: SandboxMessage[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface SandboxRunStepMeta {
-  detectedLanguage?: string;
-  categoryName?: string;
-  goalMatched?: GoalType | 'none';
-  shouldEscalate?: boolean;
-  escalationReason?: string;
-  tags?: string[];
-  knowledgeItemsUsed?: { id: string; title: string }[];
-}
-
-export interface SandboxRunStep {
-  customerText: string;
-  aiReplyText: string;
-  meta?: SandboxRunStepMeta;
-}
-
-export interface SandboxRunResponse {
-  runId: string;
-  steps: SandboxRunStep[];
-  createdAt: string;
-  settingsSnapshot?: Record<string, any>;
-}
-
-export interface SandboxWorkspaceState {
-  _id?: string;
-  workspaceId: string;
-  userId: string;
-  runConfig?: Partial<WorkspaceSettings>;
-  liveChat?: SandboxLiveChatState;
-  scenarioDraft?: SandboxScenarioDraftState;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface SandboxRun extends SandboxRunResponse {
-  _id: string;
 }
 
 export interface EscalationCase {
@@ -1038,76 +964,6 @@ export const categoriesAPI = {
 
   updateKnowledge: async (categoryId: string, content: string): Promise<CategoryKnowledge> => {
     const { data } = await api.put(`/api/categories/${categoryId}/knowledge`, { content });
-    return data;
-  },
-};
-
-export const sandboxAPI = {
-  getState: async (workspaceId: string): Promise<SandboxWorkspaceState | null> => {
-    const { data } = await api.get('/api/sandbox/state', { params: { workspaceId } });
-    return data || null;
-  },
-
-  saveState: async (
-    workspaceId: string,
-    payload: Partial<Pick<SandboxWorkspaceState, 'runConfig' | 'liveChat' | 'scenarioDraft'>>
-  ): Promise<SandboxWorkspaceState> => {
-    const { data } = await api.put('/api/sandbox/state', { workspaceId, ...payload });
-    return data;
-  },
-
-  listScenarios: async (workspaceId: string): Promise<SandboxScenario[]> => {
-    const { data } = await api.get('/api/sandbox/scenarios', { params: { workspaceId } });
-    return data;
-  },
-
-  createScenario: async (payload: {
-    workspaceId: string;
-    name: string;
-    description?: string;
-    messages: SandboxMessage[];
-  }): Promise<SandboxScenario> => {
-    const { data } = await api.post('/api/sandbox/scenarios', payload);
-    return data;
-  },
-
-  updateScenario: async (
-    scenarioId: string,
-    payload: Partial<Pick<SandboxScenario, 'name' | 'description' | 'messages'>>
-  ): Promise<SandboxScenario> => {
-    const { data } = await api.put(`/api/sandbox/scenarios/${scenarioId}`, payload);
-    return data;
-  },
-
-  deleteScenario: async (scenarioId: string): Promise<void> => {
-    await api.delete(`/api/sandbox/scenarios/${scenarioId}`);
-  },
-
-  runScenario: async (
-    scenarioId: string,
-    overrideSettings?: Partial<WorkspaceSettings>
-  ): Promise<SandboxRunResponse> => {
-    const { data } = await api.post(`/api/sandbox/scenarios/${scenarioId}/run`, {
-      overrideSettings,
-    });
-    return data;
-  },
-
-  listRuns: async (scenarioId: string): Promise<SandboxRun[]> => {
-    const { data } = await api.get(`/api/sandbox/scenarios/${scenarioId}/runs`);
-    return data;
-  },
-
-  quickRun: async (
-    workspaceId: string,
-    messages: string[] | string,
-    overrideSettings?: Partial<WorkspaceSettings>
-  ): Promise<SandboxRunResponse> => {
-    const { data } = await api.post('/api/sandbox/quick-run', {
-      workspaceId,
-      messages: Array.isArray(messages) ? messages : [messages],
-      overrideSettings,
-    });
     return data;
   },
 };

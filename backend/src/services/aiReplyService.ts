@@ -36,7 +36,6 @@ export interface AIReplyOptions {
   categorization?: { categoryName?: string; detectedLanguage?: string; translatedText?: string };
   knowledgeItemIds?: string[];
   historyLimit?: number;
-  mode?: 'live' | 'sandbox';
   messageHistory?: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[];
   goalContext?: {
     workspaceGoals?: {

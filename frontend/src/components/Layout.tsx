@@ -10,7 +10,6 @@ import {
   Tags,
   Menu,
   X as CloseIcon,
-  TestTube,
   LayoutDashboard,
   Search,
   Sparkles,
@@ -51,7 +50,6 @@ const Layout: React.FC = () => {
 
   const aiLinks = useMemo(() => ([
     { to: '/categories', label: 'Categories & Policies', icon: Tags },
-    { to: '/sandbox', label: 'Sandbox (Test)', icon: TestTube },
   ]), []);
 
   const navLinks = useMemo(() => {

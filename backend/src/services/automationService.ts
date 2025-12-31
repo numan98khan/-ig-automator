@@ -616,7 +616,7 @@ async function sendFlowMessage(params: {
     aiMeta,
   } = params;
 
-  await pauseForTypingIfNeeded(platform || conversation.platform);
+  await pauseForTypingIfNeeded();
 
   const normalizedButtons = normalizeButtons(buttons);
   let result;

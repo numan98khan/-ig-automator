@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowRight, MessageSquare, BookOpen, Tags, TestTube, Users, AlertTriangle } from 'lucide-react';
+import { Search, ArrowRight, MessageSquare, BookOpen, Tags, Users, AlertTriangle } from 'lucide-react';
 
 interface GlobalSearchModalProps {
   open: boolean;
@@ -37,13 +37,6 @@ const searchIndex: SearchItem[] = [
     path: '/categories',
     icon: Tags,
     tags: ['policy', 'routing', 'automation'],
-  },
-  {
-    title: 'Sandbox (Test)',
-    description: 'Run a live chat test or simulate scripted scenarios.',
-    path: '/sandbox',
-    icon: TestTube,
-    tags: ['testing', 'simulation'],
   },
   {
     title: 'Human Alerts (Automations)',
