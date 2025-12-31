@@ -188,6 +188,7 @@ export interface KnowledgeItem {
   storageMode?: 'vector' | 'text';
   workspaceId: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 // Automation types

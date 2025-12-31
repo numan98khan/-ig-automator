@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { knowledgeAPI, KnowledgeItem } from '../services/api';
 import {
   Plus,
+  Copy,
+  Eye,
   Edit2,
   Trash2,
   BookOpen,
@@ -11,24 +13,32 @@ import {
   AlertCircle,
   FileText,
   Calendar,
+  Clock,
   Sparkles,
-  Database
+  Database,
+  Upload
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
+
+type KnowledgeCategory = 'All' | 'Pricing' | 'Policies' | 'FAQ' | 'Shipping' | 'General';
+type StorageFilter = 'all' | 'vector' | 'text';
 
 const Knowledge: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<KnowledgeItem | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [storageMode, setStorageMode] = useState<'vector' | 'text'>('vector');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [storageFilter, setStorageFilter] = useState<StorageFilter>('all');
+  const [categoryFilter, setCategoryFilter] = useState<KnowledgeCategory>('All');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -79,11 +89,13 @@ const Knowledge: React.FC = () => {
   const handleOpenModal = (item?: KnowledgeItem) => {
     if (item) {
       setEditingItem(item);
+      setIsPreviewMode(false);
       setTitle(item.title);
       setContent(item.content);
       setStorageMode(item.storageMode || 'vector');
     } else {
       setEditingItem(null);
+      setIsPreviewMode(false);
       setTitle('');
       setContent('');
       setStorageMode('vector');
@@ -95,9 +107,21 @@ const Knowledge: React.FC = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingItem(null);
+    setIsPreviewMode(false);
     setTitle('');
     setContent('');
     setStorageMode('vector');
+    setError(null);
+  };
+
+  const handlePreview = (item: KnowledgeItem, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setEditingItem(item);
+    setIsPreviewMode(true);
+    setTitle(item.title);
+    setContent(item.content);
+    setStorageMode(item.storageMode || 'vector');
+    setIsModalOpen(true);
     setError(null);
   };
 
@@ -114,33 +138,145 @@ const Knowledge: React.FC = () => {
     }
   };
 
-  const filteredItems = items.filter(item =>
-    item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.content.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleDuplicate = async (item: KnowledgeItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentWorkspace) return;
+
+    try {
+      await knowledgeAPI.create(
+        `${item.title} Copy`,
+        item.content,
+        currentWorkspace._id,
+        item.storageMode || 'vector',
+      );
+      loadKnowledge();
+    } catch (error) {
+      console.error('Error duplicating knowledge:', error);
+      setError('Failed to duplicate knowledge item');
+    }
+  };
+
+  const getCategory = (item: KnowledgeItem): KnowledgeCategory => {
+    const haystack = `${item.title} ${item.content}`.toLowerCase();
+    if (/(price|pricing|cost|quote|rate)/.test(haystack)) return 'Pricing';
+    if (/(refund|return|exchange|policy|terms|cancellation)/.test(haystack)) return 'Policies';
+    if (/(faq|question|answer|support)/.test(haystack)) return 'FAQ';
+    if (/(ship|delivery|pickup|dispatch)/.test(haystack)) return 'Shipping';
+    return 'General';
+  };
+
+  const relativeTime = (dateValue?: string) => {
+    if (!dateValue) return 'Recently updated';
+    const date = new Date(dateValue);
+    const diffMs = Date.now() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return 'Updated today';
+    if (diffDays === 1) return 'Updated yesterday';
+    if (diffDays < 30) return `Updated ${diffDays} days ago`;
+    const diffMonths = Math.floor(diffDays / 30);
+    return `Updated ${diffMonths} mo ago`;
+  };
+
+  const summaryStats = useMemo(() => {
+    const total = items.length;
+    const ragCount = items.filter((item) => (item.storageMode || 'vector') === 'vector').length;
+    const lastUpdatedValue = items
+      .map((item) => item.updatedAt || item.createdAt)
+      .filter(Boolean)
+      .sort((a, b) => new Date(b as string).getTime() - new Date(a as string).getTime())[0] as
+      | string
+      | undefined;
+    return {
+      total,
+      ragCount,
+      lastUpdated: lastUpdatedValue ? new Date(lastUpdatedValue).toLocaleDateString() : '—',
+    };
+  }, [items]);
+
+  const filteredItems = items.filter((item) => {
+    const query = searchQuery.trim().toLowerCase();
+    const matchesQuery = !query
+      || item.title.toLowerCase().includes(query)
+      || item.content.toLowerCase().includes(query);
+    const matchesStorage = storageFilter === 'all'
+      || (item.storageMode || 'vector') === storageFilter;
+    const category = getCategory(item);
+    const matchesCategory = categoryFilter === 'All' || category === categoryFilter;
+    return matchesQuery && matchesStorage && matchesCategory;
+  });
 
   if (!currentWorkspace) return null;
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-2">
-            <BookOpen className="w-8 h-8" />
-            Knowledge Base
-          </h1>
-          <p className="text-muted-foreground">
-            Manage the knowledge your AI assistant uses to answer questions.
-          </p>
+      <div className="mb-6 rounded-2xl border border-border/70 bg-card/70 p-5 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-2">
+              <BookOpen className="w-8 h-8" />
+              Knowledge Base
+            </h1>
+            <p className="text-muted-foreground">
+              Manage the knowledge your AI assistant uses to answer questions.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search knowledge..."
+                className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-full focus:outline-none focus:ring-2 focus:ring-ring text-sm transition-all"
+              />
+            </div>
+            <select
+              value={storageFilter}
+              onChange={(e) => setStorageFilter(e.target.value as StorageFilter)}
+              className="rounded-full border border-border bg-background px-3 py-2 text-sm text-foreground"
+            >
+              <option value="all">All sources</option>
+              <option value="vector">RAG (pgvector)</option>
+              <option value="text">Text only</option>
+            </select>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value as KnowledgeCategory)}
+              className="rounded-full border border-border bg-background px-3 py-2 text-sm text-foreground"
+            >
+              {(['All', 'Pricing', 'Policies', 'FAQ', 'Shipping', 'General'] as KnowledgeCategory[]).map(
+                (category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ),
+              )}
+            </select>
+            <Button
+              onClick={() => handleOpenModal()}
+              leftIcon={<Plus className="w-4 h-4" />}
+              className="shadow-md"
+            >
+              Add Item
+            </Button>
+          </div>
         </div>
-        <Button
-          onClick={() => handleOpenModal()}
-          leftIcon={<Plus className="w-4 h-4" />}
-          className="shadow-sm"
-        >
-          Add Item
-        </Button>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">Total items</div>
+            <div className="text-2xl font-semibold">{summaryStats.total}</div>
+          </div>
+          <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">RAG indexed</div>
+            <div className="text-2xl font-semibold">{summaryStats.ragCount}</div>
+          </div>
+          <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">Last updated</div>
+            <div className="text-2xl font-semibold">{summaryStats.lastUpdated}</div>
+          </div>
+        </div>
       </div>
 
       {/* Error Message */}
@@ -153,19 +289,6 @@ const Knowledge: React.FC = () => {
 
       {/* Search and List */}
       <div className="flex-1 flex flex-col">
-        {items.length > 0 && (
-          <div className="mb-6 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search knowledge..."
-              className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm transition-all"
-            />
-          </div>
-        )}
-
         {initialLoading ? (
           <div className="flex-1 flex justify-center items-center min-h-[200px]">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -181,12 +304,17 @@ const Knowledge: React.FC = () => {
             <p className="text-muted-foreground max-w-sm mx-auto mb-6">
               {searchQuery
                 ? `No items found matching "${searchQuery}"`
-                : 'Add knowledge to help your AI answer customer questions.'}
+                : 'Add FAQs, pricing, and policies so your assistant can answer questions.'}
             </p>
             {!searchQuery && (
+              <div className="flex flex-wrap items-center justify-center gap-3">
               <Button onClick={() => handleOpenModal()} leftIcon={<Plus className="w-4 h-4" />}>
                 Create Item
               </Button>
+              <Button variant="outline" leftIcon={<Upload className="w-4 h-4" />} disabled>
+                Import from file
+              </Button>
+              </div>
             )}
           </div>
         ) : (
@@ -197,26 +325,18 @@ const Knowledge: React.FC = () => {
                 className="group relative glass-panel hover:bg-muted/50 border border-border rounded-xl p-5 transition-all duration-200 cursor-pointer hover:shadow-md"
                 onClick={() => handleOpenModal(item)}
               >
-                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={(e) => handleDelete(item._id, e)}
-                    className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-primary/10 text-primary rounded-lg">
-                    <FileText className="w-4 h-4" />
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 text-primary rounded-lg">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground truncate pr-8">
+                        {item.title}
+                      </h3>
+                      <span className="text-xs text-muted-foreground">{getCategory(item)}</span>
+                    </div>
                   </div>
-                  <h3 className="font-semibold text-foreground truncate pr-8">
-                    {item.title}
-                  </h3>
-                </div>
-
-                <div className="flex items-center gap-2 mb-3">
                   <span
                     className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold ${
                       (item.storageMode || 'vector') === 'vector'
@@ -233,6 +353,10 @@ const Knowledge: React.FC = () => {
                   </span>
                 </div>
 
+                <div className="mb-4 rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Knowledge snippet
+                </div>
+
                 <p className="text-muted-foreground text-sm line-clamp-3 mb-4 h-[60px]">
                   {item.content}
                 </p>
@@ -242,6 +366,44 @@ const Knowledge: React.FC = () => {
                     <Calendar className="w-3 h-3" />
                     {new Date(item.createdAt).toLocaleDateString()}
                   </div>
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3 h-3" />
+                    {relativeTime(item.updatedAt || item.createdAt)}
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={(e) => handlePreview(item, e)}
+                    className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                  >
+                    <Eye className="h-4 w-4" />
+                    Preview
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenModal(item);
+                    }}
+                    className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={(e) => handleDuplicate(item, e)}
+                    className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Duplicate
+                  </button>
+                  <button
+                    onClick={(e) => handleDelete(item._id, e)}
+                    className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-destructive hover:border-destructive/40"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </button>
                 </div>
               </div>
             ))}
@@ -253,7 +415,13 @@ const Knowledge: React.FC = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={editingItem ? 'Edit Knowledge' : 'Add Knowledge'}
+        title={
+          isPreviewMode
+            ? 'Knowledge Preview'
+            : editingItem
+              ? 'Edit Knowledge'
+              : 'Add Knowledge'
+        }
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -272,6 +440,7 @@ const Knowledge: React.FC = () => {
               placeholder="e.g., Returns & exchanges"
               autoFocus
               required
+              disabled={isPreviewMode}
             />
           </div>
 
@@ -284,6 +453,7 @@ const Knowledge: React.FC = () => {
               rows={10}
               className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm resize-y min-h-[150px]"
               required
+              disabled={isPreviewMode}
             />
             <p className="text-xs text-muted-foreground mt-1.5">
               The AI uses this content to answer questions. Be clear and concise.
@@ -299,6 +469,7 @@ const Knowledge: React.FC = () => {
                 className={`w-full text-left border rounded-lg p-3 flex items-start gap-3 transition ${
                   storageMode === 'vector' ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/50'
                 }`}
+                disabled={isPreviewMode}
               >
                 <div className="p-2 rounded-md bg-primary/10 text-primary">
                   <Sparkles className="w-4 h-4" />
@@ -317,6 +488,7 @@ const Knowledge: React.FC = () => {
                 className={`w-full text-left border rounded-lg p-3 flex items-start gap-3 transition ${
                   storageMode === 'text' ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/50'
                 }`}
+                disabled={isPreviewMode}
               >
                 <div className="p-2 rounded-md bg-muted text-muted-foreground">
                   <Database className="w-4 h-4" />
@@ -337,15 +509,17 @@ const Knowledge: React.FC = () => {
               variant="ghost"
               onClick={handleCloseModal}
             >
-              Cancel
+              {isPreviewMode ? 'Close' : 'Cancel'}
             </Button>
-            <Button
-              type="submit"
-              isLoading={loading}
-              leftIcon={!loading && <React.Fragment><Plus className="w-4 h-4 hidden" /><Edit2 className="w-4 h-4" /></React.Fragment>}
-            >
-              {editingItem ? 'Save Changes' : 'Create Item'}
-            </Button>
+            {!isPreviewMode && (
+              <Button
+                type="submit"
+                isLoading={loading}
+                leftIcon={!loading && <React.Fragment><Plus className="w-4 h-4 hidden" /><Edit2 className="w-4 h-4" /></React.Fragment>}
+              >
+                {editingItem ? 'Save Changes' : 'Create Item'}
+              </Button>
+            )}
           </div>
         </form>
       </Modal>
