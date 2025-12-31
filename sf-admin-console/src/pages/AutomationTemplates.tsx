@@ -1002,7 +1002,10 @@ export default function AutomationTemplates() {
             pannable
             zoomable
             nodeColor={(node) => FLOW_NODE_STYLES[node.type as FlowNodeType]?.miniMap ?? '#4B9AD5'}
-            maskColor="rgba(0,0,0,0.08)"
+            maskColor="rgb(var(--foreground) / 0.08)"
+            bgColor="rgb(var(--card))"
+            nodeStrokeColor="rgb(var(--border))"
+            className="!rounded-xl !border !border-border !bg-card !shadow-sm"
           />
           <Controls position="bottom-right" />
         </ReactFlow>
