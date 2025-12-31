@@ -168,6 +168,20 @@ export interface AutomationSessionSummary {
   instance?: { _id: string; name?: string } | null;
   template?: { _id: string; name?: string } | null;
   version?: { _id: string; version?: number; versionLabel?: string } | null;
+  currentNode?: AutomationSessionNodeSummary | null;
+}
+
+export interface AutomationSessionNodeSummaryItem {
+  label: string;
+  value: string;
+}
+
+export interface AutomationSessionNodeSummary {
+  id: string;
+  type: string;
+  label?: string;
+  preview?: string;
+  summary?: AutomationSessionNodeSummaryItem[];
 }
 
 export interface KnowledgeItem {

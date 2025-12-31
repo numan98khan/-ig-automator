@@ -14,6 +14,137 @@ import { fetchConversations, fetchUserDetails } from '../utils/instagram-api';
 
 const router = express.Router();
 
+const truncateText = (value: unknown, max = 160): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, Math.max(0, max - 3)).trim()}...`;
+};
+
+const formatList = (items: Array<string | undefined>, limit = 4): string | undefined => {
+  const cleaned = items
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean);
+  if (cleaned.length === 0) return undefined;
+  const visible = cleaned.slice(0, limit);
+  const extra = cleaned.length - visible.length;
+  if (extra > 0) {
+    return `${visible.join(', ')} (+${extra} more)`;
+  }
+  return visible.join(', ');
+};
+
+const extractNodeLabel = (dslSnapshot: any, nodeId: string): string | undefined => {
+  const nodes = Array.isArray(dslSnapshot?.nodes)
+    ? dslSnapshot.nodes
+    : Array.isArray(dslSnapshot?.steps)
+      ? dslSnapshot.steps
+      : [];
+  const match = nodes.find((node: any) => node?.id === nodeId || node?.nodeId === nodeId);
+  const label = typeof match?.data?.label === 'string'
+    ? match.data.label
+    : typeof match?.label === 'string'
+      ? match.label
+      : undefined;
+  return label?.trim() || undefined;
+};
+
+const buildNodeSummary = (node: any, options: {
+  fallbackId?: string;
+  label?: string;
+  edges?: Array<{ from?: string }>;
+}) => {
+  if (!node || typeof node !== 'object') return null;
+  const id = typeof node.id === 'string' ? node.id : options.fallbackId;
+  const type = typeof node.type === 'string' ? node.type : 'unknown';
+  if (!id && !type) return null;
+
+  const summary: Array<{ label: string; value: string }> = [];
+  const add = (label: string, value: string | undefined) => {
+    if (!value) return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    summary.push({ label, value: trimmed });
+  };
+
+  const previewCandidate = node.text ?? node.message ?? node.agentSystemPrompt ?? node.handoff?.message ?? node.handoff?.summary;
+  const preview = truncateText(previewCandidate, 180);
+
+  if (typeof node.waitForReply === 'boolean') {
+    add('Wait for reply', node.waitForReply ? 'Yes' : 'No');
+  }
+
+  const nodeType = type.toLowerCase();
+  if (nodeType === 'send_message') {
+    const buttons = Array.isArray(node.buttons) ? node.buttons : [];
+    if (buttons.length > 0) {
+      const titles = buttons.map((button: any) => (
+        typeof button === 'string' ? button : button?.title
+      ));
+      add('Buttons', formatList(titles, 3) || `${buttons.length}`);
+    }
+    const tags = Array.isArray(node.tags) ? node.tags : [];
+    if (tags.length > 0) {
+      add('Tags', formatList(tags, 4) || `${tags.length}`);
+    }
+  } else if (nodeType === 'ai_reply') {
+    const ai = node.aiSettings || {};
+    add('Model', ai.model);
+    add('Reasoning', ai.reasoningEffort);
+    if (typeof ai.temperature === 'number') add('Temperature', `${ai.temperature}`);
+    if (typeof ai.maxOutputTokens === 'number') add('Max tokens', `${ai.maxOutputTokens}`);
+    if (typeof ai.historyLimit === 'number') add('History', `${ai.historyLimit}`);
+    if (typeof ai.ragEnabled === 'boolean') add('RAG', ai.ragEnabled ? 'On' : 'Off');
+    const knowledgeItemIds = Array.isArray(node.knowledgeItemIds) ? node.knowledgeItemIds : [];
+    if (knowledgeItemIds.length > 0) add('Knowledge items', `${knowledgeItemIds.length}`);
+  } else if (nodeType === 'ai_agent') {
+    const steps = Array.isArray(node.agentSteps) ? node.agentSteps.filter(Boolean) : [];
+    if (steps.length > 0) add('Steps', `${steps.length}`);
+    add('End condition', truncateText(node.agentEndCondition, 120));
+    add('Stop condition', truncateText(node.agentStopCondition, 120));
+    if (typeof node.agentMaxQuestions === 'number') add('Max questions', `${node.agentMaxQuestions}`);
+    const slots = Array.isArray(node.agentSlots) ? node.agentSlots : [];
+    if (slots.length > 0) {
+      const keys = slots.map((slot: any) => slot?.key).filter(Boolean);
+      add('Slots', formatList(keys, 4) || `${slots.length}`);
+    }
+    const ai = node.aiSettings || {};
+    add('Model', ai.model);
+    add('Reasoning', ai.reasoningEffort);
+    if (typeof ai.temperature === 'number') add('Temperature', `${ai.temperature}`);
+    if (typeof ai.ragEnabled === 'boolean') add('RAG', ai.ragEnabled ? 'On' : 'Off');
+    const knowledgeItemIds = Array.isArray(node.knowledgeItemIds) ? node.knowledgeItemIds : [];
+    if (knowledgeItemIds.length > 0) add('Knowledge items', `${knowledgeItemIds.length}`);
+  } else if (nodeType === 'detect_intent') {
+    const intent = node.intentSettings || {};
+    add('Model', intent.model);
+    add('Reasoning', intent.reasoningEffort);
+    if (typeof intent.temperature === 'number') add('Temperature', `${intent.temperature}`);
+  } else if (nodeType === 'handoff') {
+    add('Topic', truncateText(node.handoff?.topic, 120));
+    add('Summary', truncateText(node.handoff?.summary, 160));
+    add('Message', truncateText(node.handoff?.message, 160));
+  } else if (nodeType === 'router') {
+    const routing = node.routing || {};
+    add('Match mode', routing.matchMode);
+    if (routing.defaultTarget) add('Default target', `${routing.defaultTarget}`);
+    const edges = Array.isArray(options.edges) ? options.edges : [];
+    if (edges.length > 0 && id) {
+      add('Routes', `${edges.filter((edge) => edge?.from === id).length}`);
+    }
+  }
+
+  const cleanLabel = typeof options.label === 'string' ? options.label.trim() : undefined;
+  return {
+    id: id || '',
+    type,
+    label: cleanLabel || undefined,
+    preview,
+    summary: summary.length > 0 ? summary : undefined,
+  };
+};
+
 // Get all conversations for a workspace
 router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -244,20 +375,45 @@ router.get('/:id/automation-session', authenticate, async (req: AuthRequest, res
       return res.json({ data: { session: null } });
     }
 
-    const [instance, template, version] = await Promise.all([
+    const [instance, template, versionDoc] = await Promise.all([
       AutomationInstance.findById(session.automationInstanceId).select('name').lean(),
       FlowTemplate.findById(session.templateId).select('name').lean(),
-      FlowTemplateVersion.findById(session.templateVersionId).select('version versionLabel').lean(),
+      FlowTemplateVersion.findById(session.templateVersionId)
+        .select('version versionLabel compiled dslSnapshot')
+        .lean(),
     ]);
+
+    const version = versionDoc
+      ? { _id: versionDoc._id, version: versionDoc.version, versionLabel: versionDoc.versionLabel }
+      : null;
+    const nodeId = session.state?.nodeId || session.state?.agent?.nodeId;
+    const compiledGraph = versionDoc?.compiled?.graph || versionDoc?.compiled;
+    const nodes = Array.isArray(compiledGraph?.nodes) ? compiledGraph.nodes : [];
+    let node = nodeId ? nodes.find((candidate: any) => candidate?.id === nodeId) : undefined;
+    let fallbackId = nodeId;
+    if (!node && typeof session.state?.stepIndex === 'number') {
+      node = nodes[session.state.stepIndex];
+      if (!fallbackId && typeof node?.id === 'string') {
+        fallbackId = node.id;
+      }
+    }
+    const labelId = typeof node?.id === 'string' ? node.id : nodeId;
+    const nodeLabel = labelId ? extractNodeLabel(versionDoc?.dslSnapshot, labelId) : undefined;
+    const currentNode = node
+      ? buildNodeSummary(node, {
+        fallbackId,
+        label: nodeLabel,
+        edges: Array.isArray(compiledGraph?.edges) ? compiledGraph.edges : [],
+      })
+      : null;
 
     res.json({
       data: {
         session,
         instance: instance ? { _id: instance._id, name: instance.name } : null,
         template: template ? { _id: template._id, name: template.name } : null,
-        version: version
-          ? { _id: version._id, version: version.version, versionLabel: version.versionLabel }
-          : null,
+        version,
+        currentNode,
       },
     });
   } catch (error) {

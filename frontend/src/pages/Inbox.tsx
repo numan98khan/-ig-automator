@@ -119,20 +119,28 @@ const Inbox: React.FC = () => {
     }
   };
 
-  const loadAutomationSession = async () => {
+  const loadAutomationSession = async (options?: { silent?: boolean }) => {
     if (!selectedConversation?._id) {
       setAutomationSession(null);
+      setSessionLoading(false);
       return;
     }
-    setSessionLoading(true);
+    const shouldShowLoading = !options?.silent && !automationSession;
+    if (shouldShowLoading) {
+      setSessionLoading(true);
+    }
     try {
       const data = await conversationAPI.getAutomationSession(selectedConversation._id);
       setAutomationSession(data);
     } catch (error) {
       console.error('Error loading automation session:', error);
-      setAutomationSession(null);
+      if (!automationSession) {
+        setAutomationSession(null);
+      }
     } finally {
-      setSessionLoading(false);
+      if (shouldShowLoading) {
+        setSessionLoading(false);
+      }
     }
   };
 
@@ -159,7 +167,7 @@ const Inbox: React.FC = () => {
       loadConversations();
       if (selectedConversation) {
         loadMessages();
-        loadAutomationSession();
+        loadAutomationSession({ silent: true });
       }
     }, 5000);
     return () => clearInterval(interval);
@@ -266,7 +274,7 @@ const Inbox: React.FC = () => {
       } else {
         loadMessages();
       }
-      loadAutomationSession();
+      loadAutomationSession({ silent: true });
       setShouldAutoScroll(true);
     }
   }, [selectedConversation]);
@@ -306,7 +314,7 @@ const Inbox: React.FC = () => {
       setDraftSource(null);
       setShouldAutoScroll(true);
       setTimeout(scrollToBottom, 100);
-      loadAutomationSession();
+      loadAutomationSession({ silent: true });
     } catch (error: any) {
       console.error('Error sending message:', error);
       alert(error.response?.data?.error || 'Failed to send message. Please try again.');
@@ -322,7 +330,7 @@ const Inbox: React.FC = () => {
       const message = await messageAPI.generateAIReply(selectedConversation._id);
       setNewMessage(message.text || '');
       setDraftSource('ai');
-      loadAutomationSession();
+      loadAutomationSession({ silent: true });
     } catch (error) {
       console.error('Error generating AI reply:', error);
       alert('Failed to generate AI reply. Please try again.');
@@ -336,7 +344,7 @@ const Inbox: React.FC = () => {
     setSessionAction('pause');
     try {
       await conversationAPI.pauseAutomationSession(selectedConversation._id, 'manual_pause');
-      await loadAutomationSession();
+      await loadAutomationSession({ silent: true });
     } catch (error) {
       console.error('Error pausing automation session:', error);
       alert('Failed to pause automation session.');
@@ -351,7 +359,7 @@ const Inbox: React.FC = () => {
     setSessionAction('stop');
     try {
       await conversationAPI.stopAutomationSession(selectedConversation._id, 'manual_stop');
-      await loadAutomationSession();
+      await loadAutomationSession({ silent: true });
     } catch (error) {
       console.error('Error stopping automation session:', error);
       alert('Failed to stop automation session.');
@@ -397,6 +405,25 @@ const Inbox: React.FC = () => {
   const sessionTemplateName = automationSession?.template?.name;
   const sessionVersionLabel = automationSession?.version?.versionLabel;
   const sessionVersionNumber = automationSession?.version?.version;
+  const sessionNode = automationSession?.currentNode;
+  const sessionVars = session?.state?.vars && typeof session.state.vars === 'object'
+    ? session.state.vars
+    : undefined;
+  const detectedIntent = typeof sessionVars?.detectedIntent === 'string'
+    ? sessionVars.detectedIntent
+    : undefined;
+  const agentStep = typeof sessionVars?.agentStep === 'string' ? sessionVars.agentStep : undefined;
+  const agentStepIndex = typeof sessionVars?.agentStepIndex === 'number' ? sessionVars.agentStepIndex : undefined;
+  const agentStepCount = typeof sessionVars?.agentStepCount === 'number' ? sessionVars.agentStepCount : undefined;
+  const agentQuestionsAsked = typeof sessionVars?.agentQuestionsAsked === 'number'
+    ? sessionVars.agentQuestionsAsked
+    : undefined;
+  const agentProgress = typeof agentStepIndex === 'number'
+    ? `${agentStepIndex + 1}${typeof agentStepCount === 'number' ? `/${agentStepCount}` : ''}`
+    : undefined;
+  const agentMissingSlots = Array.isArray(sessionVars?.agentMissingSlots)
+    ? sessionVars.agentMissingSlots.filter((slot) => typeof slot === 'string' && slot.trim())
+    : [];
 
   const handleConnectInstagram = async () => {
     if (!currentWorkspace) return;
@@ -829,7 +856,7 @@ const Inbox: React.FC = () => {
 
           {/* Context Drawer */}
           {contextOpen && selectedConversation && (
-            <aside className="hidden lg:flex w-[320px] flex-shrink-0 flex-col rounded-xl border border-border glass-panel shadow-sm min-h-0 p-4 gap-4">
+            <aside className="hidden lg:flex w-[320px] flex-shrink-0 flex-col rounded-xl border border-border glass-panel shadow-sm min-h-0 p-4 gap-4 overflow-hidden">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-foreground">Context</h3>
                 <button
@@ -840,17 +867,16 @@ const Inbox: React.FC = () => {
                 </button>
               </div>
 
-              <div className="space-y-3">
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70">
-                  <div className="flex items-center justify-between text-sm font-semibold text-foreground">
-                    <span>Automation session</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${sessionMeta.className}`}>
-                      {sessionMeta.label}
-                    </span>
-                  </div>
-                  {sessionLoading ? (
-                    <p className="mt-2 text-xs text-muted-foreground">Loading session...</p>
-                  ) : session ? (
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1 custom-scrollbar">
+                <div className="space-y-3">
+                  <div className="p-3 rounded-lg border border-border/70 bg-background/70">
+                    <div className="flex items-center justify-between text-sm font-semibold text-foreground">
+                      <span>Automation session</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${sessionMeta.className}`}>
+                        {sessionMeta.label}
+                      </span>
+                    </div>
+                  {session ? (
                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                       <div>
                         Instance:{' '}
@@ -885,6 +911,31 @@ const Inbox: React.FC = () => {
                           <span className="text-foreground">{Object.keys(session.state.vars || {}).length}</span>
                         </div>
                       )}
+                      {detectedIntent && (
+                        <div>
+                          Detected intent: <span className="text-foreground">{detectedIntent}</span>
+                        </div>
+                      )}
+                      {agentProgress && (
+                        <div>
+                          Agent progress: <span className="text-foreground">{agentProgress}</span>
+                        </div>
+                      )}
+                      {agentStep && (
+                        <div>
+                          Agent step: <span className="text-foreground">{agentStep}</span>
+                        </div>
+                      )}
+                      {typeof agentQuestionsAsked === 'number' && (
+                        <div>
+                          Questions asked: <span className="text-foreground">{agentQuestionsAsked}</span>
+                        </div>
+                      )}
+                      {agentMissingSlots.length > 0 && (
+                        <div>
+                          Missing slots: <span className="text-foreground">{agentMissingSlots.join(', ')}</span>
+                        </div>
+                      )}
                       {session.lastAutomationMessageAt && (
                         <div>
                           Last automation: <span className="text-foreground">{formatTime(session.lastAutomationMessageAt)}</span>
@@ -900,47 +951,69 @@ const Inbox: React.FC = () => {
                           Reason: <span className="text-foreground">{session.pauseReason}</span>
                         </div>
                       )}
+                      {sessionNode && (
+                        <div className="mt-2 rounded-md border border-border/60 bg-muted/30 px-2 py-2 space-y-1">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-foreground">
+                            <span>Current node</span>
+                            <span className="text-muted-foreground">{sessionNode.label || sessionNode.type}</span>
+                          </div>
+                          <div>
+                            ID: <span className="text-foreground">{sessionNode.id}</span>
+                          </div>
+                          <div>
+                            Type: <span className="text-foreground">{sessionNode.type}</span>
+                          </div>
+                          {sessionNode.preview && (
+                            <div className="text-foreground">{sessionNode.preview}</div>
+                          )}
+                          {sessionNode.summary?.map((item, index) => (
+                            <div key={`${item.label}-${index}`}>
+                              {item.label}: <span className="text-foreground">{item.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <p className="mt-2 text-xs text-muted-foreground">No active session.</p>
                   )}
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Button
-                      variant="secondary"
-                      className="h-9"
-                      disabled={!session || session.status !== 'active' || sessionAction === 'pause' || sessionLoading}
-                      onClick={handlePauseSession}
-                    >
-                      {sessionAction === 'pause' ? 'Pausing...' : 'Pause'}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      className="h-9"
-                      disabled={!session || sessionAction === 'stop' || sessionLoading}
-                      onClick={handleStopSession}
-                    >
-                      {sessionAction === 'stop' ? 'Stopping...' : 'Stop'}
-                    </Button>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <Button
+                        variant="secondary"
+                        className="h-9"
+                        disabled={!session || session.status !== 'active' || sessionAction === 'pause' || sessionLoading}
+                        onClick={handlePauseSession}
+                      >
+                        {sessionAction === 'pause' ? 'Pausing...' : 'Pause'}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="h-9"
+                        disabled={!session || sessionAction === 'stop' || sessionLoading}
+                        onClick={handleStopSession}
+                      >
+                        {sessionAction === 'stop' ? 'Stopping...' : 'Stop'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-2">
+                    <div className="flex items-center justify-between text-sm font-semibold text-foreground">
+                      <span>Escalation</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${selectedConversation.humanRequired
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100'
+                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100'
+                        }`}>
+                        {selectedConversation.humanRequired ? 'Open' : 'Clear'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Reason: {selectedConversation.humanRequiredReason || 'Not escalated'}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock3 className="w-4 h-4" />
+                      <span>SLA timer: 15m</span>
+                    </div>
                   </div>
                 </div>
-
-                <div className="p-3 rounded-lg border border-border/70 bg-background/70 space-y-2">
-                  <div className="flex items-center justify-between text-sm font-semibold text-foreground">
-                    <span>Escalation</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${selectedConversation.humanRequired
-                      ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100'
-                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100'
-                      }`}>
-                      {selectedConversation.humanRequired ? 'Open' : 'Clear'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Reason: {selectedConversation.humanRequiredReason || 'Not escalated'}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Clock3 className="w-4 h-4" />
-                    <span>SLA timer: 15m</span>
-                  </div>
-                </div>
-
               </div>
             </aside>
           )}
