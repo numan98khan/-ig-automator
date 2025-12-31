@@ -66,4 +66,87 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Update an existing automation intent label
+router.put('/:intentId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const intentId = req.params.intentId;
+    const valueInput = req.body?.value;
+    const descriptionInput = req.body?.description;
+    const value = typeof valueInput === 'string' ? valueInput.trim() : undefined;
+    const description = typeof descriptionInput === 'string' ? descriptionInput.trim() : undefined;
+
+    if (typeof valueInput === 'string' && !value) {
+      return res.status(400).json({ error: 'value cannot be empty' });
+    }
+    if (typeof descriptionInput === 'string' && !description) {
+      return res.status(400).json({ error: 'description cannot be empty' });
+    }
+    if (value === undefined && description === undefined) {
+      return res.status(400).json({ error: 'value or description is required' });
+    }
+
+    const intent = await WorkspaceAutomationIntent.findById(intentId);
+    if (!intent) {
+      return res.status(404).json({ error: 'Automation intent not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(intent.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+
+    if (value && value !== intent.value) {
+      const systemExists = await listAutomationIntents()
+        .then((intents) => intents.some((systemIntent) => systemIntent.value === value));
+      if (systemExists) {
+        return res.status(409).json({ error: 'Intent value already exists in system intents' });
+      }
+
+      const exists = await WorkspaceAutomationIntent.findOne({
+        workspaceId: intent.workspaceId,
+        value,
+        _id: { $ne: intent._id },
+      }).lean();
+      if (exists) {
+        return res.status(409).json({ error: 'Intent value already exists for this workspace' });
+      }
+    }
+
+    if (value) {
+      intent.value = value;
+    }
+    if (description) {
+      intent.description = description;
+    }
+
+    await intent.save();
+    res.json(intent);
+  } catch (error: any) {
+    console.error('Automation intent update error:', error);
+    res.status(400).json({ error: error.message || 'Failed to update automation intent' });
+  }
+});
+
+// Delete an existing automation intent label
+router.delete('/:intentId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const intentId = req.params.intentId;
+    const intent = await WorkspaceAutomationIntent.findById(intentId);
+    if (!intent) {
+      return res.status(404).json({ error: 'Automation intent not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(intent.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+
+    await intent.deleteOne();
+    res.status(204).send();
+  } catch (error) {
+    console.error('Automation intent delete error:', error);
+    res.status(500).json({ error: 'Failed to delete automation intent' });
+  }
+});
+
 export default router;

@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, ListChecks, Plus, Loader2, AlertCircle } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  ListChecks,
+  Plus,
+  Loader2,
+  AlertCircle,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 import { automationIntentAPI, AutomationIntent } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
@@ -14,8 +23,10 @@ export const AutomationsIntentions: React.FC = () => {
   const [customIntents, setCustomIntents] = useState<AutomationIntent[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formState, setFormState] = useState(EMPTY_FORM);
+  const [editingIntent, setEditingIntent] = useState<AutomationIntent | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [systemExpanded, setSystemExpanded] = useState(false);
@@ -42,6 +53,14 @@ export const AutomationsIntentions: React.FC = () => {
 
   const handleOpenModal = () => {
     setFormState(EMPTY_FORM);
+    setEditingIntent(null);
+    setError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEditIntent = (intent: AutomationIntent) => {
+    setFormState({ value: intent.value, description: intent.description });
+    setEditingIntent(intent);
     setError(null);
     setIsModalOpen(true);
   };
@@ -49,6 +68,7 @@ export const AutomationsIntentions: React.FC = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setFormState(EMPTY_FORM);
+    setEditingIntent(null);
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -68,14 +88,35 @@ export const AutomationsIntentions: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      await automationIntentAPI.create({ workspaceId: currentWorkspace._id, value, description });
+      if (editingIntent?._id) {
+        await automationIntentAPI.update(editingIntent._id, { value, description });
+      } else {
+        await automationIntentAPI.create({ workspaceId: currentWorkspace._id, value, description });
+      }
       handleCloseModal();
       loadIntents(currentWorkspace._id);
     } catch (err: any) {
-      console.error('Failed to create intention:', err);
-      setError(err?.response?.data?.error || 'Failed to create intention');
+      console.error('Failed to save intention:', err);
+      setError(err?.response?.data?.error || 'Failed to save intention');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteIntent = async (intent: AutomationIntent) => {
+    if (!currentWorkspace || !intent._id) return;
+    const confirmed = window.confirm(`Delete the "${intent.value}" intention? This cannot be undone.`);
+    if (!confirmed) return;
+    setDeletingId(intent._id);
+    setError(null);
+    try {
+      await automationIntentAPI.delete(intent._id);
+      loadIntents(currentWorkspace._id);
+    } catch (err: any) {
+      console.error('Failed to delete intention:', err);
+      setError(err?.response?.data?.error || 'Failed to delete intention');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -194,9 +235,30 @@ export const AutomationsIntentions: React.FC = () => {
                       <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
                         <ListChecks className="w-5 h-5" />
                       </div>
-                      <div className="space-y-1">
+                      <div className="flex-1 space-y-1">
                         <p className="text-sm font-semibold text-foreground">{intent.value}</p>
                         <p className="text-sm text-muted-foreground">{intent.description}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditIntent(intent)}
+                          leftIcon={<Pencil className="w-4 h-4" />}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteIntent(intent)}
+                          leftIcon={<Trash2 className="w-4 h-4" />}
+                          disabled={deletingId === intent._id}
+                        >
+                          Delete
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -210,7 +272,7 @@ export const AutomationsIntentions: React.FC = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title="Create intention"
+        title={editingIntent ? 'Edit intention' : 'Create intention'}
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -248,7 +310,7 @@ export const AutomationsIntentions: React.FC = () => {
               Cancel
             </Button>
             <Button type="submit" isLoading={loading}>
-              Save intention
+              {editingIntent ? 'Update intention' : 'Save intention'}
             </Button>
           </div>
         </form>

@@ -768,6 +768,13 @@ export const automationIntentAPI = {
     const { data } = await api.post('/api/automation-intents', payload);
     return data;
   },
+  update: async (id: string, payload: { value?: string; description?: string }): Promise<AutomationIntent> => {
+    const { data } = await api.put(`/api/automation-intents/${id}`, payload);
+    return data;
+  },
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/api/automation-intents/${id}`);
+  },
 };
 
 export const flowTemplateAPI = {
