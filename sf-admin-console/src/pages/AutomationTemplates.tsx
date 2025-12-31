@@ -36,6 +36,7 @@ import {
   FIELD_TYPES,
   FLOW_NODE_LABELS,
   FLOW_NODE_LIBRARY,
+  FLOW_NODE_STYLES,
   GOAL_OPTIONS,
   INDUSTRY_OPTIONS,
   MESSAGE_STATE_VARIABLES,
@@ -894,7 +895,7 @@ export default function AutomationTemplates() {
   }
 
   const renderFlowBuilder = () => (
-    <div className="relative h-full w-full bg-muted/20">
+    <div className="relative h-full w-full bg-gradient-to-br from-background via-muted/20 to-muted/30">
       <div className="absolute inset-0">
         <ReactFlow
           nodes={flowNodes}
@@ -915,15 +916,7 @@ export default function AutomationTemplates() {
           <MiniMap
             pannable
             zoomable
-            nodeColor={(node) => {
-              if (node.type === 'trigger') return '#2FB16B'
-              if (node.type === 'detect_intent') return '#6B7FD6'
-              if (node.type === 'router') return '#4FA3B8'
-              if (node.type === 'ai_reply') return '#7C8EA4'
-              if (node.type === 'ai_agent') return '#7B6CB6'
-              if (node.type === 'handoff') return '#C96A4A'
-              return '#4B9AD5'
-            }}
+            nodeColor={(node) => FLOW_NODE_STYLES[node.type as FlowNodeType]?.miniMap ?? '#4B9AD5'}
             maskColor="rgba(0,0,0,0.08)"
           />
           <Controls position="bottom-right" />
@@ -954,24 +947,28 @@ export default function AutomationTemplates() {
               Templates
             </div>
             <div className="mt-3 space-y-2">
-              {FLOW_NODE_LIBRARY.map((item) => (
-                <button
-                  key={item.type}
-                  className="w-full rounded-lg border border-border/60 bg-background/80 px-3 py-2 text-left transition hover:border-primary/50 hover:bg-muted/40"
-                  onClick={() => {
-                    handleAddNode(item.type)
-                    setPaletteOpen(false)
-                  }}
-                >
-                  <div className="flex items-start gap-2">
-                    <item.icon className="h-4 w-4 text-primary mt-0.5" />
-                    <div>
-                      <div className="text-sm font-medium text-foreground">{item.label}</div>
-                      <div className="text-xs text-muted-foreground">{item.description}</div>
+              {FLOW_NODE_LIBRARY.map((item) => {
+                const style = FLOW_NODE_STYLES[item.type]
+                return (
+                  <button
+                    key={item.type}
+                    className="w-full rounded-lg border border-border/60 bg-background/80 px-3 py-2 text-left transition hover:border-primary/50 hover:bg-muted/40"
+                    onClick={() => {
+                      handleAddNode(item.type)
+                      setPaletteOpen(false)
+                    }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className={`mt-1 h-2.5 w-2.5 rounded-full ${style.dot}`} aria-hidden />
+                      <item.icon className="h-4 w-4 text-foreground mt-0.5" />
+                      <div>
+                        <div className="text-sm font-medium text-foreground">{item.label}</div>
+                        <div className="text-xs text-muted-foreground">{item.description}</div>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}

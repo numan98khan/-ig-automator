@@ -171,3 +171,71 @@ export const FLOW_NODE_LABELS: Record<FlowNodeType, string> = {
   ai_agent: 'AI Agent',
   handoff: 'Handoff',
 }
+
+export type FlowNodeStyle = {
+  badge: string
+  border: string
+  dot: string
+  handle: string
+  ring: string
+  miniMap: string
+}
+
+export const FLOW_NODE_STYLES: Record<FlowNodeType, FlowNodeStyle> = {
+  trigger: {
+    badge: 'bg-emerald-500/10',
+    border: 'border-l-emerald-400/80',
+    dot: 'bg-emerald-400',
+    handle: '!bg-emerald-400/80 !border-emerald-500/70',
+    ring: 'ring-emerald-200/70 border-emerald-200/70',
+    miniMap: '#3BAA74',
+  },
+  detect_intent: {
+    badge: 'bg-indigo-500/10',
+    border: 'border-l-indigo-400/80',
+    dot: 'bg-indigo-400',
+    handle: '!bg-indigo-400/80 !border-indigo-500/70',
+    ring: 'ring-indigo-200/70 border-indigo-200/70',
+    miniMap: '#6B7FD6',
+  },
+  send_message: {
+    badge: 'bg-sky-500/10',
+    border: 'border-l-sky-400/80',
+    dot: 'bg-sky-400',
+    handle: '!bg-sky-400/80 !border-sky-500/70',
+    ring: 'ring-sky-200/70 border-sky-200/70',
+    miniMap: '#4B9AD5',
+  },
+  router: {
+    badge: 'bg-teal-500/10',
+    border: 'border-l-teal-400/80',
+    dot: 'bg-teal-400',
+    handle: '!bg-teal-400/80 !border-teal-500/70',
+    ring: 'ring-teal-200/70 border-teal-200/70',
+    miniMap: '#4FA3B8',
+  },
+  ai_reply: {
+    badge: 'bg-violet-500/10',
+    border: 'border-l-violet-400/80',
+    dot: 'bg-violet-400',
+    handle: '!bg-violet-400/80 !border-violet-500/70',
+    ring: 'ring-violet-200/70 border-violet-200/70',
+    miniMap: '#8B7BC9',
+  },
+  ai_agent: {
+    badge: 'bg-purple-500/10',
+    border: 'border-l-purple-400/80',
+    dot: 'bg-purple-400',
+    handle: '!bg-purple-400/80 !border-purple-500/70',
+    ring: 'ring-purple-200/70 border-purple-200/70',
+    miniMap: '#7B6CB6',
+  },
+  handoff: {
+    badge: 'bg-rose-500/10',
+    border: 'border-l-rose-400/80',
+    dot: 'bg-rose-400',
+    handle: '!bg-rose-400/80 !border-rose-500/70',
+    ring: 'ring-rose-200/70 border-rose-200/70',
+    miniMap: '#C96A4A',
+  },
+}
