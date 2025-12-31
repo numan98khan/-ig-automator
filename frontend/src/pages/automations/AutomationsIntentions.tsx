@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ListChecks, Plus, Loader2, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, ListChecks, Plus, Loader2, AlertCircle } from 'lucide-react';
 import { automationIntentAPI, AutomationIntent } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
@@ -18,6 +18,7 @@ export const AutomationsIntentions: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [systemExpanded, setSystemExpanded] = useState(false);
 
   useEffect(() => {
     if (!currentWorkspace) return;
@@ -135,30 +136,44 @@ export const AutomationsIntentions: React.FC = () => {
       ) : (
         <div className="space-y-6">
           <div className="space-y-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">System intentions</p>
-              <p className="text-sm text-muted-foreground">Global intent classes available to every workspace.</p>
-            </div>
-            {filteredSystemIntents.length === 0 ? (
-              <div className="bg-card border border-border rounded-xl p-6 text-sm text-muted-foreground">
-                No system intentions available.
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">System intentions</p>
+                <p className="text-sm text-muted-foreground">Global intent classes available to every workspace.</p>
               </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2">
-                {filteredSystemIntents.map((intent) => (
-                  <div key={intent._id || intent.value} className="bg-card border border-border rounded-xl p-4 shadow-sm">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                        <ListChecks className="w-5 h-5" />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-foreground">{intent.value}</p>
-                        <p className="text-sm text-muted-foreground">{intent.description}</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mt-1"
+                onClick={() => setSystemExpanded((prev) => !prev)}
+                leftIcon={systemExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              >
+                {systemExpanded ? 'Hide' : 'Show'}
+              </Button>
+            </div>
+            {systemExpanded && (
+              filteredSystemIntents.length === 0 ? (
+                <div className="bg-card border border-border rounded-xl p-6 text-sm text-muted-foreground">
+                  No system intentions available.
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {filteredSystemIntents.map((intent) => (
+                    <div key={intent._id || intent.value} className="bg-card border border-border rounded-xl p-4 shadow-sm">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                          <ListChecks className="w-5 h-5" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-foreground">{intent.value}</p>
+                          <p className="text-sm text-muted-foreground">{intent.description}</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )
             )}
           </div>
 
