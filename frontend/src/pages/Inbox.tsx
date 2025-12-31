@@ -33,7 +33,6 @@ import {
   Clock3,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { Badge } from '../components/ui/Badge';
 import { ImageAttachment, VideoAttachment, VoiceAttachment, LinkPreviewComponent, FileAttachment } from '../components/MessageMedia';
 
 const Inbox: React.FC = () => {

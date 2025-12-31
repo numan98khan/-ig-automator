@@ -10,6 +10,7 @@ import {
   MessageSquare,
   ShieldCheck,
   Sparkles,
+  Tag,
   User,
   UserPlus,
 } from 'lucide-react';

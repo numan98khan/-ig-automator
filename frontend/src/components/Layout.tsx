@@ -47,7 +47,10 @@ const Layout: React.FC = () => {
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
 
-  const aiLinks = useMemo(() => ([]), []);
+  const aiLinks = useMemo<Array<{ to: string; label: string; icon: typeof MessageSquare }>>(
+    () => [],
+    [],
+  );
 
   const navLinks = useMemo(() => {
     const links = [
