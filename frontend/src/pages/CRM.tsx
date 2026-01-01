@@ -718,10 +718,11 @@ const CRM: React.FC = () => {
   const hasActiveFilters = activeFilterCount > 0;
 
   return (
-    <div className="space-y-4">
-      <div className="sticky top-4 z-20">
+    <div className="h-full flex flex-col gap-4">
+      <div className="sticky top-0 z-20">
         <div className="glass-panel rounded-2xl px-2.5 py-2 space-y-2">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 md:flex-nowrap md:min-h-[52px]">
+            
             <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap md:max-w-[420px] flex-1 md:flex-none">
               {stageTabs.map((stage) => (
                 <button
@@ -741,6 +742,7 @@ const CRM: React.FC = () => {
                 </button>
               ))}
             </div>
+
             <div className="flex-1 min-w-[180px] md:min-w-[240px]">
               <Input
                 ref={searchRef}
@@ -945,8 +947,8 @@ const CRM: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr_360px] gap-4">
-        <div className="glass-panel rounded-2xl p-3 h-[72vh] overflow-hidden">
+      <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr_360px] gap-4 flex-1 min-h-0">
+        <div className="glass-panel rounded-2xl p-3 flex flex-col min-h-0">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-muted-foreground" />
@@ -955,7 +957,7 @@ const CRM: React.FC = () => {
             {loading && <span className="text-xs text-muted-foreground">Loading...</span>}
           </div>
           {viewMode === 'list' ? (
-            <div className="space-y-2 overflow-y-auto pr-1 h-[calc(72vh-40px)]">
+            <div className="space-y-2 overflow-y-auto pr-1 flex-1 min-h-0">
               {activeContacts.length === 0 && !loading && (
                 <div className="text-xs text-muted-foreground text-center py-8">
                   No contacts match your filters.
@@ -1026,7 +1028,7 @@ const CRM: React.FC = () => {
               })}
             </div>
           ) : (
-            <div className="flex gap-3 overflow-x-auto pr-1 h-[calc(72vh-40px)]">
+            <div className="flex gap-3 overflow-x-auto pr-1 flex-1 min-h-0">
               {(['new', 'engaged', 'qualified', 'won', 'lost'] as CrmStage[]).map((stage) => {
                 const stageContacts = filteredContacts.filter((contact) => contact.stage === stage);
                 return (
@@ -1068,7 +1070,7 @@ const CRM: React.FC = () => {
           )}
         </div>
 
-        <div className="glass-panel rounded-2xl p-4 h-[72vh] flex flex-col">
+        <div className="glass-panel rounded-2xl p-4 flex flex-col min-h-0">
           {!selectedContact && !detailLoading && (
             <div className="text-sm text-muted-foreground">Select a contact to view activity.</div>
           )}
@@ -1175,7 +1177,7 @@ const CRM: React.FC = () => {
           )}
         </div>
 
-        <div className="glass-panel rounded-2xl p-4 h-[72vh] flex flex-col">
+        <div className="glass-panel rounded-2xl p-4 flex flex-col min-h-0">
           {!selectedContact && !detailLoading && (
             <div className="text-sm text-muted-foreground">Select a contact to view CRM details.</div>
           )}
