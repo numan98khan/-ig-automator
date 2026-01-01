@@ -122,9 +122,17 @@ export const adminApi = {
     category?: string
     level?: 'info' | 'warn' | 'error'
     workspaceId?: string
+    sessionId?: string
     before?: string
   }) => api.get('/log-events', { params }),
   deleteLogEvents: () => api.delete('/log-events'),
+
+  getAutomationSessions: (params?: {
+    page?: number
+    limit?: number
+    workspaceId?: string
+    channel?: 'live' | 'preview'
+  }) => api.get('/automation-sessions', { params }),
 
   // Tiers
   getTiers: (params?: { page?: number; limit?: number; search?: string; status?: string }) =>

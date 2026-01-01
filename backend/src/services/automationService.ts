@@ -1088,6 +1088,13 @@ async function executeFlowPlan(params: {
   let triggered = false;
   let nodeQueue = Array.isArray(session.state?.nodeQueue) ? [...session.state.nodeQueue] : [];
   let fallbackToStart = false;
+  const logContext = {
+    automationSessionId: session._id?.toString(),
+    automationInstanceId: instance._id?.toString(),
+    templateId: instance.templateId?.toString(),
+    templateVersionId: session.templateVersionId?.toString(),
+    conversationId: conversation._id?.toString(),
+  };
 
   const markTriggeredOnce = async () => {
     if (triggered) return;
@@ -1158,6 +1165,7 @@ async function executeFlowPlan(params: {
 
     if (shouldLogNode(step)) {
       logNodeEvent('Node start', {
+        ...logContext,
         nodeId: step.id,
         type: stepType,
         waitForReply: step.waitForReply,
@@ -1440,6 +1448,7 @@ async function executeFlowPlan(params: {
 
     if (shouldLogNode(step)) {
       logNodeEvent('Node complete', {
+        ...logContext,
         nodeId: step.id,
         type: stepType,
         executedSteps,

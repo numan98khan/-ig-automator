@@ -15,6 +15,7 @@ import Logging from './pages/Logging'
 import Tiers from './pages/Tiers'
 import AutomationTemplates from './pages/AutomationTemplates'
 import AutomationIntentions from './pages/AutomationIntentions'
+import AutomationHistory from './pages/AutomationHistory'
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
                 <Route path="/ai-assistant" element={<AIAssistantConfig />} />
                 <Route path="/automations" element={<AutomationTemplates />} />
                 <Route path="/automations/intentions" element={<AutomationIntentions />} />
+                <Route path="/automations/history" element={<AutomationHistory />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/debug" element={<AdminDebug />} />
                 <Route path="/logging" element={<Logging />} />
