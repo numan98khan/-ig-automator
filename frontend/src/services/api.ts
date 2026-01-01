@@ -87,12 +87,16 @@ export interface Conversation {
   contactPhone?: string;
   tags?: string[];
   stage?: 'new' | 'engaged' | 'qualified' | 'won' | 'lost';
+  ownerId?: string;
   workspaceId: string;
   instagramAccountId: string;
   instagramConversationId?: string;
   lastMessageAt: string;
   lastMessage?: string;
+  lastCustomerMessageAt?: string;
+  lastBusinessMessageAt?: string;
   createdAt: string;
+  updatedAt?: string;
   isSynced?: boolean;
   humanRequired?: boolean;
   humanRequiredReason?: string;
@@ -108,6 +112,12 @@ export interface CrmContact extends Conversation {
   tags?: string[];
   contactEmail?: string;
   contactPhone?: string;
+  ownerId?: string;
+  openTaskCount?: number;
+  overdueTaskCount?: number;
+  nextTaskDueAt?: string;
+  unreadCount?: number;
+  leadScore?: number;
 }
 
 export interface CrmContactListResponse {
@@ -119,6 +129,12 @@ export interface CrmContactListResponse {
   };
   stageCounts: Record<CrmStage, number>;
   tagCounts: Record<string, number>;
+  summary?: {
+    newToday: number;
+    overdue: number;
+    waiting: number;
+    qualified: number;
+  };
 }
 
 export interface CrmUserRef {

@@ -6,6 +6,7 @@ import CrmTask from '../models/CrmTask';
 import AutomationSession from '../models/AutomationSession';
 import AutomationInstance from '../models/AutomationInstance';
 import FlowTemplate from '../models/FlowTemplate';
+import Message from '../models/Message';
 import User from '../models/User';
 import WorkspaceMember from '../models/WorkspaceMember';
 import { authenticate, AuthRequest } from '../middleware/auth';
@@ -66,6 +67,7 @@ const formatContactTags = (tags: any): string[] => {
 
 const formatContact = (contact: any) => ({
   ...contact,
+  ownerId: contact.ownerId?.toString ? contact.ownerId.toString() : contact.ownerId,
   stage: contact.stage || 'new',
   tags: formatContactTags(contact.tags),
 });
@@ -115,16 +117,19 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
     const tagFilter = normalizeTags(req.query.tags ?? req.query.tag);
     const inactiveDays = toInt(req.query.inactiveDays, 0);
 
-    const filter: Record<string, any> = {
-      workspaceId: new mongoose.Types.ObjectId(workspaceId),
+    const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
+    const baseFilter: Record<string, any> = {
+      workspaceId: workspaceObjectId,
       platform: { $ne: 'mock' },
     };
-    const andFilters: Record<string, any>[] = [];
+    const baseAndFilters: Record<string, any>[] = [];
+    const tagFilters: Record<string, any>[] = [];
+    const stageFilters: Record<string, any>[] = [];
 
     if (search) {
       const escaped = escapeRegExp(search);
       const regex = new RegExp(escaped, 'i');
-      andFilters.push({
+      baseAndFilters.push({
         $or: [
           { participantName: regex },
           { participantHandle: regex },
@@ -136,7 +141,7 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
 
     if (stage) {
       if (stage === 'new') {
-        andFilters.push({
+        stageFilters.push({
           $or: [
             { stage: 'new' },
             { stage: { $exists: false } },
@@ -144,47 +149,139 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
           ],
         });
       } else {
-        andFilters.push({ stage });
+        stageFilters.push({ stage });
       }
     }
 
     if (tagFilter.length > 0) {
       const tagMatchers = tagFilter.map((tag) => new RegExp(`^${escapeRegExp(tag)}$`, 'i'));
-      andFilters.push({ tags: { $in: tagMatchers } });
+      tagFilters.push({ tags: { $in: tagMatchers } });
     }
 
     if (inactiveDays > 0) {
       const cutoff = new Date(Date.now() - inactiveDays * 24 * 60 * 60 * 1000);
-      andFilters.push({ lastMessageAt: { $lte: cutoff } });
+      baseAndFilters.push({ lastMessageAt: { $lte: cutoff } });
     }
 
-    if (andFilters.length > 0) {
-      filter.$and = andFilters;
-    }
+    const buildFilter = (extras: Record<string, any>[]) => {
+      const filter: Record<string, any> = { ...baseFilter };
+      const combined = [...baseAndFilters, ...extras];
+      if (combined.length > 0) {
+        filter.$and = combined;
+      }
+      return filter;
+    };
+
+    const listFilter = buildFilter([...tagFilters, ...stageFilters]);
+    const stageCountFilter = buildFilter(tagFilters);
+    const tagCountFilter = buildFilter(stageFilters);
 
     const [contacts, total] = await Promise.all([
-      Conversation.find(filter)
+      Conversation.find(listFilter)
         .sort({ lastMessageAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
-      Conversation.countDocuments(filter),
+      Conversation.countDocuments(listFilter),
     ]);
 
-    const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
-    const [stageRows, tagRows] = await Promise.all([
+    const contactIds = contacts.map((contact: any) => contact._id);
+    const now = new Date();
+    const [taskSummary, unreadSummary] = await Promise.all([
+      contactIds.length
+        ? CrmTask.aggregate([
+            { $match: { conversationId: { $in: contactIds }, status: 'open' } },
+            {
+              $group: {
+                _id: '$conversationId',
+                openCount: { $sum: 1 },
+                nextDueAt: { $min: '$dueAt' },
+                overdueCount: {
+                  $sum: {
+                    $cond: [
+                      { $and: [{ $ifNull: ['$dueAt', false] }, { $lt: ['$dueAt', now] }] },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+              },
+            },
+          ])
+        : [],
+      contactIds.length
+        ? Message.aggregate([
+            {
+              $match: {
+                conversationId: { $in: contactIds },
+                from: 'customer',
+                $or: [{ seenAt: { $exists: false } }, { seenAt: null }],
+              },
+            },
+            { $group: { _id: '$conversationId', count: { $sum: 1 } } },
+          ])
+        : [],
+    ]);
+
+    const taskMap = new Map<string, { openCount: number; overdueCount: number; nextDueAt?: Date }>();
+    taskSummary.forEach((row: any) => {
+      taskMap.set(row._id.toString(), {
+        openCount: row.openCount || 0,
+        overdueCount: row.overdueCount || 0,
+        nextDueAt: row.nextDueAt || undefined,
+      });
+    });
+
+    const unreadMap = new Map<string, number>();
+    unreadSummary.forEach((row: any) => {
+      unreadMap.set(row._id.toString(), row.count || 0);
+    });
+
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+    const [stageRows, tagRows, newTodayCount, qualifiedCount, waitingCount, overdueRows] = await Promise.all([
       Conversation.aggregate([
-        { $match: { workspaceId: workspaceObjectId, platform: { $ne: 'mock' } } },
+        { $match: stageCountFilter },
         { $project: { stage: { $ifNull: ['$stage', 'new'] } } },
         { $group: { _id: '$stage', count: { $sum: 1 } } },
       ]),
       Conversation.aggregate([
-        { $match: { workspaceId: workspaceObjectId, platform: { $ne: 'mock' }, tags: { $exists: true, $ne: [] } } },
+        { $match: { ...tagCountFilter, tags: { $exists: true, $ne: [] } } },
         { $unwind: '$tags' },
         { $project: { tag: { $toLower: '$tags' } } },
         { $group: { _id: '$tag', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 50 },
+      ]),
+      Conversation.countDocuments({
+        ...baseFilter,
+        createdAt: { $gte: startToday },
+      }),
+      Conversation.countDocuments({
+        ...baseFilter,
+        stage: 'qualified',
+        updatedAt: { $gte: startWeek },
+      }),
+      Conversation.countDocuments({
+        ...baseFilter,
+        lastBusinessMessageAt: { $exists: true, $ne: null },
+        $expr: {
+          $gt: [
+            '$lastBusinessMessageAt',
+            { $ifNull: ['$lastCustomerMessageAt', new Date(0)] },
+          ],
+        },
+      }),
+      CrmTask.aggregate([
+        {
+          $match: {
+            workspaceId: workspaceObjectId,
+            status: 'open',
+            dueAt: { $lt: now },
+          },
+        },
+        { $group: { _id: '$conversationId' } },
+        { $count: 'count' },
       ]),
     ]);
 
@@ -205,9 +302,24 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
       return acc;
     }, {});
 
+    const contactsPayload = contacts.map((contact: any) => {
+      const base = formatContact(contact);
+      const taskInfo = taskMap.get(contact._id.toString()) || { openCount: 0, overdueCount: 0 };
+      const unreadCount = unreadMap.get(contact._id.toString()) || 0;
+      return {
+        ...base,
+        openTaskCount: taskInfo.openCount,
+        overdueTaskCount: taskInfo.overdueCount,
+        nextTaskDueAt: taskInfo.nextDueAt,
+        unreadCount,
+      };
+    });
+
+    const overdueCount = overdueRows?.[0]?.count || 0;
+
     res.json({
       data: {
-        contacts: contacts.map(formatContact),
+        contacts: contactsPayload,
         pagination: {
           currentPage: page,
           totalPages: Math.ceil(total / limit) || 1,
@@ -215,6 +327,12 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
         },
         stageCounts,
         tagCounts,
+        summary: {
+          newToday: newTodayCount || 0,
+          overdue: overdueCount,
+          waiting: waitingCount || 0,
+          qualified: qualifiedCount || 0,
+        },
       },
     });
   } catch (error) {
@@ -270,6 +388,22 @@ router.patch('/contacts/:id', authenticate, async (req: AuthRequest, res: Respon
         return res.status(400).json({ error: 'Invalid stage value' });
       }
       updates.stage = stage;
+    }
+    if ('ownerId' in (req.body || {})) {
+      if (!req.body.ownerId) {
+        updates.ownerId = undefined;
+      } else if (mongoose.isValidObjectId(req.body.ownerId)) {
+        const isMember = await WorkspaceMember.exists({
+          workspaceId: conversation.workspaceId,
+          userId: req.body.ownerId,
+        });
+        if (!isMember) {
+          return res.status(400).json({ error: 'Owner must belong to the workspace' });
+        }
+        updates.ownerId = new mongoose.Types.ObjectId(req.body.ownerId);
+      } else {
+        return res.status(400).json({ error: 'Owner id must be valid' });
+      }
     }
 
     Object.assign(conversation, updates);

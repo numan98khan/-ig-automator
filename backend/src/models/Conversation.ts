@@ -8,6 +8,7 @@ export interface IConversation extends Document {
   contactPhone?: string;
   tags?: string[];
   stage?: 'new' | 'engaged' | 'qualified' | 'won' | 'lost';
+  ownerId?: mongoose.Types.ObjectId;
   workspaceId: mongoose.Types.ObjectId;
   instagramAccountId: mongoose.Types.ObjectId;
   lastMessageAt: Date;
@@ -67,6 +68,10 @@ const conversationSchema = new Schema<IConversation>({
     type: String,
     enum: ['new', 'engaged', 'qualified', 'won', 'lost'],
     default: 'new',
+  },
+  ownerId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
   },
   workspaceId: {
     type: Schema.Types.ObjectId,
@@ -184,5 +189,6 @@ conversationSchema.index({ instagramAccountId: 1, instagramConversationId: 1 });
 conversationSchema.index({ workspaceId: 1, updatedAt: -1 });
 conversationSchema.index({ workspaceId: 1, stage: 1 });
 conversationSchema.index({ workspaceId: 1, tags: 1 });
+conversationSchema.index({ workspaceId: 1, ownerId: 1 });
 
 export default mongoose.model<IConversation>('Conversation', conversationSchema);
