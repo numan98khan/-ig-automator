@@ -70,7 +70,7 @@ export interface InstagramAccount {
   _id: string;
   username: string;
   workspaceId: string;
-  status: 'connected' | 'mock';
+  status: 'connected';
   name?: string;
   profilePictureUrl?: string;
   tokenExpiresAt?: string;
@@ -168,6 +168,24 @@ export interface AutomationSessionSummary {
   currentNode?: AutomationSessionNodeSummary | null;
 }
 
+export interface AutomationPreviewMessage {
+  id: string;
+  from: 'customer' | 'ai';
+  text: string;
+  createdAt?: string;
+}
+
+export interface AutomationPreviewSession {
+  sessionId: string;
+  conversationId: string;
+  status: 'active' | 'paused' | 'completed' | 'handoff';
+  messages: AutomationPreviewMessage[];
+}
+
+export interface AutomationPreviewSessionResponse {
+  session: AutomationSession;
+}
+
 export interface AutomationSessionNodeSummaryItem {
   label: string;
   value: string;
@@ -188,6 +206,7 @@ export interface KnowledgeItem {
   storageMode?: 'vector' | 'text';
   workspaceId: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 // Automation types
@@ -635,12 +654,6 @@ export const instagramAPI = {
     return data;
   },
 
-  // Legacy mock connection (for demo mode)
-  connect: async (username: string, workspaceId: string): Promise<InstagramAccount> => {
-    const { data } = await api.post('/api/instagram/connect', { username, workspaceId });
-    return data;
-  },
-
   getByWorkspace: async (workspaceId: string): Promise<InstagramAccount[]> => {
     const { data } = await api.get(`/api/instagram/workspace/${workspaceId}`);
     return data;
@@ -756,6 +769,35 @@ export const automationAPI = {
 
   delete: async (id: string): Promise<void> => {
     await api.delete(`/api/automations/${id}`);
+  },
+
+  createPreviewSession: async (id: string, payload?: { reset?: boolean }): Promise<AutomationPreviewSession> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-session`, payload);
+    return data;
+  },
+
+  sendPreviewMessage: async (
+    id: string,
+    payload: { text: string; sessionId?: string },
+  ): Promise<{ success: boolean; error?: string; sessionId: string; messages: AutomationPreviewMessage[] }> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-session/message`, payload);
+    return data;
+  },
+
+  pausePreviewSession: async (
+    id: string,
+    payload: { sessionId: string; reason?: string },
+  ): Promise<AutomationPreviewSessionResponse> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-session/pause`, payload);
+    return data;
+  },
+
+  stopPreviewSession: async (
+    id: string,
+    payload: { sessionId: string; reason?: string },
+  ): Promise<AutomationPreviewSessionResponse> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-session/stop`, payload);
+    return data;
   },
 };
 

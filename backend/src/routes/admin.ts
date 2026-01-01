@@ -15,6 +15,8 @@ import FlowDraft from '../models/FlowDraft';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import AutomationIntent from '../models/AutomationIntent';
+import AutomationSession from '../models/AutomationSession';
+import AutomationInstance from '../models/AutomationInstance';
 import Tier from '../models/Tier';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
@@ -666,6 +668,7 @@ router.get('/log-events', authenticate, requireAdmin, async (req, res) => {
     const workspaceId = typeof req.query.workspaceId === 'string'
       ? req.query.workspaceId.trim()
       : undefined;
+    const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId.trim() : undefined;
     const beforeRaw = typeof req.query.before === 'string' ? req.query.before.trim() : undefined;
     const before = beforeRaw ? new Date(beforeRaw) : undefined;
     const beforeDate = before && !Number.isNaN(before.getTime()) ? before : undefined;
@@ -675,6 +678,7 @@ router.get('/log-events', authenticate, requireAdmin, async (req, res) => {
       category,
       level: level === 'warn' || level === 'error' || level === 'info' ? level : undefined,
       workspaceId,
+      sessionId,
       before: beforeDate,
     });
 
@@ -691,6 +695,73 @@ router.delete('/log-events', authenticate, requireAdmin, async (_req, res) => {
     res.json({ data: { success: true } });
   } catch (error) {
     console.error('Admin log events delete error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Automation session history
+router.get('/automation-sessions', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(200, Math.max(1, toInt(req.query.limit, 50)));
+    const page = Math.max(1, toInt(req.query.page, 1));
+    const workspaceId = typeof req.query.workspaceId === 'string' ? req.query.workspaceId.trim() : undefined;
+    const channelRaw = typeof req.query.channel === 'string' ? req.query.channel.trim() : undefined;
+    const channel = channelRaw === 'preview' ? 'preview' : channelRaw === 'live' ? 'live' : undefined;
+
+    const query: Record<string, any> = {};
+    if (workspaceId) {
+      query.workspaceId = toObjectId(workspaceId);
+    }
+    if (channel) {
+      query.channel = channel;
+    }
+
+    const skip = (page - 1) * limit;
+    const [total, sessions] = await Promise.all([
+      AutomationSession.countDocuments(query),
+      AutomationSession.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+    ]);
+
+    const instanceIds = Array.from(new Set(sessions.map((session) => session.automationInstanceId?.toString()).filter(Boolean)));
+    const instances = instanceIds.length
+      ? await AutomationInstance.find({ _id: { $in: instanceIds } }).select('name templateId').lean()
+      : [];
+    const instanceMap = new Map(instances.map((instance) => [instance._id.toString(), instance]));
+
+    const templateIds = Array.from(new Set(instances.map((instance) => instance.templateId?.toString()).filter(Boolean)));
+    const templates = templateIds.length
+      ? await FlowTemplate.find({ _id: { $in: templateIds } }).select('name').lean()
+      : [];
+    const templateMap = new Map(templates.map((template) => [template._id.toString(), template]));
+
+    const payload = sessions.map((session) => {
+      const instance = session.automationInstanceId
+        ? instanceMap.get(session.automationInstanceId.toString())
+        : null;
+      const templateId = instance?.templateId || session.templateId;
+      const template = templateId ? templateMap.get(templateId.toString()) : null;
+      return {
+        ...session,
+        automationName: instance?.name,
+        templateId,
+        templateName: template?.name,
+      };
+    });
+
+    res.json({
+      data: {
+        sessions: payload,
+        total,
+        page,
+        limit,
+      },
+    });
+  } catch (error) {
+    console.error('Admin automation sessions get error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

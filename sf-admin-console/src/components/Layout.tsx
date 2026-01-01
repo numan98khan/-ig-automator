@@ -7,12 +7,13 @@ import {
   Users,
   BarChart3,
   Bot,
-  Settings,
   Menu,
   LogOut,
   X,
   Bug,
   ScrollText,
+  Trophy,
+  Atom,
 } from 'lucide-react'
 import { useAdminAuth } from '../context/AdminAuthContext'
 
@@ -30,9 +31,9 @@ export default function Layout({ children }: LayoutProps) {
     { name: 'Workspaces', href: '/workspaces', icon: Building2 },
     { name: 'Conversations', href: '/conversations', icon: MessageSquare },
     { name: 'Users', href: '/users', icon: Users },
-    { name: 'Tiers', href: '/tiers', icon: Bug },
+    { name: 'Tiers', href: '/tiers', icon: Trophy },
     { name: 'AI Assistant', href: '/ai-assistant', icon: Bot },
-    { name: 'Automations', href: '/automations', icon: Settings },
+    { name: 'Automations', href: '/automations', icon: Atom },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Logging', href: '/logging', icon: ScrollText },
     { name: 'Debug', href: '/debug', icon: Bug },
@@ -71,7 +72,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Sidebar */}
       <aside className={`group fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:w-20 lg:hover:w-64 lg:overflow-hidden lg:transition-all ${
         mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-      } lg:z-auto mt-0 lg:mt-0`}>
+      } mt-0 lg:mt-0`}>
         <div className="flex flex-col h-full">
           {/* Logo - Desktop Only */}
           <div className="hidden lg:flex items-center gap-3 px-4 py-4 border-b border-border lg:justify-center lg:gap-0 lg:group-hover:justify-start lg:group-hover:gap-3">

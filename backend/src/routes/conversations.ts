@@ -1,6 +1,7 @@
 import express, { Response } from 'express';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
+import Escalation from '../models/Escalation';
 import Workspace from '../models/Workspace';
 import InstagramAccount from '../models/InstagramAccount';
 import AutomationSession from '../models/AutomationSession';
@@ -158,6 +159,27 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
 
     const conversations = await Conversation.find({ workspaceId })
       .sort({ lastMessageAt: -1 });
+    const conversationIds = conversations.map((conv) => conv._id);
+    const [activeEscalations, activeHandoffs] = await Promise.all([
+      Escalation.find({
+        conversationId: { $in: conversationIds },
+        status: { $in: ['pending', 'in_progress'] },
+      })
+        .select('conversationId reason createdAt')
+        .lean(),
+      AutomationSession.find({
+        conversationId: { $in: conversationIds },
+        status: 'handoff',
+      })
+        .select('conversationId')
+        .lean(),
+    ]);
+    const escalationByConversationId = new Map(
+      activeEscalations.map((escalation) => [escalation.conversationId.toString(), escalation])
+    );
+    const handoffConversationIds = new Set(
+      activeHandoffs.map((session) => session.conversationId.toString())
+    );
 
     const normalizeId = (value: unknown): string | undefined => {
       if (!value) return undefined;
@@ -181,9 +203,21 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
           .limit(1);
 
         const convObj = conv.toObject();
+        const conversationId = conv._id.toString();
+        const activeEscalation = escalationByConversationId.get(conversationId);
+        const isHandoff = handoffConversationIds.has(conversationId);
+        const isEscalated = Boolean(activeEscalation) || isHandoff;
         return {
           ...convObj,
           instagramAccountId: normalizeId(convObj.instagramAccountId),
+          humanRequired: isEscalated,
+          humanRequiredReason: isEscalated
+            ? activeEscalation?.reason || convObj.humanRequiredReason
+            : undefined,
+          humanTriggeredAt: isEscalated
+            ? activeEscalation?.createdAt || convObj.humanTriggeredAt
+            : undefined,
+          humanHoldUntil: isEscalated ? convObj.humanHoldUntil : undefined,
           lastMessage: lastMessage ? lastMessage.text : '',
           isSynced: true, // Local conversations are synced
         };

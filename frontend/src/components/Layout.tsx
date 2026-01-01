@@ -49,7 +49,6 @@ const Layout: React.FC = () => {
       { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
       { to: '/automations', label: 'Automations', icon: Atom, isActive: isActive('/automations') },
-      { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
     ];
 
     return links;
@@ -96,11 +95,11 @@ const Layout: React.FC = () => {
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute inset-0 bg-contour-lines" aria-hidden />
         <div
-          className="absolute inset-0 bg-[radial-gradient(140%_130%_at_18%_18%,rgba(16,107,163,0.14),transparent_52%)] dark:bg-[radial-gradient(140%_130%_at_18%_18%,rgba(72,175,240,0.12),transparent_48%)]"
+          className="absolute inset-0 bg-[radial-gradient(140%_130%_at_18%_18%,rgba(15,23,42,0.06),transparent_60%)] dark:bg-[radial-gradient(140%_130%_at_18%_18%,rgba(72,175,240,0.12),transparent_48%)]"
           aria-hidden
         />
         <div
-          className="absolute inset-0 bg-gradient-to-b from-[#c7d9e5]/80 via-white/45 to-[#eff3f6]/85 dark:from-[#0e1a22]/85 dark:via-transparent dark:to-[#0c141c]/90"
+          className="absolute inset-0 bg-gradient-to-b from-white/90 via-white/70 to-[#f8fafc]/90 dark:from-[#0e1a22]/85 dark:via-transparent dark:to-[#0c141c]/90"
           aria-hidden
         />
       </div>

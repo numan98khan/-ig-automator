@@ -60,7 +60,7 @@ app.use('/api/instagram', instagramSyncRoutes);   // Sync routes (sync-messages,
 app.use('/api/instagram', instagramDebugRoutes);  // Debug routes
 app.use('/api/instagram', instagramWebhookRoutes); // Webhook routes (real-time events)
 app.use('/api/instagram', instagramLogsRoutes);    // Logs routes (view/manage logs)
-app.use('/api/instagram', instagramRoutes);       // Legacy mock routes
+app.use('/api/instagram', instagramRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/knowledge', knowledgeRoutes);

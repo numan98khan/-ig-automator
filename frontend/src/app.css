@@ -6,45 +6,45 @@
 
 @layer base {
   :root {
-    /* Palantir-inspired Light */
-    --background: 245 248 250;
-    /* #F5F8FA */
-    --foreground: 24 32 38;
-    /* #182026 */
+    /* Neutral Light */
+    --background: 255 255 255;
+    /* #FFFFFF */
+    --foreground: 17 24 39;
+    /* #111827 */
 
     --primary: 16 107 163;
     /* #106BA3 */
     --primary-foreground: 255 255 255;
 
-    --secondary: 231 237 242;
-    /* #E7EDF2 */
-    --secondary-foreground: 24 32 38;
-    /* #182026 */
+    --secondary: 248 250 252;
+    /* #F8FAFC */
+    --secondary-foreground: 17 24 39;
+    /* #111827 */
 
-    --muted: 222 232 240;
-    /* #DEE8F0 */
-    --muted-foreground: 92 112 128;
-    /* #5C7080 */
+    --muted: 241 245 249;
+    /* #F1F5F9 */
+    --muted-foreground: 100 116 139;
+    /* #64748B */
 
-    --accent: 202 215 225;
-    /* #CAD7E1 */
-    --accent-foreground: 24 32 38;
-    /* #182026 */
+    --accent: 226 232 240;
+    /* #E2E8F0 */
+    --accent-foreground: 17 24 39;
+    /* #111827 */
 
-    --border: 216 225 232;
-    /* #D8E1E8 */
-    --input: 216 225 232;
-    /* #D8E1E8 */
+    --border: 203 213 225;
+    /* #CBD5E1 */
+    --input: 203 213 225;
+    /* #CBD5E1 */
     --ring: 16 107 163;
     /* #106BA3 */
 
     --radius: 0.5rem;
 
     --card: 255 255 255;
-    --card-foreground: 24 32 38;
+    --card-foreground: 17 24 39;
 
     --glass-blur: 14px;
-    --glass-opacity: 0.32;
+    --glass-opacity: 0.45;
   }
 
   .dark {
@@ -66,8 +66,8 @@
 
     --muted: 59 69 81;
     /* #3B4551 */
-    --muted-foreground: 138 152 171;
-    /* #8A98AB */
+    --muted-foreground: 166 182 200;
+    /* #A6B6C8 */
 
     --accent: 50 65 80;
     /* #324150 */
@@ -153,7 +153,7 @@
   background-position: center;
   background-size: cover;
   /* fills the element */
-  opacity: 0.15;
+  opacity: 0.04;
   mix-blend-mode: soft-light;
 
 }

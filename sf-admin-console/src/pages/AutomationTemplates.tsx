@@ -11,6 +11,7 @@ import {
   UploadCloud,
   Trash2,
   Play,
+  LayoutGrid,
   Network,
   Copy,
   Eraser,
@@ -36,6 +37,7 @@ import {
   FIELD_TYPES,
   FLOW_NODE_LABELS,
   FLOW_NODE_LIBRARY,
+  FLOW_NODE_STYLES,
   GOAL_OPTIONS,
   INDUSTRY_OPTIONS,
   MESSAGE_STATE_VARIABLES,
@@ -212,6 +214,12 @@ export default function AutomationTemplates() {
     const nodeMap = new Map(flowNodes.map((node) => [node.id, node]))
     const routerIds = new Set(flowNodes.filter((node) => node.type === 'router').map((node) => node.id))
 
+    const formatRuleValue = (value: RouterRule['value']) => {
+      if (Array.isArray(value)) return value.join(', ')
+      if (value === undefined || value === null || value === '') return ''
+      return String(value)
+    }
+
     const branchTags = new Map<string, string | undefined>()
     routerIds.forEach((routerId) => {
       const outgoing = flowEdges.filter((edge) => edge.source === routerId)
@@ -237,7 +245,7 @@ export default function AutomationTemplates() {
         if (!isDefault) {
           (condition.rules || []).forEach((rule) => {
             const label = rule.source === 'vars'
-              ? 'vars'
+              ? formatRuleValue(rule.value)
               : rule.source === 'message'
                 ? 'message'
                 : rule.source === 'config'
@@ -878,6 +886,90 @@ export default function AutomationTemplates() {
     setSelectedNodeId(null)
   }
 
+  const handleArrangeFlow = useCallback(() => {
+    if (flowNodes.length === 0) return
+
+    const columnSpacing = 260
+    const rowSpacing = 140
+    const nodeMap = new Map(flowNodes.map((node) => [node.id, node]))
+    const edgesBySource = new Map<string, string[]>()
+
+    flowEdges.forEach((edge) => {
+      if (!edge.source || !edge.target) return
+      const targets = edgesBySource.get(edge.source) ?? []
+      targets.push(edge.target)
+      edgesBySource.set(edge.source, targets)
+    })
+
+    const depthMap = new Map<string, number>()
+    const queue: string[] = []
+
+    if (startNodeId && nodeMap.has(startNodeId)) {
+      depthMap.set(startNodeId, 0)
+      queue.push(startNodeId)
+    } else if (flowNodes[0]?.id) {
+      depthMap.set(flowNodes[0].id, 0)
+      queue.push(flowNodes[0].id)
+    }
+
+    while (queue.length > 0) {
+      const nodeId = queue.shift()
+      if (!nodeId) continue
+      const depth = depthMap.get(nodeId) ?? 0
+      const targets = edgesBySource.get(nodeId) ?? []
+      targets.forEach((targetId) => {
+        const nextDepth = depth + 1
+        const existingDepth = depthMap.get(targetId)
+        if (existingDepth === undefined || nextDepth < existingDepth) {
+          depthMap.set(targetId, nextDepth)
+          queue.push(targetId)
+        }
+      })
+    }
+
+    const maxDepth = depthMap.size ? Math.max(...Array.from(depthMap.values())) : 0
+    flowNodes.forEach((node) => {
+      if (!depthMap.has(node.id)) {
+        depthMap.set(node.id, maxDepth + 1)
+      }
+    })
+
+    const grouped = new Map<number, FlowNode[]>()
+    flowNodes.forEach((node) => {
+      const depth = depthMap.get(node.id) ?? 0
+      const group = grouped.get(depth) ?? []
+      group.push(node)
+      grouped.set(depth, group)
+    })
+
+    const arrangedPositions = new Map<string, { x: number; y: number }>()
+    Array.from(grouped.entries())
+      .sort(([depthA], [depthB]) => depthA - depthB)
+      .forEach(([depth, nodes]) => {
+        nodes
+          .slice()
+          .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0))
+          .forEach((node, index) => {
+            arrangedPositions.set(node.id, {
+              x: depth * columnSpacing,
+              y: index * rowSpacing,
+            })
+          })
+      })
+
+    setFlowNodes((nodes) =>
+      nodes.map((node) => {
+        const position = arrangedPositions.get(node.id)
+        if (!position) return node
+        return { ...node, position }
+      }),
+    )
+
+    requestAnimationFrame(() => {
+      flowInstance?.fitView({ padding: 0.2, duration: 200 })
+    })
+  }, [flowEdges, flowInstance, flowNodes, setFlowNodes, startNodeId])
+
   const handleOpenBuilder = () => {
     if (!selectedDraftId) return
     const nextParams = new URLSearchParams(searchParams)
@@ -894,7 +986,7 @@ export default function AutomationTemplates() {
   }
 
   const renderFlowBuilder = () => (
-    <div className="relative h-full w-full bg-muted/20">
+    <div className="relative h-full w-full bg-gradient-to-br from-background via-muted/20 to-muted/30">
       <div className="absolute inset-0">
         <ReactFlow
           nodes={flowNodes}
@@ -909,22 +1001,17 @@ export default function AutomationTemplates() {
           defaultEdgeOptions={{ type: 'smoothstep' }}
           minZoom={0.2}
           maxZoom={1.5}
-          className="h-full w-full"
+          className="h-full w-full touch-none"
         >
           <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="rgb(var(--muted-foreground) / 0.25)" />
           <MiniMap
             pannable
             zoomable
-            nodeColor={(node) => {
-              if (node.type === 'trigger') return '#2FB16B'
-              if (node.type === 'detect_intent') return '#6B7FD6'
-              if (node.type === 'router') return '#4FA3B8'
-              if (node.type === 'ai_reply') return '#7C8EA4'
-              if (node.type === 'ai_agent') return '#7B6CB6'
-              if (node.type === 'handoff') return '#C96A4A'
-              return '#4B9AD5'
-            }}
-            maskColor="rgba(0,0,0,0.08)"
+            nodeColor={(node) => FLOW_NODE_STYLES[node.type as FlowNodeType]?.miniMap ?? '#4B9AD5'}
+            maskColor="rgb(var(--foreground) / 0.08)"
+            bgColor="rgb(var(--card))"
+            nodeStrokeColor="rgb(var(--border))"
+            className="!rounded-xl !border !border-border !bg-card !shadow-sm"
           />
           <Controls position="bottom-right" />
         </ReactFlow>
@@ -954,24 +1041,28 @@ export default function AutomationTemplates() {
               Templates
             </div>
             <div className="mt-3 space-y-2">
-              {FLOW_NODE_LIBRARY.map((item) => (
-                <button
-                  key={item.type}
-                  className="w-full rounded-lg border border-border/60 bg-background/80 px-3 py-2 text-left transition hover:border-primary/50 hover:bg-muted/40"
-                  onClick={() => {
-                    handleAddNode(item.type)
-                    setPaletteOpen(false)
-                  }}
-                >
-                  <div className="flex items-start gap-2">
-                    <item.icon className="h-4 w-4 text-primary mt-0.5" />
-                    <div>
-                      <div className="text-sm font-medium text-foreground">{item.label}</div>
-                      <div className="text-xs text-muted-foreground">{item.description}</div>
+              {FLOW_NODE_LIBRARY.map((item) => {
+                const style = FLOW_NODE_STYLES[item.type]
+                return (
+                  <button
+                    key={item.type}
+                    className="w-full rounded-lg border border-border/60 bg-background/80 px-3 py-2 text-left transition hover:border-primary/50 hover:bg-muted/40"
+                    onClick={() => {
+                      handleAddNode(item.type)
+                      setPaletteOpen(false)
+                    }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className={`mt-1 h-2.5 w-2.5 rounded-full ${style.dot}`} aria-hidden />
+                      <item.icon className="h-4 w-4 text-foreground mt-0.5" />
+                      <div>
+                        <div className="text-sm font-medium text-foreground">{item.label}</div>
+                        <div className="text-xs text-muted-foreground">{item.description}</div>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
@@ -3077,6 +3168,13 @@ export default function AutomationTemplates() {
                 >
                   <Network className="w-4 h-4" />
                   Fit view
+                </button>
+                <button
+                  className="btn btn-secondary flex items-center gap-2"
+                  onClick={handleArrangeFlow}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                  Arrange
                 </button>
                 <button
                   className="btn btn-secondary flex items-center gap-2"

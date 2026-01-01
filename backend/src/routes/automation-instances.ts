@@ -1,10 +1,15 @@
 import express, { Response } from 'express';
 import mongoose from 'mongoose';
 import AutomationInstance from '../models/AutomationInstance';
+import AutomationSession from '../models/AutomationSession';
+import Conversation from '../models/Conversation';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
+import InstagramAccount from '../models/InstagramAccount';
+import Message from '../models/Message';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
+import { executePreviewFlowForInstance, resolveLatestTemplateVersion } from '../services/automationService';
 
 const router = express.Router();
 
@@ -83,6 +88,87 @@ const hydrateInstances = async (instances: Array<Record<string, any>>) => {
       templateVersion: latestVersion || storedVersion,
     };
   });
+};
+
+const buildPreviewConversation = async (params: {
+  instance: any;
+  instagramAccountId: mongoose.Types.ObjectId;
+}) => {
+  const { instance, instagramAccountId } = params;
+  return Conversation.create({
+    participantName: 'Preview Tester',
+    participantHandle: 'preview',
+    workspaceId: instance.workspaceId,
+    instagramAccountId,
+    platform: 'mock',
+    participantInstagramId: `preview-${instance._id.toString()}`,
+  });
+};
+
+const formatPreviewMessages = (messages: Array<Record<string, any>>) =>
+  messages.map((message) => ({
+    id: message._id?.toString(),
+    text: message.text,
+    from: message.from,
+    createdAt: message.createdAt,
+  }));
+
+const loadPreviewMessages = async (conversationId: mongoose.Types.ObjectId | string) => {
+  const messages = await Message.find({ conversationId })
+    .sort({ createdAt: 1 })
+    .lean();
+  return formatPreviewMessages(messages);
+};
+
+const ensurePreviewSession = async (params: {
+  instance: any;
+  templateVersionId: mongoose.Types.ObjectId;
+  instagramAccountId: mongoose.Types.ObjectId;
+  reset?: boolean;
+  sessionId?: string;
+}) => {
+  const { instance, templateVersionId, instagramAccountId, reset, sessionId } = params;
+  let session = sessionId
+    ? await AutomationSession.findById(sessionId)
+    : await AutomationSession.findOne({
+        automationInstanceId: instance._id,
+        channel: 'preview',
+      }).sort({ updatedAt: -1 });
+
+  const shouldReset = reset || !session || session.status !== 'active' || session.channel !== 'preview';
+  if (shouldReset) {
+    const conversation = await buildPreviewConversation({ instance, instagramAccountId });
+    session = await AutomationSession.create({
+      workspaceId: instance.workspaceId,
+      conversationId: conversation._id,
+      automationInstanceId: instance._id,
+      templateId: instance.templateId,
+      templateVersionId,
+      channel: 'preview',
+      status: 'active',
+      state: {},
+    });
+    return { session, conversation };
+  }
+
+  if (!session) {
+    throw new Error('Preview session missing');
+  }
+
+  if (session.templateVersionId?.toString() !== templateVersionId.toString()) {
+    session.templateVersionId = templateVersionId;
+    await session.save();
+  }
+
+  const conversation = await Conversation.findById(session.conversationId);
+  if (!conversation) {
+    const newConversation = await buildPreviewConversation({ instance, instagramAccountId });
+    session.conversationId = newConversation._id;
+    await session.save();
+    return { session, conversation: newConversation };
+  }
+
+  return { session, conversation };
 };
 
 router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
@@ -253,6 +339,206 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     res.json({ message: 'Automation instance deleted successfully' });
   } catch (error) {
     console.error('Delete automation instance error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/:id/preview-session', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { reset } = req.body || {};
+    const instance = await AutomationInstance.findById(id);
+    if (!instance) {
+      return res.status(404).json({ error: 'Automation instance not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(instance.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const version = await resolveLatestTemplateVersion({
+      templateId: instance.templateId,
+      fallbackVersionId: instance.templateVersionId,
+    });
+    if (!version) {
+      return res.status(400).json({ error: 'Template version not found or unpublished' });
+    }
+
+    const instagramAccount = await InstagramAccount.findOne({ workspaceId: instance.workspaceId })
+      .select('_id')
+      .lean();
+    if (!instagramAccount?._id) {
+      return res.status(400).json({ error: 'Instagram account not connected for this workspace' });
+    }
+
+    const { session, conversation } = await ensurePreviewSession({
+      instance,
+      templateVersionId: version._id,
+      instagramAccountId: instagramAccount._id,
+      reset: Boolean(reset),
+    });
+
+    const messages = await loadPreviewMessages(conversation._id);
+    return res.json({
+      sessionId: session._id,
+      conversationId: conversation._id,
+      status: session.status,
+      messages,
+    });
+  } catch (error) {
+    console.error('Create preview session error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/:id/preview-session/pause', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { sessionId, reason } = req.body || {};
+    if (!sessionId || typeof sessionId !== 'string') {
+      return res.status(400).json({ error: 'sessionId is required' });
+    }
+
+    const instance = await AutomationInstance.findById(id);
+    if (!instance) {
+      return res.status(404).json({ error: 'Automation instance not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(instance.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const session = await AutomationSession.findOne({
+      _id: sessionId,
+      automationInstanceId: instance._id,
+      channel: 'preview',
+    });
+    if (!session) {
+      return res.status(404).json({ error: 'Preview session not found' });
+    }
+
+    session.status = 'paused';
+    session.pausedAt = new Date();
+    session.pauseReason = typeof reason === 'string' ? reason : 'Paused by admin';
+    await session.save();
+
+    return res.json({ session });
+  } catch (error) {
+    console.error('Pause preview session error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/:id/preview-session/stop', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { sessionId, reason } = req.body || {};
+    if (!sessionId || typeof sessionId !== 'string') {
+      return res.status(400).json({ error: 'sessionId is required' });
+    }
+
+    const instance = await AutomationInstance.findById(id);
+    if (!instance) {
+      return res.status(404).json({ error: 'Automation instance not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(instance.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const session = await AutomationSession.findOne({
+      _id: sessionId,
+      automationInstanceId: instance._id,
+      channel: 'preview',
+    });
+    if (!session) {
+      return res.status(404).json({ error: 'Preview session not found' });
+    }
+
+    session.status = 'completed';
+    session.state = {};
+    session.pauseReason = typeof reason === 'string' ? reason : undefined;
+    await session.save();
+
+    return res.json({ session });
+  } catch (error) {
+    console.error('Stop preview session error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/:id/preview-session/message', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { text, sessionId } = req.body || {};
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Message text is required' });
+    }
+
+    const instance = await AutomationInstance.findById(id);
+    if (!instance) {
+      return res.status(404).json({ error: 'Automation instance not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(instance.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const version = await resolveLatestTemplateVersion({
+      templateId: instance.templateId,
+      fallbackVersionId: instance.templateVersionId,
+    });
+    if (!version) {
+      return res.status(400).json({ error: 'Template version not found or unpublished' });
+    }
+
+    const instagramAccount = await InstagramAccount.findOne({ workspaceId: instance.workspaceId })
+      .select('_id')
+      .lean();
+    if (!instagramAccount?._id) {
+      return res.status(400).json({ error: 'Instagram account not connected for this workspace' });
+    }
+
+    const { session, conversation } = await ensurePreviewSession({
+      instance,
+      templateVersionId: version._id,
+      instagramAccountId: instagramAccount._id,
+      sessionId,
+    });
+
+    const trimmedText = text.trim();
+    const customerMessage = await Message.create({
+      conversationId: conversation._id,
+      workspaceId: conversation.workspaceId,
+      text: trimmedText,
+      from: 'customer',
+      platform: 'mock',
+    });
+
+    conversation.lastMessage = customerMessage.text;
+    conversation.lastMessageAt = customerMessage.createdAt;
+    conversation.lastCustomerMessageAt = customerMessage.createdAt;
+    await conversation.save();
+
+    const result = await executePreviewFlowForInstance({
+      instance,
+      session,
+      conversation,
+      messageText: trimmedText,
+    });
+
+    return res.json({
+      success: result.success,
+      error: result.error,
+      sessionId: session._id,
+      messages: result.messages,
+    });
+  } catch (error) {
+    console.error('Send preview message error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

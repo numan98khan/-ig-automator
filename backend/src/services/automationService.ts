@@ -37,6 +37,18 @@ import {
 import { FlowExposedField, FlowTriggerDefinition } from '../types/flow';
 import { AutomationTestContext } from './automation/types';
 
+type AutomationDeliveryMode = 'instagram' | 'preview';
+
+type PreviewAutomationMessage = {
+  id: string;
+  from: 'ai';
+  text: string;
+  buttons?: Array<{ title: string; payload?: string }>;
+  tags?: string[];
+  source?: 'template_flow' | 'ai_reply';
+  createdAt: Date;
+};
+
 type FlowRuntimeEdge = {
   from: string;
   to: string;
@@ -219,7 +231,7 @@ const deepClone = <T>(value: T): T => {
   return JSON.parse(JSON.stringify(value)) as T;
 };
 
-const resolveLatestTemplateVersion = async (params: {
+export const resolveLatestTemplateVersion = async (params: {
   templateId?: mongoose.Types.ObjectId | string;
   fallbackVersionId?: mongoose.Types.ObjectId | string;
 }) => {
@@ -565,6 +577,7 @@ async function ensureAutomationSession(params: {
     automationInstanceId: params.instance._id,
     templateId: params.instance.templateId,
     templateVersionId: params.templateVersionId,
+    channel: 'live',
     status: 'active',
     state: {},
   });
@@ -587,13 +600,15 @@ async function markAutomationReplySent(instanceId: mongoose.Types.ObjectId, time
 async function sendFlowMessage(params: {
   conversation: any;
   instance: any;
-  igAccount: any;
-  recipientId: string;
+  igAccount?: any;
+  recipientId?: string;
   text: string;
   buttons?: Array<{ title: string; payload?: string } | string>;
   platform?: string;
   tags?: string[];
   source?: 'template_flow' | 'ai_reply';
+  deliveryMode?: AutomationDeliveryMode;
+  trackStats?: boolean;
   aiMeta?: {
     shouldEscalate?: boolean;
     escalationReason?: string;
@@ -610,31 +625,37 @@ async function sendFlowMessage(params: {
     platform,
     tags,
     source,
+    deliveryMode = 'instagram',
+    trackStats = true,
     aiMeta,
   } = params;
 
-  await pauseForTypingIfNeeded();
-
   const normalizedButtons = normalizeButtons(buttons);
   let result;
-  if (normalizedButtons.length > 0 && igAccount.instagramAccountId) {
-    result = await sendButtonMessage(
-      igAccount.instagramAccountId,
-      recipientId,
-      text,
-      normalizedButtons.map((button) => ({
-        type: 'postback',
-        title: button.title,
-        payload: button.payload || `button_${button.title}`,
-      })),
-      igAccount.accessToken,
-    );
-  } else {
-    result = await sendInstagramMessage(recipientId, text, igAccount.accessToken);
-  }
+  if (deliveryMode === 'instagram') {
+    await pauseForTypingIfNeeded();
+    if (!igAccount || !igAccount.accessToken || !recipientId) {
+      throw new Error('Instagram account or recipient missing for delivery.');
+    }
+    if (normalizedButtons.length > 0 && igAccount.instagramAccountId) {
+      result = await sendButtonMessage(
+        igAccount.instagramAccountId,
+        recipientId,
+        text,
+        normalizedButtons.map((button) => ({
+          type: 'postback',
+          title: button.title,
+          payload: button.payload || `button_${button.title}`,
+        })),
+        igAccount.accessToken,
+      );
+    } else {
+      result = await sendInstagramMessage(recipientId, text, igAccount.accessToken);
+    }
 
-  if (!result || (!result.message_id && !result.recipient_id)) {
-    throw new Error('Instagram API did not return a valid response.');
+    if (!result || (!result.message_id && !result.recipient_id)) {
+      throw new Error('Instagram API did not return a valid response.');
+    }
   }
 
   const sentAt = new Date();
@@ -643,8 +664,8 @@ async function sendFlowMessage(params: {
     workspaceId: conversation.workspaceId,
     text,
     from: 'ai',
-    platform: platform || conversation.platform || 'instagram',
-    instagramMessageId: result.message_id,
+    platform: deliveryMode === 'preview' ? 'mock' : (platform || conversation.platform || 'instagram'),
+    instagramMessageId: result?.message_id,
     automationSource: source || 'template_flow',
     aiTags: tags,
     aiShouldEscalate: aiMeta?.shouldEscalate,
@@ -659,21 +680,25 @@ async function sendFlowMessage(params: {
   conversation.lastBusinessMessageAt = sentAt;
   await conversation.save();
 
-  await markAutomationReplySent(instance._id, sentAt);
-
-  const increments: Record<string, number> = {
-    outboundMessages: 1,
-    aiReplies: 1,
-  };
-
-  if (tags && tags.length > 0) {
-    tags.forEach(tag => addCountIncrement(increments, 'tagCounts', tag));
+  if (trackStats) {
+    await markAutomationReplySent(instance._id, sentAt);
   }
 
-  const responseMetrics = calculateResponseTime(conversation, sentAt);
-  Object.assign(increments, responseMetrics);
+  if (trackStats) {
+    const increments: Record<string, number> = {
+      outboundMessages: 1,
+      aiReplies: 1,
+    };
 
-  await trackDailyMetric(conversation.workspaceId, sentAt, increments);
+    if (tags && tags.length > 0) {
+      tags.forEach(tag => addCountIncrement(increments, 'tagCounts', tag));
+    }
+
+    const responseMetrics = calculateResponseTime(conversation, sentAt);
+    Object.assign(increments, responseMetrics);
+
+    await trackDailyMetric(conversation.workspaceId, sentAt, increments);
+  }
 
   return message;
 }
@@ -735,8 +760,25 @@ async function handleAiReplyStep(params: {
   messageText: string;
   platform?: string;
   messageContext?: AutomationTestContext;
+  deliveryMode?: AutomationDeliveryMode;
+  onMessageSent?: (message: PreviewAutomationMessage) => void;
+  trackStats?: boolean;
+  logContext?: Record<string, any>;
 }): Promise<{ success: boolean; error?: string }> {
-  const { step, graph, conversation, instance, igAccount, messageText, platform, messageContext } = params;
+  const {
+    step,
+    graph,
+    conversation,
+    instance,
+    igAccount,
+    messageText,
+    platform,
+    messageContext,
+    deliveryMode = 'instagram',
+    onMessageSent,
+    trackStats = true,
+    logContext,
+  } = params;
   const settings = await getWorkspaceSettings(conversation.workspaceId);
   const aiSettings = {
     ...(graph.aiSettings || {}),
@@ -753,13 +795,29 @@ async function handleAiReplyStep(params: {
     workspaceSettings: settings,
   });
   logAutomationStep('flow_ai_reply_generate', replyStart);
+  logAdminEvent({
+    category: 'flow_node',
+    message: 'AI reply generated',
+    details: {
+      ...(logContext || {}),
+      nodeId: step.id,
+      type: 'ai_reply',
+      aiSettings,
+      replyPreview: aiResponse.replyText?.slice(0, 500),
+      tags: aiResponse.tags,
+      shouldEscalate: aiResponse.shouldEscalate,
+      escalationReason: aiResponse.escalationReason,
+      knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
+    },
+    workspaceId: resolveWorkspaceId(logContext),
+  });
 
-  const activeTicket = await getActiveTicket(conversation._id);
+  const activeTicket = deliveryMode === 'preview' ? null : await getActiveTicket(conversation._id);
   if (activeTicket && aiResponse.shouldEscalate) {
     aiResponse.replyText = buildFollowupResponse(activeTicket.followUpCount || 0, aiResponse.replyText);
   } else if (activeTicket && !aiResponse.shouldEscalate) {
     aiResponse.replyText = `${aiResponse.replyText} Your earlier request is with a human teammate and they will confirm that separately.`;
-  } else if (aiResponse.shouldEscalate) {
+  } else if (aiResponse.shouldEscalate && deliveryMode !== 'preview') {
     aiResponse.replyText = buildInitialEscalationReply(aiResponse.replyText);
   }
 
@@ -773,16 +831,29 @@ async function handleAiReplyStep(params: {
     platform,
     tags: aiResponse.tags,
     source: 'ai_reply',
+    deliveryMode,
+    trackStats,
     aiMeta: {
       shouldEscalate: aiResponse.shouldEscalate,
       escalationReason: aiResponse.escalationReason,
       knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
     },
   });
+  if (deliveryMode === 'preview' && onMessageSent) {
+    onMessageSent({
+      id: message._id?.toString() || '',
+      from: 'ai',
+      text: message.text,
+      buttons: normalizeButtons(step.buttons),
+      tags: aiResponse.tags,
+      source: 'ai_reply',
+      createdAt: message.createdAt || new Date(),
+    });
+  }
   logAutomationStep('flow_ai_reply_send', sendStart);
 
   let ticketId = activeTicket?._id;
-  if (aiResponse.shouldEscalate && !ticketId) {
+  if (aiResponse.shouldEscalate && !ticketId && deliveryMode !== 'preview') {
     const ticketStart = nowMs();
     const ticket = await createTicket({
       conversationId: conversation._id,
@@ -807,7 +878,7 @@ async function handleAiReplyStep(params: {
     logAutomationStep('flow_ai_ticket_update', updateStart, { ticketId: ticketId.toString() });
   }
 
-  if (aiResponse.shouldEscalate) {
+  if (aiResponse.shouldEscalate && deliveryMode !== 'preview') {
     const holdMinutes = settings?.humanHoldMinutes || 60;
     const behavior = settings?.humanEscalationBehavior || 'ai_silent';
     conversation.humanRequired = true;
@@ -1009,6 +1080,9 @@ async function executeFlowPlan(params: {
   platform?: string;
   messageContext?: AutomationTestContext;
   config?: Record<string, any>;
+  deliveryMode?: AutomationDeliveryMode;
+  onMessageSent?: (message: PreviewAutomationMessage) => void;
+  trackStats?: boolean;
 }): Promise<{ success: boolean; error?: string; sentCount: number; executedSteps: number }> {
   const {
     plan,
@@ -1020,6 +1094,9 @@ async function executeFlowPlan(params: {
     platform,
     messageContext,
     config,
+    deliveryMode = 'instagram',
+    onMessageSent,
+    trackStats = true,
   } = params;
 
   const runtimeConfig = config && typeof config === 'object' ? config : {};
@@ -1029,11 +1106,21 @@ async function executeFlowPlan(params: {
   let triggered = false;
   let nodeQueue = Array.isArray(session.state?.nodeQueue) ? [...session.state.nodeQueue] : [];
   let fallbackToStart = false;
+  const logContext = {
+    automationSessionId: session._id?.toString(),
+    automationInstanceId: instance._id?.toString(),
+    templateId: instance.templateId?.toString(),
+    templateVersionId: session.templateVersionId?.toString(),
+    conversationId: conversation._id?.toString(),
+    workspaceId: conversation.workspaceId?.toString(),
+  };
 
   const markTriggeredOnce = async () => {
     if (triggered) return;
     triggered = true;
-    await markAutomationTriggered(instance._id, new Date());
+    if (trackStats) {
+      await markAutomationTriggered(instance._id, new Date());
+    }
   };
   const buildNextState = (nextState: Record<string, any>) => {
     const base = { ...nextState };
@@ -1097,6 +1184,7 @@ async function executeFlowPlan(params: {
 
     if (shouldLogNode(step)) {
       logNodeEvent('Node start', {
+        ...logContext,
         nodeId: step.id,
         type: stepType,
         waitForReply: step.waitForReply,
@@ -1113,7 +1201,7 @@ async function executeFlowPlan(params: {
         return { success: false, error: 'Rate limit exceeded', sentCount, executedSteps };
       }
       await markTriggeredOnce();
-      await sendFlowMessage({
+      const message = await sendFlowMessage({
         conversation,
         instance,
         igAccount,
@@ -1123,7 +1211,20 @@ async function executeFlowPlan(params: {
         platform,
         tags: step.tags,
         source: 'template_flow',
+        deliveryMode,
+        trackStats,
       });
+      if (deliveryMode === 'preview' && onMessageSent) {
+        onMessageSent({
+          id: message._id?.toString() || '',
+          from: 'ai',
+          text: message.text || text,
+          buttons: normalizeButtons(step.buttons),
+          tags: step.tags,
+          source: 'template_flow',
+          createdAt: message.createdAt || new Date(),
+        });
+      }
       sentCount += 1;
     } else if (stepType === 'ai_reply') {
       if (rateLimit && !updateRateLimit(session, rateLimit)) {
@@ -1139,6 +1240,10 @@ async function executeFlowPlan(params: {
         messageText,
         platform,
         messageContext,
+        deliveryMode,
+        onMessageSent,
+        trackStats,
+        logContext,
       });
       if (!aiResult.success) {
         return { success: false, error: aiResult.error || 'AI reply failed', sentCount, executedSteps };
@@ -1201,12 +1306,30 @@ async function executeFlowPlan(params: {
         advanceStep: agentResult.advanceStep,
         endConversation: agentResult.endConversation,
       });
+      logAdminEvent({
+        category: 'flow_node',
+        message: 'AI agent response generated',
+        details: {
+          ...(logContext || {}),
+          nodeId: step.id,
+          type: 'ai_agent',
+          aiSettings,
+          replyPreview: agentResult.replyText?.slice(0, 500),
+          advanceStep: agentResult.advanceStep,
+          endConversation: agentResult.endConversation,
+          shouldStop: agentResult.shouldStop,
+          missingFields: agentResult.missingFields,
+          collectedFields: agentResult.collectedFields,
+          stepIndex: agentStepIndex,
+        },
+        workspaceId: resolveWorkspaceId(logContext),
+      });
 
       if (!agentResult.replyText) {
         return { success: false, error: 'AI agent reply missing', sentCount, executedSteps };
       }
 
-      await sendFlowMessage({
+      const message = await sendFlowMessage({
         conversation,
         instance,
         igAccount,
@@ -1214,7 +1337,18 @@ async function executeFlowPlan(params: {
         text: agentResult.replyText,
         platform,
         source: 'ai_reply',
+        deliveryMode,
+        trackStats,
       });
+      if (deliveryMode === 'preview' && onMessageSent) {
+        onMessageSent({
+          id: message._id?.toString() || '',
+          from: 'ai',
+          text: message.text || agentResult.replyText,
+          source: 'ai_reply',
+          createdAt: message.createdAt || new Date(),
+        });
+      }
       sentCount += 1;
 
       const collectedFields = agentResult.collectedFields || {};
@@ -1283,27 +1417,29 @@ async function executeFlowPlan(params: {
       }
     } else if (stepType === 'handoff') {
       await markTriggeredOnce();
-      const topic = step.handoff?.topic || 'Handoff requested';
-      const summary = step.handoff?.summary || 'Flow requested handoff to a teammate.';
-      const handoffStart = nowMs();
-      await createTicket({
-        conversationId: conversation._id,
-        topicSummary: topic.slice(0, 140),
-        reason: summary,
-        createdBy: 'system',
-        customerMessage: messageText,
-      });
-      logAutomationStep('flow_handoff', handoffStart);
+      if (deliveryMode !== 'preview') {
+        const topic = step.handoff?.topic || 'Handoff requested';
+        const summary = step.handoff?.summary || 'Flow requested handoff to a teammate.';
+        const handoffStart = nowMs();
+        await createTicket({
+          conversationId: conversation._id,
+          topicSummary: topic.slice(0, 140),
+          reason: summary,
+          createdBy: 'system',
+          customerMessage: messageText,
+        });
+        logAutomationStep('flow_handoff', handoffStart);
 
-      conversation.humanRequired = true;
-      conversation.humanRequiredReason = topic;
-      conversation.humanTriggeredAt = new Date();
-      conversation.humanTriggeredByMessageId = undefined;
-      conversation.humanHoldUntil = new Date(Date.now() + 60 * 60 * 1000);
-      await conversation.save();
+        conversation.humanRequired = true;
+        conversation.humanRequiredReason = topic;
+        conversation.humanTriggeredAt = new Date();
+        conversation.humanTriggeredByMessageId = undefined;
+        conversation.humanHoldUntil = new Date(Date.now() + 60 * 60 * 1000);
+        await conversation.save();
+      }
 
       if (step.handoff?.message) {
-        await sendFlowMessage({
+        const message = await sendFlowMessage({
           conversation,
           instance,
           igAccount,
@@ -1311,7 +1447,18 @@ async function executeFlowPlan(params: {
           text: step.handoff.message,
           platform,
           source: 'template_flow',
+          deliveryMode,
+          trackStats,
         });
+        if (deliveryMode === 'preview' && onMessageSent) {
+          onMessageSent({
+            id: message._id?.toString() || '',
+            from: 'ai',
+            text: message.text || step.handoff.message,
+            source: 'template_flow',
+            createdAt: message.createdAt || new Date(),
+          });
+        }
         sentCount += 1;
       }
     } else if (stepType === 'detect_intent') {
@@ -1339,6 +1486,7 @@ async function executeFlowPlan(params: {
 
     if (shouldLogNode(step)) {
       logNodeEvent('Node complete', {
+        ...logContext,
         nodeId: step.id,
         type: stepType,
         executedSteps,
@@ -1513,6 +1661,85 @@ async function executeFlowForInstance(params: {
   return result.success
     ? { success: true }
     : { success: false, error: result.error || 'Flow execution failed' };
+}
+
+export async function executePreviewFlowForInstance(params: {
+  instance: any;
+  session: any;
+  conversation: any;
+  messageText: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{ success: boolean; error?: string; messages: PreviewAutomationMessage[] }> {
+  const { instance, session, conversation, messageText, messageContext } = params;
+  const version = await resolveLatestTemplateVersion({
+    templateId: instance.templateId,
+    fallbackVersionId: session.templateVersionId || instance.templateVersionId,
+  });
+  if (!version) {
+    return { success: false, error: 'Template version not found', messages: [] };
+  }
+
+  const runtime = resolveFlowRuntime(version, instance);
+  if (!runtime) {
+    return { success: false, error: 'Flow runtime unavailable', messages: [] };
+  }
+
+  const plan = buildExecutionPlan(runtime.graph);
+  if (!plan) {
+    return { success: false, error: 'Flow graph missing runnable steps', messages: [] };
+  }
+
+  const state = session.state || {};
+  const hasActiveState = Boolean(
+    state.stepIndex !== undefined ||
+    state.nodeId ||
+    (Array.isArray(state.nodeQueue) && state.nodeQueue.length > 0) ||
+    state.agent?.nodeId,
+  );
+
+  if (!hasActiveState) {
+    const triggers = runtime.triggers || [];
+    const dmTriggers = triggers.filter((trigger) => trigger.type === 'dm_message');
+    if (dmTriggers.length === 0) {
+      return { success: false, error: 'No triggers configured for preview', messages: [] };
+    }
+    let matched = false;
+    for (const trigger of dmTriggers) {
+      if (await matchesTriggerConfig(messageText || '', trigger.config, messageContext)) {
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      return { success: false, error: 'Trigger conditions did not match', messages: [] };
+    }
+  }
+
+  if (session.templateVersionId?.toString() !== version._id.toString()) {
+    session.templateVersionId = version._id;
+  }
+
+  session.lastCustomerMessageAt = new Date();
+
+  const outbound: PreviewAutomationMessage[] = [];
+  const result = await executeFlowPlan({
+    plan,
+    session,
+    instance,
+    conversation,
+    igAccount: null,
+    messageText,
+    platform: 'mock',
+    messageContext,
+    config: runtime.config,
+    deliveryMode: 'preview',
+    onMessageSent: (message) => outbound.push(message),
+    trackStats: false,
+  });
+
+  return result.success
+    ? { success: true, messages: outbound }
+    : { success: false, error: result.error || 'Flow execution failed', messages: outbound };
 }
 
 /**

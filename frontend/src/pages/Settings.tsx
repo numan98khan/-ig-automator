@@ -206,7 +206,7 @@ export default function Settings() {
 
       <div className="flex flex-col lg:flex-row gap-6">
         <aside className="lg:w-64 flex-shrink-0">
-          <div className="bg-card/80 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-2 space-y-1 shadow-sm backdrop-blur-sm">
+          <div className="bg-white/50 dark:bg-white/5 border border-border/70 dark:border-white/10 rounded-xl p-2 space-y-1 shadow-sm backdrop-blur-sm">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;

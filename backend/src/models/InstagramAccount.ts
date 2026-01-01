@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IInstagramAccount extends Document {
   username: string;
   workspaceId: mongoose.Types.ObjectId;
-  status: 'connected' | 'mock';
+  status: 'connected';
 
   // OAuth & Account Details
   instagramAccountId?: string;  // Business Account ID (for webhooks)
@@ -36,8 +36,8 @@ const instagramAccountSchema = new Schema<IInstagramAccount>({
   },
   status: {
     type: String,
-    enum: ['connected', 'mock'],
-    default: 'mock',
+    enum: ['connected'],
+    default: 'connected',
   },
 
   // OAuth & Account Details
