@@ -7,7 +7,6 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "seed": "tsx src/utils/seed.ts",
     "seed:tiers": "tsx src/utils/runSeedTiers.ts"
   },
   "dependencies": {

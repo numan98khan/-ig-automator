@@ -70,7 +70,7 @@ export interface InstagramAccount {
   _id: string;
   username: string;
   workspaceId: string;
-  status: 'connected' | 'mock';
+  status: 'connected';
   name?: string;
   profilePictureUrl?: string;
   tokenExpiresAt?: string;
@@ -633,12 +633,6 @@ export const instagramAPI = {
   // OAuth flow - Get authorization URL
   getAuthUrl: async (workspaceId: string): Promise<{ authUrl: string }> => {
     const { data } = await api.get(`/api/instagram/auth?workspaceId=${workspaceId}`);
-    return data;
-  },
-
-  // Legacy mock connection (for demo mode)
-  connect: async (username: string, workspaceId: string): Promise<InstagramAccount> => {
-    const { data } = await api.post('/api/instagram/connect', { username, workspaceId });
     return data;
   },
 
