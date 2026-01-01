@@ -388,6 +388,84 @@ router.post('/:id/preview-session', authenticate, async (req: AuthRequest, res: 
   }
 });
 
+router.post('/:id/preview-session/pause', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { sessionId, reason } = req.body || {};
+    if (!sessionId || typeof sessionId !== 'string') {
+      return res.status(400).json({ error: 'sessionId is required' });
+    }
+
+    const instance = await AutomationInstance.findById(id);
+    if (!instance) {
+      return res.status(404).json({ error: 'Automation instance not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(instance.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const session = await AutomationSession.findOne({
+      _id: sessionId,
+      automationInstanceId: instance._id,
+      channel: 'preview',
+    });
+    if (!session) {
+      return res.status(404).json({ error: 'Preview session not found' });
+    }
+
+    session.status = 'paused';
+    session.pausedAt = new Date();
+    session.pauseReason = typeof reason === 'string' ? reason : 'Paused by admin';
+    await session.save();
+
+    return res.json({ session });
+  } catch (error) {
+    console.error('Pause preview session error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/:id/preview-session/stop', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { sessionId, reason } = req.body || {};
+    if (!sessionId || typeof sessionId !== 'string') {
+      return res.status(400).json({ error: 'sessionId is required' });
+    }
+
+    const instance = await AutomationInstance.findById(id);
+    if (!instance) {
+      return res.status(404).json({ error: 'Automation instance not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(instance.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const session = await AutomationSession.findOne({
+      _id: sessionId,
+      automationInstanceId: instance._id,
+      channel: 'preview',
+    });
+    if (!session) {
+      return res.status(404).json({ error: 'Preview session not found' });
+    }
+
+    session.status = 'completed';
+    session.state = {};
+    session.pauseReason = typeof reason === 'string' ? reason : undefined;
+    await session.save();
+
+    return res.json({ session });
+  } catch (error) {
+    console.error('Stop preview session error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.post('/:id/preview-session/message', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;

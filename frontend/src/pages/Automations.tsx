@@ -119,6 +119,9 @@ const Automations: React.FC = () => {
   const [previewMessages, setPreviewMessages] = useState<AutomationPreviewMessage[]>([]);
   const [previewInputValue, setPreviewInputValue] = useState('');
   const [previewStatus, setPreviewStatus] = useState<string | null>(null);
+  const [previewSessionStatus, setPreviewSessionStatus] = useState<
+    'active' | 'paused' | 'completed' | 'handoff' | null
+  >(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewSending, setPreviewSending] = useState(false);
 
@@ -199,6 +202,7 @@ const Automations: React.FC = () => {
     setPreviewMessages([]);
     setPreviewInputValue('');
     setPreviewStatus(null);
+    setPreviewSessionStatus(null);
   };
 
   const loadPreviewSession = async (automation: AutomationInstance, options?: { reset?: boolean }) => {
@@ -208,6 +212,7 @@ const Automations: React.FC = () => {
       const session = await automationAPI.createPreviewSession(automation._id, options);
       setPreviewSessionId(session.sessionId);
       setPreviewMessages(session.messages || []);
+      setPreviewSessionStatus(session.status || null);
     } catch (err) {
       console.error('Error loading preview session:', err);
       setPreviewStatus('Unable to start preview. Please try again.');
@@ -421,6 +426,14 @@ const Automations: React.FC = () => {
   const handlePreviewSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editingAutomation) return;
+    if (previewSessionStatus === 'paused') {
+      setPreviewStatus('Preview is paused. Resume or reset to continue.');
+      return;
+    }
+    if (previewSessionStatus === 'completed') {
+      setPreviewStatus('Preview is stopped. Reset to start a new run.');
+      return;
+    }
     const trimmed = previewInputValue.trim();
     if (!trimmed) return;
 
@@ -454,6 +467,48 @@ const Automations: React.FC = () => {
     } finally {
       setPreviewSending(false);
     }
+  };
+
+  const handlePreviewPause = async () => {
+    if (!editingAutomation || !previewSessionId) return;
+    try {
+      setPreviewLoading(true);
+      const response = await automationAPI.pausePreviewSession(editingAutomation._id, {
+        sessionId: previewSessionId,
+        reason: 'Paused from preview console',
+      });
+      setPreviewSessionStatus(response.session.status);
+      setPreviewStatus('Preview paused.');
+    } catch (err) {
+      console.error('Error pausing preview session:', err);
+      setPreviewStatus('Failed to pause preview session.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handlePreviewStop = async () => {
+    if (!editingAutomation || !previewSessionId) return;
+    try {
+      setPreviewLoading(true);
+      const response = await automationAPI.stopPreviewSession(editingAutomation._id, {
+        sessionId: previewSessionId,
+        reason: 'Stopped from preview console',
+      });
+      setPreviewSessionStatus(response.session.status);
+      setPreviewStatus('Preview stopped.');
+    } catch (err) {
+      console.error('Error stopping preview session:', err);
+      setPreviewStatus('Failed to stop preview session.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handlePreviewReset = async () => {
+    if (!editingAutomation) return;
+    await loadPreviewSession(editingAutomation, { reset: true });
+    setPreviewStatus('Preview reset.');
   };
 
   if (!currentWorkspace) return null;
@@ -514,10 +569,20 @@ const Automations: React.FC = () => {
                   previewMessages={previewMessages}
                   previewInputValue={previewInputValue}
                   previewStatus={previewStatus}
+                  previewSessionStatus={previewSessionStatus}
                   previewLoading={previewLoading}
-                  previewSendDisabled={previewSending || previewLoading || previewInputValue.trim().length === 0}
+                  previewSendDisabled={
+                    previewSending ||
+                    previewLoading ||
+                    previewInputValue.trim().length === 0 ||
+                    previewSessionStatus === 'paused' ||
+                    previewSessionStatus === 'completed'
+                  }
                   onPreviewInputChange={handlePreviewInputChange}
                   onPreviewSubmit={handlePreviewSubmit}
+                  onPreviewPause={handlePreviewPause}
+                  onPreviewStop={handlePreviewStop}
+                  onPreviewReset={handlePreviewReset}
                 />
               ) : (
                 <AutomationsListView

@@ -182,6 +182,10 @@ export interface AutomationPreviewSession {
   messages: AutomationPreviewMessage[];
 }
 
+export interface AutomationPreviewSessionResponse {
+  session: AutomationSession;
+}
+
 export interface AutomationSessionNodeSummaryItem {
   label: string;
   value: string;
@@ -777,6 +781,22 @@ export const automationAPI = {
     payload: { text: string; sessionId?: string },
   ): Promise<{ success: boolean; error?: string; sessionId: string; messages: AutomationPreviewMessage[] }> => {
     const { data } = await api.post(`/api/automations/${id}/preview-session/message`, payload);
+    return data;
+  },
+
+  pausePreviewSession: async (
+    id: string,
+    payload: { sessionId: string; reason?: string },
+  ): Promise<AutomationPreviewSessionResponse> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-session/pause`, payload);
+    return data;
+  },
+
+  stopPreviewSession: async (
+    id: string,
+    payload: { sessionId: string; reason?: string },
+  ): Promise<AutomationPreviewSessionResponse> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-session/stop`, payload);
     return data;
   },
 };

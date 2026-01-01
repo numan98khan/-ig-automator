@@ -55,10 +55,14 @@ type AutomationsCreateViewProps = {
   previewMessages: PreviewMessage[];
   previewInputValue: string;
   previewStatus?: string | null;
+  previewSessionStatus?: 'active' | 'paused' | 'completed' | 'handoff' | null;
   previewLoading?: boolean;
   previewSendDisabled?: boolean;
   onPreviewInputChange: (value: string) => void;
   onPreviewSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onPreviewPause: () => void;
+  onPreviewStop: () => void;
+  onPreviewReset: () => void;
 };
 
 const formatConfigValue = (value: any) => {
@@ -139,10 +143,14 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   previewMessages,
   previewInputValue,
   previewStatus,
+  previewSessionStatus,
   previewLoading,
   previewSendDisabled,
   onPreviewInputChange,
   onPreviewSubmit,
+  onPreviewPause,
+  onPreviewStop,
+  onPreviewReset,
 }) => {
   const updateFormData = (updates: Partial<CreateFormData>) => {
     onUpdateFormData((prev) => ({ ...prev, ...updates }));
@@ -471,6 +479,34 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                     {editingAutomation && previewStatus && (
                       <div className="mt-3 text-xs text-muted-foreground text-center">
                         {previewStatus}
+                      </div>
+                    )}
+                    {editingAutomation && (
+                      <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={onPreviewPause}
+                          disabled={previewLoading || previewSessionStatus === 'paused'}
+                          className="px-3 py-1 rounded-full border border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {previewSessionStatus === 'paused' ? 'Paused' : 'Pause'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onPreviewStop}
+                          disabled={previewLoading || previewSessionStatus === 'completed'}
+                          className="px-3 py-1 rounded-full border border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {previewSessionStatus === 'completed' ? 'Stopped' : 'Stop'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onPreviewReset}
+                          disabled={previewLoading}
+                          className="px-3 py-1 rounded-full border border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          Reset
+                        </button>
                       </div>
                     )}
                   </div>
