@@ -1950,7 +1950,7 @@ const CRM: React.FC = () => {
         </div>
       )}
       {moveToast && (
-        <div className="fixed bottom-16 right-6 z-50 rounded-full px-4 py-2 text-xs font-semibold shadow-lg bg-card/95 border border-border flex items-center gap-3">
+        <div className="fixed bottom-16 left-6 z-50 rounded-full px-4 py-2 text-xs font-semibold shadow-lg bg-card/95 border border-border flex items-center gap-3">
           <span>{moveToast.message}</span>
           {moveToast.onUndo && (
             <button
