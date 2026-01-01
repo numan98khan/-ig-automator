@@ -572,10 +572,10 @@ const applyConversationTags = (conversation: any, tags?: string[]) => {
   const tagList = normalized.filter((tag) => !tag.startsWith('stage:'));
   if (tagList.length === 0) return;
 
-  const existing = Array.isArray(conversation.tags)
-    ? conversation.tags.map((tag: any) => String(tag))
+  const existing: string[] = Array.isArray(conversation.tags)
+    ? conversation.tags.map((tag: unknown) => String(tag))
     : [];
-  const seen = new Set(existing.map((tag) => tag.toLowerCase()));
+  const seen = new Set(existing.map((tag: string) => tag.toLowerCase()));
   tagList.forEach((tag) => {
     if (seen.has(tag)) return;
     seen.add(tag);
