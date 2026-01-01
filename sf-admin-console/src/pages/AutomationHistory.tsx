@@ -144,13 +144,6 @@ export default function AutomationHistory() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Automation Run History</h1>
-        <p className="text-muted-foreground mt-2">
-          Inspect recent automation runs, view their flow snapshots, and drill into node-level logs.
-        </p>
-      </div>
-
       <div className="card space-y-4">
         <AutomationsTabs />
       </div>
