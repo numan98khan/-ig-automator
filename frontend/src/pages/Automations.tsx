@@ -142,6 +142,17 @@ const Automations: React.FC = () => {
     () => selectedTemplate?.currentVersion?.exposedFields || [],
     [selectedTemplate],
   );
+  const summaryStats = useMemo(() => {
+    const totalTriggered = automations.reduce((sum, automation) => sum + (automation.stats?.totalTriggered || 0), 0);
+    const totalRepliesSent = automations.reduce((sum, automation) => sum + (automation.stats?.totalRepliesSent || 0), 0);
+    const activeCount = automations.filter((automation) => automation.isActive).length;
+    return {
+      activeCount,
+      totalCount: automations.length,
+      totalTriggered,
+      totalRepliesSent,
+    };
+  }, [automations]);
 
   useEffect(() => {
     const section = searchParams.get('section');
@@ -303,6 +314,32 @@ const Automations: React.FC = () => {
     }
   };
 
+  const handleDuplicate = async (automation: AutomationInstance) => {
+    if (!currentWorkspace) return;
+    try {
+      const template = resolveTemplateForInstance(automation);
+      const templateVersionId = automation.templateVersionId || template?.currentVersion?._id;
+      if (!templateVersionId || !template?._id) {
+        setError('Unable to duplicate automation. Missing template version.');
+        return;
+      }
+
+      await automationAPI.create({
+        name: `${automation.name} Copy`,
+        description: automation.description || '',
+        workspaceId: currentWorkspace._id,
+        isActive: false,
+        templateId: template._id,
+        templateVersionId,
+        userConfig: automation.userConfig || {},
+      });
+      loadData();
+    } catch (err) {
+      console.error('Error duplicating automation:', err);
+      setError('Failed to duplicate automation');
+    }
+  };
+
   const handleSelectTemplate = (template: FlowTemplate) => {
     if (!template.currentVersion) {
       setError('Template is not yet published.');
@@ -396,10 +433,12 @@ const Automations: React.FC = () => {
               ) : (
                 <AutomationsListView
                   automations={automations}
+                  summaryStats={summaryStats}
                   loading={loading}
                   onCreate={handleOpenCreateModal}
                   onOpen={handleOpenEditAutomation}
                   onToggle={handleToggle}
+                  onDuplicate={handleDuplicate}
                   onDelete={handleDelete}
                 />
               )}
