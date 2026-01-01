@@ -112,12 +112,12 @@ const Layout: React.FC = () => {
           <div className="flex items-center gap-2 min-w-0">
             <Link
               to="/"
-              className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted transition dark:bg-white/90 dark:border-white/10"
+              className="flex items-center gap-2 rounded-md px-2 py-1 transition"
             >
               <img
-                src="/sendfx.png"
-                alt="SendFx logo"
-                className="h-8 w-auto shrink-0 object-contain"
+                src="/icon.svg"
+                alt="SendFx icon"
+                className="h-10 w-10 md:h-12 md:w-12 shrink-0 object-contain rounded-[10px] md:rounded-[12px] border border-transparent dark:border-white/70"
               />
             </Link>
             <div className="relative" ref={accountMenuRef}>
