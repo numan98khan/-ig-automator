@@ -88,7 +88,14 @@ export default function AutomationHistory() {
       }),
   })
 
-  const workspaces = unwrapData<{ data?: Workspace[] }>(workspacesData)?.data || unwrapData<Workspace[]>(workspacesData) || []
+  const workspacePayload = unwrapData<any>(workspacesData)
+  const workspaces: Workspace[] = Array.isArray(workspacePayload)
+    ? workspacePayload
+    : Array.isArray(workspacePayload?.workspaces)
+      ? workspacePayload.workspaces
+      : Array.isArray(workspacePayload?.data)
+        ? workspacePayload.data
+        : []
   const sessionsPayload = unwrapData<{ sessions: AutomationSessionHistory[] }>(sessionsData)
   const sessions = sessionsPayload?.sessions || []
 
