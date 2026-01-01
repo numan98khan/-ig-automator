@@ -552,6 +552,38 @@ const updateRateLimit = (session: any, rateLimit: AutomationRateLimit): boolean 
   return true;
 };
 
+const CRM_STAGES = ['new', 'engaged', 'qualified', 'won', 'lost'];
+
+const applyConversationTags = (conversation: any, tags?: string[]) => {
+  if (!tags || tags.length === 0) return;
+  const normalized = tags
+    .map((tag) => (typeof tag === 'string' ? tag.trim().toLowerCase() : ''))
+    .filter(Boolean);
+  if (normalized.length === 0) return;
+
+  const stageTag = normalized.find((tag) => tag.startsWith('stage:'));
+  if (stageTag) {
+    const stage = stageTag.split(':')[1];
+    if (CRM_STAGES.includes(stage)) {
+      conversation.stage = stage;
+    }
+  }
+
+  const tagList = normalized.filter((tag) => !tag.startsWith('stage:'));
+  if (tagList.length === 0) return;
+
+  const existing = Array.isArray(conversation.tags)
+    ? conversation.tags.map((tag: any) => String(tag))
+    : [];
+  const seen = new Set(existing.map((tag) => tag.toLowerCase()));
+  tagList.forEach((tag) => {
+    if (seen.has(tag)) return;
+    seen.add(tag);
+    existing.push(tag);
+  });
+  conversation.tags = existing;
+};
+
 async function ensureAutomationSession(params: {
   instance: any;
   conversationId: mongoose.Types.ObjectId;
@@ -675,6 +707,7 @@ async function sendFlowMessage(params: {
     createdAt: sentAt,
   });
 
+  applyConversationTags(conversation, tags);
   conversation.lastMessage = text;
   conversation.lastMessageAt = sentAt;
   conversation.lastBusinessMessageAt = sentAt;
