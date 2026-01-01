@@ -153,52 +153,47 @@ export default function AutomationHistory() {
 
       <div className="card space-y-4">
         <AutomationsTabs />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">Workspace</label>
-            <select
-              className="input w-full"
-              value={filters.workspaceId}
-              onChange={(event) =>
-                setFilters((prev) => ({ ...prev, workspaceId: event.target.value }))
-              }
-            >
-              <option value="">All workspaces</option>
-              {workspaces.map((workspace) => (
-                <option key={workspace._id} value={workspace._id}>
-                  {workspace.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">Channel</label>
-            <select
-              className="input w-full"
-              value={filters.channel}
-              onChange={(event) =>
-                setFilters((prev) => ({ ...prev, channel: event.target.value as 'live' | 'preview' }))
-              }
-            >
-              <option value="live">Live</option>
-              <option value="preview">Preview</option>
-            </select>
-          </div>
-          <div className="flex items-end text-xs text-muted-foreground">
-            {isFetchingSessions ? 'Refreshing…' : `${sessions.length} run(s)`}
-          </div>
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-6">
-        <div className="card h-fit">
-          <div className="flex items-center justify-between">
+      <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)_320px] gap-6">
+        <div className="card h-fit space-y-4">
+          <div className="space-y-3">
             <h3 className="font-semibold text-foreground">Runs</h3>
-            <span className="text-xs text-muted-foreground">
-              {isFetchingSessions ? 'Loading…' : `${sessions.length} total`}
-            </span>
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Workspace</label>
+              <select
+                className="input w-full"
+                value={filters.workspaceId}
+                onChange={(event) =>
+                  setFilters((prev) => ({ ...prev, workspaceId: event.target.value }))
+                }
+              >
+                <option value="">All workspaces</option>
+                {workspaces.map((workspace) => (
+                  <option key={workspace._id} value={workspace._id}>
+                    {workspace.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Channel</label>
+              <select
+                className="input w-full"
+                value={filters.channel}
+                onChange={(event) =>
+                  setFilters((prev) => ({ ...prev, channel: event.target.value as 'live' | 'preview' }))
+                }
+              >
+                <option value="live">Live</option>
+                <option value="preview">Preview</option>
+              </select>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {isFetchingSessions ? 'Refreshing…' : `${sessions.length} run(s)`}
+            </div>
           </div>
-          <div className="mt-4 space-y-3 max-h-[520px] overflow-y-auto pr-2">
+          <div className="space-y-3 max-h-[520px] overflow-y-auto pr-2">
             {sessions.length === 0 ? (
               <div className="text-sm text-muted-foreground">No runs found.</div>
             ) : (
@@ -227,78 +222,76 @@ export default function AutomationHistory() {
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="card">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="font-semibold text-foreground">Flow Snapshot</h3>
-                <p className="text-xs text-muted-foreground">
-                  {selectedSession
-                    ? `Template: ${selectedSession.templateName || selectedSession.templateId || 'Unknown'}`
-                    : 'Select a run to view its flow.'}
-                </p>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {isFetchingVersion ? 'Loading flow…' : selectedSession?.templateVersionId || '—'}
-              </div>
+        <div className="card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-foreground">Flow Snapshot</h3>
+              <p className="text-xs text-muted-foreground">
+                {selectedSession
+                  ? `Template: ${selectedSession.templateName || selectedSession.templateId || 'Unknown'}`
+                  : 'Select a run to view its flow.'}
+              </p>
             </div>
-            <div className="mt-4 h-[420px] rounded-lg border border-border bg-muted/30">
-              {selectedSession ? (
-                <ReactFlow
-                  nodes={flowData.nodes as Node[]}
-                  edges={flowData.edges}
-                  nodeTypes={nodeTypes}
-                  fitView
-                  nodesDraggable={false}
-                  nodesConnectable={false}
-                  onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-                  elementsSelectable
-                >
-                  <Background gap={16} size={1} />
-                  <Controls showInteractive={false} />
-                </ReactFlow>
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  Select a run to view the flow.
-                </div>
-              )}
+            <div className="text-xs text-muted-foreground">
+              {isFetchingVersion ? 'Loading flow…' : selectedSession?.templateVersionId || '—'}
             </div>
           </div>
+          <div className="mt-4 h-[520px] rounded-lg border border-border bg-muted/30">
+            {selectedSession ? (
+              <ReactFlow
+                nodes={flowData.nodes as Node[]}
+                edges={flowData.edges}
+                nodeTypes={nodeTypes}
+                fitView
+                nodesDraggable={false}
+                nodesConnectable={false}
+                onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+                elementsSelectable
+              >
+                <Background gap={16} size={1} />
+                <Controls showInteractive={false} />
+              </ReactFlow>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Select a run to view the flow.
+              </div>
+            )}
+          </div>
+        </div>
 
-          <div className="card">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="font-semibold text-foreground">Node Logs</h3>
-                <p className="text-xs text-muted-foreground">
-                  {selectedNodeId ? `Node ${selectedNodeId}` : 'Select a node to inspect logs.'}
-                </p>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {isFetchingLogs ? 'Loading logs…' : `${nodeLogs.length} event(s)`}
-              </div>
+        <div className="card h-fit">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-foreground">Node Details</h3>
+              <p className="text-xs text-muted-foreground">
+                {selectedNodeId ? `Node ${selectedNodeId}` : 'Select a node to inspect logs.'}
+              </p>
             </div>
-            <div className="mt-4 space-y-3 max-h-[320px] overflow-y-auto pr-2">
-              {!selectedNodeId ? (
-                <div className="text-sm text-muted-foreground">Pick a node to see its log events.</div>
-              ) : nodeLogs.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No logs found for this node.</div>
-              ) : (
-                nodeLogs.map((event) => (
-                  <div key={event._id} className="rounded-lg border border-border/60 bg-muted/20 p-3">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{formatTimestamp(event.createdAt)}</span>
-                      <span className="uppercase">{event.level}</span>
-                    </div>
-                    <div className="mt-2 text-sm text-foreground">{event.message}</div>
-                    {event.details ? (
-                      <pre className="mt-2 text-xs whitespace-pre-wrap break-words text-muted-foreground">
-                        {JSON.stringify(event.details, null, 2)}
-                      </pre>
-                    ) : null}
+            <div className="text-xs text-muted-foreground">
+              {isFetchingLogs ? 'Loading logs…' : `${nodeLogs.length} event(s)`}
+            </div>
+          </div>
+          <div className="mt-4 space-y-3 max-h-[520px] overflow-y-auto pr-2">
+            {!selectedNodeId ? (
+              <div className="text-sm text-muted-foreground">Pick a node to see its log events.</div>
+            ) : nodeLogs.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No logs found for this node.</div>
+            ) : (
+              nodeLogs.map((event) => (
+                <div key={event._id} className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{formatTimestamp(event.createdAt)}</span>
+                    <span className="uppercase">{event.level}</span>
                   </div>
-                ))
-              )}
-            </div>
+                  <div className="mt-2 text-sm text-foreground">{event.message}</div>
+                  {event.details ? (
+                    <pre className="mt-2 text-xs whitespace-pre-wrap break-words text-muted-foreground">
+                      {JSON.stringify(event.details, null, 2)}
+                    </pre>
+                  ) : null}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
