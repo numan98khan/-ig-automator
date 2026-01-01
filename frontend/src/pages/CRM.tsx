@@ -921,7 +921,7 @@ const CRM: React.FC = () => {
       )}
       {selectedContact && !detailLoading && (
         <div className="flex flex-col h-full">
-          <div className="sticky top-0 bg-card/95 pb-3 border-b border-border z-10">
+          <div className="sticky top-0 bg-background pb-3 border-b border-border z-10">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Badge variant={stageVariant[contactForm.stage]}>{contactForm.stage.toUpperCase()}</Badge>
@@ -1732,8 +1732,8 @@ const CRM: React.FC = () => {
                 className="absolute inset-0 bg-background/40 backdrop-blur-sm z-20"
                 onClick={() => setKanbanDrawerOpen(false)}
               />
-              <div className="absolute inset-y-0 right-0 w-full max-w-[440px] md:max-w-[35%] bg-background/95 border-l border-border shadow-2xl z-30 flex flex-col">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
+              <div className="absolute inset-y-0 right-0 w-full max-w-[440px] md:max-w-[35%] bg-background border-l border-border shadow-2xl z-30 flex flex-col">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background">
                   <div className="text-sm font-semibold text-foreground">Contact details</div>
                   <button
                     type="button"
@@ -1743,7 +1743,7 @@ const CRM: React.FC = () => {
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="flex-1 min-h-0 overflow-y-auto p-4">
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-background">
                   <div className="flex flex-col min-h-0">{detailsPanelContent}</div>
                 </div>
               </div>
