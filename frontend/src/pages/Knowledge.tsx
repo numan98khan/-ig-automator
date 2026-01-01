@@ -221,8 +221,8 @@ const Knowledge: React.FC = () => {
               Manage the knowledge your AI assistant uses to answer questions.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative w-full sm:w-64">
+          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+            <div className="relative w-full sm:w-64 lg:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="text"
@@ -232,28 +232,30 @@ const Knowledge: React.FC = () => {
                 className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-full focus:outline-none focus:ring-2 focus:ring-ring text-sm transition-all"
               />
             </div>
-            <select
-              value={storageFilter}
-              onChange={(e) => setStorageFilter(e.target.value as StorageFilter)}
-              className="rounded-full border border-border bg-background px-3 py-2 text-sm text-foreground"
-            >
-              <option value="all">All sources</option>
-              <option value="vector">RAG (pgvector)</option>
-              <option value="text">Text only</option>
-            </select>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value as KnowledgeCategory)}
-              className="rounded-full border border-border bg-background px-3 py-2 text-sm text-foreground"
-            >
-              {(['All', 'Pricing', 'Policies', 'FAQ', 'Shipping', 'General'] as KnowledgeCategory[]).map(
-                (category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ),
-              )}
-            </select>
+            <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+              <select
+                value={storageFilter}
+                onChange={(e) => setStorageFilter(e.target.value as StorageFilter)}
+                className="rounded-full border border-border bg-background px-3 py-2 text-sm text-foreground"
+              >
+                <option value="all">All sources</option>
+                <option value="vector">RAG (pgvector)</option>
+                <option value="text">Text only</option>
+              </select>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value as KnowledgeCategory)}
+                className="rounded-full border border-border bg-background px-3 py-2 text-sm text-foreground"
+              >
+                {(['All', 'Pricing', 'Policies', 'FAQ', 'Shipping', 'General'] as KnowledgeCategory[]).map(
+                  (category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
             <Button
               onClick={() => handleOpenModal()}
               leftIcon={<Plus className="w-4 h-4" />}
@@ -326,19 +328,19 @@ const Knowledge: React.FC = () => {
                 onClick={() => handleOpenModal(item)}
               >
                 <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 text-primary rounded-lg">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="p-2 bg-primary/10 text-primary rounded-lg flex-shrink-0">
                       <FileText className="w-4 h-4" />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground truncate pr-8">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-foreground truncate">
                         {item.title}
                       </h3>
                       <span className="text-xs text-muted-foreground">{getCategory(item)}</span>
                     </div>
                   </div>
                   <span
-                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold ${
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold flex-shrink-0 ${
                       (item.storageMode || 'vector') === 'vector'
                         ? 'bg-primary/10 text-primary'
                         : 'bg-muted text-muted-foreground'
