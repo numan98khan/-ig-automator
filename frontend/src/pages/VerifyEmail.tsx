@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { authAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import Seo from '../components/Seo';
 
 const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -53,42 +54,44 @@ const VerifyEmail: React.FC = () => {
   }, [searchParams, navigate, refreshUser]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-        <div className="text-center">
-          {/* Icon */}
-          <div className="mx-auto w-16 h-16 mb-6 flex items-center justify-center">
-            {status === 'loading' && (
-              <Loader2 className="w-16 h-16 text-purple-600 animate-spin" />
-            )}
-            {status === 'success' && (
-              <CheckCircle className="w-16 h-16 text-green-600" />
-            )}
-            {status === 'error' && (
-              <XCircle className="w-16 h-16 text-red-600" />
-            )}
-          </div>
-
-          {/* Title */}
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            {status === 'loading' && 'Verifying Your Email...'}
-            {status === 'success' && 'Email Verified!'}
-            {status === 'error' && 'Verification Failed'}
-          </h1>
-
-          {/* Message */}
-          <p className="text-gray-600 mb-6">
-            {message}
-          </p>
-
-          {/* Success - Auto redirect message */}
-          {status === 'success' && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-green-800">
-                Redirecting you to your inbox in a few seconds...
-              </p>
+    <>
+      <Seo title="Verify Email | SendFx" robots="noindex, nofollow" />
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+          <div className="text-center">
+            {/* Icon */}
+            <div className="mx-auto w-16 h-16 mb-6 flex items-center justify-center">
+              {status === 'loading' && (
+                <Loader2 className="w-16 h-16 text-purple-600 animate-spin" />
+              )}
+              {status === 'success' && (
+                <CheckCircle className="w-16 h-16 text-green-600" />
+              )}
+              {status === 'error' && (
+                <XCircle className="w-16 h-16 text-red-600" />
+              )}
             </div>
-          )}
+
+            {/* Title */}
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">
+              {status === 'loading' && 'Verifying Your Email...'}
+              {status === 'success' && 'Email Verified!'}
+              {status === 'error' && 'Verification Failed'}
+            </h1>
+
+            {/* Message */}
+            <p className="text-gray-600 mb-6">
+              {message}
+            </p>
+
+            {/* Success - Auto redirect message */}
+            {status === 'success' && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-green-800">
+                Redirecting you to your inbox in a few seconds...
+                </p>
+              </div>
+            )}
 
           {/* Error - Action buttons */}
           {status === 'error' && (
@@ -116,8 +119,9 @@ const VerifyEmail: React.FC = () => {
             </div>
           </div>
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

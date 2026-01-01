@@ -28,6 +28,7 @@ import { useTheme } from '../context/ThemeContext';
 import SupportTicketModal from './SupportTicketModal';
 import { recordBreadcrumb } from '../services/diagnostics';
 import AssistantWidget from './AssistantWidget';
+import Seo from './Seo';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -54,6 +55,17 @@ const Layout: React.FC = () => {
     ];
 
     return links;
+  }, [location.pathname]);
+
+  const pageTitle = useMemo(() => {
+    const path = location.pathname;
+    if (path === '/' || path.startsWith('/inbox')) return 'Inbox';
+    if (path.startsWith('/dashboard')) return 'Dashboard';
+    if (path.startsWith('/crm')) return 'CRM';
+    if (path.startsWith('/automations')) return 'Automations';
+    if (path.startsWith('/settings')) return 'Settings';
+    if (path.startsWith('/support')) return 'Support';
+    return 'App';
   }, [location.pathname]);
 
   const connectedAccountLabel = useMemo(() => {
@@ -92,6 +104,7 @@ const Layout: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground relative selection:bg-primary/30 transition-colors duration-300">
+      <Seo title={`${pageTitle} | SendFx`} robots="noindex, nofollow" />
 
       {/* Topographic / Contour Lines Background */}
       <div className="fixed inset-0 pointer-events-none z-0">

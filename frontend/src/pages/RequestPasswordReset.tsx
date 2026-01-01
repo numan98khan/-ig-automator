@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, ArrowLeft, CheckCircle } from 'lucide-react';
 import { authAPI } from '../services/api';
+import Seo from '../components/Seo';
 
 const RequestPasswordReset: React.FC = () => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  const seo = <Seo title="Reset Password | SendFx" robots="noindex, nofollow" />;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,55 +34,60 @@ const RequestPasswordReset: React.FC = () => {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-          <div className="text-center">
-            <div className="mx-auto w-16 h-16 mb-6 flex items-center justify-center">
-              <CheckCircle className="w-16 h-16 text-green-600" />
-            </div>
+      <>
+        {seo}
+        <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+            <div className="text-center">
+              <div className="mx-auto w-16 h-16 mb-6 flex items-center justify-center">
+                <CheckCircle className="w-16 h-16 text-green-600" />
+              </div>
 
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">
-              Check Your Email
-            </h1>
+              <h1 className="text-2xl font-bold text-gray-900 mb-4">
+                Check Your Email
+              </h1>
 
-            <p className="text-gray-600 mb-6">
-              If an account exists with that email address, we've sent you a password reset link.
-            </p>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-blue-800">
-                Please check your inbox and spam folder for the reset link.
+              <p className="text-gray-600 mb-6">
+                If an account exists with that email address, we've sent you a password reset link.
               </p>
-            </div>
 
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2 text-purple-600 hover:text-purple-700 font-medium"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Login
-            </Link>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-blue-800">
+                  Please check your inbox and spam folder for the reset link.
+                </p>
+              </div>
+
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-2 text-purple-600 hover:text-purple-700 font-medium"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Login
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-        <div className="text-center mb-8">
-          <div className="mx-auto w-16 h-16 mb-6 bg-purple-100 rounded-full flex items-center justify-center">
-            <Mail className="w-8 h-8 text-purple-600" />
-          </div>
+    <>
+      {seo}
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+          <div className="text-center mb-8">
+            <div className="mx-auto w-16 h-16 mb-6 bg-purple-100 rounded-full flex items-center justify-center">
+              <Mail className="w-8 h-8 text-purple-600" />
+            </div>
 
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Reset Your Password
-          </h1>
-          <p className="text-gray-600">
-            Enter your email address and we'll send you a link to reset your password.
-          </p>
-        </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+              Reset Your Password
+            </h1>
+            <p className="text-gray-600">
+              Enter your email address and we'll send you a link to reset your password.
+            </p>
+          </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
@@ -122,8 +129,9 @@ const RequestPasswordReset: React.FC = () => {
             </Link>
           </div>
         </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

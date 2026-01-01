@@ -223,7 +223,7 @@ const CRM: React.FC = () => {
   const [tagFilter, setTagFilter] = useState('');
   const [inactiveDays, setInactiveDays] = useState(0);
   const [sortBy, setSortBy] = useState<SortBy>('last_activity');
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   const [quickFilters, setQuickFilters] = useState(DEFAULT_QUICK_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);

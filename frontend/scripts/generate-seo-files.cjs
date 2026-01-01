@@ -1,0 +1,34 @@
+const fs = require('fs');
+const path = require('path');
+
+const rootDir = path.resolve(__dirname, '..');
+const publicDir = path.join(rootDir, 'public');
+
+const rawSiteUrl = process.env.SITE_URL || process.env.VITE_SITE_URL || '';
+const baseUrl = (rawSiteUrl || 'http://localhost:3000').replace(/\/$/, '');
+
+const indexablePages = [
+  { path: '/landing', changefreq: 'weekly', priority: 1.0 },
+  { path: '/privacy-policy', changefreq: 'yearly', priority: 0.2 },
+];
+
+const lastmod = new Date().toISOString();
+
+const sitemapEntries = indexablePages
+  .map((page) => {
+    const loc = `${baseUrl}${page.path}`;
+    return `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>${page.changefreq}</changefreq>\n    <priority>${page.priority}</priority>\n  </url>`;
+  })
+  .join('\n');
+
+const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapEntries}\n</urlset>\n`;
+
+const robotsTxt = `User-agent: *\nDisallow: /\nAllow: /landing\nAllow: /privacy-policy\n\nSitemap: ${baseUrl}/sitemap.xml\n`;
+
+fs.mkdirSync(publicDir, { recursive: true });
+fs.writeFileSync(path.join(publicDir, 'sitemap.xml'), sitemapXml);
+fs.writeFileSync(path.join(publicDir, 'robots.txt'), robotsTxt);
+
+if (!rawSiteUrl) {
+  console.warn('Warning: SITE_URL not set. Using http://localhost:3000 for sitemap/robots generation.');
+}

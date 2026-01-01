@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { Button } from '../components/ui/Button';
 import AssistantWidget from '../components/AssistantWidget';
+import Seo from '../components/Seo';
 
 const Landing: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -33,6 +34,18 @@ const Landing: React.FC = () => {
   const { user, currentWorkspace, login, refreshUser } = useAuth();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const seoDescription =
+    'SendFx automates multi-channel DMs with AI guardrails, approvals, and smart routing. Capture leads, manage contacts, and sync to Google Sheets.';
+  const siteUrl = (import.meta.env.VITE_SITE_URL || window.location.origin).replace(/\/$/, '');
+  const structuredData = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'SendFx',
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'Web',
+    description: seoDescription,
+    url: `${siteUrl}/landing`,
+  };
 
   const location = useLocation();
   const isLight = theme === 'light';
@@ -123,7 +136,16 @@ const Landing: React.FC = () => {
   };
 
   return (
-    <div className={`min-h-screen relative overflow-x-hidden flex flex-col selection:bg-primary/30 ${isLight ? 'bg-[#f7f8fb]' : 'bg-background'}`}>
+    <>
+      <Seo
+        title="SendFx | Multi-channel DM Automation & CRM"
+        description={seoDescription}
+        canonicalPath="/landing"
+        image="/sendfx.png"
+        robots="index, follow"
+        structuredData={structuredData}
+      />
+      <div className={`min-h-screen relative overflow-x-hidden flex flex-col selection:bg-primary/30 ${isLight ? 'bg-[#f7f8fb]' : 'bg-background'}`}>
 
       {/* Background Ambience */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -631,7 +653,8 @@ const Landing: React.FC = () => {
       <footer className="p-8 text-center text-slate-600 text-sm relative z-10">
         <p>© 2024 SendFx. AI flows and guardrails for Instagram.</p>
       </footer>
-    </div>
+      </div>
+    </>
   );
 };
 

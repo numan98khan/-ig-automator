@@ -1,17 +1,28 @@
 import React from 'react';
+import Seo from '../components/Seo';
 
 const PrivacyPolicy: React.FC = () => {
+  const seoDescription =
+    'Privacy policy for SendFx, a multi-channel DM automation and CRM platform.';
+
   return (
-    <div style={{
-      maxWidth: '800px',
-      margin: '0 auto',
-      padding: '40px 20px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      lineHeight: '1.6',
-      color: '#333'
-    }}>
-      <h1 style={{ fontSize: '32px', marginBottom: '10px' }}>Privacy Policy</h1>
-      <p style={{ color: '#666', marginBottom: '30px' }}>Last updated: {new Date().toLocaleDateString()}</p>
+    <>
+      <Seo
+        title="Privacy Policy | SendFx"
+        description={seoDescription}
+        canonicalPath="/privacy-policy"
+        robots="index, follow"
+      />
+      <div style={{
+        maxWidth: '800px',
+        margin: '0 auto',
+        padding: '40px 20px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        lineHeight: '1.6',
+        color: '#333'
+      }}>
+        <h1 style={{ fontSize: '32px', marginBottom: '10px' }}>Privacy Policy</h1>
+        <p style={{ color: '#666', marginBottom: '30px' }}>Last updated: {new Date().toLocaleDateString()}</p>
 
       <section style={{ marginBottom: '30px' }}>
         <h2 style={{ fontSize: '24px', marginBottom: '15px' }}>1. Introduction</h2>
@@ -169,7 +180,8 @@ const PrivacyPolicy: React.FC = () => {
       }}>
         <p>© {new Date().getFullYear()} AI Instagram Inbox. All rights reserved.</p>
       </div>
-    </div>
+      </div>
+    </>
   );
 };
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Lock, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { authAPI } from '../services/api';
+import Seo from '../components/Seo';
 
 const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -12,6 +13,7 @@ const ResetPassword: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const seo = <Seo title="Reset Password | SendFx" robots="noindex, nofollow" />;
 
   const token = searchParams.get('token');
 
@@ -58,67 +60,75 @@ const ResetPassword: React.FC = () => {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Invalid Reset Link</h1>
-            <p className="text-gray-600 mb-6">
-              This password reset link is invalid or has expired. Please request a new one.
-            </p>
-            <Link
-              to="/request-password-reset"
-              className="inline-block bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition font-medium"
-            >
-              Request New Link
-            </Link>
+      <>
+        {seo}
+        <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+            <div className="text-center">
+              <h1 className="text-2xl font-bold text-gray-900 mb-4">Invalid Reset Link</h1>
+              <p className="text-gray-600 mb-6">
+                This password reset link is invalid or has expired. Please request a new one.
+              </p>
+              <Link
+                to="/request-password-reset"
+                className="inline-block bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition font-medium"
+              >
+                Request New Link
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-          <div className="text-center">
-            <div className="mx-auto w-16 h-16 mb-6 flex items-center justify-center">
-              <CheckCircle className="w-16 h-16 text-green-600" />
-            </div>
+      <>
+        {seo}
+        <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+            <div className="text-center">
+              <div className="mx-auto w-16 h-16 mb-6 flex items-center justify-center">
+                <CheckCircle className="w-16 h-16 text-green-600" />
+              </div>
 
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">
-              Password Reset Successfully!
-            </h1>
+              <h1 className="text-2xl font-bold text-gray-900 mb-4">
+                Password Reset Successfully!
+              </h1>
 
-            <p className="text-gray-600 mb-6">
-              Your password has been updated. You can now log in with your new password.
-            </p>
-
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-green-800">
-                Redirecting you to login in a few seconds...
+              <p className="text-gray-600 mb-6">
+                Your password has been updated. You can now log in with your new password.
               </p>
-            </div>
 
-            <Link
-              to="/login"
-              className="inline-block bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition font-medium"
-            >
-              Go to Login Now
-            </Link>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-green-800">
+                  Redirecting you to login in a few seconds...
+                </p>
+              </div>
+
+              <Link
+                to="/login"
+                className="inline-block bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition font-medium"
+              >
+                Go to Login Now
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-        <div className="text-center mb-8">
-          <div className="mx-auto w-16 h-16 mb-6 bg-purple-100 rounded-full flex items-center justify-center">
-            <Lock className="w-8 h-8 text-purple-600" />
-          </div>
+    <>
+      {seo}
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+          <div className="text-center mb-8">
+            <div className="mx-auto w-16 h-16 mb-6 bg-purple-100 rounded-full flex items-center justify-center">
+              <Lock className="w-8 h-8 text-purple-600" />
+            </div>
 
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
             Create New Password
@@ -185,8 +195,9 @@ const ResetPassword: React.FC = () => {
             {loading ? 'Resetting Password...' : 'Reset Password'}
           </button>
         </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
