@@ -115,7 +115,6 @@ export default function AutomationHistory() {
     queryFn: () =>
       adminApi.getLogEvents({
         category: 'flow_node',
-        workspaceId: selectedSession?.workspaceId,
         sessionId: selectedSession?._id || undefined,
         limit: 500,
       }),

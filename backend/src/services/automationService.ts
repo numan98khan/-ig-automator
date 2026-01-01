@@ -1094,6 +1094,7 @@ async function executeFlowPlan(params: {
     templateId: instance.templateId?.toString(),
     templateVersionId: session.templateVersionId?.toString(),
     conversationId: conversation._id?.toString(),
+    workspaceId: conversation.workspaceId?.toString(),
   };
 
   const markTriggeredOnce = async () => {
