@@ -3,11 +3,10 @@ import { Link } from 'react-router-dom';
 import {
   BarChart3,
   CalendarClock,
+  ChevronDown,
   CheckCircle2,
   ClipboardList,
   Filter,
-  LayoutGrid,
-  List,
   Mail,
   MessageSquare,
   MoreVertical,
@@ -82,6 +81,13 @@ const sortOptions = [
   { value: 'created', label: 'Created date' },
   { value: 'stage', label: 'Stage' },
   { value: 'lead_score', label: 'Lead score' },
+];
+
+const activityOptions = [
+  { value: 0, label: 'All' },
+  { value: 1, label: 'No reply 24h' },
+  { value: 7, label: 'No reply 7d' },
+  { value: 30, label: 'No reply 30d' },
 ];
 
 const DEFAULT_QUICK_FILTERS = {
@@ -211,6 +217,7 @@ const CRM: React.FC = () => {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [filterMenu, setFilterMenu] = useState<'tag' | 'activity' | 'sort' | null>(null);
   const [summary, setSummary] = useState({
     newToday: 0,
     overdue: 0,
@@ -236,6 +243,9 @@ const CRM: React.FC = () => {
   const searchRef = useRef<HTMLInputElement | null>(null);
   const statsRef = useRef<HTMLDivElement | null>(null);
   const moreRef = useRef<HTMLDivElement | null>(null);
+  const tagMenuRef = useRef<HTMLDivElement | null>(null);
+  const activityMenuRef = useRef<HTMLDivElement | null>(null);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [noteDraft, setNoteDraft] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -345,6 +355,10 @@ const CRM: React.FC = () => {
 
   useEffect(() => {
     window.localStorage.setItem('crm_filters_open', String(filtersOpen));
+  }, [filtersOpen]);
+
+  useEffect(() => {
+    if (!filtersOpen) setFilterMenu(null);
   }, [filtersOpen]);
 
   useEffect(() => {
@@ -701,6 +715,30 @@ const CRM: React.FC = () => {
     };
   }, [moreOpen]);
 
+  useEffect(() => {
+    if (!filterMenu) return undefined;
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        (tagMenuRef.current && tagMenuRef.current.contains(target)) ||
+        (activityMenuRef.current && activityMenuRef.current.contains(target)) ||
+        (sortMenuRef.current && sortMenuRef.current.contains(target))
+      ) {
+        return;
+      }
+      setFilterMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFilterMenu(null);
+    };
+    window.addEventListener('mousedown', handleClick);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [filterMenu]);
+
   if (!currentWorkspace) {
     return (
       <div className="p-6 text-muted-foreground">
@@ -716,21 +754,22 @@ const CRM: React.FC = () => {
   const quickFilterCount = Object.values(quickFilters).filter(Boolean).length;
   const activeFilterCount = (tagFilter ? 1 : 0) + (inactiveDays ? 1 : 0) + quickFilterCount;
   const hasActiveFilters = activeFilterCount > 0;
+  const selectedSortLabel = sortOptions.find((option) => option.value === sortBy)?.label || 'Last activity';
+  const selectedActivityLabel = activityOptions.find((option) => option.value === inactiveDays)?.label || 'All';
 
   return (
     <div className="h-full flex flex-col gap-4">
       <div className="sticky top-0 z-20">
         <div className="glass-panel rounded-2xl px-2.5 py-2 space-y-2">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 md:flex-nowrap md:min-h-[52px]">
-            
-            <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap md:max-w-[420px] flex-1 md:flex-none">
+            <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap min-w-[180px] md:max-w-[420px] flex-1 md:flex-none">
               {stageTabs.map((stage) => (
                 <button
                   key={stage.value}
                   onClick={() => setStageFilter(stage.value)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition ${stageFilter === stage.value
-                    ? 'bg-primary/10 text-primary border-primary/40'
-                    : 'bg-transparent text-muted-foreground border-border/70 hover:text-foreground'
+                  className={`h-8 px-3 rounded-full text-[11px] font-semibold transition ${stageFilter === stage.value
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted/60'
                     }`}
                 >
                   {stage.label}
@@ -758,27 +797,29 @@ const CRM: React.FC = () => {
                   }
                 }}
                 icon={<Search className="w-4 h-4" />}
-                className="h-9"
+                className="h-9 bg-muted/40 border-transparent focus-visible:ring-primary/30 focus-visible:ring-offset-0"
               />
             </div>
             <div className="flex items-center gap-2 justify-between md:justify-end w-full md:w-auto">
-              <div className="hidden lg:flex items-center gap-2">
-                <Button
-                  variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-                  size="sm"
+              <div className="hidden lg:inline-flex items-center rounded-lg bg-muted/40 p-0.5">
+                <button
                   onClick={() => setViewMode('list')}
-                  leftIcon={<List className="w-4 h-4" />}
+                  className={`h-8 px-3 rounded-md text-xs font-semibold transition ${viewMode === 'list'
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                    }`}
                 >
                   List
-                </Button>
-                <Button
-                  variant={viewMode === 'kanban' ? 'secondary' : 'ghost'}
-                  size="sm"
+                </button>
+                <button
                   onClick={() => setViewMode('kanban')}
-                  leftIcon={<LayoutGrid className="w-4 h-4" />}
+                  className={`h-8 px-3 rounded-md text-xs font-semibold transition ${viewMode === 'kanban'
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                    }`}
                 >
                   Kanban
-                </Button>
+                </button>
               </div>
               <div className="relative" ref={statsRef}>
                 <Button
@@ -786,6 +827,7 @@ const CRM: React.FC = () => {
                   size="sm"
                   onClick={() => setStatsOpen((prev) => !prev)}
                   leftIcon={<BarChart3 className="w-4 h-4" />}
+                  className={`h-8 px-3 ${statsOpen ? 'bg-primary/10 text-primary' : 'bg-muted/40 hover:bg-muted/60'}`}
                 >
                   Stats
                 </Button>
@@ -816,11 +858,15 @@ const CRM: React.FC = () => {
                 )}
               </div>
               <Button
-                variant={filtersOpen || hasActiveFilters ? 'secondary' : 'outline'}
+                variant="ghost"
                 size="sm"
                 onClick={() => setFiltersOpen((prev) => !prev)}
+                className={`h-8 px-3 ${filtersOpen || hasActiveFilters
+                  ? 'bg-primary/10 text-primary'
+                  : 'bg-muted/40 hover:bg-muted/60'
+                  }`}
               >
-                {hasActiveFilters ? `Filters (${activeFilterCount})` : 'Filters'}
+                {hasActiveFilters ? `Advanced (${activeFilterCount})` : 'Advanced'}
               </Button>
               <div className="relative lg:hidden" ref={moreRef}>
                 <Button
@@ -828,6 +874,7 @@ const CRM: React.FC = () => {
                   size="sm"
                   onClick={() => setMoreOpen((prev) => !prev)}
                   leftIcon={<MoreVertical className="w-4 h-4" />}
+                  className={`h-8 px-3 ${moreOpen ? 'bg-primary/10 text-primary' : 'bg-muted/40 hover:bg-muted/60'}`}
                 >
                   More
                 </Button>
@@ -839,7 +886,7 @@ const CRM: React.FC = () => {
                         setViewMode('list');
                         setMoreOpen(false);
                       }}
-                      className={`w-full text-left px-2 py-1.5 rounded-md ${viewMode === 'list'
+                      className={`w-full text-left px-2 h-8 rounded-md ${viewMode === 'list'
                         ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
                         }`}
@@ -851,7 +898,7 @@ const CRM: React.FC = () => {
                         setViewMode('kanban');
                         setMoreOpen(false);
                       }}
-                      className={`w-full text-left px-2 py-1.5 rounded-md ${viewMode === 'kanban'
+                      className={`w-full text-left px-2 h-8 rounded-md ${viewMode === 'kanban'
                         ? 'bg-primary/10 text-primary'
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
                         }`}
@@ -865,82 +912,155 @@ const CRM: React.FC = () => {
           </div>
 
           {filtersOpen && (
-            <div className="pt-2 border-t border-border/60 space-y-2">
-              <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1">Tag</label>
-                  <select
-                    className="input-field"
-                    value={tagFilter}
-                    onChange={(e) => setTagFilter(e.target.value)}
-                  >
-                    <option value="">All tags</option>
-                    {tagOptions.map((tag) => (
-                      <option key={tag} value={tag}>
-                        {tag} ({tagCounts[tag]})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1">Activity</label>
-                  <select
-                    className="input-field"
-                    value={inactiveDays}
-                    onChange={(e) => setInactiveDays(Number(e.target.value))}
-                  >
-                    <option value={0}>All activity</option>
-                    <option value={1}>No reply 24h</option>
-                    <option value={7}>No reply 7d</option>
-                    <option value={30}>No reply 30d</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground mb-1">Sort</label>
-                  <select
-                    className="input-field"
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as SortBy)}
-                  >
-                    {sortOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {hasActiveFilters && (
-                  <Button variant="ghost" size="sm" onClick={handleClearFilters}>
-                    Clear
-                  </Button>
-                )}
-              </div>
+            <div className="pt-2 border-t border-border/40">
+              <div className="flex items-center gap-2 flex-nowrap">
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="relative" ref={tagMenuRef}>
+                    <button
+                      onClick={() => setFilterMenu((prev) => (prev === 'tag' ? null : 'tag'))}
+                      className={`h-8 px-3 rounded-full text-xs font-semibold inline-flex items-center gap-2 transition ${filterMenu === 'tag'
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-muted/40 text-foreground hover:bg-muted/60'
+                        }`}
+                    >
+                      <span className="truncate max-w-[140px]">Tag: {tagFilter || 'All'}</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                    </button>
+                    {filterMenu === 'tag' && (
+                      <div className="absolute left-0 mt-2 w-48 rounded-xl border border-border bg-background shadow-xl p-1 text-xs z-30">
+                        <button
+                          onClick={() => {
+                            setTagFilter('');
+                            setFilterMenu(null);
+                          }}
+                          className={`w-full text-left px-2 h-8 rounded-md ${!tagFilter
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                            }`}
+                        >
+                          All
+                        </button>
+                        {tagOptions.map((tag) => (
+                          <button
+                            key={tag}
+                            onClick={() => {
+                              setTagFilter(tag);
+                              setFilterMenu(null);
+                            }}
+                            className={`w-full text-left px-2 h-8 rounded-md ${tagFilter === tag
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                              }`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-              <div className="flex items-center gap-2 text-xs overflow-x-auto whitespace-nowrap">
-                {[
-                  { key: 'unread', label: 'Unread' },
-                  { key: 'noTags', label: 'No tags' },
-                  { key: 'hot', label: 'Hot leads' },
-                  { key: 'overdue', label: 'Overdue' },
-                  { key: 'hasOpenTask', label: 'Has open task' },
-                  { key: 'noReply24h', label: 'No reply 24h' },
-                ].map((chip) => (
-                  <button
-                    key={chip.key}
-                    onClick={() =>
-                      setQuickFilters((prev) => ({
-                        ...prev,
-                        [chip.key]: !prev[chip.key as keyof typeof prev],
-                      }))
-                    }
-                    className={`px-3 py-1.5 rounded-full border transition flex-shrink-0 ${quickFilters[chip.key as keyof typeof quickFilters]
-                      ? 'bg-primary/10 text-primary border-primary/40'
-                      : 'bg-transparent text-muted-foreground border-border/70 hover:text-foreground'
-                      }`}
-                  >
-                    {chip.label}
-                  </button>
-                ))}
+                  <div className="relative" ref={activityMenuRef}>
+                    <button
+                      onClick={() => setFilterMenu((prev) => (prev === 'activity' ? null : 'activity'))}
+                      className={`h-8 px-3 rounded-full text-xs font-semibold inline-flex items-center gap-2 transition ${filterMenu === 'activity'
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-muted/40 text-foreground hover:bg-muted/60'
+                        }`}
+                    >
+                      <span>Activity: {selectedActivityLabel}</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                    </button>
+                    {filterMenu === 'activity' && (
+                      <div className="absolute left-0 mt-2 w-48 rounded-xl border border-border bg-background shadow-xl p-1 text-xs z-30">
+                        {activityOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              setInactiveDays(option.value);
+                              setFilterMenu(null);
+                            }}
+                            className={`w-full text-left px-2 h-8 rounded-md ${inactiveDays === option.value
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                              }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="relative" ref={sortMenuRef}>
+                    <button
+                      onClick={() => setFilterMenu((prev) => (prev === 'sort' ? null : 'sort'))}
+                      className={`h-8 px-3 rounded-full text-xs font-semibold inline-flex items-center gap-2 transition ${filterMenu === 'sort'
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-muted/40 text-foreground hover:bg-muted/60'
+                        }`}
+                    >
+                      <span>Sort: {selectedSortLabel}</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                    </button>
+                    {filterMenu === 'sort' && (
+                      <div className="absolute left-0 mt-2 w-48 rounded-xl border border-border bg-background shadow-xl p-1 text-xs z-30">
+                        {sortOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              setSortBy(option.value as SortBy);
+                              setFilterMenu(null);
+                            }}
+                            className={`w-full text-left px-2 h-8 rounded-md ${sortBy === option.value
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                              }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {hasActiveFilters && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleClearFilters}
+                      className="h-8 px-3 bg-muted/30 hover:bg-muted/50"
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap flex-1 min-w-0 pb-1">
+                  {[
+                    { key: 'unread', label: 'Unread' },
+                    { key: 'noTags', label: 'No tags' },
+                    { key: 'hot', label: 'Hot leads' },
+                    { key: 'overdue', label: 'Overdue' },
+                    { key: 'hasOpenTask', label: 'Open task' },
+                    { key: 'noReply24h', label: 'No reply (24h)' },
+                  ].map((chip) => (
+                    <button
+                      key={chip.key}
+                      onClick={() =>
+                        setQuickFilters((prev) => ({
+                          ...prev,
+                          [chip.key]: !prev[chip.key as keyof typeof prev],
+                        }))
+                      }
+                      className={`h-8 px-3 rounded-full transition flex-shrink-0 ${quickFilters[chip.key as keyof typeof quickFilters]
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                        }`}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
