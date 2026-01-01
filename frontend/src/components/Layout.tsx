@@ -49,7 +49,6 @@ const Layout: React.FC = () => {
       { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
       { to: '/automations', label: 'Automations', icon: Atom, isActive: isActive('/automations') },
-      { to: '/settings', label: 'Settings', icon: Settings, isActive: isActive('/settings') },
     ];
 
     return links;
