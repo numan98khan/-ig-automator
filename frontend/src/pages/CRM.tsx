@@ -99,6 +99,8 @@ const activityOptions = [
   { value: 30, label: 'No reply 30d' },
 ];
 
+const tagPillClass = 'inline-flex items-center rounded-full bg-muted/40 text-muted-foreground text-[11px] font-semibold px-2.5 py-1';
+
 const DEFAULT_QUICK_FILTERS = {
   unread: false,
   noTags: false,
@@ -1426,7 +1428,7 @@ const CRM: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setFilterMenu((prev) => (prev === 'tag' ? null : 'tag'))}
-                      className={`h-8 px-3 rounded-full text-xs font-semibold inline-flex items-center gap-2 transition ${filterMenu === 'tag'
+                      className={`h-8 px-3 rounded-full text-[11px] font-semibold inline-flex items-center gap-2 transition ${filterMenu === 'tag'
                         ? 'bg-primary/10 text-primary'
                         : 'bg-muted/40 text-foreground hover:bg-muted/60'
                         }`}
@@ -1471,7 +1473,7 @@ const CRM: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setFilterMenu((prev) => (prev === 'activity' ? null : 'activity'))}
-                      className={`h-8 px-3 rounded-full text-xs font-semibold inline-flex items-center gap-2 transition ${filterMenu === 'activity'
+                      className={`h-8 px-3 rounded-full text-[11px] font-semibold inline-flex items-center gap-2 transition ${filterMenu === 'activity'
                         ? 'bg-primary/10 text-primary'
                         : 'bg-muted/40 text-foreground hover:bg-muted/60'
                         }`}
@@ -1504,7 +1506,7 @@ const CRM: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setFilterMenu((prev) => (prev === 'sort' ? null : 'sort'))}
-                      className={`h-8 px-3 rounded-full text-xs font-semibold inline-flex items-center gap-2 transition ${filterMenu === 'sort'
+                      className={`h-8 px-3 rounded-full text-[11px] font-semibold inline-flex items-center gap-2 transition ${filterMenu === 'sort'
                         ? 'bg-primary/10 text-primary'
                         : 'bg-muted/40 text-foreground hover:bg-muted/60'
                         }`}
@@ -1562,9 +1564,9 @@ const CRM: React.FC = () => {
                           [chip.key]: !prev[chip.key as keyof typeof prev],
                         }))
                       }
-                      className={`h-8 px-3 rounded-full transition flex-shrink-0 ${quickFilters[chip.key as keyof typeof quickFilters]
+                      className={`h-8 px-3 rounded-full text-[11px] font-semibold transition flex-shrink-0 ${quickFilters[chip.key as keyof typeof quickFilters]
                         ? 'bg-primary/10 text-primary'
-                        : 'bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                        : 'bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted/60'
                         }`}
                     >
                       {chip.label}
@@ -1668,14 +1670,14 @@ const CRM: React.FC = () => {
                                 {hasOverdue && <CalendarClock className="w-3 h-3 text-amber-500" />}
                                 {isHot && <Sparkles className="w-3 h-3 text-amber-400" />}
                               </div>
-                              <div className="flex items-center gap-1 mt-2 text-[10px] text-muted-foreground">
+                              <div className="flex items-center gap-1 mt-2">
                                 {visibleTags.map((tag) => (
-                                  <span key={tag} className="rounded-full bg-muted/60 px-2 py-0.5">
+                                  <span key={tag} className={tagPillClass}>
                                     {tag}
                                   </span>
                                 ))}
                                 {extraTags > 0 && (
-                                  <span className="rounded-full bg-muted/60 px-2 py-0.5">+{extraTags}</span>
+                                  <span className={tagPillClass}>+{extraTags}</span>
                                 )}
                               </div>
                               <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition">
@@ -1810,12 +1812,12 @@ const CRM: React.FC = () => {
                           </div>
                           <div className="flex items-center gap-1">
                             {visibleTags.map((tag) => (
-                              <span key={tag} className="rounded-full bg-muted px-2 py-0.5 text-[10px]">
+                              <span key={tag} className={tagPillClass}>
                                 {tag}
                               </span>
                             ))}
                             {extraTags > 0 && (
-                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px]">+{extraTags}</span>
+                              <span className={tagPillClass}>+{extraTags}</span>
                             )}
                           </div>
                         </div>
