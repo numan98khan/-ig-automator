@@ -1680,32 +1680,35 @@ const CRM: React.FC = () => {
                                   <span className={tagPillClass}>+{extraTags}</span>
                                 )}
                               </div>
-                              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition">
-                                <div className="flex items-center gap-1 text-[10px]">
+                              <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition">
+                                <div className="flex items-center gap-1">
                                   <button
+                                    type="button"
                                     onClick={(event) => {
                                       event.stopPropagation();
                                       openDrawerForContact(contact._id, 'assign');
                                     }}
-                                    className="rounded-full bg-muted/70 px-2 py-1 text-muted-foreground hover:text-foreground"
+                                    className={`${tagPillClass} hover:text-foreground`}
                                   >
                                     Assign
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={(event) => {
                                       event.stopPropagation();
                                       openDrawerForContact(contact._id, 'task');
                                     }}
-                                    className="rounded-full bg-muted/70 px-2 py-1 text-muted-foreground hover:text-foreground"
+                                    className={`${tagPillClass} hover:text-foreground`}
                                   >
                                     Task
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={(event) => {
                                       event.stopPropagation();
                                       openDrawerForContact(contact._id, 'tag');
                                     }}
-                                    className="rounded-full bg-muted/70 px-2 py-1 text-muted-foreground hover:text-foreground"
+                                    className={`${tagPillClass} hover:text-foreground`}
                                   >
                                     Tag
                                   </button>
