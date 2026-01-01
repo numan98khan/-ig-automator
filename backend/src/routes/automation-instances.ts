@@ -151,6 +151,10 @@ const ensurePreviewSession = async (params: {
     return { session, conversation };
   }
 
+  if (!session) {
+    throw new Error('Preview session missing');
+  }
+
   if (session.templateVersionId?.toString() !== templateVersionId.toString()) {
     session.templateVersionId = templateVersionId;
     await session.save();
