@@ -763,6 +763,7 @@ async function handleAiReplyStep(params: {
   deliveryMode?: AutomationDeliveryMode;
   onMessageSent?: (message: PreviewAutomationMessage) => void;
   trackStats?: boolean;
+  logContext?: Record<string, any>;
 }): Promise<{ success: boolean; error?: string }> {
   const {
     step,
@@ -776,6 +777,7 @@ async function handleAiReplyStep(params: {
     deliveryMode = 'instagram',
     onMessageSent,
     trackStats = true,
+    logContext,
   } = params;
   const settings = await getWorkspaceSettings(conversation.workspaceId);
   const aiSettings = {
@@ -793,6 +795,22 @@ async function handleAiReplyStep(params: {
     workspaceSettings: settings,
   });
   logAutomationStep('flow_ai_reply_generate', replyStart);
+  logAdminEvent({
+    category: 'flow_node',
+    message: 'AI reply generated',
+    details: {
+      ...(logContext || {}),
+      nodeId: step.id,
+      type: 'ai_reply',
+      aiSettings,
+      replyPreview: aiResponse.replyText?.slice(0, 500),
+      tags: aiResponse.tags,
+      shouldEscalate: aiResponse.shouldEscalate,
+      escalationReason: aiResponse.escalationReason,
+      knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
+    },
+    workspaceId: resolveWorkspaceId(logContext),
+  });
 
   const activeTicket = deliveryMode === 'preview' ? null : await getActiveTicket(conversation._id);
   if (activeTicket && aiResponse.shouldEscalate) {
@@ -1225,6 +1243,7 @@ async function executeFlowPlan(params: {
         deliveryMode,
         onMessageSent,
         trackStats,
+        logContext,
       });
       if (!aiResult.success) {
         return { success: false, error: aiResult.error || 'AI reply failed', sentCount, executedSteps };
@@ -1286,6 +1305,24 @@ async function executeFlowPlan(params: {
         stepIndex: agentStepIndex,
         advanceStep: agentResult.advanceStep,
         endConversation: agentResult.endConversation,
+      });
+      logAdminEvent({
+        category: 'flow_node',
+        message: 'AI agent response generated',
+        details: {
+          ...(logContext || {}),
+          nodeId: step.id,
+          type: 'ai_agent',
+          aiSettings,
+          replyPreview: agentResult.replyText?.slice(0, 500),
+          advanceStep: agentResult.advanceStep,
+          endConversation: agentResult.endConversation,
+          shouldStop: agentResult.shouldStop,
+          missingFields: agentResult.missingFields,
+          collectedFields: agentResult.collectedFields,
+          stepIndex: agentStepIndex,
+        },
+        workspaceId: resolveWorkspaceId(logContext),
       });
 
       if (!agentResult.replyText) {
