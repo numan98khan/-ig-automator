@@ -168,6 +168,20 @@ export interface AutomationSessionSummary {
   currentNode?: AutomationSessionNodeSummary | null;
 }
 
+export interface AutomationPreviewMessage {
+  id: string;
+  from: 'customer' | 'ai';
+  text: string;
+  createdAt?: string;
+}
+
+export interface AutomationPreviewSession {
+  sessionId: string;
+  conversationId: string;
+  status: 'active' | 'paused' | 'completed' | 'handoff';
+  messages: AutomationPreviewMessage[];
+}
+
 export interface AutomationSessionNodeSummaryItem {
   label: string;
   value: string;
@@ -751,6 +765,19 @@ export const automationAPI = {
 
   delete: async (id: string): Promise<void> => {
     await api.delete(`/api/automations/${id}`);
+  },
+
+  createPreviewSession: async (id: string, payload?: { reset?: boolean }): Promise<AutomationPreviewSession> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-session`, payload);
+    return data;
+  },
+
+  sendPreviewMessage: async (
+    id: string,
+    payload: { text: string; sessionId?: string },
+  ): Promise<{ success: boolean; error?: string; sessionId: string; messages: AutomationPreviewMessage[] }> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-session/message`, payload);
+    return data;
   },
 };
 
