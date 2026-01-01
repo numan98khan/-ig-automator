@@ -157,7 +157,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
-    const conversations = await Conversation.find({ workspaceId })
+    const conversations = await Conversation.find({ workspaceId, platform: { $ne: 'mock' } })
       .sort({ lastMessageAt: -1 });
     const conversationIds = conversations.map((conv) => conv._id);
     const [activeEscalations, activeHandoffs] = await Promise.all([

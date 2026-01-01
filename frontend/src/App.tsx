@@ -14,6 +14,7 @@ import Dashboard from './pages/Dashboard';
 import { AccountProvider } from './context/AccountContext';
 import Support from './pages/Support';
 import Automations from './pages/Automations';
+import CRM from './pages/CRM';
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
             <Route path="knowledge" element={<Navigate to="/automations?section=knowledge" replace />} />
             <Route path="settings" element={<Settings />} />
             <Route path="automations" element={<Automations />} />
+            <Route path="crm" element={<CRM />} />
             <Route path="support" element={<Support />} />
             <Route path="alerts" element={<Navigate to="/automations?section=alerts" replace />} />
             <Route path="escalations" element={<Navigate to="/automations?section=alerts" replace />} />

@@ -17,6 +17,7 @@ import {
   Sun,
   LifeBuoy,
   Atom,
+  Users,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
@@ -48,6 +49,7 @@ const Layout: React.FC = () => {
     const links = [
       { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
+      { to: '/crm', label: 'CRM', icon: Users, isActive: isActive('/crm') },
       { to: '/automations', label: 'Automations', icon: Atom, isActive: isActive('/automations') },
     ];
 

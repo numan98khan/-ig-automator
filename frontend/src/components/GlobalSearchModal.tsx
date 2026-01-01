@@ -32,6 +32,13 @@ const searchIndex: SearchItem[] = [
     tags: ['docs', 'articles', 'collections'],
   },
   {
+    title: 'CRM',
+    description: 'Track contacts, stages, follow-ups, and team notes.',
+    path: '/crm',
+    icon: Users,
+    tags: ['pipeline', 'contacts', 'tasks'],
+  },
+  {
     title: 'Human Alerts (Automations)',
     description: 'Review escalations and resolve with your team.',
     path: '/automations?section=alerts',
@@ -106,7 +113,7 @@ const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ open, onClose, on
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search conversations, automations, or teammates"
+            placeholder="Search conversations, contacts, automations, or teammates"
             className="flex-1 bg-transparent outline-none text-sm"
           />
           <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-md">ESC</span>

@@ -45,6 +45,7 @@ api.interceptors.response.use(
 // Types
 export interface User {
   id: string;
+  _id?: string;
   email?: string;
   firstName?: string;
   lastName?: string;
@@ -82,18 +83,94 @@ export interface Conversation {
   _id: string;
   participantName: string;
   participantHandle: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  tags?: string[];
+  stage?: 'new' | 'engaged' | 'qualified' | 'won' | 'lost';
+  ownerId?: string;
   workspaceId: string;
   instagramAccountId: string;
   instagramConversationId?: string;
   lastMessageAt: string;
   lastMessage?: string;
+  lastCustomerMessageAt?: string;
+  lastBusinessMessageAt?: string;
   createdAt: string;
+  updatedAt?: string;
   isSynced?: boolean;
   humanRequired?: boolean;
   humanRequiredReason?: string;
   humanTriggeredAt?: string;
   humanTriggeredByMessageId?: string;
   humanHoldUntil?: string;
+}
+
+export type CrmStage = 'new' | 'engaged' | 'qualified' | 'won' | 'lost';
+
+export interface CrmContact extends Conversation {
+  stage?: CrmStage;
+  tags?: string[];
+  contactEmail?: string;
+  contactPhone?: string;
+  ownerId?: string;
+  openTaskCount?: number;
+  overdueTaskCount?: number;
+  nextTaskDueAt?: string;
+  unreadCount?: number;
+  leadScore?: number;
+}
+
+export interface CrmContactListResponse {
+  contacts: CrmContact[];
+  pagination: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+  };
+  stageCounts: Record<CrmStage, number>;
+  tagCounts: Record<string, number>;
+  summary?: {
+    newToday: number;
+    overdue: number;
+    waiting: number;
+    qualified: number;
+  };
+}
+
+export interface CrmUserRef {
+  _id: string;
+  name?: string;
+  email?: string;
+  instagramUsername?: string;
+}
+
+export interface CrmNote {
+  _id: string;
+  conversationId: string;
+  body: string;
+  author?: CrmUserRef;
+  authorId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type CrmTaskStatus = 'open' | 'completed' | 'cancelled';
+export type CrmTaskType = 'follow_up' | 'general';
+
+export interface CrmTask {
+  _id: string;
+  conversationId: string;
+  title: string;
+  description?: string;
+  taskType: CrmTaskType;
+  status: CrmTaskStatus;
+  dueAt?: string;
+  reminderAt?: string;
+  assignedTo?: CrmUserRef;
+  createdBy?: CrmUserRef;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface MessageAttachment {
@@ -158,6 +235,11 @@ export interface AutomationSession {
   pauseReason?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CrmAutomationEvent extends AutomationSession {
+  automationName?: string;
+  templateName?: string;
 }
 
 export interface AutomationSessionSummary {
@@ -709,6 +791,101 @@ export const messageAPI = {
 
   markSeen: async (conversationId: string): Promise<{ success: boolean; markedCount: number }> => {
     const { data } = await api.post('/api/messages/mark-seen', { conversationId });
+    return data;
+  },
+};
+
+// CRM API
+export const crmAPI = {
+  listContacts: async (params: {
+    workspaceId: string;
+    page?: number;
+    limit?: number;
+    search?: string;
+    stage?: CrmStage;
+    tags?: string[];
+    inactiveDays?: number;
+  }): Promise<CrmContactListResponse> => {
+    const { data } = await api.get('/api/crm/contacts', {
+      params: {
+        ...params,
+        tags: params.tags?.join(','),
+      },
+    });
+    return data?.data || data;
+  },
+
+  getContact: async (conversationId: string): Promise<{ contact: CrmContact }> => {
+    const { data } = await api.get(`/api/crm/contacts/${conversationId}`);
+    return data?.data || data;
+  },
+
+  updateContact: async (conversationId: string, updates: Partial<CrmContact>): Promise<CrmContact> => {
+    const { data } = await api.patch(`/api/crm/contacts/${conversationId}`, updates);
+    const payload = data?.data || data;
+    return payload.contact || payload;
+  },
+
+  getNotes: async (conversationId: string): Promise<CrmNote[]> => {
+    const { data } = await api.get(`/api/crm/contacts/${conversationId}/notes`);
+    const payload = data?.data || data;
+    return payload.notes || [];
+  },
+
+  addNote: async (conversationId: string, body: string): Promise<CrmNote> => {
+    const { data } = await api.post(`/api/crm/contacts/${conversationId}/notes`, { body });
+    const payload = data?.data || data;
+    return payload.note || payload;
+  },
+
+  getTasks: async (conversationId: string): Promise<CrmTask[]> => {
+    const { data } = await api.get(`/api/crm/contacts/${conversationId}/tasks`);
+    const payload = data?.data || data;
+    return payload.tasks || [];
+  },
+
+  addTask: async (
+    conversationId: string,
+    task: {
+      title: string;
+      description?: string;
+      dueAt?: string;
+      reminderAt?: string;
+      assignedTo?: string;
+      taskType?: CrmTaskType;
+    },
+  ): Promise<CrmTask> => {
+    const { data } = await api.post(`/api/crm/contacts/${conversationId}/tasks`, task);
+    const payload = data?.data || data;
+    return payload.task || payload;
+  },
+
+  updateTask: async (
+    conversationId: string,
+    taskId: string,
+    updates: Partial<{
+      title: string;
+      description?: string;
+      dueAt?: string;
+      reminderAt?: string;
+      assignedTo?: string;
+      status?: CrmTaskStatus;
+      taskType?: CrmTaskType;
+    }>,
+  ): Promise<CrmTask> => {
+    const { data } = await api.patch(`/api/crm/contacts/${conversationId}/tasks/${taskId}`, updates);
+    const payload = data?.data || data;
+    return payload.task || payload;
+  },
+
+  getAutomationEvents: async (conversationId: string): Promise<CrmAutomationEvent[]> => {
+    const { data } = await api.get(`/api/crm/contacts/${conversationId}/automation-events`);
+    const payload = data?.data || data;
+    return payload.sessions || [];
+  },
+
+  getMessages: async (conversationId: string): Promise<Message[]> => {
+    const { data } = await api.get(`/api/messages/conversation/${conversationId}`);
     return data;
   },
 };

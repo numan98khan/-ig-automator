@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
 import ReactMarkdown from 'react-markdown';
@@ -38,6 +39,11 @@ import { ImageAttachment, VideoAttachment, VoiceAttachment, LinkPreviewComponent
 const Inbox: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const { activeAccount, accounts: accountContextList } = useAccountContext();
+  const location = useLocation();
+  const requestedConversationId = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('conversationId');
+  }, [location.search]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -140,7 +146,7 @@ const Inbox: React.FC = () => {
     if (currentWorkspace) {
       loadData();
     }
-  }, [currentWorkspace, activeAccount]);
+  }, [currentWorkspace, activeAccount, requestedConversationId]);
 
   useEffect(() => {
     if (!currentWorkspace) return;
@@ -196,7 +202,12 @@ const Inbox: React.FC = () => {
             (conv) => conv.instagramAccountId === activeAccount._id,
           );
           setConversations(filteredUpdated || []);
-          if (filteredUpdated && filteredUpdated.length > 0 && !selectedConversation) {
+          const requested = requestedConversationId
+            ? filteredUpdated.find((conv) => conv._id === requestedConversationId)
+            : null;
+          if (requested) {
+            setSelectedConversation(requested);
+          } else if (filteredUpdated && filteredUpdated.length > 0 && !selectedConversation) {
             setSelectedConversation(filteredUpdated[0]);
           } else if (filteredUpdated.length === 0) {
             setSelectedConversation(null);
@@ -207,7 +218,12 @@ const Inbox: React.FC = () => {
         }
       } else {
         setConversations(scopedConversations || []);
-        if (scopedConversations && scopedConversations.length > 0 && !selectedConversation) {
+        const requested = requestedConversationId
+          ? scopedConversations.find((conv) => conv._id === requestedConversationId)
+          : null;
+        if (requested) {
+          setSelectedConversation(requested);
+        } else if (scopedConversations && scopedConversations.length > 0 && !selectedConversation) {
           setSelectedConversation(scopedConversations[0]);
         } else if (scopedConversations.length === 0) {
           setSelectedConversation(null);

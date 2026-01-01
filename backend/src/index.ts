@@ -31,6 +31,7 @@ import flowTemplateRoutes from './routes/flow-templates';
 import automationInstanceRoutes from './routes/automation-instances';
 import integrationsRoutes from './routes/integrations';
 import automationIntentRoutes from './routes/automation-intents';
+import crmRoutes from './routes/crm';
 import { ensureDefaultAdmin } from './utils/defaultAdmin';
 import { initConsoleLogCapture } from './services/consoleLogCapture';
 
@@ -76,6 +77,7 @@ app.use('/api/flow-templates', flowTemplateRoutes);
 app.use('/api/automation-instances', automationInstanceRoutes);
 app.use('/api/automation-intents', automationIntentRoutes);
 app.use('/api/integrations', integrationsRoutes);
+app.use('/api/crm', crmRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
