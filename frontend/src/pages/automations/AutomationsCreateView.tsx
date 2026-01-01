@@ -14,7 +14,7 @@ import {
 } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { AutomationPreviewPhone } from './AutomationPreviewPhone';
+import { AutomationPreviewPhone, PreviewMessage } from './AutomationPreviewPhone';
 import { FLOW_GOAL_FILTERS, TRIGGER_METADATA } from './constants';
 
 type CreateFormData = {
@@ -52,6 +52,17 @@ type AutomationsCreateViewProps = {
   onContinueToReview: () => void;
   onUpdateFormData: React.Dispatch<React.SetStateAction<CreateFormData>>;
   onUpdateConfigValues: React.Dispatch<React.SetStateAction<Record<string, any>>>;
+  previewMessages: PreviewMessage[];
+  previewInputValue: string;
+  previewStatus?: string | null;
+  previewSessionStatus?: 'active' | 'paused' | 'completed' | 'handoff' | null;
+  previewLoading?: boolean;
+  previewSendDisabled?: boolean;
+  onPreviewInputChange: (value: string) => void;
+  onPreviewSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onPreviewPause: () => void;
+  onPreviewStop: () => void;
+  onPreviewReset: () => void;
 };
 
 const formatConfigValue = (value: any) => {
@@ -129,6 +140,17 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   onContinueToReview,
   onUpdateFormData,
   onUpdateConfigValues,
+  previewMessages,
+  previewInputValue,
+  previewStatus,
+  previewSessionStatus,
+  previewLoading,
+  previewSendDisabled,
+  onPreviewInputChange,
+  onPreviewSubmit,
+  onPreviewPause,
+  onPreviewStop,
+  onPreviewReset,
 }) => {
   const updateFormData = (updates: Partial<CreateFormData>) => {
     onUpdateFormData((prev) => ({ ...prev, ...updates }));
@@ -140,7 +162,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
 
   const version = selectedTemplate?.currentVersion;
   const display = version?.display;
-  const previewMessages = display?.previewConversation || [];
+  const templatePreviewMessages = display?.previewConversation || [];
   const triggers = version?.triggers || [];
 
   const sortedFields = [...exposedFields].sort((a, b) => {
@@ -431,17 +453,62 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                       accountHandle={accountHandle}
                       accountAvatarUrl={accountAvatarUrl}
                       accountInitial={accountInitial}
-                      messages={previewMessages.map((msg, idx) => ({
-                        id: `preview-${idx}`,
-                        from: msg.from === 'customer' ? 'customer' : 'ai',
-                        text: msg.message,
-                      }))}
-                      showSeen={
-                        previewMessages.length > 0 &&
-                        previewMessages[previewMessages.length - 1].from === 'bot'
+                      messages={
+                        editingAutomation
+                          ? previewMessages
+                          : templatePreviewMessages.map((msg, idx) => ({
+                              id: `preview-${idx}`,
+                              from: msg.from === 'customer' ? 'customer' : 'ai',
+                              text: msg.message,
+                            }))
                       }
-                      mode="static"
+                      showSeen={
+                        editingAutomation
+                          ? previewMessages.length > 0 &&
+                            previewMessages[previewMessages.length - 1].from === 'ai'
+                          : templatePreviewMessages.length > 0 &&
+                            templatePreviewMessages[templatePreviewMessages.length - 1].from === 'bot'
+                      }
+                      mode={editingAutomation ? 'interactive' : 'static'}
+                      inputValue={previewInputValue}
+                      onInputChange={onPreviewInputChange}
+                      onSubmit={onPreviewSubmit}
+                      inputDisabled={Boolean(previewLoading)}
+                      sendDisabled={previewSendDisabled}
                     />
+                    {editingAutomation && previewStatus && (
+                      <div className="mt-3 text-xs text-muted-foreground text-center">
+                        {previewStatus}
+                      </div>
+                    )}
+                    {editingAutomation && (
+                      <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={onPreviewPause}
+                          disabled={previewLoading || previewSessionStatus === 'paused'}
+                          className="px-3 py-1 rounded-full border border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {previewSessionStatus === 'paused' ? 'Paused' : 'Pause'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onPreviewStop}
+                          disabled={previewLoading || previewSessionStatus === 'completed'}
+                          className="px-3 py-1 rounded-full border border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {previewSessionStatus === 'completed' ? 'Stopped' : 'Stop'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onPreviewReset}
+                          disabled={previewLoading}
+                          className="px-3 py-1 rounded-full border border-border/70 text-muted-foreground hover:text-foreground hover:border-primary/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

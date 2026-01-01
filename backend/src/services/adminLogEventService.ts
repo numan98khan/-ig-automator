@@ -18,6 +18,7 @@ type LogQueryParams = {
   category?: string;
   level?: AdminLogLevel;
   workspaceId?: string;
+  sessionId?: string;
   before?: Date;
 };
 
@@ -67,6 +68,9 @@ export const getAdminLogEvents = async (params: LogQueryParams = {}): Promise<IA
     if (workspaceObjectId) query.workspaceId = workspaceObjectId;
   }
   if (params.before) query.createdAt = { $lt: params.before };
+  if (params.sessionId) {
+    query['details.automationSessionId'] = params.sessionId;
+  }
 
   const limit = params.limit && params.limit > 0 ? Math.min(params.limit, 500) : 200;
   return AdminLogEvent.find(query).sort({ createdAt: -1 }).limit(limit).lean();

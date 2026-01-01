@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
 import {
   automationAPI,
+  AutomationPreviewMessage,
   flowTemplateAPI,
   AutomationInstance,
   FlowExposedField,
@@ -114,6 +115,15 @@ const Automations: React.FC = () => {
   });
   const [configValues, setConfigValues] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
+  const [previewSessionId, setPreviewSessionId] = useState<string | null>(null);
+  const [previewMessages, setPreviewMessages] = useState<AutomationPreviewMessage[]>([]);
+  const [previewInputValue, setPreviewInputValue] = useState('');
+  const [previewStatus, setPreviewStatus] = useState<string | null>(null);
+  const [previewSessionStatus, setPreviewSessionStatus] = useState<
+    'active' | 'paused' | 'completed' | 'handoff' | null
+  >(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewSending, setPreviewSending] = useState(false);
 
   const accountDisplayName = activeAccount?.name || activeAccount?.username || 'Connected account';
   const accountHandle = activeAccount?.username || 'connected_account';
@@ -186,6 +196,38 @@ const Automations: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const resetPreviewState = () => {
+    setPreviewSessionId(null);
+    setPreviewMessages([]);
+    setPreviewInputValue('');
+    setPreviewStatus(null);
+    setPreviewSessionStatus(null);
+  };
+
+  const loadPreviewSession = async (automation: AutomationInstance, options?: { reset?: boolean }) => {
+    try {
+      setPreviewLoading(true);
+      setPreviewStatus(null);
+      const session = await automationAPI.createPreviewSession(automation._id, options);
+      setPreviewSessionId(session.sessionId);
+      setPreviewMessages(session.messages || []);
+      setPreviewSessionStatus(session.status || null);
+    } catch (err) {
+      console.error('Error loading preview session:', err);
+      setPreviewStatus('Unable to start preview. Please try again.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!editingAutomation) {
+      resetPreviewState();
+      return;
+    }
+    void loadPreviewSession(editingAutomation);
+  }, [editingAutomation]);
 
   const handleOpenCreateModal = () => {
     setEditingAutomation(null);
@@ -374,6 +416,101 @@ const Automations: React.FC = () => {
     setCurrentStep('review');
   };
 
+  const handlePreviewInputChange = (value: string) => {
+    setPreviewInputValue(value);
+    if (previewStatus) {
+      setPreviewStatus(null);
+    }
+  };
+
+  const handlePreviewSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingAutomation) return;
+    if (previewSessionStatus === 'paused') {
+      setPreviewStatus('Preview is paused. Resume or reset to continue.');
+      return;
+    }
+    if (previewSessionStatus === 'completed') {
+      setPreviewStatus('Preview is stopped. Reset to start a new run.');
+      return;
+    }
+    const trimmed = previewInputValue.trim();
+    if (!trimmed) return;
+
+    const optimisticMessage: AutomationPreviewMessage = {
+      id: `preview-user-${Date.now()}`,
+      from: 'customer',
+      text: trimmed,
+    };
+    setPreviewMessages((prev) => [...prev, optimisticMessage]);
+    setPreviewInputValue('');
+    setPreviewSending(true);
+    setPreviewStatus(null);
+
+    try {
+      const response = await automationAPI.sendPreviewMessage(editingAutomation._id, {
+        text: trimmed,
+        sessionId: previewSessionId || undefined,
+      });
+      if (response.sessionId && response.sessionId !== previewSessionId) {
+        setPreviewSessionId(response.sessionId);
+      }
+      if (response.messages && response.messages.length > 0) {
+        setPreviewMessages((prev) => [...prev, ...response.messages]);
+      }
+      if (!response.success) {
+        setPreviewStatus(response.error || 'No automated response was generated.');
+      }
+    } catch (err) {
+      console.error('Error sending preview message:', err);
+      setPreviewStatus('Failed to send preview message.');
+    } finally {
+      setPreviewSending(false);
+    }
+  };
+
+  const handlePreviewPause = async () => {
+    if (!editingAutomation || !previewSessionId) return;
+    try {
+      setPreviewLoading(true);
+      const response = await automationAPI.pausePreviewSession(editingAutomation._id, {
+        sessionId: previewSessionId,
+        reason: 'Paused from preview console',
+      });
+      setPreviewSessionStatus(response.session.status);
+      setPreviewStatus('Preview paused.');
+    } catch (err) {
+      console.error('Error pausing preview session:', err);
+      setPreviewStatus('Failed to pause preview session.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handlePreviewStop = async () => {
+    if (!editingAutomation || !previewSessionId) return;
+    try {
+      setPreviewLoading(true);
+      const response = await automationAPI.stopPreviewSession(editingAutomation._id, {
+        sessionId: previewSessionId,
+        reason: 'Stopped from preview console',
+      });
+      setPreviewSessionStatus(response.session.status);
+      setPreviewStatus('Preview stopped.');
+    } catch (err) {
+      console.error('Error stopping preview session:', err);
+      setPreviewStatus('Failed to stop preview session.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handlePreviewReset = async () => {
+    if (!editingAutomation) return;
+    await loadPreviewSession(editingAutomation, { reset: true });
+    setPreviewStatus('Preview reset.');
+  };
+
   if (!currentWorkspace) return null;
 
   return (
@@ -429,6 +566,23 @@ const Automations: React.FC = () => {
                   onContinueToReview={handleContinueToReview}
                   onUpdateFormData={setFormData}
                   onUpdateConfigValues={setConfigValues}
+                  previewMessages={previewMessages}
+                  previewInputValue={previewInputValue}
+                  previewStatus={previewStatus}
+                  previewSessionStatus={previewSessionStatus}
+                  previewLoading={previewLoading}
+                  previewSendDisabled={
+                    previewSending ||
+                    previewLoading ||
+                    previewInputValue.trim().length === 0 ||
+                    previewSessionStatus === 'paused' ||
+                    previewSessionStatus === 'completed'
+                  }
+                  onPreviewInputChange={handlePreviewInputChange}
+                  onPreviewSubmit={handlePreviewSubmit}
+                  onPreviewPause={handlePreviewPause}
+                  onPreviewStop={handlePreviewStop}
+                  onPreviewReset={handlePreviewReset}
                 />
               ) : (
                 <AutomationsListView

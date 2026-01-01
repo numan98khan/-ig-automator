@@ -3,11 +3,16 @@ import { Link, useLocation } from 'react-router-dom'
 const tabs = [
   { id: 'flows', label: 'Flows', href: '/automations' },
   { id: 'intentions', label: 'Intentions', href: '/automations/intentions' },
+  { id: 'history', label: 'Run History', href: '/automations/history' },
 ]
 
 export default function AutomationsTabs() {
   const location = useLocation()
-  const activeTab = location.pathname.startsWith('/automations/intentions') ? 'intentions' : 'flows'
+  const activeTab = location.pathname.startsWith('/automations/intentions')
+    ? 'intentions'
+    : location.pathname.startsWith('/automations/history')
+      ? 'history'
+      : 'flows'
 
   return (
     <div className="border-b border-border">

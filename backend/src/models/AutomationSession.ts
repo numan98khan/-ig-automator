@@ -6,6 +6,7 @@ export interface IAutomationSession extends Document {
   automationInstanceId: mongoose.Types.ObjectId;
   templateId: mongoose.Types.ObjectId;
   templateVersionId: mongoose.Types.ObjectId;
+  channel?: 'live' | 'preview';
   status: 'active' | 'paused' | 'completed' | 'handoff';
   state?: {
     stepIndex?: number;
@@ -40,6 +41,11 @@ const automationSessionSchema = new Schema<IAutomationSession>({
   automationInstanceId: { type: Schema.Types.ObjectId, ref: 'AutomationInstance', required: true },
   templateId: { type: Schema.Types.ObjectId, ref: 'FlowTemplate', required: true },
   templateVersionId: { type: Schema.Types.ObjectId, ref: 'FlowTemplateVersion', required: true },
+  channel: {
+    type: String,
+    enum: ['live', 'preview'],
+    default: 'live',
+  },
   status: {
     type: String,
     enum: ['active', 'paused', 'completed', 'handoff'],
