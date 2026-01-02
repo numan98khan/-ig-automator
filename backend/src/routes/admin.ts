@@ -11,6 +11,7 @@ import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
+import GlobalUiSettings, { IGlobalUiSettings } from '../models/GlobalUiSettings';
 import FlowDraft from '../models/FlowDraft';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
@@ -616,6 +617,51 @@ router.put('/assistant/config', authenticate, requireAdmin, async (req, res) => 
     });
   } catch (error) {
     console.error('Admin global assistant config update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Global UI settings (theme + branding)
+router.get('/ui-settings', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    const settings = await GlobalUiSettings.findOneAndUpdate(
+      {},
+      { $setOnInsert: { uiTheme: 'legacy' } },
+      { new: true, upsert: true },
+    ).lean<IGlobalUiSettings>();
+
+    res.json({
+      data: {
+        uiTheme: settings?.uiTheme || 'legacy',
+      },
+    });
+  } catch (error) {
+    console.error('Admin UI settings get error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/ui-settings', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const uiTheme = typeof req.body?.uiTheme === 'string' ? req.body.uiTheme.trim() : undefined;
+    if (uiTheme && uiTheme !== 'legacy' && uiTheme !== 'comic') {
+      return res.status(400).json({ error: 'Invalid uiTheme value' });
+    }
+
+    const settings = await GlobalUiSettings.findOneAndUpdate(
+      {},
+      { $set: { ...(uiTheme ? { uiTheme } : {}) } },
+      { new: true, upsert: true },
+    ).lean<IGlobalUiSettings>();
+
+    res.json({
+      data: {
+        success: true,
+        uiTheme: settings?.uiTheme || 'legacy',
+      },
+    });
+  } catch (error) {
+    console.error('Admin UI settings update error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

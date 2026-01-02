@@ -1,5 +1,6 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
@@ -20,14 +21,19 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props
 }) => {
-  const baseStyles = 'inline-flex items-center justify-center font-semibold transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed rounded-lg border-2 border-black shadow-[3px_3px_0_rgba(0,0,0,0.9)] active:translate-x-[1px] active:translate-y-[1px]';
+  const { uiTheme } = useTheme();
+  const isComicTheme = uiTheme === 'comic';
+  const baseStyles = 'inline-flex items-center justify-center font-medium transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed rounded-lg active:scale-95';
+  const comicStyles = isComicTheme
+    ? 'comic-button active:translate-x-[1px] active:translate-y-[1px] active:scale-100'
+    : '';
 
   const variants = {
-    primary: 'bg-primary hover:bg-primary/90 text-primary-foreground',
-    secondary: 'bg-secondary hover:bg-secondary/85 text-secondary-foreground',
-    outline: 'bg-white text-foreground hover:bg-muted/60',
-    ghost: 'bg-transparent text-foreground hover:bg-muted/40 border-transparent shadow-none',
-    danger: 'bg-red-500 hover:bg-red-600 text-white',
+    primary: 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 border border-transparent',
+    secondary: 'bg-secondary hover:bg-secondary/80 text-secondary-foreground border border-border/80',
+    outline: 'bg-transparent border border-border text-foreground hover:bg-muted/60',
+    ghost: 'bg-transparent text-foreground hover:bg-muted/40',
+    danger: 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/25',
   };
 
   const sizes = {
@@ -38,7 +44,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
-      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${comicStyles} ${className}`}
       disabled={disabled || isLoading}
       {...props}
     >
