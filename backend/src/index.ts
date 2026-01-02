@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { connectDB } from './config/database';
 
 // Import routes
@@ -87,6 +88,27 @@ app.get('/health', (req, res) => {
 // Serve static files from React frontend in production
 if (isProduction) {
   const frontendPath = path.join(__dirname, '../../frontend/dist');
+  const sitemapPath = path.join(frontendPath, 'sitemap.xml');
+  const robotsPath = path.join(frontendPath, 'robots.txt');
+
+  app.get('/sitemap.xml', (req, res) => {
+    if (fs.existsSync(sitemapPath)) {
+      res.type('application/xml');
+      res.sendFile(sitemapPath);
+      return;
+    }
+    res.status(404).send('Sitemap not found');
+  });
+
+  app.get('/robots.txt', (req, res) => {
+    if (fs.existsSync(robotsPath)) {
+      res.type('text/plain');
+      res.sendFile(robotsPath);
+      return;
+    }
+    res.status(404).send('Robots file not found');
+  });
+
   app.use(express.static(frontendPath));
 
   // Handle React routing - return index.html for all non-API routes
