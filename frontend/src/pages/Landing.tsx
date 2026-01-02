@@ -28,6 +28,7 @@ const Landing: React.FC = () => {
   const [loginLoading, setLoginLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
+  const [showAuthPanel, setShowAuthPanel] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -54,6 +55,14 @@ const Landing: React.FC = () => {
       demoSection.scrollIntoView({ behavior: 'smooth' });
     }
   };
+  const openAuthPanel = (useEmailLogin = false) => {
+    setShowAuthPanel(true);
+    setShowEmailLogin(useEmailLogin);
+  };
+  const closeAuthPanel = () => {
+    setShowAuthPanel(false);
+    setShowEmailLogin(false);
+  };
 
   const location = useLocation();
   const isLight = theme === 'light';
@@ -68,6 +77,11 @@ const Landing: React.FC = () => {
       ? 'comic-panel-soft bg-white'
       : 'bg-white/85 border border-black/5 shadow-[0_18px_60px_-38px_rgba(0,0,0,0.35)]')
     : 'bg-background/60 border border-border/60 backdrop-blur-md';
+  const authCardClass = isLight
+    ? (isComic
+      ? 'comic-panel-soft'
+      : 'glass-panel border border-border bg-card/50 backdrop-blur-xl')
+    : 'glass-panel border border-border bg-card/50 backdrop-blur-xl';
   const pageBackground = isLight
     ? (isComic ? 'bg-[#fffbe6]' : 'bg-[#f7f8fb]')
     : 'bg-background';
@@ -89,7 +103,9 @@ const Landing: React.FC = () => {
         setShowEmailLogin(true);
       } else {
         setError(`Authentication failed: ${errorParam}`);
+        setShowEmailLogin(false);
       }
+      setShowAuthPanel(true);
       console.error('❌ OAuth error:', errorParam);
       // Keep error in URL for 5 seconds before cleaning
       setTimeout(() => {
@@ -247,22 +263,66 @@ const Landing: React.FC = () => {
           {/* Hero */}
           <section id="overview" className="grid md:grid-cols-2 gap-10 md:gap-10 items-center">
             <div
-              className={`space-y-5 md:space-y-6 text-left ${isComic && isLight ? 'comic-panel-soft bg-white/70 backdrop-blur-md p-6 md:p-8' : ''}`}
+              className={`relative text-left ${isComic && isLight ? 'comic-panel-soft bg-white/70 backdrop-blur-md p-6 md:p-8' : ''}`}
             >
               <div
-                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium backdrop-blur-md ${isComic ? 'comic-sticker text-foreground font-semibold' : 'bg-muted/40 border border-border text-muted-foreground'}`}
+                className={`space-y-5 md:space-y-6 transition-opacity duration-300 ${showAuthPanel ? 'opacity-0 pointer-events-none select-none' : 'opacity-100'}`}
+                aria-hidden={showAuthPanel}
               >
-                <Sparkles className="w-3 h-3 text-amber-500" />
-                <span>Instagram-first automation for SMBs</span>
-              </div>
-              <h1 className={`text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[1.05] md:leading-[1.08] ${isComic ? 'text-[#ff3fd0] comic-display comic-shadow-text' : 'text-foreground tracking-tight md:tracking-tighter'}`}>
-                Instagram DM automation + lightweight CRM for SMBs.
-              </h1>
-              <p className="text-lg md:text-xl text-muted-foreground leading-relaxed md:leading-[1.7]">
-                Route and qualify inbound DMs, reply with guardrails and approvals, and sync leads to Google Sheets without losing the human touch.
-              </p>
+                <div
+                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium backdrop-blur-md ${isComic ? 'comic-sticker text-foreground font-semibold' : 'bg-muted/40 border border-border text-muted-foreground'}`}
+                >
+                  <Sparkles className="w-3 h-3 text-amber-500" />
+                  <span>Instagram-first automation for SMBs</span>
+                </div>
+                <h1 className={`text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[1.05] md:leading-[1.08] ${isComic ? 'text-[#ff3fd0] comic-display comic-shadow-text' : 'text-foreground tracking-tight md:tracking-tighter'}`}>
+                  Instagram DM automation + lightweight CRM for SMBs.
+                </h1>
+                <p className="text-lg md:text-xl text-muted-foreground leading-relaxed md:leading-[1.7]">
+                  Route and qualify inbound DMs, reply with guardrails and approvals, and sync leads to Google Sheets without losing the human touch.
+                </p>
 
-              <div className="space-y-3">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      onClick={() => openAuthPanel()}
+                      className="group inline-flex items-center gap-3 px-6 py-3 text-base"
+                    >
+                      <Instagram className="w-4 h-4" />
+                      <span>Start free</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className={`inline-flex items-center gap-2 ${isComic ? 'shadow-none bg-white/70' : ''}`}
+                      onClick={handleWatchDemo}
+                    >
+                      <PlayCircle className="w-4 h-4" />
+                      Watch demo (60s)
+                    </Button>
+                  </div>
+                  <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-3">
+                    <span>Free plan</span>
+                    <span className="w-1 h-1 rounded-full bg-border" />
+                    <span>Setup in 5 min</span>
+                    <span className="w-1 h-1 rounded-full bg-border" />
+                    <span>Cancel anytime</span>
+                  </div>
+                  <div className="mt-2">
+                    <button
+                      onClick={() => openAuthPanel(true)}
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium"
+                    >
+                      Prefer email? Log in with email
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className={`absolute inset-0 flex flex-col gap-3 transition-opacity duration-300 ${showAuthPanel ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                aria-hidden={!showAuthPanel}
+              >
                 {/* Error Message */}
                 {error && (
                   <div className="animate-fade-in">
@@ -276,11 +336,11 @@ const Landing: React.FC = () => {
                   </div>
                 )}
 
-                {showEmailLogin ? (
-                  <div className="w-full max-w-md animate-fade-in">
-                    <form onSubmit={handleEmailLogin} className="space-y-4">
-                      <div className={`p-6 rounded-2xl ${isLight ? (isComic ? 'comic-panel-soft' : 'glass-panel border border-border bg-card/50 backdrop-blur-xl') : 'glass-panel border border-border bg-card/50 backdrop-blur-xl'}`}>
-                        <h2 className="text-xl font-bold text-foreground mb-4 text-left">Log in with email</h2>
+                <div className="w-full max-w-md">
+                  <div className={`rounded-2xl p-6 min-h-[360px] ${authCardClass}`}>
+                    {showEmailLogin ? (
+                      <form onSubmit={handleEmailLogin} className="space-y-4 animate-fade-in">
+                        <h2 className="text-xl font-bold text-foreground text-left">Log in with email</h2>
 
                         <div className="space-y-4">
                           <div>
@@ -341,47 +401,56 @@ const Landing: React.FC = () => {
                             </button>
                           </div>
                         </div>
+                      </form>
+                    ) : (
+                      <div className="space-y-3 animate-fade-in">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Button
+                            onClick={handleInstagramLogin}
+                            disabled={loading}
+                            className="group inline-flex items-center gap-3 px-6 py-3 text-base"
+                          >
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Instagram className="w-4 h-4" />}
+                            <span>Start free</span>
+                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className={`inline-flex items-center gap-2 ${isComic ? 'shadow-none bg-white/70' : ''}`}
+                            onClick={handleWatchDemo}
+                          >
+                            <PlayCircle className="w-4 h-4" />
+                            Watch demo (60s)
+                          </Button>
+                        </div>
+                        <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-3">
+                          <span>Free plan</span>
+                          <span className="w-1 h-1 rounded-full bg-border" />
+                          <span>Setup in 5 min</span>
+                          <span className="w-1 h-1 rounded-full bg-border" />
+                          <span>Cancel anytime</span>
+                        </div>
+                        <div className="mt-2">
+                          <button
+                            onClick={() => setShowEmailLogin(true)}
+                            className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium"
+                          >
+                            Prefer email? Log in with email
+                          </button>
+                        </div>
                       </div>
-                    </form>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Button
-                        onClick={handleInstagramLogin}
-                        disabled={loading}
-                        className="group inline-flex items-center gap-3 px-6 py-3 text-base"
-                      >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Instagram className="w-4 h-4" />}
-                        <span>Start free</span>
-                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className={`inline-flex items-center gap-2 ${isComic ? 'shadow-none bg-white/70' : ''}`}
-                        onClick={handleWatchDemo}
-                      >
-                        <PlayCircle className="w-4 h-4" />
-                        Watch demo (60s)
-                      </Button>
-                    </div>
-                    <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-3">
-                      <span>Free plan</span>
-                      <span className="w-1 h-1 rounded-full bg-border" />
-                      <span>Setup in 5 min</span>
-                      <span className="w-1 h-1 rounded-full bg-border" />
-                      <span>Cancel anytime</span>
-                    </div>
-                    <div className="mt-2">
+                    )}
+                    <div className="pt-2 text-left">
                       <button
-                        onClick={() => setShowEmailLogin(true)}
-                        className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium"
+                        type="button"
+                        onClick={closeAuthPanel}
+                        className="text-sm text-muted-foreground hover:text-foreground transition"
                       >
-                        Prefer email? Log in with email
+                        ← Back to overview
                       </button>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
 
               {/* <div className={`text-sm border rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 backdrop-blur-md w-full max-w-full text-left sm:inline-flex sm:w-auto ${isComic ? 'text-foreground border-2 border-black bg-white/90 shadow-[4px_4px_0_rgba(0,0,0,0.8)]' : 'text-muted-foreground border-border/70 bg-background/60'}`}>
@@ -404,8 +473,8 @@ const Landing: React.FC = () => {
                   aria-hidden="true"
                 />
                 <img
-                  src="/landing_girl.png"
-                  alt="SendFx assistant illustration"
+                  src="/sd_phone.jpg"
+                  alt="SendFx product preview"
                   className="relative z-10 w-full h-auto max-h-[580px] object-contain scale-[1.08] md:scale-[1.12]"
                   loading="eager"
                   decoding="async"
