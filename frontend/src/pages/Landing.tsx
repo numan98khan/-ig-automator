@@ -211,7 +211,7 @@ const Landing: React.FC = () => {
           </div>
 
           
-          <div className="hidden md:flex items-center gap-6 text-base font-semibold text-muted-foreground">
+          <div className="hidden md:flex items-center gap-7 text-[15px] font-semibold text-muted-foreground">
             <a href="#overview" className="hover:text-foreground transition-colors">Overview</a>
             <a href="#product" className="hover:text-foreground transition-colors">Product</a>
             <a href="#templates" className="hover:text-foreground transition-colors">Use cases</a>
@@ -245,7 +245,7 @@ const Landing: React.FC = () => {
         <div className="max-w-6xl mx-auto space-y-16 md:space-y-24">
 
           {/* Hero */}
-          <section id="overview" className="grid md:grid-cols-2 gap-10 md:gap-14 items-center">
+          <section id="overview" className="grid md:grid-cols-2 gap-10 md:gap-10 items-center">
             <div
               className={`space-y-5 md:space-y-6 text-left ${isComic && isLight ? 'comic-panel-soft bg-white/70 backdrop-blur-md p-6 md:p-8' : ''}`}
             >
@@ -358,7 +358,7 @@ const Landing: React.FC = () => {
                       </Button>
                       <Button
                         variant="outline"
-                        className="inline-flex items-center gap-2"
+                        className={`inline-flex items-center gap-2 ${isComic ? 'shadow-none bg-white/70' : ''}`}
                         onClick={handleWatchDemo}
                       >
                         <PlayCircle className="w-4 h-4" />
@@ -392,7 +392,9 @@ const Landing: React.FC = () => {
 
             {/* Mock Panel */}
             <div className="relative">
-              <div className={`glass-panel rounded-3xl p-4 md:p-6 space-y-4 ${surfaceMain}`}>
+              <div
+                className={`p-4 md:p-6 space-y-4 ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.08]' : 'glass-panel rounded-3xl'}`}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-emerald-400" />
