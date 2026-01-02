@@ -33,6 +33,7 @@ import automationInstanceRoutes from './routes/automation-instances';
 import integrationsRoutes from './routes/integrations';
 import automationIntentRoutes from './routes/automation-intents';
 import crmRoutes from './routes/crm';
+import uiSettingsRoutes from './routes/ui-settings';
 import { ensureDefaultAdmin } from './utils/defaultAdmin';
 import { initConsoleLogCapture } from './services/consoleLogCapture';
 
@@ -79,6 +80,7 @@ app.use('/api/automation-instances', automationInstanceRoutes);
 app.use('/api/automation-intents', automationIntentRoutes);
 app.use('/api/integrations', integrationsRoutes);
 app.use('/api/crm', crmRoutes);
+app.use('/api/ui-settings', uiSettingsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

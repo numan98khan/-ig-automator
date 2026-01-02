@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -89,6 +89,81 @@
     --glass-opacity: 0.14;
   }
 
+  :root[data-ui-theme='comic']:not(.dark) {
+    /* Comic Pop Light */
+    --background: 255 251 230;
+    /* #FFFBE6 */
+    --foreground: 17 24 39;
+    /* #111827 */
+
+    --primary: 255 79 216;
+    /* #FF4FD8 */
+    --primary-foreground: 15 23 42;
+
+    --secondary: 0 212 255;
+    /* #00D4FF */
+    --secondary-foreground: 15 23 42;
+
+    --muted: 255 253 234;
+    /* #FFFDEA */
+    --muted-foreground: 51 65 85;
+    /* #334155 */
+
+    --accent: 255 226 74;
+    /* #FFE24A */
+    --accent-foreground: 17 24 39;
+    /* #111827 */
+
+    --border: 15 23 42;
+    /* #0F172A */
+    --input: 15 23 42;
+    /* #0F172A */
+    --ring: 15 23 42;
+    /* #0F172A */
+
+    --radius: 0.75rem;
+
+    --card: 255 255 255;
+    --card-foreground: 17 24 39;
+  }
+
+  :root.dark[data-ui-theme='comic'] {
+    --background: 15 23 42;
+    /* #0F172A */
+    --foreground: 248 250 252;
+    /* #F8FAFC */
+
+    --primary: 255 79 216;
+    /* #FF4FD8 */
+    --primary-foreground: 15 23 42;
+
+    --secondary: 0 212 255;
+    /* #00D4FF */
+    --secondary-foreground: 15 23 42;
+
+    --muted: 30 41 59;
+    /* #1E293B */
+    --muted-foreground: 226 232 240;
+    /* #E2E8F0 */
+
+    --accent: 255 226 74;
+    /* #FFE24A */
+    --accent-foreground: 15 23 42;
+
+    --border: 248 250 252;
+    /* #F8FAFC */
+    --input: 248 250 252;
+    /* #F8FAFC */
+    --ring: 255 226 74;
+    /* #FFE24A */
+
+    --radius: 0.75rem;
+
+    --card: 30 41 59;
+    /* #1E293B */
+    --card-foreground: 248 250 252;
+  }
+
   * {
     border-color: rgb(var(--border));
   }
@@ -123,7 +198,7 @@
 /* Glassmorphism Utilities */
 @layer components {
   .glass-panel {
-    @apply border border-border/50;
+    @apply border border-border/60;
     background-color: rgb(var(--card) / var(--glass-opacity));
     backdrop-filter: blur(var(--glass-blur));
   }
@@ -139,6 +214,46 @@
   .bg-radial-at-t {
     background: radial-gradient(140% 110% at 18% 18%, rgba(255, 255, 255, 0.24), transparent 55%);
   }
+}
+
+.comic-display {
+  font-family: 'Bangers', 'Inter', system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.comic-shadow-text {
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.75);
+}
+
+.comic-panel {
+  border: 2px solid rgb(var(--border));
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 rgba(15, 23, 42, 0.9);
+  background-color: rgb(var(--card));
+}
+
+.comic-panel-soft {
+  border: 2px solid rgb(var(--border));
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 rgba(15, 23, 42, 0.85);
+  background-color: rgb(var(--card));
+}
+
+.comic-sticker {
+  border: 2px solid rgb(var(--border));
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 rgba(15, 23, 42, 0.85);
+  background-color: rgb(var(--card));
+}
+
+.comic-button {
+  border: 2px solid rgb(var(--border));
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 rgba(15, 23, 42, 0.9);
+  font-weight: 700;
+  text-transform: uppercase;
+  min-height: 44px;
 }
 
 

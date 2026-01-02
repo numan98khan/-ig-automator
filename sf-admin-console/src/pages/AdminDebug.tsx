@@ -23,6 +23,7 @@ export default function AdminDebug() {
     openaiApiLogsEnabled: false,
     consoleLogsEnabled: false,
   })
+  const [uiTheme, setUiTheme] = useState<'legacy' | 'comic'>('legacy')
 
   const { data: workspaces } = useQuery({
     queryKey: ['debug-workspaces'],
@@ -37,6 +38,10 @@ export default function AdminDebug() {
   const { data: logSettingsData } = useQuery({
     queryKey: ['admin-log-settings'],
     queryFn: () => adminApi.getLogSettings(),
+  })
+  const { data: uiSettingsData } = useQuery({
+    queryKey: ['admin-ui-settings'],
+    queryFn: () => adminApi.getUiSettings(),
   })
 
   const adminToken = localStorage.getItem('admin_token')
@@ -57,10 +62,23 @@ export default function AdminDebug() {
     }
   }, [logSettingsData])
 
+  useEffect(() => {
+    const payload = unwrapData<any>(uiSettingsData)
+    if (payload?.uiTheme === 'comic' || payload?.uiTheme === 'legacy') {
+      setUiTheme(payload.uiTheme)
+    }
+  }, [uiSettingsData])
+
   const updateLogsMutation = useMutation({
     mutationFn: (payload: Partial<typeof logSettings>) => adminApi.updateLogSettings(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-log-settings'] })
+    },
+  })
+  const updateUiMutation = useMutation({
+    mutationFn: (payload: { uiTheme: 'legacy' | 'comic' }) => adminApi.updateUiSettings(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-ui-settings'] })
     },
   })
 
@@ -68,6 +86,11 @@ export default function AdminDebug() {
     const nextValue = !logSettings[key]
     setLogSettings((prev) => ({ ...prev, [key]: nextValue }))
     updateLogsMutation.mutate({ [key]: nextValue })
+  }
+
+  const handleUiThemeChange = (nextTheme: 'legacy' | 'comic') => {
+    setUiTheme(nextTheme)
+    updateUiMutation.mutate({ uiTheme: nextTheme })
   }
 
   // Parse workspace count - handle both array and object responses
@@ -89,6 +112,7 @@ export default function AdminDebug() {
   const workspaceCount = getWorkspaceCount()
   const userCount = getUserCount()
   const isSavingLogSettings = updateLogsMutation.isPending
+  const isSavingUiSettings = updateUiMutation.isPending
 
   return (
     <div className="space-y-6">
@@ -204,6 +228,31 @@ export default function AdminDebug() {
         {isSavingLogSettings && (
           <p className="text-xs text-muted-foreground mt-3">Saving log settings...</p>
         )}
+      </div>
+
+      <div className="card">
+        <h3 className="font-semibold text-foreground mb-2">🎨 UI Theme</h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          Choose the default app theme to serve to customers.
+        </p>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-foreground" htmlFor="ui-theme-select">
+            Theme style
+          </label>
+          <select
+            id="ui-theme-select"
+            className="input-field max-w-xs bg-background"
+            value={uiTheme}
+            onChange={(event) => handleUiThemeChange(event.target.value as 'legacy' | 'comic')}
+            disabled={isSavingUiSettings}
+          >
+            <option value="legacy">Legacy (current)</option>
+            <option value="comic">Comic pop-art</option>
+          </select>
+          {isSavingUiSettings && (
+            <p className="text-xs text-muted-foreground">Saving theme selection...</p>
+          )}
+        </div>
       </div>
 
       {/* Warning if no data */}

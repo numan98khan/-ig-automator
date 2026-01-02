@@ -32,7 +32,7 @@ const Landing: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { user, currentWorkspace, login, refreshUser } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, uiTheme } = useTheme();
   const navigate = useNavigate();
   const seoDescription =
     'SendFx is Instagram DM automation and a lightweight CRM for SMBs. Route and qualify DMs, reply with guardrails and approvals, and sync leads to Google Sheets.';
@@ -57,12 +57,21 @@ const Landing: React.FC = () => {
 
   const location = useLocation();
   const isLight = theme === 'light';
+  const isComic = uiTheme === 'comic';
   const surfaceMain = isLight
-    ? 'bg-white/90 border border-black/5 shadow-[0_22px_70px_-40px_rgba(0,0,0,0.35)]'
+    ? (isComic
+      ? 'comic-panel bg-white'
+      : 'bg-white/90 border border-black/5 shadow-[0_22px_70px_-40px_rgba(0,0,0,0.35)]')
     : 'bg-card/70 border border-border/60 backdrop-blur-xl shadow-2xl';
   const surfaceSoft = isLight
-    ? 'bg-white/85 border border-black/5 shadow-[0_18px_60px_-38px_rgba(0,0,0,0.35)]'
+    ? (isComic
+      ? 'comic-panel-soft bg-white'
+      : 'bg-white/85 border border-black/5 shadow-[0_18px_60px_-38px_rgba(0,0,0,0.35)]')
     : 'bg-background/60 border border-border/60 backdrop-blur-md';
+  const pageBackground = isLight
+    ? (isComic ? 'bg-[#fffbe6]' : 'bg-[#f7f8fb]')
+    : 'bg-background';
+  const sectionHeadingClass = isComic ? 'comic-display' : '';
 
   useEffect(() => {
     // Check for errors in URL params
@@ -155,28 +164,30 @@ const Landing: React.FC = () => {
         robots="index, follow"
         structuredData={structuredData}
       />
-      <div className={`min-h-screen relative overflow-x-hidden flex flex-col selection:bg-primary/30 ${isLight ? 'bg-[#f7f8fb]' : 'bg-background'}`}>
+      <div className={`min-h-screen relative overflow-x-hidden flex flex-col selection:bg-primary/30 ${pageBackground}`}>
 
       {/* Background Ambience */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Mesh gradient blobs */}
-        <div className={`absolute top-[-10%] left-[-10%] w-[45%] h-[45%] rounded-full ${isLight ? 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.14),_transparent_55%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.2),_transparent_60%)] blur-3xl'}`} />
-        <div className={`absolute top-[10%] right-[-12%] w-[50%] h-[50%] rounded-full ${isLight ? 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.1),_transparent_55%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.18),_transparent_60%)] blur-3xl'}`} />
-        <div className={`absolute bottom-[-12%] left-[5%] w-[60%] h-[60%] rounded-full ${isLight ? 'bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.08),_transparent_65%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(94,234,212,0.16),_transparent_65%)] blur-3xl'}`} />
+        <div className={`absolute ${isComic && isLight ? 'top-[-20%] left-[-20%] w-[50%] h-[50%]' : 'top-[-10%] left-[-10%] w-[45%] h-[45%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,79,216,0.28),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.14),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.2),_transparent_60%)] blur-3xl'}`} />
+        <div className={`absolute ${isComic && isLight ? 'top-[5%] right-[-20%] w-[55%] h-[55%]' : 'top-[10%] right-[-12%] w-[50%] h-[50%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(0,212,255,0.25),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.1),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.18),_transparent_60%)] blur-3xl'}`} />
+        <div className={`absolute ${isComic && isLight ? 'bottom-[-18%] left-[0%] w-[65%] h-[65%]' : 'bottom-[-12%] left-[5%] w-[60%] h-[60%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,226,74,0.25),_transparent_65%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.08),_transparent_65%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(94,234,212,0.16),_transparent_65%)] blur-3xl'}`} />
 
         {/* Grid overlay */}
         <div
           className="absolute inset-0 mix-blend-soft-light"
           style={{
             backgroundImage: isLight
-              ? `linear-gradient(to right, rgba(15,23,42,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.05) 1px, transparent 1px)`
+              ? (isComic
+                ? 'radial-gradient(rgba(15,23,42,0.18) 1px, transparent 1px)'
+                : 'linear-gradient(to right, rgba(15,23,42,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.05) 1px, transparent 1px)')
               : `linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)`,
-            backgroundSize: '44px 44px',
+            backgroundSize: isLight ? (isComic ? '26px 26px' : '44px 44px') : '44px 44px',
           }}
         />
 
         {/* Vignette */}
-        <div className={`absolute inset-0 ${isLight ? 'bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0)_0%,_rgba(15,23,42,0.06)_70%,_rgba(15,23,42,0.12)_100%)]' : 'bg-[radial-gradient(circle_at_center,_rgba(0,0,0,0)_0%,_rgba(0,0,0,0.25)_70%,_rgba(0,0,0,0.5)_100%)]'}`} />
+        <div className={`absolute inset-0 ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0)_0%,_rgba(15,23,42,0.08)_72%,_rgba(15,23,42,0.18)_100%)]' : 'bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0)_0%,_rgba(15,23,42,0.06)_70%,_rgba(15,23,42,0.12)_100%)]') : 'bg-[radial-gradient(circle_at_center,_rgba(0,0,0,0)_0%,_rgba(0,0,0,0.25)_70%,_rgba(0,0,0,0.5)_100%)]'}`} />
 
         {/* Subtle Grain Overlay */}
         <div className="absolute inset-0 opacity-[0.05] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noiseFilter\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.65\' numOctaves=\'3\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noiseFilter)\'/%3E%3C/svg%3E")' }} />
@@ -187,12 +198,9 @@ const Landing: React.FC = () => {
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
  
-          <div 
-
-            // className="p-2 rounded-xl bg-card border border-border shadow-glow"
-            className="p-2 rounded-xl bg-card border border-border dark:bg-white/90 dark:border-white/10 "
-            
-            >
+          <div
+            className={`p-2 rounded-xl ${isLight ? (isComic ? 'comic-panel-soft' : 'bg-card border border-border') : 'bg-card border border-border'} dark:bg-white/90 dark:border-white/10`}
+          >
               <img src="/sendfx.png" alt="SendFx logo" 
               
               // className="w-7 h-7"
@@ -203,7 +211,7 @@ const Landing: React.FC = () => {
           </div>
 
           
-          <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
+          <div className="hidden md:flex items-center gap-7 text-[15px] font-semibold text-muted-foreground">
             <a href="#overview" className="hover:text-foreground transition-colors">Overview</a>
             <a href="#product" className="hover:text-foreground transition-colors">Product</a>
             <a href="#templates" className="hover:text-foreground transition-colors">Use cases</a>
@@ -233,17 +241,21 @@ const Landing: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 px-4 pb-16 md:pb-24 relative z-10">
-        <div className="max-w-6xl mx-auto space-y-16 md:space-y-24">
+      <main className="flex-1 px-6 pb-16 md:pb-24 relative z-10">
+        <div className="max-w-7xl mx-auto space-y-16 md:space-y-24">
 
           {/* Hero */}
-          <section id="overview" className="grid md:grid-cols-2 gap-10 md:gap-14 items-center">
-            <div className="space-y-5 md:space-y-6 text-left">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/40 border border-border text-muted-foreground text-[11px] font-medium backdrop-blur-md">
+          <section id="overview" className="grid md:grid-cols-2 gap-10 md:gap-10 items-center">
+            <div
+              className={`space-y-5 md:space-y-6 text-left ${isComic && isLight ? 'comic-panel-soft bg-white/70 backdrop-blur-md p-6 md:p-8' : ''}`}
+            >
+              <div
+                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium backdrop-blur-md ${isComic ? 'comic-sticker text-foreground font-semibold' : 'bg-muted/40 border border-border text-muted-foreground'}`}
+              >
                 <Sparkles className="w-3 h-3 text-amber-500" />
                 <span>Instagram-first automation for SMBs</span>
               </div>
-              <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-foreground tracking-tight md:tracking-tighter leading-[1.05] md:leading-[1.08]">
+              <h1 className={`text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[1.05] md:leading-[1.08] ${isComic ? 'text-[#ff3fd0] comic-display comic-shadow-text' : 'text-foreground tracking-tight md:tracking-tighter'}`}>
                 Instagram DM automation + lightweight CRM for SMBs.
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground leading-relaxed md:leading-[1.7]">
@@ -267,7 +279,7 @@ const Landing: React.FC = () => {
                 {showEmailLogin ? (
                   <div className="w-full max-w-md animate-fade-in">
                     <form onSubmit={handleEmailLogin} className="space-y-4">
-                      <div className="glass-panel p-6 rounded-2xl border border-border bg-card/50 backdrop-blur-xl">
+                      <div className={`p-6 rounded-2xl ${isLight ? (isComic ? 'comic-panel-soft' : 'glass-panel border border-border bg-card/50 backdrop-blur-xl') : 'glass-panel border border-border bg-card/50 backdrop-blur-xl'}`}>
                         <h2 className="text-xl font-bold text-foreground mb-4 text-left">Log in with email</h2>
 
                         <div className="space-y-4">
@@ -346,7 +358,7 @@ const Landing: React.FC = () => {
                       </Button>
                       <Button
                         variant="outline"
-                        className="inline-flex items-center gap-2"
+                        className={`inline-flex items-center gap-2 ${isComic ? 'shadow-none bg-white/70' : ''}`}
                         onClick={handleWatchDemo}
                       >
                         <PlayCircle className="w-4 h-4" />
@@ -372,7 +384,7 @@ const Landing: React.FC = () => {
                 )}
               </div>
 
-              <div className="text-sm text-muted-foreground border border-border/70 rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 bg-background/60 backdrop-blur-md w-full max-w-full text-left sm:inline-flex sm:w-auto">
+              <div className={`text-sm border rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 backdrop-blur-md w-full max-w-full text-left sm:inline-flex sm:w-auto ${isComic ? 'text-foreground border-2 border-black bg-white/90 shadow-[4px_4px_0_rgba(0,0,0,0.8)]' : 'text-muted-foreground border-border/70 bg-background/60'}`}>
                 <Sparkles className="w-4 h-4 text-primary" />
                 <span>Built for SMBs on Instagram: bookings, restaurants, salons, ecommerce, local services</span>
               </div>
@@ -380,13 +392,15 @@ const Landing: React.FC = () => {
 
             {/* Mock Panel */}
             <div className="relative">
-              <div className={`glass-panel rounded-3xl p-4 md:p-6 space-y-4 ${surfaceMain}`}>
+              <div
+                className={`p-4 md:p-6 space-y-4 ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.08]' : 'glass-panel rounded-3xl'}`}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-emerald-400" />
                     <p className="text-sm text-foreground font-semibold">Guardrails ON</p>
                   </div>
-                  <div className="text-xs text-muted-foreground px-2 py-1 rounded-full border border-border/60">Live</div>
+                  <div className={`text-xs px-2 py-1 rounded-full ${isComic ? 'comic-sticker text-foreground' : 'text-muted-foreground border border-border/60'}`}>Live</div>
                 </div>
                 <div className="grid grid-cols-3 gap-3 text-sm">
                   <div className="p-3 rounded-2xl border border-border/60 bg-background/60">
@@ -445,7 +459,7 @@ const Landing: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Product</p>
-                <h2 className="text-2xl md:text-3xl font-extrabold text-foreground">How SendFx works</h2>
+                <h2 className={`text-2xl md:text-3xl font-extrabold text-foreground ${sectionHeadingClass}`}>How SendFx works</h2>
               </div>
             </div>
             <div className="grid md:grid-cols-3 gap-4">
@@ -471,7 +485,7 @@ const Landing: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Demo</p>
-                <h3 className="text-xl md:text-2xl font-extrabold text-foreground">Watch a 60-second walkthrough</h3>
+                <h3 className={`text-xl md:text-2xl font-extrabold text-foreground ${sectionHeadingClass}`}>Watch a 60-second walkthrough</h3>
               </div>
             </div>
             <div className="grid md:grid-cols-[1.4fr,0.6fr] gap-6">
@@ -509,7 +523,7 @@ const Landing: React.FC = () => {
 
           {/* Core differentiation */}
           <section id="features" className="space-y-6 text-left">
-            <h3 className="text-xl md:text-2xl font-extrabold text-foreground">Why SMBs pick SendFx</h3>
+            <h3 className={`text-xl md:text-2xl font-extrabold text-foreground ${sectionHeadingClass}`}>Why SMBs pick SendFx</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
                 {
@@ -544,7 +558,7 @@ const Landing: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Templates</p>
-                <h3 className="text-xl md:text-2xl font-extrabold text-foreground">Use cases and templates built for SMBs</h3>
+                <h3 className={`text-xl md:text-2xl font-extrabold text-foreground ${sectionHeadingClass}`}>Use cases and templates built for SMBs</h3>
                 <p className="text-sm text-muted-foreground">Bookings, sales, and support templates you can launch in minutes.</p>
               </div>
               <Button
@@ -582,7 +596,7 @@ const Landing: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Control & Safety</p>
-                <h3 className="text-xl md:text-2xl font-extrabold text-foreground">Operational controls that keep you in charge</h3>
+                <h3 className={`text-xl md:text-2xl font-extrabold text-foreground ${sectionHeadingClass}`}>Operational controls that keep you in charge</h3>
               </div>
             </div>
             <div className="grid md:grid-cols-[1.2fr,0.8fr] gap-6">
@@ -613,7 +627,7 @@ const Landing: React.FC = () => {
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Pricing</p>
-                <h2 className="text-2xl md:text-3xl font-extrabold text-foreground mt-2">Simple pricing for Instagram businesses</h2>
+                <h2 className={`text-2xl md:text-3xl font-extrabold text-foreground mt-2 ${sectionHeadingClass}`}>Simple pricing for Instagram businesses</h2>
                 <p className="text-muted-foreground mt-2 max-w-2xl">Start free, upgrade as your DM volume grows.</p>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -637,7 +651,7 @@ const Landing: React.FC = () => {
                       <p className="text-3xl font-extrabold text-foreground mt-1">{plan.price}<span className="text-base font-semibold text-muted-foreground"> / month</span></p>
                     </div>
                     {plan.highlight && (
-                      <div className="px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/30">Popular</div>
+                      <div className={`px-3 py-1.5 rounded-full text-xs font-semibold ${isComic ? 'comic-sticker text-foreground' : 'bg-primary/10 text-primary border border-primary/30'}`}>Popular</div>
                     )}
                   </div>
                   <ul className="space-y-3 text-sm text-foreground">
@@ -659,7 +673,7 @@ const Landing: React.FC = () => {
 
           {/* FAQ */}
           <section className="space-y-4 text-left">
-            <h3 className="text-xl md:text-2xl font-extrabold text-foreground">FAQ</h3>
+            <h3 className={`text-xl md:text-2xl font-extrabold text-foreground ${sectionHeadingClass}`}>FAQ</h3>
             <div className="grid md:grid-cols-2 gap-4">
               {[
                 { q: 'Is this safe for Instagram?', a: 'Guardrails and approval stops help prevent risky replies before they send.' },
@@ -700,7 +714,7 @@ const Landing: React.FC = () => {
             <p className="text-sm text-muted-foreground">
               Example flow: detect intent → route or reply → escalate to human when needed. Customize tone, approvals, and handoff notes.
             </p>
-            <div className="glass-panel rounded-xl border border-border/60 bg-background/70 p-4 text-sm text-foreground">
+            <div className={`rounded-xl p-4 text-sm text-foreground ${isLight ? (isComic ? 'comic-panel-soft' : 'glass-panel border border-border/60 bg-background/70') : 'glass-panel border border-border/60 bg-background/70'}`}>
               <p className="font-semibold mb-2">Steps</p>
               <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
                 <li>Intent detected from incoming DM</li>
