@@ -241,8 +241,8 @@ const Landing: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 px-4 pb-16 md:pb-24 relative z-10">
-        <div className="max-w-6xl mx-auto space-y-16 md:space-y-24">
+      <main className="flex-1 px-6 pb-16 md:pb-24 relative z-10">
+        <div className="max-w-7xl mx-auto space-y-16 md:space-y-24">
 
           {/* Hero */}
           <section id="overview" className="grid md:grid-cols-2 gap-10 md:gap-10 items-center">
