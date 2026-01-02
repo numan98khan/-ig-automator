@@ -384,24 +384,45 @@ const Landing: React.FC = () => {
                 )}
               </div>
 
-              <div className={`text-sm border rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 backdrop-blur-md w-full max-w-full text-left sm:inline-flex sm:w-auto ${isComic ? 'text-foreground border-2 border-black bg-white/90 shadow-[4px_4px_0_rgba(0,0,0,0.8)]' : 'text-muted-foreground border-border/70 bg-background/60'}`}>
+              {/* <div className={`text-sm border rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 backdrop-blur-md w-full max-w-full text-left sm:inline-flex sm:w-auto ${isComic ? 'text-foreground border-2 border-black bg-white/90 shadow-[4px_4px_0_rgba(0,0,0,0.8)]' : 'text-muted-foreground border-border/70 bg-background/60'}`}>
                 <Sparkles className="w-4 h-4 text-primary" />
                 <span>Built for SMBs on Instagram: bookings, restaurants, salons, ecommerce, local services</span>
-              </div>
+              </div> */}
             </div>
 
             {/* Hero Visual */}
             <div className="relative">
               <div
-                className={`relative overflow-hidden p-4 md:p-6 ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.04]' : 'glass-panel rounded-3xl'}`}
+                className={`relative overflow-hidden p-2 md:p-4 flex items-center justify-center ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.04]' : 'glass-panel rounded-3xl'}`}
               >
+                <div
+                  className="absolute -right-12 top-6 h-56 w-56 rounded-full bg-primary/20 blur-3xl opacity-70"
+                  aria-hidden="true"
+                />
+                <div
+                  className={`absolute bottom-5 left-1/2 h-6 w-[70%] -translate-x-1/2 rounded-full blur-2xl ${isLight ? 'bg-black/15 opacity-50' : 'bg-black/35 opacity-60'}`}
+                  aria-hidden="true"
+                />
                 <img
                   src="/landing_girl.png"
                   alt="SendFx assistant illustration"
-                  className="w-full h-auto max-h-[520px] object-contain"
+                  className="relative z-10 w-full h-auto max-h-[580px] object-contain scale-[1.08] md:scale-[1.12]"
                   loading="eager"
                   decoding="async"
                 />
+                <div className="absolute inset-0 z-20 pointer-events-none">
+                  <div className="absolute left-4 top-6 rounded-2xl border border-border/60 bg-background/80 px-3 py-2 text-[11px] text-muted-foreground shadow-[0_12px_24px_-20px_rgba(15,23,42,0.45)] backdrop-blur-md md:left-8 md:top-8 md:text-xs">
+                    <span className="font-semibold text-primary">New DM:</span> Shipping ETA?
+                  </div>
+                  <div className="absolute right-6 top-1/2 -translate-y-1/2 rounded-2xl border border-border/60 bg-background/80 px-3 py-2 text-[11px] text-muted-foreground shadow-[0_12px_24px_-20px_rgba(15,23,42,0.45)] backdrop-blur-md md:right-10 md:text-xs">
+                    Suggested reply ready
+                  </div>
+                  <div className="absolute left-10 bottom-8 rounded-2xl border border-border/60 bg-background/80 px-3 py-2 text-[11px] text-muted-foreground shadow-[0_12px_24px_-20px_rgba(15,23,42,0.45)] backdrop-blur-md md:left-16 md:bottom-10 md:text-xs">
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">Approve</span>
+                    <span className="mx-2 text-border">/</span>
+                    <span>Edit</span>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
