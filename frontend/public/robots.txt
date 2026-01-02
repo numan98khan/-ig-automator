@@ -1,6 +1,13 @@
 User-agent: *
-Disallow: /
-Allow: /landing
-Allow: /privacy-policy
+Disallow: /inbox
+Disallow: /dashboard
+Disallow: /crm
+Disallow: /automations
+Disallow: /settings
+Disallow: /support
+Disallow: /accept-invite
+Disallow: /verify-email
+Disallow: /request-password-reset
+Disallow: /reset-password
 
-Sitemap: http://localhost:3000/sitemap.xml
+Sitemap: https://sendfx.ai/sitemap.xml

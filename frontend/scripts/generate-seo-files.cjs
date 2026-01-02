@@ -23,7 +23,21 @@ const sitemapEntries = indexablePages
 
 const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapEntries}\n</urlset>\n`;
 
-const robotsTxt = `User-agent: *\nDisallow: /\nAllow: /landing\nAllow: /privacy-policy\n\nSitemap: ${baseUrl}/sitemap.xml\n`;
+const disallowedPaths = [
+  '/inbox',
+  '/dashboard',
+  '/crm',
+  '/automations',
+  '/settings',
+  '/support',
+  '/accept-invite',
+  '/verify-email',
+  '/request-password-reset',
+  '/reset-password',
+];
+
+const robotsLines = ['User-agent: *', ...disallowedPaths.map((path) => `Disallow: ${path}`), '', `Sitemap: ${baseUrl}/sitemap.xml`];
+const robotsTxt = `${robotsLines.join('\n')}\n`;
 
 fs.mkdirSync(publicDir, { recursive: true });
 fs.writeFileSync(path.join(publicDir, 'sitemap.xml'), sitemapXml);

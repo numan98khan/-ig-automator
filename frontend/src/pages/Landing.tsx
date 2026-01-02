@@ -138,7 +138,7 @@ const Landing: React.FC = () => {
   return (
     <>
       <Seo
-        title="SendFx | Multi-channel DM Automation & CRM"
+        title="SendFx | Multi-channel DM Automation, CRM & Sheets Sync"
         description={seoDescription}
         canonicalPath="/landing"
         image="/sendfx.png"
