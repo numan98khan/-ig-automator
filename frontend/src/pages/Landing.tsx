@@ -169,9 +169,9 @@ const Landing: React.FC = () => {
       {/* Background Ambience */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Mesh gradient blobs */}
-        <div className={`absolute top-[-10%] left-[-10%] w-[45%] h-[45%] rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,79,216,0.28),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.14),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.2),_transparent_60%)] blur-3xl'}`} />
-        <div className={`absolute top-[10%] right-[-12%] w-[50%] h-[50%] rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(0,212,255,0.25),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.1),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.18),_transparent_60%)] blur-3xl'}`} />
-        <div className={`absolute bottom-[-12%] left-[5%] w-[60%] h-[60%] rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,226,74,0.25),_transparent_65%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.08),_transparent_65%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(94,234,212,0.16),_transparent_65%)] blur-3xl'}`} />
+        <div className={`absolute ${isComic && isLight ? 'top-[-20%] left-[-20%] w-[50%] h-[50%]' : 'top-[-10%] left-[-10%] w-[45%] h-[45%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,79,216,0.28),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.14),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.2),_transparent_60%)] blur-3xl'}`} />
+        <div className={`absolute ${isComic && isLight ? 'top-[5%] right-[-20%] w-[55%] h-[55%]' : 'top-[10%] right-[-12%] w-[50%] h-[50%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(0,212,255,0.25),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.1),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.18),_transparent_60%)] blur-3xl'}`} />
+        <div className={`absolute ${isComic && isLight ? 'bottom-[-18%] left-[0%] w-[65%] h-[65%]' : 'bottom-[-12%] left-[5%] w-[60%] h-[60%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,226,74,0.25),_transparent_65%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.08),_transparent_65%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(94,234,212,0.16),_transparent_65%)] blur-3xl'}`} />
 
         {/* Grid overlay */}
         <div
@@ -211,7 +211,7 @@ const Landing: React.FC = () => {
           </div>
 
           
-          <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
+          <div className="hidden md:flex items-center gap-6 text-base font-semibold text-muted-foreground">
             <a href="#overview" className="hover:text-foreground transition-colors">Overview</a>
             <a href="#product" className="hover:text-foreground transition-colors">Product</a>
             <a href="#templates" className="hover:text-foreground transition-colors">Use cases</a>
@@ -246,7 +246,9 @@ const Landing: React.FC = () => {
 
           {/* Hero */}
           <section id="overview" className="grid md:grid-cols-2 gap-10 md:gap-14 items-center">
-            <div className="space-y-5 md:space-y-6 text-left">
+            <div
+              className={`space-y-5 md:space-y-6 text-left ${isComic && isLight ? 'comic-panel-soft bg-white/70 backdrop-blur-md p-6 md:p-8' : ''}`}
+            >
               <div
                 className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium backdrop-blur-md ${isComic ? 'comic-sticker text-foreground font-semibold' : 'bg-muted/40 border border-border text-muted-foreground'}`}
               >

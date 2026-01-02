@@ -223,32 +223,37 @@
 }
 
 .comic-shadow-text {
-  text-shadow: 3px 3px 0 rgba(0, 0, 0, 0.85);
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.75);
 }
 
 .comic-panel {
   border: 2px solid rgb(var(--border));
-  box-shadow: 6px 6px 0 rgba(15, 23, 42, 0.9);
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 rgba(15, 23, 42, 0.9);
   background-color: rgb(var(--card));
 }
 
 .comic-panel-soft {
   border: 2px solid rgb(var(--border));
+  border-radius: var(--radius);
   box-shadow: 4px 4px 0 rgba(15, 23, 42, 0.85);
   background-color: rgb(var(--card));
 }
 
 .comic-sticker {
   border: 2px solid rgb(var(--border));
-  box-shadow: 3px 3px 0 rgba(15, 23, 42, 0.85);
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 rgba(15, 23, 42, 0.85);
   background-color: rgb(var(--card));
 }
 
 .comic-button {
   border: 2px solid rgb(var(--border));
-  box-shadow: 3px 3px 0 rgba(15, 23, 42, 0.9);
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 rgba(15, 23, 42, 0.9);
   font-weight: 700;
   text-transform: uppercase;
+  min-height: 44px;
 }
 
 

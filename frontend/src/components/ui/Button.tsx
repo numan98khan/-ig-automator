@@ -36,11 +36,17 @@ export const Button: React.FC<ButtonProps> = ({
     danger: 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/25',
   };
 
-  const sizes = {
-    sm: 'text-xs px-3 py-1.5 gap-1.5',
-    md: 'text-sm px-4 py-2 gap-2',
-    lg: 'text-base px-6 py-3 gap-2.5',
-  };
+  const sizes = isComicTheme
+    ? {
+      sm: 'text-sm px-5 py-2.5 gap-2',
+      md: 'text-sm px-5 py-2.5 gap-2',
+      lg: 'text-sm px-5 py-2.5 gap-2',
+    }
+    : {
+      sm: 'text-xs px-3 py-1.5 gap-1.5',
+      md: 'text-sm px-4 py-2 gap-2',
+      lg: 'text-base px-6 py-3 gap-2.5',
+    };
 
   return (
     <button
