@@ -390,47 +390,18 @@ const Landing: React.FC = () => {
               </div>
             </div>
 
-            {/* Mock Panel */}
+            {/* Hero Visual */}
             <div className="relative">
               <div
-                className={`p-4 md:p-6 space-y-4 ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.08]' : 'glass-panel rounded-3xl'}`}
+                className={`relative overflow-hidden p-4 md:p-6 ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.04]' : 'glass-panel rounded-3xl'}`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <p className="text-sm text-foreground font-semibold">Guardrails ON</p>
-                  </div>
-                  <div className={`text-xs px-2 py-1 rounded-full ${isComic ? 'comic-sticker text-foreground' : 'text-muted-foreground border border-border/60'}`}>Live</div>
-                </div>
-                <div className="grid grid-cols-3 gap-3 text-sm">
-                  <div className="p-3 rounded-2xl border border-border/60 bg-background/60">
-                    <p className="text-xs text-muted-foreground">Inbox</p>
-                    <div className="space-y-2 mt-2">
-                      <div className="p-2 rounded-xl bg-primary/10 text-primary">New: Shipping ETA?</div>
-                      <div className="p-2 rounded-xl bg-muted text-foreground/80">VIP: Bulk order</div>
-                      <div className="p-2 rounded-xl bg-muted text-foreground/80">Clinic: Follow-up</div>
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-2xl border border-border/60 bg-background/60">
-                    <p className="text-xs text-muted-foreground">Flow</p>
-                    <div className="space-y-2 mt-2">
-                      <div className="p-2 rounded-xl bg-primary/10 text-primary">Intent detected</div>
-                      <div className="p-2 rounded-xl bg-amber-100/10 text-amber-300">Safety check</div>
-                      <div className="p-2 rounded-xl bg-emerald-100/10 text-emerald-300">Route to sales</div>
-                      <div className="p-2 rounded-xl bg-indigo-100/10 text-indigo-300">Reply + summary</div>
-                    </div>
-                  </div>
-                  <div className="p-3 rounded-2xl border border-border/60 bg-background/60 space-y-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Suggested reply</p>
-                      <p className="mt-1 text-sm text-foreground">“We can deliver by Friday. Want me to reserve stock?”</p>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <div className="px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/30">Approve</div>
-                      <div className="px-2 py-1 rounded-full bg-muted text-foreground border border-border/60">Edit</div>
-                    </div>
-                  </div>
-                </div>
+                <img
+                  src="/landing_girl.png"
+                  alt="SendFx assistant illustration"
+                  className="w-full h-auto max-h-[520px] object-contain"
+                  loading="eager"
+                  decoding="async"
+                />
               </div>
             </div>
           </section>
