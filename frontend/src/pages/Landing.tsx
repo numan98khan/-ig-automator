@@ -37,6 +37,8 @@ const Landing: React.FC = () => {
   const seoDescription =
     'SendFx is Instagram DM automation and a lightweight CRM for SMBs. Route and qualify DMs, reply with guardrails and approvals, and sync leads to Google Sheets.';
   const siteUrl = (import.meta.env.VITE_SITE_URL || window.location.origin).replace(/\/$/, '');
+  const demoVideoUrl = (import.meta.env.VITE_DEMO_VIDEO_URL as string | undefined)?.trim();
+  const hasDemoVideo = Boolean(demoVideoUrl);
   const structuredData = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
@@ -474,9 +476,25 @@ const Landing: React.FC = () => {
             </div>
             <div className="grid md:grid-cols-[1.4fr,0.6fr] gap-6">
               <div className={`glass-panel p-4 rounded-2xl ${surfaceSoft}`}>
-                <div className="aspect-video rounded-2xl border border-dashed border-border/70 bg-muted/40 flex items-center justify-center text-sm text-muted-foreground">
-                  Loom video coming soon. Drop the embed here.
-                </div>
+                {hasDemoVideo ? (
+                  <div className="aspect-video overflow-hidden rounded-2xl border border-border/70 bg-muted/20">
+                    <iframe
+                      className="h-full w-full"
+                      src={demoVideoUrl}
+                      title="SendFx product demo"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <div className="aspect-video rounded-2xl border border-dashed border-border/70 bg-muted/40 flex flex-col items-center justify-center gap-3 px-6 text-center text-sm text-muted-foreground">
+                    <p className="text-base font-semibold text-foreground">Demo video coming soon.</p>
+                    <p>Start free to explore templates and workflows inside the app.</p>
+                    <Button onClick={handleInstagramLogin} disabled={loading} className="mt-1">
+                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Start free'}
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className={`glass-panel p-5 rounded-2xl ${surfaceSoft}`}>
                 <p className="text-sm font-semibold text-foreground">What you will see</p>

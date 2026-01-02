@@ -100,6 +100,15 @@ if (isProduction) {
     res.status(404).send('Sitemap not found');
   });
 
+  app.get('/site-map.xml', (req, res) => {
+    if (fs.existsSync(sitemapPath)) {
+      res.type('application/xml');
+      res.sendFile(sitemapPath);
+      return;
+    }
+    res.status(404).send('Sitemap not found');
+  });
+
   app.get('/robots.txt', (req, res) => {
     if (fs.existsSync(robotsPath)) {
       res.type('text/plain');
