@@ -69,7 +69,7 @@ const Landing: React.FC = () => {
       : 'bg-white/85 border border-black/5 shadow-[0_18px_60px_-38px_rgba(0,0,0,0.35)]')
     : 'bg-background/60 border border-border/60 backdrop-blur-md';
   const pageBackground = isLight
-    ? (isComic ? 'bg-[#fff6a6]' : 'bg-[#f7f8fb]')
+    ? (isComic ? 'bg-[#fffbe6]' : 'bg-[#f7f8fb]')
     : 'bg-background';
   const sectionHeadingClass = isComic ? 'comic-display' : '';
 

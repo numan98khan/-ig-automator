@@ -91,8 +91,8 @@
 
   :root[data-ui-theme='comic']:not(.dark) {
     /* Comic Pop Light */
-    --background: 255 246 166;
-    /* #FFF6A6 */
+    --background: 255 251 230;
+    /* #FFFBE6 */
     --foreground: 17 24 39;
     /* #111827 */
 
