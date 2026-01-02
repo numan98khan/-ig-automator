@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://sendfx.ai/landing</loc>
-    <lastmod>2026-01-02T09:15:08.470Z</lastmod>
+    <loc>https://sendfx.ai/</loc>
+    <lastmod>2026-01-02T09:55:27.038Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1</priority>
   </url>
   <url>
     <loc>https://sendfx.ai/privacy-policy</loc>
-    <lastmod>2026-01-02T09:15:08.470Z</lastmod>
+    <lastmod>2026-01-02T09:55:27.038Z</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.2</priority>
   </url>

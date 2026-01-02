@@ -44,7 +44,7 @@ const Landing: React.FC = () => {
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
     description: seoDescription,
-    url: `${siteUrl}/landing`,
+    url: `${siteUrl}/`,
   };
 
   const location = useLocation();
@@ -85,9 +85,11 @@ const Landing: React.FC = () => {
     // If user is already logged in with workspace, redirect to inbox or original destination
     if (user && currentWorkspace) {
       console.log('✅ User authenticated, redirecting...');
-      const from = location.state?.from?.pathname || '/inbox';
-      // If the destination is same as landing (shouldn't happen), go to inbox
-      const target = from === '/landing' ? '/inbox' : from;
+      const from = location.state?.from?.pathname || '/app/inbox';
+      // If the destination is the public landing, go to the app inbox
+      const target = (from === '/' || from === '/landing' || from === '/app')
+        ? '/app/inbox'
+        : from;
       navigate(target, { replace: true });
     }
   }, [user, currentWorkspace, navigate, location]);
@@ -127,7 +129,7 @@ const Landing: React.FC = () => {
       console.log('✅ User data refreshed, navigating to inbox...');
 
       // Navigate to inbox
-      navigate('/inbox', { replace: true });
+      navigate('/app/inbox', { replace: true });
     } catch (error: any) {
       console.error('Login error:', error);
       setError(error.response?.data?.error || 'Invalid email or password');
@@ -140,7 +142,7 @@ const Landing: React.FC = () => {
       <Seo
         title="SendFx | Multi-channel DM Automation, CRM & Sheets Sync"
         description={seoDescription}
-        canonicalPath="/landing"
+        canonicalPath="/"
         image="/sendfx.png"
         robots="index, follow"
         structuredData={structuredData}

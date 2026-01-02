@@ -8,7 +8,7 @@ const rawSiteUrl = process.env.SITE_URL || process.env.VITE_SITE_URL || '';
 const baseUrl = (rawSiteUrl || 'http://localhost:3000').replace(/\/$/, '');
 
 const indexablePages = [
-  { path: '/landing', changefreq: 'weekly', priority: 1.0 },
+  { path: '/', changefreq: 'weekly', priority: 1.0 },
   { path: '/privacy-policy', changefreq: 'yearly', priority: 0.2 },
 ];
 
@@ -24,6 +24,9 @@ const sitemapEntries = indexablePages
 const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapEntries}\n</urlset>\n`;
 
 const disallowedPaths = [
+  '/app',
+  '/landing',
+  '/login',
   '/inbox',
   '/dashboard',
   '/crm',

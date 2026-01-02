@@ -48,10 +48,10 @@ const Layout: React.FC = () => {
 
   const navLinks = useMemo(() => {
     const links = [
-      { to: '/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/inbox') || location.pathname === '/' },
-      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/dashboard') },
-      { to: '/crm', label: 'CRM', icon: Users, isActive: isActive('/crm') },
-      { to: '/automations', label: 'Automations', icon: Atom, isActive: isActive('/automations') },
+      { to: '/app/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/app/inbox') || location.pathname === '/app' },
+      { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/app/dashboard') },
+      { to: '/app/crm', label: 'CRM', icon: Users, isActive: isActive('/app/crm') },
+      { to: '/app/automations', label: 'Automations', icon: Atom, isActive: isActive('/app/automations') },
     ];
 
     return links;
@@ -59,12 +59,12 @@ const Layout: React.FC = () => {
 
   const pageTitle = useMemo(() => {
     const path = location.pathname;
-    if (path === '/' || path.startsWith('/inbox')) return 'Inbox';
-    if (path.startsWith('/dashboard')) return 'Dashboard';
-    if (path.startsWith('/crm')) return 'CRM';
-    if (path.startsWith('/automations')) return 'Automations';
-    if (path.startsWith('/settings')) return 'Settings';
-    if (path.startsWith('/support')) return 'Support';
+    if (path === '/app' || path.startsWith('/app/inbox')) return 'Inbox';
+    if (path.startsWith('/app/dashboard')) return 'Dashboard';
+    if (path.startsWith('/app/crm')) return 'CRM';
+    if (path.startsWith('/app/automations')) return 'Automations';
+    if (path.startsWith('/app/settings')) return 'Settings';
+    if (path.startsWith('/app/support')) return 'Support';
     return 'App';
   }, [location.pathname]);
 
@@ -79,7 +79,7 @@ const Layout: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   useEffect(() => {
@@ -124,7 +124,7 @@ const Layout: React.FC = () => {
         <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full grid grid-cols-[auto,1fr,auto] items-center gap-4">
           <div className="flex items-center gap-2 min-w-0">
             <Link
-              to="/"
+              to="/app/inbox"
               className="flex items-center gap-2 rounded-md px-2 py-1 transition"
             >
               <img
@@ -195,7 +195,7 @@ const Layout: React.FC = () => {
                       className="w-full justify-start px-2 h-10"
                       onClick={() => {
                         setAccountMenuOpen(false);
-                        navigate('/settings');
+                        navigate('/app/settings');
                       }}
                       leftIcon={<Plus className="w-4 h-4" />}
                     >
@@ -294,7 +294,7 @@ const Layout: React.FC = () => {
                     variant="ghost"
                     onClick={() => {
                       setShowUserMenu(false);
-                      navigate('/settings');
+                      navigate('/app/settings');
                     }}
                     className="w-full justify-start px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-muted text-sm font-normal h-auto rounded-none"
                     leftIcon={<Settings className="w-4 h-4" />}
@@ -432,7 +432,7 @@ const Layout: React.FC = () => {
               variant="ghost"
               onClick={() => {
                 setShowUserMenu(false);
-                navigate('/settings');
+                navigate('/app/settings');
               }}
               className="w-full justify-start px-4 py-3 text-muted-foreground hover:text-foreground hover:bg-muted font-medium h-auto rounded-none"
               leftIcon={<Settings className="w-4 h-4" />}

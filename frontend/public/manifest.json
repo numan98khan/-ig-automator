@@ -2,7 +2,7 @@
   "name": "SendFx",
   "short_name": "SendFx",
   "description": "AI-powered Instagram DM automation with guardrails, approvals, and smart routing.",
-  "start_url": "/",
+  "start_url": "/app",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0ea5e9",

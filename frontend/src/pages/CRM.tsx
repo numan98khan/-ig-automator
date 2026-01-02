@@ -937,7 +937,7 @@ const CRM: React.FC = () => {
                   variant="outline"
                   leftIcon={<MessageSquare className="w-4 h-4" />}
                   type="button"
-                  onClick={() => navigate(`/inbox?conversationId=${selectedContact._id}`)}
+                  onClick={() => navigate(`/app/inbox?conversationId=${selectedContact._id}`)}
                 >
                   Open in Inbox
                 </Button>
@@ -1861,7 +1861,7 @@ const CRM: React.FC = () => {
                     variant="outline"
                     leftIcon={<MessageSquare className="w-4 h-4" />}
                     type="button"
-                    onClick={() => navigate(`/inbox?conversationId=${selectedContact._id}`)}
+                    onClick={() => navigate(`/app/inbox?conversationId=${selectedContact._id}`)}
                   >
                     Open in Inbox
                   </Button>

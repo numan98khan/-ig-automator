@@ -21,14 +21,16 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/landing" element={<Landing />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/landing" element={<Navigate to="/" replace />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/request-password-reset" element={<RequestPasswordReset />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route
-            path="/"
+            path="/app"
             element={
               <PrivateRoute requireWorkspace requireInstagram>
                 <AccountProvider>
@@ -37,19 +39,19 @@ function App() {
               </PrivateRoute>
             }
           >
-            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route index element={<Navigate to="/app/dashboard" replace />} />
             <Route path="inbox" element={<Inbox />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="knowledge" element={<Navigate to="/automations?section=knowledge" replace />} />
+            <Route path="knowledge" element={<Navigate to="/app/automations?section=knowledge" replace />} />
             <Route path="settings" element={<Settings />} />
             <Route path="automations" element={<Automations />} />
             <Route path="crm" element={<CRM />} />
             <Route path="support" element={<Support />} />
-            <Route path="alerts" element={<Navigate to="/automations?section=alerts" replace />} />
-            <Route path="escalations" element={<Navigate to="/automations?section=alerts" replace />} />
-            <Route path="team" element={<Navigate to="/settings?tab=team" replace />} />
+            <Route path="alerts" element={<Navigate to="/app/automations?section=alerts" replace />} />
+            <Route path="escalations" element={<Navigate to="/app/automations?section=alerts" replace />} />
+            <Route path="team" element={<Navigate to="/app/settings?tab=team" replace />} />
           </Route>
-          <Route path="*" element={<Navigate to="/landing" />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
