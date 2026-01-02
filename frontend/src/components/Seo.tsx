@@ -12,7 +12,7 @@ type SeoProps = {
 };
 
 const DEFAULT_DESCRIPTION =
-  'SendFx automates multi-channel DMs with AI guardrails, approvals, and smart routing.';
+  'SendFx is Instagram DM automation and a lightweight CRM for SMBs.';
 const DEFAULT_IMAGE = '/sendfx.png';
 const SITE_NAME = 'SendFx';
 

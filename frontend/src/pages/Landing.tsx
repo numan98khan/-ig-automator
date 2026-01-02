@@ -35,7 +35,7 @@ const Landing: React.FC = () => {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const seoDescription =
-    'SendFx automates multi-channel DMs with AI guardrails, approvals, and smart routing. Capture leads, manage contacts, and sync to Google Sheets.';
+    'SendFx is Instagram DM automation and a lightweight CRM for SMBs. Route and qualify DMs, reply with guardrails and approvals, and sync leads to Google Sheets.';
   const siteUrl = (import.meta.env.VITE_SITE_URL || window.location.origin).replace(/\/$/, '');
   const structuredData = {
     '@context': 'https://schema.org',
@@ -45,6 +45,12 @@ const Landing: React.FC = () => {
     operatingSystem: 'Web',
     description: seoDescription,
     url: `${siteUrl}/`,
+  };
+  const handleWatchDemo = () => {
+    const demoSection = document.getElementById('demo');
+    if (demoSection) {
+      demoSection.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   const location = useLocation();
@@ -140,7 +146,7 @@ const Landing: React.FC = () => {
   return (
     <>
       <Seo
-        title="SendFx | Multi-channel DM Automation, CRM & Sheets Sync"
+        title="SendFx | Instagram DM Automation & CRM for SMBs"
         description={seoDescription}
         canonicalPath="/"
         image="/sendfx.png"
@@ -198,14 +204,19 @@ const Landing: React.FC = () => {
           <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
             <a href="#overview" className="hover:text-foreground transition-colors">Overview</a>
             <a href="#product" className="hover:text-foreground transition-colors">Product</a>
-            <a href="#templates" className="hover:text-foreground transition-colors">Templates</a>
+            <a href="#templates" className="hover:text-foreground transition-colors">Use cases</a>
+            <a href="#demo" className="hover:text-foreground transition-colors">Demo</a>
             <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
             <a href="#trust" className="hover:text-foreground transition-colors">Trust</a>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="hidden md:inline-flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="hidden md:inline-flex items-center gap-2"
+              onClick={handleWatchDemo}
+            >
               <PlayCircle className="w-4 h-4" />
-              Watch demo
+              Watch demo (60s)
             </Button>
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -214,7 +225,7 @@ const Landing: React.FC = () => {
             >
               {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
-            <Button onClick={handleInstagramLogin} className="hidden md:inline-flex">Connect Instagram</Button>
+            <Button onClick={handleInstagramLogin} className="hidden md:inline-flex">Start free</Button>
           </div>
         </div>
       </header>
@@ -228,13 +239,13 @@ const Landing: React.FC = () => {
             <div className="space-y-5 md:space-y-6 text-left">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/40 border border-border text-muted-foreground text-[11px] font-medium backdrop-blur-md">
                 <Sparkles className="w-3 h-3 text-amber-500" />
-                <span>Composable flows + guardrails</span>
+                <span>Instagram-first automation for SMBs</span>
               </div>
               <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-foreground tracking-tight md:tracking-tighter leading-[1.05] md:leading-[1.08]">
-                Automate Instagram DMs — without losing control.
+                Instagram DM automation + lightweight CRM for SMBs.
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground leading-relaxed md:leading-[1.7]">
-                AI replies, routing, approvals, and human handoff in one inbox. Keep tone consistent, block risky replies, and escalate edge cases automatically.
+                Route and qualify inbound DMs, reply with guardrails and approvals, and sync leads to Google Sheets without losing the human touch.
               </p>
 
               <div className="space-y-3">
@@ -328,20 +339,24 @@ const Landing: React.FC = () => {
                         className="group inline-flex items-center gap-3 px-6 py-3 text-base"
                       >
                         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Instagram className="w-4 h-4" />}
-                        <span>Connect Instagram</span>
+                        <span>Start free</span>
                         <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                       </Button>
-                      <Button variant="outline" className="inline-flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        className="inline-flex items-center gap-2"
+                        onClick={handleWatchDemo}
+                      >
                         <PlayCircle className="w-4 h-4" />
-                        Watch 45s demo
+                        Watch demo (60s)
                       </Button>
                     </div>
                     <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-3">
-                      <span>No card</span>
+                      <span>Free plan</span>
                       <span className="w-1 h-1 rounded-full bg-border" />
-                      <span>Setup in ~5 min</span>
+                      <span>Setup in 5 min</span>
                       <span className="w-1 h-1 rounded-full bg-border" />
-                      <span>Uninstall anytime</span>
+                      <span>Cancel anytime</span>
                     </div>
                     <div className="mt-2">
                       <button
@@ -357,7 +372,7 @@ const Landing: React.FC = () => {
 
               <div className="text-sm text-muted-foreground border border-border/70 rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 bg-background/60 backdrop-blur-md w-full max-w-full text-left sm:inline-flex sm:w-auto">
                 <Sparkles className="w-4 h-4 text-primary" />
-                <span>Used by teams in: E-commerce • Clinics • Restaurants • Creators • Local services</span>
+                <span>Built for SMBs on Instagram: bookings, restaurants, salons, ecommerce, local services</span>
               </div>
             </div>
 
@@ -433,9 +448,9 @@ const Landing: React.FC = () => {
             </div>
             <div className="grid md:grid-cols-3 gap-4">
               {[
-                { title: 'Connect Instagram', body: 'Auth in minutes to sync your inbox securely.' },
-                { title: 'Import brand voice + FAQs', body: 'Drop offers and examples to stay on-brand.' },
-                { title: 'Build flows + go live', body: 'Safe defaults with approvals and escalation baked in.' },
+                { title: 'Detect intent and route', body: 'Classify DMs and route to sales, support, or bookings.' },
+                { title: 'Draft replies with approvals', body: 'AI drafts responses and stops for approval when needed.' },
+                { title: 'Handoff when confidence is low', body: 'Send edge cases to a teammate with context and summary.' },
               ].map((step) => (
                 <div key={step.title} className={`glass-panel p-5 rounded-2xl ${surfaceSoft}`}>
                   <p className="text-base font-semibold text-foreground">{step.title}</p>
@@ -446,14 +461,42 @@ const Landing: React.FC = () => {
             <p className="text-sm text-muted-foreground">Start with templates. Customize later.</p>
           </section>
 
+          {/* Demo */}
+          <section id="demo" className="space-y-6 text-left">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                <PlayCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Demo</p>
+                <h3 className="text-xl md:text-2xl font-extrabold text-foreground">Watch a 60-second walkthrough</h3>
+              </div>
+            </div>
+            <div className="grid md:grid-cols-[1.4fr,0.6fr] gap-6">
+              <div className={`glass-panel p-4 rounded-2xl ${surfaceSoft}`}>
+                <div className="aspect-video rounded-2xl border border-dashed border-border/70 bg-muted/40 flex items-center justify-center text-sm text-muted-foreground">
+                  Loom video coming soon. Drop the embed here.
+                </div>
+              </div>
+              <div className={`glass-panel p-5 rounded-2xl ${surfaceSoft}`}>
+                <p className="text-sm font-semibold text-foreground">What you will see</p>
+                <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                  <li>How DMs get classified and routed.</li>
+                  <li>Approval stops for sensitive replies.</li>
+                  <li>Google Sheets sync for leads.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
           {/* Core differentiation */}
           <section id="features" className="space-y-6 text-left">
-            <h3 className="text-xl md:text-2xl font-extrabold text-foreground">Why teams pick SendFx</h3>
+            <h3 className="text-xl md:text-2xl font-extrabold text-foreground">Why SMBs pick SendFx</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
                 {
                   title: 'On-brand AI replies',
-                  body: 'Trained on your offers and examples so every DM sounds like you.',
+                  body: 'Trained on your menu, pricing, and FAQs so every DM sounds like you.',
                   icon: MessageSquare,
                 },
                 {
@@ -463,7 +506,7 @@ const Landing: React.FC = () => {
                 },
                 {
                   title: 'Smart routing + handoff',
-                  body: 'Auto-route to sales/support/humans with summaries, suggested replies, and context.',
+                  body: 'Auto-route to sales, bookings, or support with summaries and context.',
                   icon: Workflow,
                 },
               ].map(({ title, body, icon: Icon }) => (
@@ -483,22 +526,26 @@ const Landing: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Templates</p>
-                <h3 className="text-xl md:text-2xl font-extrabold text-foreground">Launch faster with proven flows</h3>
-                <p className="text-sm text-muted-foreground">Preview and adapt in minutes. For power users: build flows like functions.</p>
+                <h3 className="text-xl md:text-2xl font-extrabold text-foreground">Use cases and templates built for SMBs</h3>
+                <p className="text-sm text-muted-foreground">Bookings, sales, and support templates you can launch in minutes.</p>
               </div>
-              <Button variant="outline" className="hidden md:inline-flex items-center gap-2">
+              <Button
+                variant="outline"
+                className="hidden md:inline-flex items-center gap-2"
+                onClick={handleWatchDemo}
+              >
                 <PlayCircle className="w-4 h-4" />
-                Watch demo
+                Watch demo (60s)
               </Button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {[
-                'Pricing questions',
-                'Delivery / availability',
-                'Booking / appointment',
-                'Refund / returns',
-                'Location / hours',
-                'Angry customer escalation',
+                'Bookings and appointments',
+                'Restaurant reservations',
+                'Pricing and quotes',
+                'Product availability',
+                'Order tracking',
+                'Customer complaints',
               ].map((template) => (
                 <div key={template} className={`glass-panel p-5 rounded-2xl flex flex-col gap-3 ${surfaceSoft}`}>
                   <p className="font-semibold text-foreground">{template}</p>
@@ -548,19 +595,19 @@ const Landing: React.FC = () => {
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Pricing</p>
-                <h2 className="text-2xl md:text-3xl font-extrabold text-foreground mt-2">Plans that grow with control</h2>
-                <p className="text-muted-foreground mt-2 max-w-2xl">Starter for solo creators, Pro for teams, Business for multi-workspace control. Enterprise available on request.</p>
+                <h2 className="text-2xl md:text-3xl font-extrabold text-foreground mt-2">Simple pricing for Instagram businesses</h2>
+                <p className="text-muted-foreground mt-2 max-w-2xl">Start free, upgrade as your DM volume grows.</p>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CreditCard className="w-4 h-4" />
-                <span>Cancel anytime • Usage = automated sends</span>
+                <span>Cancel anytime • Upgrade anytime</span>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
-                { name: 'Starter', price: '$39', note: 'Solo / creators', perks: ['1 workspace', '2 team seats included', 'Core templates + flows', 'Suggested replies with edits'] },
-                { name: 'Pro', price: '$89', note: 'Teams', highlight: true, perks: ['3 workspaces', '5 team seats included', 'Approvals + routing + handoffs', 'On-brand training + analytics'] },
-                { name: 'Business', price: '$149', note: 'Multi-workspace + controls', perks: ['Unlimited workspaces', '8 team seats included', 'Advanced guardrails + audit exports', 'Priority support'] },
+                { name: 'Free', price: '$0', note: 'Get started', perks: ['1 Instagram account', 'Basic inbox + tags', 'Starter templates', 'Manual replies'] },
+                { name: 'Starter', price: '$24.99', note: 'Growing SMBs', highlight: true, perks: ['1 workspace', '2 team seats', 'Guardrails + approvals', 'Google Sheets sync'] },
+                { name: 'Pro', price: '$99', note: 'High-volume teams', perks: ['3 workspaces', '5 team seats', 'Advanced routing + handoff', 'Priority support'] },
               ].map((plan) => (
                 <div
                   key={plan.name}
@@ -584,7 +631,7 @@ const Landing: React.FC = () => {
                     ))}
                   </ul>
                   <Button onClick={handleInstagramLogin} disabled={loading} className="w-full">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Connect Instagram'}
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Start free'}
                   </Button>
                   <p className="text-xs text-muted-foreground">Usage counts when a reply is sent or a flow runs.</p>
                 </div>
@@ -597,12 +644,12 @@ const Landing: React.FC = () => {
             <h3 className="text-xl md:text-2xl font-extrabold text-foreground">FAQ</h3>
             <div className="grid md:grid-cols-2 gap-4">
               {[
-                { q: 'Will it say something risky?', a: 'Guardrails block forbidden claims and approvals catch sensitive topics before they send.' },
-                { q: 'Can I approve messages before they send?', a: 'Yes. Add approval stops for intents that need human review.' },
-                { q: 'Can humans take over anytime?', a: 'Yes. Route to humans with summaries and suggested replies to save time.' },
-                { q: 'What permissions do you request from Instagram?', a: 'Only what is required to read inbox messages and send replies for connected accounts.' },
-                { q: 'Does it work with multiple accounts?', a: 'Starter supports one workspace; Pro/Business add multiple workspaces and roles.' },
-                { q: 'Do I have to code flows?', a: 'No. Start with templates; power users can build flows like functions later.' },
+                { q: 'Is this safe for Instagram?', a: 'Guardrails and approval stops help prevent risky replies before they send.' },
+                { q: 'Can I start free without connecting Instagram?', a: 'Yes. Explore templates and workflows, then connect when ready.' },
+                { q: 'How long does setup take?', a: 'Most SMBs connect and launch their first flow in under 10 minutes.' },
+                { q: 'Can I approve messages before they send?', a: 'Yes. Require approval for any intent or keyword you choose.' },
+                { q: 'Does it support bookings and restaurants?', a: 'Yes. Templates cover bookings, menus, pricing, and availability.' },
+                { q: 'Can I sync leads to Google Sheets?', a: 'Yes. Send qualified leads and contact updates to Sheets automatically.' },
               ].map(({ q, a }) => (
                 <div key={q} className={`glass-panel p-5 rounded-2xl ${surfaceSoft}`}>
                   <p className="font-semibold text-foreground">{q}</p>
@@ -653,7 +700,7 @@ const Landing: React.FC = () => {
 
       {/* Footer */}
       <footer className="p-8 text-center text-slate-600 text-sm relative z-10">
-        <p>© 2024 SendFx. AI flows and guardrails for Instagram.</p>
+        <p>© 2024 SendFx. Instagram DM automation for SMBs.</p>
       </footer>
       </div>
     </>
