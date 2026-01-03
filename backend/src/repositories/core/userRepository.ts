@@ -238,6 +238,55 @@ export const upsertUserFromLegacy = async (legacyUser: {
   createdAt?: Date;
   updatedAt?: Date;
 }) => {
+  const instagramUserId = legacyUser.instagramUserId ?? null;
+  if (instagramUserId) {
+    const existingByInstagram = await postgresQuery('SELECT * FROM core.users WHERE instagram_user_id = $1', [
+      instagramUserId,
+    ]);
+    if (existingByInstagram.rows[0]) {
+      const existingId = existingByInstagram.rows[0].id as string;
+      const updated = await postgresQuery(
+        `UPDATE core.users SET
+          email = $2,
+          password = $3,
+          first_name = $4,
+          last_name = $5,
+          role = $6,
+          instagram_user_id = $7,
+          instagram_username = $8,
+          is_provisional = $9,
+          email_verified = $10,
+          default_workspace_id = $11,
+          billing_account_id = $12,
+          tier_id = $13,
+          tier_limit_overrides = $14,
+          created_at = $15,
+          updated_at = $16
+        WHERE id = $1
+        RETURNING *`,
+        [
+          existingId,
+          legacyUser.email?.toLowerCase() ?? null,
+          legacyUser.password ?? null,
+          legacyUser.firstName ?? null,
+          legacyUser.lastName ?? null,
+          legacyUser.role ?? 'user',
+          legacyUser.instagramUserId ?? null,
+          legacyUser.instagramUsername ?? null,
+          legacyUser.isProvisional ?? true,
+          legacyUser.emailVerified ?? false,
+          legacyUser.defaultWorkspaceId ?? null,
+          legacyUser.billingAccountId ?? null,
+          legacyUser.tierId ?? null,
+          legacyUser.tierLimitOverrides ? JSON.stringify(legacyUser.tierLimitOverrides) : null,
+          legacyUser.createdAt ?? new Date(),
+          legacyUser.updatedAt ?? legacyUser.createdAt ?? new Date(),
+        ]
+      );
+      return mapUserRow(updated.rows[0]);
+    }
+  }
+
   const result = await postgresQuery(
     `INSERT INTO core.users (
       id,
