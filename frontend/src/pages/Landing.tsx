@@ -6,7 +6,6 @@ import {
   Sparkles,
   MessageSquare,
   AlertCircle,
-  AlertTriangle,
   ArrowRight,
   Clock,
   Mail,
@@ -23,7 +22,6 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
-import { AiHandledCard } from '../components/AiHandledCard';
 import AssistantWidget from '../components/AssistantWidget';
 import Seo from '../components/Seo';
 
@@ -91,6 +89,8 @@ const Landing: React.FC = () => {
     ? (isComic ? 'bg-[#fffbe6]' : 'bg-[#f7f8fb]')
     : 'bg-background';
   const sectionHeadingClass = isComic ? 'comic-display' : '';
+  const heroOverlayClass =
+    'rounded-2xl border border-border/60 bg-background/95 p-3 text-foreground shadow-[0_18px_40px_-26px_rgba(15,23,42,0.6)] backdrop-blur-sm';
 
   useEffect(() => {
     // Check for errors in URL params
@@ -366,34 +366,44 @@ const Landing: React.FC = () => {
                   loading="eager"
                   decoding="async"
                 />
-                <div className="absolute inset-0 z-20 pointer-events-none">
-                  <div className="absolute left-6 bottom-6 w-[240px] md:left-8 md:bottom-8 md:w-[280px]">
-                    <AiHandledCard
-                      value="97.1%"
-                      className={`shadow-[0_24px_60px_-32px_rgba(15,23,42,0.6)] backdrop-blur-sm ${isLight ? 'bg-white/95 border border-black/10' : 'bg-[#11131a]/95 border border-white/10'}`}
-                    />
-                  </div>
-                  <div className="absolute right-6 top-6 max-w-[240px] md:right-8 md:top-8 md:max-w-[280px]">
-                    <div className="rounded-2xl border border-border/60 bg-background/95 p-3 shadow-[0_18px_40px_-26px_rgba(15,23,42,0.6)] backdrop-blur-sm">
-                      <Badge variant="warning" className="gap-1">
-                        <ShieldCheck className="w-3 h-3" />
-                        Approval needed
-                      </Badge>
-                      <p className="mt-2 text-[11px] uppercase tracking-wide text-muted-foreground">Suggested reply</p>
-                      <p className="mt-1 text-sm text-foreground">We can deliver by Friday. Want me to reserve stock?</p>
-                      <div className="mt-3 flex gap-2">
-                        <Button size="sm" className="pointer-events-none">Approve</Button>
-                        <Button size="sm" variant="outline" className="pointer-events-none">Edit</Button>
-                      </div>
+              </div>
+              <div className="absolute inset-0 z-20 pointer-events-none">
+                <div className="hidden sm:block absolute -right-4 -top-4 w-[260px] sm:w-[300px] md:w-[320px] lg:w-[340px] md:-right-6 md:-top-6">
+                  <div className={heroOverlayClass}>
+                    <Badge variant="warning" className="gap-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      Approval needed
+                    </Badge>
+                    <p className="mt-3 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Suggested reply</p>
+                    <p
+                      className="mt-1 text-[13px] text-foreground leading-snug"
+                      style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      We can deliver by Friday. Want me to reserve stock?
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <Button size="sm" className="pointer-events-none">Approve</Button>
+                      <Button size="sm" variant="outline" className="pointer-events-none">Edit</Button>
                     </div>
                   </div>
-                  <div className="absolute right-5 bottom-6 md:right-10 md:bottom-10">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/90 px-3 py-1.5 text-xs text-foreground shadow-[0_12px_30px_-22px_rgba(15,23,42,0.6)] backdrop-blur-sm">
-                      <Badge variant="danger" className="gap-1">
-                        <AlertTriangle className="w-3 h-3" />
+                </div>
+                <div className="hidden sm:block absolute left-6 bottom-6 w-[240px] sm:w-[280px] md:w-[300px] lg:w-[320px] md:left-8 md:bottom-8">
+                  <div className={heroOverlayClass}>
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Inbox performance</p>
+                    <p className="mt-2 text-base font-semibold text-foreground">AI handled: High</p>
+                    <p className="text-xs text-muted-foreground mt-1">Based on recent threads</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Badge variant="neutral" className="text-[10px] uppercase tracking-wide">
                         Human alert
                       </Badge>
-                      <span className="text-muted-foreground">Pricing exception</span>
+                      <Badge variant="neutral" className="text-[10px] uppercase tracking-wide">
+                        Pricing exception
+                      </Badge>
                     </div>
                   </div>
                 </div>
