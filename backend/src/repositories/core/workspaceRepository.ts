@@ -91,3 +91,33 @@ export const createWorkspace = async (data: { name: string; userId: string; bill
   );
   return mapWorkspaceRow(result.rows[0]);
 };
+
+export const upsertWorkspaceFromLegacy = async (legacyWorkspace: {
+  _id: string;
+  name: string;
+  userId: string;
+  billingAccountId?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}) => {
+  const result = await postgresQuery(
+    `INSERT INTO core.workspaces (id, name, user_id, billing_account_id, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name,
+      user_id = EXCLUDED.user_id,
+      billing_account_id = EXCLUDED.billing_account_id,
+      created_at = EXCLUDED.created_at,
+      updated_at = EXCLUDED.updated_at
+    RETURNING *`,
+    [
+      legacyWorkspace._id,
+      legacyWorkspace.name,
+      legacyWorkspace.userId,
+      legacyWorkspace.billingAccountId ?? null,
+      legacyWorkspace.createdAt ?? new Date(),
+      legacyWorkspace.updatedAt ?? legacyWorkspace.createdAt ?? new Date(),
+    ]
+  );
+  return mapWorkspaceRow(result.rows[0]);
+};

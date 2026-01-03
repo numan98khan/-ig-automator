@@ -62,6 +62,32 @@ export const createWorkspaceMember = async (data: { workspaceId: string; userId:
   return mapWorkspaceMemberRow(result.rows[0]);
 };
 
+export const upsertWorkspaceMemberFromLegacy = async (legacyMember: {
+  workspaceId: string;
+  userId: string;
+  role: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}) => {
+  const result = await postgresQuery(
+    `INSERT INTO core.workspace_members (workspace_id, user_id, role, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT (workspace_id, user_id) DO UPDATE SET
+      role = EXCLUDED.role,
+      created_at = EXCLUDED.created_at,
+      updated_at = EXCLUDED.updated_at
+    RETURNING *`,
+    [
+      legacyMember.workspaceId,
+      legacyMember.userId,
+      legacyMember.role,
+      legacyMember.createdAt ?? new Date(),
+      legacyMember.updatedAt ?? legacyMember.createdAt ?? new Date(),
+    ]
+  );
+  return mapWorkspaceMemberRow(result.rows[0]);
+};
+
 export const deleteWorkspaceMember = async (workspaceId: string, userId: string) => {
   await postgresQuery('DELETE FROM core.workspace_members WHERE workspace_id = $1 AND user_id = $2', [workspaceId, userId]);
 };

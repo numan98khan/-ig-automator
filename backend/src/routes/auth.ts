@@ -6,6 +6,8 @@ import { generateToken as generateEmailToken, verifyToken } from '../services/to
 import { ensureUserTier } from '../services/tierService';
 import { ensureBillingAccountForUser } from '../services/billingService';
 import LegacyUser from '../models/User';
+import LegacyWorkspace from '../models/Workspace';
+import LegacyWorkspaceMember from '../models/WorkspaceMember';
 import {
   createUser,
   getUserByEmail,
@@ -15,6 +17,8 @@ import {
   updateUser,
   verifyPassword,
 } from '../repositories/core/userRepository';
+import { upsertWorkspaceFromLegacy } from '../repositories/core/workspaceRepository';
+import { upsertWorkspaceMemberFromLegacy } from '../repositories/core/workspaceMemberRepository';
 import { listWorkspaceMembersByUserId } from '../repositories/core/workspaceMemberRepository';
 import { listWorkspacesByIds } from '../repositories/core/workspaceRepository';
 
@@ -86,6 +90,42 @@ router.post('/login', async (req: Request, res: Response) => {
           createdAt: legacy.createdAt ?? undefined,
           updatedAt: legacy.updatedAt ?? undefined,
         });
+
+        const legacyWorkspaces = await LegacyWorkspace.find({ userId: legacyUser._id }).lean();
+        const legacyMemberships = await LegacyWorkspaceMember.find({ userId: legacyUser._id }).lean();
+        const workspaceMap = new Map(
+          legacyWorkspaces.map((workspace) => [workspace._id.toString(), workspace])
+        );
+        for (const membership of legacyMemberships) {
+          const workspaceId = membership.workspaceId?.toString();
+          if (workspaceId && !workspaceMap.has(workspaceId)) {
+            const workspace = await LegacyWorkspace.findById(workspaceId).lean();
+            if (workspace) {
+              workspaceMap.set(workspace._id.toString(), workspace);
+            }
+          }
+        }
+
+        for (const workspace of workspaceMap.values()) {
+          await upsertWorkspaceFromLegacy({
+            _id: workspace._id.toString(),
+            name: workspace.name,
+            userId: workspace.userId?.toString(),
+            billingAccountId: workspace.billingAccountId?.toString(),
+            createdAt: (workspace as any).createdAt,
+            updatedAt: (workspace as any).updatedAt,
+          });
+        }
+
+        for (const membership of legacyMemberships) {
+          await upsertWorkspaceMemberFromLegacy({
+            workspaceId: membership.workspaceId.toString(),
+            userId: membership.userId.toString(),
+            role: membership.role,
+            createdAt: (membership as any).createdAt,
+            updatedAt: (membership as any).updatedAt,
+          });
+        }
       }
     }
     if (!user || !user.password) {
