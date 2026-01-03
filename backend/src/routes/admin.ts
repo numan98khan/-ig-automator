@@ -861,10 +861,16 @@ router.post('/flow-drafts/:id/publish', authenticate, requireAdmin, async (req, 
     if (!draft) return res.status(404).json({ error: 'Draft not found' });
 
     const compiled = compileFlow(draft.dsl);
-    const template = await FlowTemplate.findById(draft.templateId);
+    let template = draft.templateId ? await FlowTemplate.findById(draft.templateId) : null;
 
     if (!template) {
-      return res.status(404).json({ error: 'Flow template not found' });
+      template = await FlowTemplate.create({
+        name: draft.name,
+        description: draft.description,
+        status: 'active',
+      });
+      draft.templateId = template._id;
+      await draft.save();
     }
 
     const versionCount = await FlowTemplateVersion.countDocuments({ templateId: template._id });
