@@ -78,11 +78,12 @@ const Landing: React.FC = () => {
       ? 'comic-panel-soft bg-white'
       : 'bg-white/85 border border-black/5 shadow-[0_18px_60px_-38px_rgba(0,0,0,0.35)]')
     : 'bg-background/60 border border-border/60 backdrop-blur-md';
-  const authCardClass = isLight
-    ? (isComic
-      ? 'comic-panel-soft'
-      : 'glass-panel border border-border bg-card/50 backdrop-blur-xl')
-    : 'glass-panel border border-border bg-card/50 backdrop-blur-xl';
+  const modalCardClass = isLight
+    ? 'bg-white border border-black/10 shadow-2xl'
+    : 'bg-[#0f1117] border border-white/10 shadow-2xl';
+  const modalInputClass = isLight
+    ? 'bg-white border-black/10 focus:ring-primary/40'
+    : 'bg-[#0b0e14] border-white/10 focus:ring-primary/40';
   const pageBackground = isLight
     ? (isComic ? 'bg-[#fffbe6]' : 'bg-[#f7f8fb]')
     : 'bg-background';
@@ -343,9 +344,9 @@ const Landing: React.FC = () => {
             </div>
 
             {/* Hero Visual */}
-            <div className="relative md:pt-8">
+            <div className="relative h-full">
               <div
-                className={`relative overflow-hidden p-2 md:p-3 flex items-center justify-center ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.04]' : 'glass-panel rounded-3xl'}`}
+                className={`relative overflow-hidden p-0 flex items-center justify-center h-full ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.04]' : 'glass-panel rounded-3xl'}`}
               >
                 <div
                   className="absolute -right-12 top-6 h-56 w-56 rounded-full bg-primary/20 blur-3xl opacity-70"
@@ -358,7 +359,7 @@ const Landing: React.FC = () => {
                 <img
                   src="/sd_phone.jpg"
                   alt="SendFx product preview"
-                  className="relative z-10 w-full h-auto max-h-[620px] md:max-h-[680px] object-contain scale-[1.12] md:scale-[1.16]"
+                  className="relative z-10 h-full w-full object-cover"
                   loading="eager"
                   decoding="async"
                 />
@@ -640,14 +641,14 @@ const Landing: React.FC = () => {
       
       {showEmailModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6 py-10 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6 py-10"
           onClick={closeEmailModal}
           role="dialog"
           aria-modal="true"
           aria-labelledby="email-login-title"
         >
           <div
-            className={`w-full max-w-lg rounded-2xl p-7 md:p-8 ${authCardClass}`}
+            className={`w-full max-w-md rounded-2xl p-6 md:p-7 ${modalCardClass}`}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -655,7 +656,7 @@ const Landing: React.FC = () => {
               <button
                 type="button"
                 onClick={closeEmailModal}
-                className="text-muted-foreground hover:text-foreground transition"
+                className={`flex h-11 w-11 items-center justify-center rounded-full border transition ${isLight ? 'bg-white border-black/10 text-slate-500 hover:text-slate-900' : 'bg-[#141824] border-white/10 text-slate-200 hover:text-white'}`}
                 aria-label="Close email login"
               >
                 ✕
@@ -680,7 +681,7 @@ const Landing: React.FC = () => {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-background/50 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className={`w-full pl-11 pr-4 py-3 border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${modalInputClass}`}
                     placeholder="your@email.com"
                     required
                   />
@@ -695,30 +696,41 @@ const Landing: React.FC = () => {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-background/50 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className={`w-full pl-11 pr-4 py-3 border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${modalInputClass}`}
                     placeholder="Enter your password"
                     required
                   />
                 </div>
               </div>
 
-              <button
+              <Button
                 type="submit"
-                disabled={loginLoading}
-                className="w-full px-6 py-3 bg-gradient-primary rounded-xl text-white font-semibold hover:shadow-glow hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                size="lg"
+                isLoading={loginLoading}
+                className="w-full"
               >
-                {loginLoading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Logging in...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Log In</span>
-                    <ArrowRight className="w-5 h-5" />
-                  </>
-                )}
-              </button>
+                Log In
+              </Button>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeEmailModal();
+                    navigate('/request-password-reset');
+                  }}
+                  className="hover:text-foreground transition"
+                >
+                  Forgot password?
+                </button>
+                <button
+                  type="button"
+                  onClick={handleInstagramLogin}
+                  className="hover:text-foreground transition"
+                >
+                  New here? Continue with Instagram
+                </button>
+              </div>
             </form>
           </div>
         </div>
