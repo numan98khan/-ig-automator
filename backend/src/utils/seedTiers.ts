@@ -1,4 +1,4 @@
-import Tier from '../models/Tier';
+import { upsertTier } from '../services/tierService';
 
 const DEFAULT_TIERS = [
   {
@@ -39,11 +39,6 @@ const DEFAULT_TIERS = [
 
 export const seedBaselineTiers = async () => {
   for (const tierData of DEFAULT_TIERS) {
-    const existing = await Tier.findOne({ name: tierData.name });
-    if (existing) {
-      await Tier.updateOne({ _id: existing._id }, tierData);
-      continue;
-    }
-    await Tier.create(tierData);
+    await upsertTier(tierData);
   }
 };

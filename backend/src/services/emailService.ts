@@ -1,9 +1,8 @@
 import { Resend } from 'resend';
-import { IUser } from '../models/User';
+import { CoreUser } from '../repositories/core/userRepository';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const EMAIL_FROM = process.env.EMAIL_FROM || 'no-reply@yourdomain.com';
-// Remove trailing slash to prevent double slashes in URLs
 const APP_BASE_URL = (process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
 
 if (!RESEND_API_KEY) {
@@ -12,10 +11,9 @@ if (!RESEND_API_KEY) {
 
 const resend = new Resend(RESEND_API_KEY);
 
-/**
- * Send email verification link
- */
-export async function sendVerificationEmail(user: IUser, token: string): Promise<void> {
+type EmailUser = Pick<CoreUser, '_id' | 'email' | 'firstName' | 'lastName'>;
+
+export async function sendVerificationEmail(user: EmailUser, token: string): Promise<void> {
   if (!user.email) {
     throw new Error('User email is required for verification');
   }
@@ -100,10 +98,7 @@ Instagram AI Inbox - Powered by AI
   }
 }
 
-/**
- * Send password reset link
- */
-export async function sendPasswordResetEmail(user: IUser, token: string): Promise<void> {
+export async function sendPasswordResetEmail(user: EmailUser, token: string): Promise<void> {
   if (!user.email) {
     throw new Error('User email is required for password reset');
   }
@@ -188,9 +183,6 @@ Instagram AI Inbox - Powered by AI
   }
 }
 
-/**
- * Send workspace invite email
- */
 export async function sendWorkspaceInviteEmail(
   invitedEmail: string,
   workspaceName: string,
@@ -200,7 +192,6 @@ export async function sendWorkspaceInviteEmail(
 ): Promise<void> {
   const inviteUrl = `${APP_BASE_URL}/accept-invite?token=${token}`;
 
-  // Format role for display
   const roleDisplay = role.charAt(0).toUpperCase() + role.slice(1);
 
   const htmlContent = `
@@ -263,12 +254,11 @@ Instagram AI Inbox - Powered by AI
     console.log(`📧 Sending workspace invite email...`);
     console.log(`   From: ${EMAIL_FROM}`);
     console.log(`   To: ${invitedEmail}`);
-    console.log(`   Subject: You've been invited to ${workspaceName} - Instagram AI Inbox`);
 
     const result = await resend.emails.send({
       from: EMAIL_FROM,
       to: invitedEmail,
-      subject: `You've been invited to ${workspaceName} - Instagram AI Inbox`,
+      subject: `You're invited to join ${workspaceName} on Instagram AI Inbox`,
       html: htmlContent,
       text: textContent,
     });

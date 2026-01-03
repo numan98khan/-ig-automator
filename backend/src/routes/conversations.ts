@@ -2,7 +2,6 @@ import express, { Response } from 'express';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Escalation from '../models/Escalation';
-import Workspace from '../models/Workspace';
 import InstagramAccount from '../models/InstagramAccount';
 import AutomationSession from '../models/AutomationSession';
 import AutomationInstance from '../models/AutomationInstance';

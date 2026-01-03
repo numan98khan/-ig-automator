@@ -1,14 +1,22 @@
-import mongoose from 'mongoose';
-import Tier, { ITier, TierLimits } from '../models/Tier';
-import User from '../models/User';
-import Workspace from '../models/Workspace';
-import UsageCounter, { UsageResourceType } from '../models/UsageCounter';
+import { TierLimits } from '../models/Tier';
 import { getActiveSubscriptionForBillingAccount } from './billingService';
+import { getUserById, updateUser } from '../repositories/core/userRepository';
+import {
+  CoreTier,
+  createTier,
+  getDefaultActiveTier,
+  getFirstActiveTier,
+  getTierById,
+  getTierByName,
+  updateTier,
+} from '../repositories/core/tierRepository';
+import { getWorkspaceById } from '../repositories/core/workspaceRepository';
+import { getUsageCounter, upsertUsageCounter } from '../repositories/core/usageCounterRepository';
 
 const DEFAULT_PERIOD_DAYS = parseInt(process.env.TIER_USAGE_PERIOD_DAYS || '30', 10);
 
 export interface TierSummary {
-  tier: ITier | null;
+  tier: CoreTier | null;
   limits: TierLimits;
 }
 
@@ -23,42 +31,40 @@ export const getUsageWindow = () => {
   return { periodStart: start, periodEnd: end };
 };
 
-export const getDefaultTier = async (): Promise<ITier | null> => {
-  const existing = await Tier.findOne({ isDefault: true, status: 'active' });
-  if (existing) return existing;
-  return Tier.findOne({ status: 'active' });
+export const getDefaultTier = async (): Promise<CoreTier | null> => {
+  const defaultTier = await getDefaultActiveTier();
+  if (defaultTier) return defaultTier;
+  return getFirstActiveTier();
 };
 
-export const ensureUserTier = async (userId: mongoose.Types.ObjectId | string): Promise<ITier | null> => {
-  const user = await User.findById(userId);
+export const ensureUserTier = async (userId: string): Promise<CoreTier | null> => {
+  const user = await getUserById(userId, { includePassword: true });
   if (!user) return null;
 
   if (user.tierId) {
-    const tier = await Tier.findById(user.tierId);
+    const tier = await getTierById(user.tierId);
     if (tier) return tier;
   }
 
   const defaultTier = await getDefaultTier();
-  if (defaultTier && (!user.tierId || user.tierId.toString() !== defaultTier._id.toString())) {
-    user.tierId = defaultTier._id;
-    await user.save();
+  if (defaultTier && (!user.tierId || user.tierId !== defaultTier._id)) {
+    await updateUser(user._id, { tierId: defaultTier._id });
     return defaultTier;
   }
 
-  return defaultTier;
+  return defaultTier || null;
 };
 
-export const getTierForUser = async (userId: mongoose.Types.ObjectId | string): Promise<TierSummary> => {
-  const user = await User.findById(userId);
+export const getTierForUser = async (userId: string): Promise<TierSummary> => {
+  const user = await getUserById(userId, { includePassword: true });
   if (!user) {
     return { tier: null, limits: {} };
   }
 
-  // Prefer billing account subscription
   if (user.billingAccountId) {
     const subscription = await getActiveSubscriptionForBillingAccount(user.billingAccountId);
     if (subscription?.tierId) {
-      const tier = await Tier.findById(subscription.tierId);
+      const tier = await getTierById(subscription.tierId);
       if (tier) {
         const limits: TierLimits = { ...(tier.limits || {}) };
         if (user.tierLimitOverrides) {
@@ -69,7 +75,7 @@ export const getTierForUser = async (userId: mongoose.Types.ObjectId | string): 
     }
   }
 
-  const tier = user.tierId ? await Tier.findById(user.tierId) : await ensureUserTier(userId);
+  const tier = user.tierId ? await getTierById(user.tierId) : await ensureUserTier(userId);
   const limits: TierLimits = { ...(tier?.limits || {}) };
 
   if (user.tierLimitOverrides) {
@@ -80,9 +86,9 @@ export const getTierForUser = async (userId: mongoose.Types.ObjectId | string): 
 };
 
 export const getWorkspaceOwnerTier = async (
-  workspaceId: mongoose.Types.ObjectId | string
-): Promise<{ tier: ITier | null; limits: TierLimits; ownerId?: mongoose.Types.ObjectId; billingAccountId?: mongoose.Types.ObjectId }> => {
-  const workspace = await Workspace.findById(workspaceId);
+  workspaceId: string
+): Promise<{ tier: CoreTier | null; limits: TierLimits; ownerId?: string; billingAccountId?: string }> => {
+  const workspace = await getWorkspaceById(workspaceId);
   if (!workspace) {
     return { tier: null, limits: {} };
   }
@@ -90,7 +96,7 @@ export const getWorkspaceOwnerTier = async (
   if (workspace.billingAccountId) {
     const subscription = await getActiveSubscriptionForBillingAccount(workspace.billingAccountId);
     if (subscription?.tierId) {
-      const tier = await Tier.findById(subscription.tierId);
+      const tier = await getTierById(subscription.tierId);
       if (tier) {
         return {
           tier,
@@ -107,10 +113,10 @@ export const getWorkspaceOwnerTier = async (
 };
 
 export const assertUsageLimit = async (
-  userId: mongoose.Types.ObjectId | string,
-  resource: UsageResourceType,
+  userId: string,
+  resource: keyof TierLimits,
   increment = 1,
-  workspaceId?: mongoose.Types.ObjectId | string,
+  workspaceId?: string,
   options?: { increment?: boolean }
 ) => {
   const shouldIncrement = options?.increment !== false;
@@ -122,11 +128,7 @@ export const assertUsageLimit = async (
   }
 
   const { periodStart, periodEnd } = getUsageWindow();
-  const usage = await UsageCounter.findOne({
-    userId,
-    resource,
-    periodStart,
-  });
+  const usage = await getUsageCounter(userId, resource, periodStart);
 
   const current = usage?.count || 0;
   if (current + increment > limitValue) {
@@ -134,22 +136,23 @@ export const assertUsageLimit = async (
   }
 
   if (shouldIncrement) {
-    await UsageCounter.findOneAndUpdate(
-      { userId, resource, periodStart },
-      {
-        $setOnInsert: { periodStart, periodEnd, tierId: tier?._id, workspaceId },
-        $inc: { count: increment },
-      },
-      { upsert: true }
-    );
+    await upsertUsageCounter({
+      userId,
+      resource,
+      periodStart,
+      periodEnd,
+      increment,
+      tierId: tier?._id,
+      workspaceId,
+    });
   }
 
   return { allowed: true, current: current + increment, limit: limitValue };
 };
 
 export const assertWorkspaceLimit = async (
-  workspaceId: mongoose.Types.ObjectId | string,
-  resource: UsageResourceType,
+  workspaceId: string,
+  resource: keyof TierLimits,
   projectedCount: number
 ) => {
   const { limits, tier } = await getWorkspaceOwnerTier(workspaceId);
@@ -165,44 +168,48 @@ export const assertWorkspaceLimit = async (
   return { allowed: true, limit: limitValue, tier };
 };
 
-export const assignTierFromOwner = async (
-  workspaceId: mongoose.Types.ObjectId | string,
-  userId: mongoose.Types.ObjectId | string
-) => {
-  const workspace = await Workspace.findById(workspaceId);
+export const assignTierFromOwner = async (workspaceId: string, userId: string) => {
+  const workspace = await getWorkspaceById(workspaceId);
   if (!workspace) return;
 
   const [owner, member, workspaceTier] = await Promise.all([
-    User.findById(workspace.userId),
-    User.findById(userId),
+    getUserById(workspace.userId, { includePassword: true }),
+    getUserById(userId, { includePassword: true }),
     getWorkspaceOwnerTier(workspaceId),
   ]);
 
   if (!member) return;
 
-  // Persist the workspace's billing tier on the owner if it's not already set
   if (
     workspaceTier.tier?._id &&
     owner &&
-    (!owner.tierId || owner.tierId.toString() !== workspaceTier.tier._id.toString())
+    (!owner.tierId || owner.tierId !== workspaceTier.tier._id)
   ) {
-    owner.tierId = workspaceTier.tier._id;
-    await owner.save();
+    await updateUser(owner._id, { tierId: workspaceTier.tier._id });
   }
 
   let fallbackTierId = owner?.tierId;
   if (!workspaceTier.tier?._id && !fallbackTierId) {
     const ensuredTier = await ensureUserTier(workspace.userId);
     if (ensuredTier?._id && owner) {
-      owner.tierId = ensuredTier._id;
-      await owner.save();
+      await updateUser(owner._id, { tierId: ensuredTier._id });
     }
     fallbackTierId = ensuredTier?._id || owner?.tierId;
   }
 
   const tierIdToAssign = workspaceTier.tier?._id || fallbackTierId;
-  if (tierIdToAssign && (!member.tierId || member.tierId.toString() !== tierIdToAssign.toString())) {
-    member.tierId = tierIdToAssign;
-    await member.save();
+  if (tierIdToAssign && (!member.tierId || member.tierId !== tierIdToAssign)) {
+    await updateUser(member._id, { tierId: tierIdToAssign });
   }
+};
+
+export const upsertTier = async (data: Partial<CoreTier>) => {
+  if (!data.name) {
+    throw new Error('Tier name is required');
+  }
+  const existing = await getTierByName(data.name);
+  if (existing) {
+    return updateTier(existing._id, data);
+  }
+  return createTier(data);
 };

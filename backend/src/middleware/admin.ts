@@ -1,14 +1,14 @@
-import { NextFunction, Response } from 'express';
-import User from '../models/User';
+import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth';
+import { getUserById } from '../repositories/core/userRepository';
 
-export async function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+export const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const user = await User.findById(req.userId);
+    const user = await getUserById(req.userId, { includePassword: true });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -17,16 +17,9 @@ export async function requireAdmin(req: AuthRequest, res: Response, next: NextFu
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    req.userRole = user.role;
     next();
   } catch (error) {
-    console.error('Admin check error:', error);
+    console.error('Admin middleware error:', error);
     res.status(500).json({ error: 'Server error' });
   }
-}
-
-declare module './auth' {
-  interface AuthRequest {
-    userRole?: 'user' | 'admin';
-  }
-}
+};
