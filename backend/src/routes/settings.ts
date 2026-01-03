@@ -1,14 +1,10 @@
 import express, { Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import WorkspaceSettings from '../models/WorkspaceSettings';
-import Workspace from '../models/Workspace';
+import { getWorkspaceById } from '../repositories/core/workspaceRepository';
 
 const router = express.Router();
 
-/**
- * Get workspace settings
- * GET /api/settings/workspace/:workspaceId
- */
 function sanitizeSettings(settings: any) {
   if (!settings) return settings;
   const plain = settings.toObject ? settings.toObject() : { ...settings };
@@ -36,23 +32,15 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   try {
     const { workspaceId } = req.params;
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
-
-    if (!workspace) {
+    const workspace = await getWorkspaceById(workspaceId);
+    if (!workspace || workspace.userId !== req.userId) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    // Get or create settings
     let settings = await WorkspaceSettings.findOne({ workspaceId });
 
     if (!settings) {
-      // Create default settings
       settings = await WorkspaceSettings.create({ workspaceId });
-
     }
 
     res.json(sanitizeSettings(settings));
@@ -62,10 +50,6 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   }
 });
 
-/**
- * Update workspace settings
- * PUT /api/settings/workspace/:workspaceId
- */
 router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId } = req.params;
@@ -93,17 +77,11 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       googleSheets,
     } = req.body;
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
-
-    if (!workspace) {
+    const workspace = await getWorkspaceById(workspaceId);
+    if (!workspace || workspace.userId !== req.userId) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    // Update settings
     const updateData: Record<string, any> = {};
 
     if (defaultLanguage !== undefined) updateData.defaultLanguage = defaultLanguage;
@@ -145,30 +123,19 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   }
 });
 
-/**
- * Get automation statistics
- * GET /api/settings/workspace/:workspaceId/stats
- */
 router.get('/workspace/:workspaceId/stats', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId } = req.params;
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
-
-    if (!workspace) {
+    const workspace = await getWorkspaceById(workspaceId);
+    if (!workspace || workspace.userId !== req.userId) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    // Import models for stats
     const CommentDMLog = (await import('../models/CommentDMLog')).default;
     const FollowupTask = (await import('../models/FollowupTask')).default;
     const Message = (await import('../models/Message')).default;
 
-    // Get statistics
     const [
       commentDmsSent,
       commentDmsFailed,
@@ -180,8 +147,6 @@ router.get('/workspace/:workspaceId/stats', authenticate, async (req: AuthReques
       CommentDMLog.countDocuments({ workspaceId, status: 'failed' }),
       Message.countDocuments({
         automationSource: 'auto_reply',
-        // Note: We'd need to join with conversation to filter by workspace
-        // For now, this gives an approximation
       }),
       FollowupTask.countDocuments({ workspaceId, status: 'sent' }),
       FollowupTask.countDocuments({ workspaceId, status: 'scheduled' }),

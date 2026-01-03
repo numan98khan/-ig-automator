@@ -6,8 +6,8 @@ const router = express.Router();
 router.get('/', async (_req, res) => {
   try {
     const settings = await GlobalUiSettings.findOneAndUpdate(
-      {},
-      { $setOnInsert: { uiTheme: 'legacy' } },
+      { key: 'global' },
+      { $setOnInsert: { key: 'global', uiTheme: 'legacy' } },
       { new: true, upsert: true },
     ).lean<IGlobalUiSettings>();
 

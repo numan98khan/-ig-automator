@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { connectDB } from './config/database';
+import { ensureCoreSchema } from './db/coreSchema';
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -50,9 +51,17 @@ app.use(cors());
 app.use(express.json());
 app.use(requestIdMiddleware);
 
-// Connect to database
-connectDB();
-ensureDefaultAdmin();
+const startServer = async () => {
+  try {
+    await ensureCoreSchema();
+  } catch (error) {
+    console.error('Failed to ensure core Postgres schema:', error);
+    process.exit(1);
+  }
+
+  connectDB();
+  ensureDefaultAdmin();
+};
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -128,13 +137,20 @@ if (isProduction) {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  if (isProduction) {
-    console.log('Serving frontend from ../frontend/dist');
-  }
+startServer()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      if (isProduction) {
+        console.log('Serving frontend from ../frontend/dist');
+      }
 
-  // Start background job scheduler
-  scheduler.start();
-});
+      // Start background job scheduler
+      scheduler.start();
+    });
+  })
+  .catch((error) => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  });

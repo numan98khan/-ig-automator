@@ -7,6 +7,7 @@ import WorkspaceSettings, { IWorkspaceSettings } from '../models/WorkspaceSettin
 import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
+import { logOpenAiUsage } from './openAiUsageService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -565,6 +566,12 @@ Generate a response following all rules above. Return JSON with:
 
     requestStart = process.hrtime.bigint();
     const response = await openai.responses.create(requestPayload);
+    await logOpenAiUsage({
+      workspaceId: String(workspaceId),
+      model: response?.model || model,
+      usage: response?.usage,
+      requestId: response?.id,
+    });
     logAiTiming('ai_reply', model, requestStart, true);
     logOpenAiApi('response', summarizeOpenAiResponse(response));
 
