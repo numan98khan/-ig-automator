@@ -417,6 +417,13 @@ export default function AutomationTemplates() {
       setNewDraftTemplateId('')
       setNewDraftOpen(false)
     },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.error ||
+        error?.message ||
+        'Failed to create draft.'
+      setError(message)
+    },
   })
 
   const updateMutation = useMutation({
