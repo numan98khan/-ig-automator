@@ -1,4 +1,4 @@
-import { WorkspaceMemberRole } from '../models/WorkspaceMember';
+import { WorkspaceMemberRole } from '../types/core';
 import { assignTierFromOwner, assertWorkspaceLimit } from './tierService';
 import { getWorkspaceById } from '../repositories/core/workspaceRepository';
 import {

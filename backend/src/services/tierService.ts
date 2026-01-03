@@ -1,4 +1,4 @@
-import { TierLimits } from '../models/Tier';
+import { TierLimits } from '../types/core';
 import { getActiveSubscriptionForBillingAccount } from './billingService';
 import { getUserById, updateUser } from '../repositories/core/userRepository';
 import {

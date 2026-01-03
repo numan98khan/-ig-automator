@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { postgresQuery } from '../../db/postgres';
 import { generateObjectId } from '../../db/objectId';
-import { TierLimits } from '../../models/Tier';
+import { TierLimits } from '../../types/core';
 
 export interface CoreUser {
   _id: string;

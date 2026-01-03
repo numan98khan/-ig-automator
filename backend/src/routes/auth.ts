@@ -1,13 +1,12 @@
 import express, { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { generateToken } from '../utils/jwt';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/emailService';
 import { generateToken as generateEmailToken, verifyToken } from '../services/tokenService';
 import { ensureUserTier } from '../services/tierService';
 import { ensureBillingAccountForUser } from '../services/billingService';
-import LegacyUser from '../models/User';
-import LegacyWorkspace from '../models/Workspace';
-import LegacyWorkspaceMember from '../models/WorkspaceMember';
+import { TierLimits } from '../types/core';
 import {
   createUser,
   getUserByEmail,
@@ -23,6 +22,56 @@ import { listWorkspaceMembersByUserId } from '../repositories/core/workspaceMemb
 import { listWorkspacesByIds } from '../repositories/core/workspaceRepository';
 
 const router = express.Router();
+
+type LegacyUserDoc = {
+  _id: mongoose.Types.ObjectId;
+  email?: string;
+  password?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: 'user' | 'admin';
+  instagramUserId?: string;
+  instagramUsername?: string;
+  isProvisional?: boolean;
+  emailVerified?: boolean;
+  defaultWorkspaceId?: mongoose.Types.ObjectId;
+  billingAccountId?: mongoose.Types.ObjectId;
+  tierId?: mongoose.Types.ObjectId;
+  tierLimitOverrides?: TierLimits;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
+type LegacyWorkspaceDoc = {
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  userId?: mongoose.Types.ObjectId;
+  billingAccountId?: mongoose.Types.ObjectId;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
+type LegacyWorkspaceMemberDoc = {
+  _id: mongoose.Types.ObjectId;
+  workspaceId: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
+  role: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
+const getLegacyCollections = () => {
+  const db = mongoose.connection.db;
+  if (!db) {
+    throw new Error('MongoDB not connected');
+  }
+
+  return {
+    users: db.collection<LegacyUserDoc>('users'),
+    workspaces: db.collection<LegacyWorkspaceDoc>('workspaces'),
+    workspaceMembers: db.collection<LegacyWorkspaceMemberDoc>('workspacemembers'),
+  };
+};
 
 // Signup
 router.post('/signup', async (req: Request, res: Response) => {
@@ -69,37 +118,37 @@ router.post('/login', async (req: Request, res: Response) => {
 
     let user = await getUserByEmail(email, { includePassword: true });
     if (!user) {
-      const legacyUser = await LegacyUser.findOne({ email: email.toLowerCase() }).lean();
+      const { users, workspaces, workspaceMembers } = getLegacyCollections();
+      const legacyUser = await users.findOne({ email: email.toLowerCase() });
       if (legacyUser) {
-        const legacy = legacyUser as any;
         user = await upsertUserFromLegacy({
           _id: legacyUser._id.toString(),
           email: legacyUser.email ?? undefined,
           password: legacyUser.password ?? undefined,
           firstName: legacyUser.firstName ?? undefined,
           lastName: legacyUser.lastName ?? undefined,
-          role: legacyUser.role,
+          role: legacyUser.role ?? 'user',
           instagramUserId: legacyUser.instagramUserId ?? undefined,
           instagramUsername: legacyUser.instagramUsername ?? undefined,
-          isProvisional: legacyUser.isProvisional,
-          emailVerified: legacyUser.emailVerified,
+          isProvisional: legacyUser.isProvisional ?? true,
+          emailVerified: legacyUser.emailVerified ?? false,
           defaultWorkspaceId: legacyUser.defaultWorkspaceId?.toString() ?? undefined,
           billingAccountId: legacyUser.billingAccountId?.toString() ?? undefined,
           tierId: legacyUser.tierId?.toString() ?? undefined,
           tierLimitOverrides: legacyUser.tierLimitOverrides ?? undefined,
-          createdAt: legacy.createdAt ?? undefined,
-          updatedAt: legacy.updatedAt ?? undefined,
+          createdAt: legacyUser.createdAt ?? undefined,
+          updatedAt: legacyUser.updatedAt ?? undefined,
         });
 
-        const legacyWorkspaces = await LegacyWorkspace.find({ userId: legacyUser._id }).lean();
-        const legacyMemberships = await LegacyWorkspaceMember.find({ userId: legacyUser._id }).lean();
+        const legacyWorkspaces = await workspaces.find({ userId: legacyUser._id }).toArray();
+        const legacyMemberships = await workspaceMembers.find({ userId: legacyUser._id }).toArray();
         const workspaceMap = new Map(
           legacyWorkspaces.map((workspace) => [workspace._id.toString(), workspace])
         );
         for (const membership of legacyMemberships) {
           const workspaceId = membership.workspaceId?.toString();
           if (workspaceId && !workspaceMap.has(workspaceId)) {
-            const workspace = await LegacyWorkspace.findById(workspaceId).lean();
+            const workspace = await workspaces.findOne({ _id: new mongoose.Types.ObjectId(workspaceId) });
             if (workspace) {
               workspaceMap.set(workspace._id.toString(), workspace);
             }
@@ -112,8 +161,8 @@ router.post('/login', async (req: Request, res: Response) => {
             name: workspace.name,
             userId: workspace.userId?.toString(),
             billingAccountId: workspace.billingAccountId?.toString(),
-            createdAt: (workspace as any).createdAt,
-            updatedAt: (workspace as any).updatedAt,
+            createdAt: workspace.createdAt,
+            updatedAt: workspace.updatedAt,
           });
         }
 
@@ -122,8 +171,8 @@ router.post('/login', async (req: Request, res: Response) => {
             workspaceId: membership.workspaceId.toString(),
             userId: membership.userId.toString(),
             role: membership.role,
-            createdAt: (membership as any).createdAt,
-            updatedAt: (membership as any).updatedAt,
+            createdAt: membership.createdAt,
+            updatedAt: membership.updatedAt,
           });
         }
       }

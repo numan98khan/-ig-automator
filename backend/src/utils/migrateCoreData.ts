@@ -2,13 +2,6 @@ import mongoose from 'mongoose';
 import { connectDB } from '../config/database';
 import { ensureCoreSchema } from '../db/coreSchema';
 import { closePostgresPool, postgresQuery } from '../db/postgres';
-import User from '../models/User';
-import Workspace from '../models/Workspace';
-import WorkspaceMember from '../models/WorkspaceMember';
-import Tier from '../models/Tier';
-import BillingAccount from '../models/BillingAccount';
-import Subscription from '../models/Subscription';
-import UsageCounter from '../models/UsageCounter';
 
 const insertUser = async (user: any) => {
   await postgresQuery(
@@ -205,14 +198,19 @@ const migrate = async () => {
   await ensureCoreSchema();
   await connectDB();
 
+  const db = mongoose.connection.db;
+  if (!db) {
+    throw new Error('MongoDB not connected');
+  }
+
   const [users, workspaces, members, tiers, billingAccounts, subscriptions, usageCounters] = await Promise.all([
-    User.find({}).lean(),
-    Workspace.find({}).lean(),
-    WorkspaceMember.find({}).lean(),
-    Tier.find({}).lean(),
-    BillingAccount.find({}).lean(),
-    Subscription.find({}).lean(),
-    UsageCounter.find({}).lean(),
+    db.collection('users').find({}).toArray(),
+    db.collection('workspaces').find({}).toArray(),
+    db.collection('workspacemembers').find({}).toArray(),
+    db.collection('tiers').find({}).toArray(),
+    db.collection('billingaccounts').find({}).toArray(),
+    db.collection('subscriptions').find({}).toArray(),
+    db.collection('usagecounters').find({}).toArray(),
   ]);
 
   for (const tier of tiers) {

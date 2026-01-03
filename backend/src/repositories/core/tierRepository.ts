@@ -1,6 +1,6 @@
 import { postgresQuery } from '../../db/postgres';
 import { generateObjectId } from '../../db/objectId';
-import { TierLimits, TierStatus } from '../../models/Tier';
+import { TierLimits, TierStatus } from '../../types/core';
 
 export interface CoreTier {
   _id: string;

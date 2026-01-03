@@ -1,5 +1,5 @@
 import { postgresQuery } from '../../db/postgres';
-import { UsageResourceType } from '../../models/UsageCounter';
+import { UsageResourceType } from '../../types/core';
 
 export interface CoreUsageCounter {
   id: number;
