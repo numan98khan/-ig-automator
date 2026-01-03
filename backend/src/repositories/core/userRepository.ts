@@ -219,3 +219,81 @@ export const updateUser = async (id: string, updates: {
   const row = result.rows[0];
   return row ? mapUserRow(row) : null;
 };
+
+export const upsertUserFromLegacy = async (legacyUser: {
+  _id: string;
+  email?: string;
+  password?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: 'user' | 'admin';
+  instagramUserId?: string;
+  instagramUsername?: string;
+  isProvisional?: boolean;
+  emailVerified?: boolean;
+  defaultWorkspaceId?: string;
+  billingAccountId?: string;
+  tierId?: string;
+  tierLimitOverrides?: TierLimits;
+  createdAt?: Date;
+  updatedAt?: Date;
+}) => {
+  const result = await postgresQuery(
+    `INSERT INTO core.users (
+      id,
+      email,
+      password,
+      first_name,
+      last_name,
+      role,
+      instagram_user_id,
+      instagram_username,
+      is_provisional,
+      email_verified,
+      default_workspace_id,
+      billing_account_id,
+      tier_id,
+      tier_limit_overrides,
+      created_at,
+      updated_at
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      email = EXCLUDED.email,
+      password = EXCLUDED.password,
+      first_name = EXCLUDED.first_name,
+      last_name = EXCLUDED.last_name,
+      role = EXCLUDED.role,
+      instagram_user_id = EXCLUDED.instagram_user_id,
+      instagram_username = EXCLUDED.instagram_username,
+      is_provisional = EXCLUDED.is_provisional,
+      email_verified = EXCLUDED.email_verified,
+      default_workspace_id = EXCLUDED.default_workspace_id,
+      billing_account_id = EXCLUDED.billing_account_id,
+      tier_id = EXCLUDED.tier_id,
+      tier_limit_overrides = EXCLUDED.tier_limit_overrides,
+      created_at = EXCLUDED.created_at,
+      updated_at = EXCLUDED.updated_at
+    RETURNING *`,
+    [
+      legacyUser._id,
+      legacyUser.email?.toLowerCase() ?? null,
+      legacyUser.password ?? null,
+      legacyUser.firstName ?? null,
+      legacyUser.lastName ?? null,
+      legacyUser.role ?? 'user',
+      legacyUser.instagramUserId ?? null,
+      legacyUser.instagramUsername ?? null,
+      legacyUser.isProvisional ?? true,
+      legacyUser.emailVerified ?? false,
+      legacyUser.defaultWorkspaceId ?? null,
+      legacyUser.billingAccountId ?? null,
+      legacyUser.tierId ?? null,
+      legacyUser.tierLimitOverrides ? JSON.stringify(legacyUser.tierLimitOverrides) : null,
+      legacyUser.createdAt ?? new Date(),
+      legacyUser.updatedAt ?? legacyUser.createdAt ?? new Date(),
+    ]
+  );
+  return mapUserRow(result.rows[0]);
+};

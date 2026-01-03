@@ -5,11 +5,13 @@ import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email
 import { generateToken as generateEmailToken, verifyToken } from '../services/tokenService';
 import { ensureUserTier } from '../services/tierService';
 import { ensureBillingAccountForUser } from '../services/billingService';
+import LegacyUser from '../models/User';
 import {
   createUser,
   getUserByEmail,
   getUserByEmailExcludingId,
   getUserById,
+  upsertUserFromLegacy,
   updateUser,
   verifyPassword,
 } from '../repositories/core/userRepository';
@@ -61,7 +63,31 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = await getUserByEmail(email, { includePassword: true });
+    let user = await getUserByEmail(email, { includePassword: true });
+    if (!user) {
+      const legacyUser = await LegacyUser.findOne({ email: email.toLowerCase() }).lean();
+      if (legacyUser) {
+        const legacy = legacyUser as any;
+        user = await upsertUserFromLegacy({
+          _id: legacyUser._id.toString(),
+          email: legacyUser.email ?? undefined,
+          password: legacyUser.password ?? undefined,
+          firstName: legacyUser.firstName ?? undefined,
+          lastName: legacyUser.lastName ?? undefined,
+          role: legacyUser.role,
+          instagramUserId: legacyUser.instagramUserId ?? undefined,
+          instagramUsername: legacyUser.instagramUsername ?? undefined,
+          isProvisional: legacyUser.isProvisional,
+          emailVerified: legacyUser.emailVerified,
+          defaultWorkspaceId: legacyUser.defaultWorkspaceId?.toString() ?? undefined,
+          billingAccountId: legacyUser.billingAccountId?.toString() ?? undefined,
+          tierId: legacyUser.tierId?.toString() ?? undefined,
+          tierLimitOverrides: legacyUser.tierLimitOverrides ?? undefined,
+          createdAt: legacy.createdAt ?? undefined,
+          updatedAt: legacy.updatedAt ?? undefined,
+        });
+      }
+    }
     if (!user || !user.password) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
