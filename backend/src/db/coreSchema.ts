@@ -95,6 +95,21 @@ CREATE TABLE IF NOT EXISTS core.usage_counters (
 );
 CREATE INDEX IF NOT EXISTS usage_counters_resource_period_idx ON core.usage_counters (resource, period_start);
 CREATE INDEX IF NOT EXISTS usage_counters_workspace_idx ON core.usage_counters (workspace_id);
+
+CREATE TABLE IF NOT EXISTS core.openai_usage (
+  id BIGSERIAL PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  user_id TEXT,
+  model TEXT,
+  prompt_tokens INTEGER NOT NULL DEFAULT 0,
+  completion_tokens INTEGER NOT NULL DEFAULT 0,
+  total_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_cents INTEGER NOT NULL DEFAULT 0,
+  request_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS openai_usage_workspace_idx ON core.openai_usage (workspace_id, created_at);
+CREATE INDEX IF NOT EXISTS openai_usage_workspace_model_idx ON core.openai_usage (workspace_id, model, created_at);
 `;
 
 export const ensureCoreSchema = async () => {

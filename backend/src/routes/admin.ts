@@ -54,6 +54,7 @@ import {
   listWorkspaceMembersByUserIds,
   listWorkspaceMembersByWorkspaceId,
 } from '../repositories/core/workspaceMemberRepository';
+import { getWorkspaceOpenAiUsageSummary } from '../repositories/core/openAiUsageRepository';
 
 const router = express.Router();
 
@@ -69,6 +70,11 @@ const toOptionalBoolean = (value: any) => {
     if (normalized === 'false') return false;
   }
   return undefined;
+};
+const toRangeDays = (value: any, fallback = 30) => {
+  const parsed = typeof value === 'string' ? parseInt(value.replace(/[^0-9]/g, ''), 10) : Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, 365);
 };
 const STORAGE_MODES = ['vector', 'text'];
 
@@ -385,6 +391,30 @@ router.get('/workspaces/:id', authenticate, requireAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Admin workspace detail error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/workspaces/:id/usage', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rangeDays = toRangeDays(req.query.range, 30);
+    const endAt = new Date();
+    const startAt = new Date(endAt);
+    startAt.setUTCDate(startAt.getUTCDate() - rangeDays);
+
+    const summary = await getWorkspaceOpenAiUsageSummary(id, startAt, endAt);
+
+    res.json({
+      data: {
+        rangeDays,
+        startAt,
+        endAt,
+        ...summary,
+      },
+    });
+  } catch (error) {
+    console.error('Admin workspace usage error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

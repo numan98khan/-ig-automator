@@ -31,6 +31,7 @@ const resetPostgres = async () => {
     await postgresQuery('DELETE FROM core.workspaces');
     await postgresQuery('DELETE FROM core.subscriptions');
     await postgresQuery('DELETE FROM core.usage_counters');
+    await postgresQuery('DELETE FROM core.openai_usage');
     await postgresQuery('DELETE FROM core.billing_accounts');
     await postgresQuery('DELETE FROM core.tiers');
     await postgresQuery('DELETE FROM core.users WHERE id <> $1', [adminId]);
