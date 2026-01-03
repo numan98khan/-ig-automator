@@ -6,6 +6,7 @@ import KnowledgeItem from '../models/KnowledgeItem';
 import { AutomationAiSettings } from '../types/automation';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
+import { logOpenAiUsage } from './openAiUsageService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -317,6 +318,12 @@ Return JSON with:
     });
 
     const response = await openai.responses.create(requestPayload);
+    await logOpenAiUsage({
+      workspaceId: String(workspaceId),
+      model: response?.model || model,
+      usage: response?.usage,
+      requestId: response?.id,
+    });
     responseContent = response.output_text || '{}';
 
     const structured = extractStructuredJson<AIAgentResult>(response);

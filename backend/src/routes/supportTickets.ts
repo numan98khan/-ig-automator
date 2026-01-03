@@ -1,16 +1,19 @@
 import express, { Response } from 'express';
 import SupportTicket from '../models/SupportTicket';
 import SupportTicketComment from '../models/SupportTicketComment';
-import User from '../models/User';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
+import { getUserById } from '../repositories/core/userRepository';
 
 const router = express.Router();
 
-// Create a support ticket
 router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     const {
       workspaceId,
       instagramAccountId,
@@ -57,13 +60,16 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// List tickets for workspace or all (admin)
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     const { workspaceId, status, type, severity, tag } = req.query;
     const filter: any = {};
 
-    const user = await User.findById(req.userId);
+    const user = await getUserById(req.userId, { includePassword: true });
     const isAdmin = user?.role === 'admin';
 
     if (workspaceId) {
@@ -93,9 +99,12 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Get ticket details
 router.get('/:ticketId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     const { ticketId } = req.params;
     const ticket = await SupportTicket.findById(ticketId);
 
@@ -103,7 +112,7 @@ router.get('/:ticketId', authenticate, async (req: AuthRequest, res: Response) =
       return res.status(404).json({ error: 'Ticket not found' });
     }
 
-    const user = await User.findById(req.userId);
+    const user = await getUserById(req.userId, { includePassword: true });
     const isAdmin = user?.role === 'admin';
 
     if (!isAdmin) {
@@ -124,7 +133,6 @@ router.get('/:ticketId', authenticate, async (req: AuthRequest, res: Response) =
   }
 });
 
-// Update ticket status or metadata (admin only)
 router.patch('/:ticketId', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const { ticketId } = req.params;
@@ -160,9 +168,12 @@ router.patch('/:ticketId', authenticate, requireAdmin, async (req: AuthRequest, 
   }
 });
 
-// Add comment to ticket
 router.post('/:ticketId/comments', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     const { ticketId } = req.params;
     const { message, attachments } = req.body;
 
@@ -175,7 +186,7 @@ router.post('/:ticketId/comments', authenticate, async (req: AuthRequest, res: R
       return res.status(404).json({ error: 'Ticket not found' });
     }
 
-    const user = await User.findById(req.userId);
+    const user = await getUserById(req.userId, { includePassword: true });
     const isAdmin = user?.role === 'admin';
 
     if (!isAdmin) {

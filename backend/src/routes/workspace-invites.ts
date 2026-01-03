@@ -2,16 +2,22 @@ import express, { Response } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { WorkspaceInvite } from '../models/WorkspaceInvite';
-import User from '../models/User';
-import Workspace from '../models/Workspace';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { hasPermission, addMember, getWorkspaceMembers } from '../services/workspaceService';
 import { sendWorkspaceInviteEmail } from '../services/emailService';
+import { assertWorkspaceLimit } from '../services/tierService';
+import { countWorkspaceMembers } from '../repositories/core/workspaceMemberRepository';
+import { getWorkspaceById } from '../repositories/core/workspaceRepository';
+import {
+  createUser,
+  getUserByEmail,
+  getUserById,
+  updateUser,
+} from '../repositories/core/userRepository';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-// Send workspace invite
 router.post('/send', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId, email, role } = req.body;
@@ -20,48 +26,41 @@ router.post('/send', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Workspace ID, email, and role are required' });
     }
 
-    // Validate role
     const validRoles = ['admin', 'agent', 'viewer'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ error: 'Invalid role. Must be admin, agent, or viewer' });
     }
 
-    // Check if user has permission to invite (must be owner or admin)
     const canInvite = await hasPermission(req.userId!, workspaceId, 'admin');
     if (!canInvite) {
       return res.status(403).json({ error: 'You do not have permission to invite members to this workspace' });
     }
 
-    // Get workspace details
-    const workspace = await Workspace.findById(workspaceId);
+    const workspace = await getWorkspaceById(workspaceId);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    // Enforce team member limit (members + pending invites)
-    const existingMembersCount = await (await import('../models/WorkspaceMember')).default.countDocuments({ workspaceId });
+    const existingMembersCount = await countWorkspaceMembers(workspaceId);
     const pendingInvitesCount = await WorkspaceInvite.countDocuments({
       workspaceId,
       accepted: false,
       expiresAt: { $gt: new Date() },
     });
-    const { assertWorkspaceLimit } = await import('../services/tierService');
     const limitCheck = await assertWorkspaceLimit(workspaceId, 'teamMembers', existingMembersCount + pendingInvitesCount + 1);
     if (!limitCheck.allowed) {
       return res.status(403).json({ error: `Team member limit reached (limit: ${limitCheck.limit})` });
     }
 
-    // Check if user is already a member
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const existingUser = await getUserByEmail(email);
     if (existingUser) {
       const members = await getWorkspaceMembers(workspaceId);
-      const isMember = members.some((m: any) => m.user._id.toString() === existingUser._id.toString());
+      const isMember = members.some((m: any) => m.user?._id === existingUser._id);
       if (isMember) {
         return res.status(400).json({ error: 'User is already a member of this workspace' });
       }
     }
 
-    // Check if there's already a pending invite
     const existingInvite = await WorkspaceInvite.findOne({
       workspaceId,
       email: email.toLowerCase(),
@@ -73,12 +72,10 @@ router.post('/send', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'An invite has already been sent to this email' });
     }
 
-    // Generate invite token
     const inviteToken = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
+    expiresAt.setDate(expiresAt.getDate() + 7);
 
-    // Create invite
     const invite = await WorkspaceInvite.create({
       workspaceId,
       email: email.toLowerCase(),
@@ -88,10 +85,8 @@ router.post('/send', authenticate, async (req: AuthRequest, res: Response) => {
       expiresAt,
     });
 
-    // Get inviter details
-    const inviter = await User.findById(req.userId);
+    const inviter = await getUserById(req.userId!, { includePassword: true });
 
-    // Send invite email
     await sendWorkspaceInviteEmail(
       email,
       workspace.name,
@@ -121,34 +116,39 @@ router.post('/send', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// List invites for a workspace
 router.get('/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId } = req.params;
 
-    // Check if user has permission to view invites (must be at least an agent)
     const canView = await hasPermission(req.userId!, workspaceId, 'agent');
     if (!canView) {
       return res.status(403).json({ error: 'You do not have permission to view invites for this workspace' });
     }
 
-    // Get all pending invites
     const invites = await WorkspaceInvite.find({
       workspaceId,
       accepted: false,
       expiresAt: { $gt: new Date() },
-    })
-      .populate('invitedBy', 'email')
-      .sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 });
 
-    res.json(invites);
+    const inviterIds = invites
+      .map(invite => invite.invitedBy?.toString())
+      .filter(Boolean) as string[];
+    const inviters = await Promise.all(inviterIds.map(id => getUserById(String(id), { includePassword: true })));
+    const inviterMap = Object.fromEntries(inviters.filter(Boolean).map(user => [user!._id, user]));
+
+    res.json(invites.map(invite => ({
+      ...invite.toObject(),
+      invitedBy: inviterMap[String(invite.invitedBy)]
+        ? { email: inviterMap[String(invite.invitedBy)]?.email }
+        : undefined,
+    })));
   } catch (error) {
     console.error('Get invites error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Cancel invite
 router.delete('/:inviteId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { inviteId } = req.params;
@@ -158,7 +158,6 @@ router.delete('/:inviteId', authenticate, async (req: AuthRequest, res: Response
       return res.status(404).json({ error: 'Invite not found' });
     }
 
-    // Check if user has permission to cancel invites (must be owner or admin)
     const canCancel = await hasPermission(req.userId!, invite.workspaceId.toString(), 'admin');
     if (!canCancel) {
       return res.status(403).json({ error: 'You do not have permission to cancel invites for this workspace' });
@@ -178,7 +177,6 @@ router.delete('/:inviteId', authenticate, async (req: AuthRequest, res: Response
   }
 });
 
-// Get invite details by token
 router.get('/details/:token', async (req, res) => {
   try {
     const { token } = req.params;
@@ -187,15 +185,17 @@ router.get('/details/:token', async (req, res) => {
       token,
       accepted: false,
       expiresAt: { $gt: new Date() },
-    }).populate('workspaceId', 'name');
+    });
 
     if (!invite) {
       return res.status(400).json({ error: 'Invalid or expired invite token' });
     }
 
+    const workspace = await getWorkspaceById(invite.workspaceId.toString());
+
     res.json({
       email: invite.email,
-      workspaceName: (invite.workspaceId as any).name,
+      workspaceName: workspace?.name,
       role: invite.role,
     });
   } catch (error) {
@@ -204,7 +204,6 @@ router.get('/details/:token', async (req, res) => {
   }
 });
 
-// Accept invite and set password
 router.post('/accept', async (req, res) => {
   try {
     const { token, password, firstName, lastName } = req.body;
@@ -217,7 +216,6 @@ router.post('/accept', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    // Find invite
     const invite = await WorkspaceInvite.findOne({
       token,
       accepted: false,
@@ -228,58 +226,51 @@ router.post('/accept', async (req, res) => {
       return res.status(400).json({ error: 'Invalid or expired invite token' });
     }
 
-    // Get workspace details
-    const workspace = await Workspace.findById(invite.workspaceId);
+    const workspace = await getWorkspaceById(invite.workspaceId.toString());
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    // Check if user already exists
-    let user = await User.findOne({ email: invite.email });
+    let user = await getUserByEmail(invite.email, { includePassword: true });
 
     if (user) {
-      // User exists - just add them to the workspace
       if (user.isProvisional) {
-        // Upgrade provisional account to full account
-        user.password = password;
-        user.emailVerified = true;
-        user.isProvisional = false;
-        if (firstName) user.firstName = firstName;
-        if (lastName) user.lastName = lastName;
-        await user.save();
+        user = await updateUser(user._id, {
+          password,
+          emailVerified: true,
+          isProvisional: false,
+          firstName: firstName ?? user.firstName ?? null,
+          lastName: lastName ?? user.lastName ?? null,
+        });
       }
     } else {
-      // Create new user
-      user = await User.create({
+      user = await createUser({
         email: invite.email,
         password,
         firstName,
         lastName,
-        emailVerified: true, // Email verified via invite
+        emailVerified: true,
         isProvisional: false,
       });
     }
 
     const { assignTierFromOwner } = await import('../services/tierService');
 
-    // Add user to workspace (will enforce limit internally)
-    await addMember(invite.workspaceId, user._id, invite.role);
-    await assignTierFromOwner(invite.workspaceId, user._id);
+    await addMember(invite.workspaceId.toString(), user!._id, invite.role);
+    await assignTierFromOwner(invite.workspaceId.toString(), user!._id);
 
-    // Mark invite as accepted
     invite.accepted = true;
     invite.acceptedAt = new Date();
     await invite.save();
 
-    // Generate JWT token
     const jwtToken = jwt.sign(
-      { userId: user._id },
+      { userId: user!._id },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
 
     console.log('✅ Invite accepted:', {
-      email: user.email,
+      email: user!.email,
       workspace: workspace.name,
       role: invite.role,
     });
@@ -288,11 +279,11 @@ router.post('/accept', async (req, res) => {
       message: 'Invite accepted successfully',
       token: jwtToken,
       user: {
-        _id: user._id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        emailVerified: user.emailVerified,
+        _id: user!._id,
+        email: user!.email,
+        firstName: user!.firstName,
+        lastName: user!.lastName,
+        emailVerified: user!.emailVerified,
       },
     });
   } catch (error: any) {

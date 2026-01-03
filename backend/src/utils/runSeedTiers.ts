@@ -1,19 +1,16 @@
-import dotenv from 'dotenv';
-import { connectDB } from '../config/database';
 import { seedBaselineTiers } from './seedTiers';
+import { ensureCoreSchema } from '../db/coreSchema';
 
-dotenv.config();
-
-const run = async () => {
+async function run() {
   try {
-    await connectDB();
+    await ensureCoreSchema();
     await seedBaselineTiers();
-    console.log('✅ Seeded baseline tiers');
+    console.log('✅ Baseline tiers seeded');
+    process.exit(0);
   } catch (error) {
     console.error('❌ Failed to seed tiers', error);
-  } finally {
-    process.exit(0);
+    process.exit(1);
   }
-};
+}
 
 run();

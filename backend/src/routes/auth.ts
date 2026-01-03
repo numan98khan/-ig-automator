@@ -1,13 +1,20 @@
 import express, { Request, Response } from 'express';
-import User from '../models/User';
-import Workspace from '../models/Workspace';
-import WorkspaceMember from '../models/WorkspaceMember';
 import { generateToken } from '../utils/jwt';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/emailService';
 import { generateToken as generateEmailToken, verifyToken } from '../services/tokenService';
 import { ensureUserTier } from '../services/tierService';
 import { ensureBillingAccountForUser } from '../services/billingService';
+import {
+  createUser,
+  getUserByEmail,
+  getUserByEmailExcludingId,
+  getUserById,
+  updateUser,
+  verifyPassword,
+} from '../repositories/core/userRepository';
+import { listWorkspaceMembersByUserId } from '../repositories/core/workspaceMemberRepository';
+import { listWorkspacesByIds } from '../repositories/core/workspaceRepository';
 
 const router = express.Router();
 
@@ -20,19 +27,16 @@ router.post('/signup', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await getUserByEmail(email);
     if (existingUser) {
       return res.status(400).json({ error: 'User already exists' });
     }
 
-    // Create user
-    const user = await User.create({ email, password });
+    const user = await createUser({ email, password });
     await ensureBillingAccountForUser(user._id);
     await ensureUserTier(user._id);
 
-    // Generate token
-    const token = generateToken(user._id.toString());
+    const token = generateToken(user._id);
 
     res.status(201).json({
       token,
@@ -57,20 +61,17 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Find user
-    const user = await User.findOne({ email });
-    if (!user) {
+    const user = await getUserByEmail(email, { includePassword: true });
+    if (!user || !user.password) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Check password
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await verifyPassword(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Generate token
-    const token = generateToken(user._id.toString());
+    const token = generateToken(user._id);
     await ensureBillingAccountForUser(user._id);
     await ensureUserTier(user._id);
 
@@ -91,7 +92,11 @@ router.post('/login', async (req: Request, res: Response) => {
 // Get current user
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const user = await User.findById(req.userId).select('-password');
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const user = await getUserById(req.userId, { includePassword: true });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -99,12 +104,8 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
     const { getTierForUser } = await import('../services/tierService');
     const tierSummary = await getTierForUser(user._id);
 
-    // Get user's workspaces via WorkspaceMember
-    const memberships = await WorkspaceMember.find({ userId: user._id })
-      .populate('workspaceId')
-      .sort({ createdAt: -1 });
-
-    const workspaces = memberships.map((m: any) => m.workspaceId).filter(Boolean);
+    const memberships = await listWorkspaceMembersByUserId(user._id);
+    const workspaces = await listWorkspacesByIds(memberships.map(m => m.workspaceId));
 
     res.json({
       user: {
@@ -131,53 +132,49 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
 // Secure account - add email/password to Instagram-only user
 router.post('/secure-account', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     const { email, password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
-    // Password strength validation
     if (password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
-    // Check if email is already taken
-    const existingUser = await User.findOne({ email, _id: { $ne: req.userId } });
+    const existingUser = await getUserByEmailExcludingId(email, req.userId);
     if (existingUser) {
       return res.status(400).json({ error: 'Email already in use' });
     }
 
-    // Update user with email and password
-    const user = await User.findById(req.userId);
+    const user = await updateUser(req.userId, {
+      email,
+      password,
+      emailVerified: false,
+    });
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    user.email = email;
-    user.password = password; // Will be hashed by pre-save hook
-    // Keep isProvisional = true until email is verified
-    user.emailVerified = false;
-    await user.save();
-
-    // Generate verification token
     const verificationToken = generateEmailToken({
-      userId: user._id.toString(),
+      userId: user._id,
       type: 'verify_email',
     });
 
-    // Send verification email
     try {
       await sendVerificationEmail(user, verificationToken);
     } catch (emailError: any) {
       console.error('Failed to send verification email:', emailError);
-      // Don't fail the request if email fails - user can request resend
     }
 
     res.json({
@@ -207,7 +204,6 @@ router.get('/verify-email', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Verification token is required' });
     }
 
-    // Verify and decode token
     let payload;
     try {
       payload = verifyToken(token);
@@ -222,8 +218,11 @@ router.get('/verify-email', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid token type' });
     }
 
-    // Find user and verify
-    const user = await User.findById(payload.userId);
+    if (!payload.userId) {
+      return res.status(400).json({ error: 'Invalid token payload' });
+    }
+
+    const user = await getUserById(payload.userId, { includePassword: true });
     if (!user) {
       console.log('❌ User not found:', payload.userId);
       return res.status(404).json({ error: 'User not found' });
@@ -233,7 +232,7 @@ router.get('/verify-email', async (req: Request, res: Response) => {
       id: user._id,
       email: user.email,
       emailVerified: user.emailVerified,
-      isProvisional: user.isProvisional
+      isProvisional: user.isProvisional,
     });
 
     if (user.emailVerified) {
@@ -241,25 +240,25 @@ router.get('/verify-email', async (req: Request, res: Response) => {
       return res.status(200).json({ message: 'Email already verified' });
     }
 
-    // Mark email as verified and user as non-provisional
-    user.emailVerified = true;
-    user.isProvisional = false;
-    await user.save();
+    const updatedUser = await updateUser(user._id, {
+      emailVerified: true,
+      isProvisional: false,
+    });
 
     console.log('✅ Email verified successfully:', {
-      id: user._id,
-      email: user.email,
-      emailVerified: user.emailVerified,
-      isProvisional: user.isProvisional
+      id: updatedUser?._id,
+      email: updatedUser?.email,
+      emailVerified: updatedUser?.emailVerified,
+      isProvisional: updatedUser?.isProvisional,
     });
 
     res.json({
       message: 'Email verified successfully!',
       user: {
-        id: user._id,
-        email: user.email,
-        emailVerified: user.emailVerified,
-        isProvisional: user.isProvisional,
+        id: updatedUser?._id,
+        email: updatedUser?.email,
+        emailVerified: updatedUser?.emailVerified,
+        isProvisional: updatedUser?.isProvisional,
       },
     });
   } catch (error) {
@@ -271,7 +270,11 @@ router.get('/verify-email', async (req: Request, res: Response) => {
 // Resend verification email
 router.post('/resend-verification', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const user = await User.findById(req.userId);
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const user = await getUserById(req.userId, { includePassword: true });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -284,13 +287,11 @@ router.post('/resend-verification', authenticate, async (req: AuthRequest, res: 
       return res.status(400).json({ error: 'Email already verified' });
     }
 
-    // Generate new verification token
     const verificationToken = generateEmailToken({
-      userId: user._id.toString(),
+      userId: user._id,
       type: 'verify_email',
     });
 
-    // Send verification email
     await sendVerificationEmail(user, verificationToken);
 
     res.json({ message: 'Verification email sent' });
@@ -309,24 +310,18 @@ router.post('/reset-password-request', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    // Find user by email
-    const user = await User.findOne({ email });
+    const user = await getUserByEmail(email, { includePassword: true });
 
-    // Always return success (don't leak if email exists)
-    // But only send email if user exists
     if (user) {
-      // Generate reset token
       const resetToken = generateEmailToken({
-        userId: user._id.toString(),
+        userId: user._id,
         type: 'password_reset',
       });
 
-      // Send password reset email
       try {
         await sendPasswordResetEmail(user, resetToken);
       } catch (emailError: any) {
         console.error('Failed to send password reset email:', emailError);
-        // Still return success to user for security
       }
     }
 
@@ -346,12 +341,10 @@ router.post('/reset-password', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Token and new password are required' });
     }
 
-    // Password strength validation
     if (newPassword.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
-    // Verify token
     let payload;
     try {
       payload = verifyToken(token);
@@ -363,14 +356,16 @@ router.post('/reset-password', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid token type' });
     }
 
-    // Find user and update password
-    const user = await User.findById(payload.userId);
+    if (!payload.userId) {
+      return res.status(400).json({ error: 'Invalid token payload' });
+    }
+
+    const user = await getUserById(payload.userId, { includePassword: true });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    user.password = newPassword; // Will be hashed by pre-save hook
-    await user.save();
+    await updateUser(user._id, { password: newPassword });
 
     res.json({ message: 'Password reset successfully' });
   } catch (error) {

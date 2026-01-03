@@ -1,12 +1,8 @@
 import express from 'express';
-import mongoose from 'mongoose';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
-import Workspace from '../models/Workspace';
-import User from '../models/User';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
-import WorkspaceMember from '../models/WorkspaceMember';
 import Escalation from '../models/Escalation';
 import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
@@ -18,7 +14,6 @@ import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import AutomationIntent from '../models/AutomationIntent';
 import AutomationSession from '../models/AutomationSession';
 import AutomationInstance from '../models/AutomationInstance';
-import Tier from '../models/Tier';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
 import { deleteAdminLogEvents, getAdminLogEvents } from '../services/adminLogEventService';
@@ -31,6 +26,35 @@ import {
   reindexWorkspaceKnowledge,
   upsertKnowledgeEmbedding,
 } from '../services/vectorStore';
+import {
+  countTiers,
+  createTier,
+  deleteTier,
+  getTierById,
+  listTiers,
+  listTiersByIds,
+  updateTier,
+} from '../repositories/core/tierRepository';
+import {
+  countUsers,
+  getUserById,
+  listUsers,
+  listUsersByIds,
+  updateUser,
+} from '../repositories/core/userRepository';
+import {
+  countWorkspaces,
+  getWorkspaceById,
+  listWorkspaces,
+  listWorkspacesByIds,
+} from '../repositories/core/workspaceRepository';
+import {
+  countWorkspaceMembersByWorkspaceIds,
+  listWorkspaceMembersByUserId,
+  listWorkspaceMembersByUserIds,
+  listWorkspaceMembersByWorkspaceId,
+} from '../repositories/core/workspaceMemberRepository';
+import { getWorkspaceOpenAiUsageSummary } from '../repositories/core/openAiUsageRepository';
 
 const router = express.Router();
 
@@ -47,10 +71,13 @@ const toOptionalBoolean = (value: any) => {
   }
   return undefined;
 };
+const toRangeDays = (value: any, fallback = 30) => {
+  const parsed = typeof value === 'string' ? parseInt(value.replace(/[^0-9]/g, ''), 10) : Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, 365);
+};
 const STORAGE_MODES = ['vector', 'text'];
-const toObjectId = (value?: string) => (value ? new mongoose.Types.ObjectId(value) : undefined);
 
-// Tiers CRUD
 router.get('/tiers', authenticate, requireAdmin, async (req, res) => {
   try {
     const page = Math.max(1, toInt(req.query.page, 1));
@@ -58,21 +85,14 @@ router.get('/tiers', authenticate, requireAdmin, async (req, res) => {
     const search = (req.query.search as string)?.trim();
     const status = (req.query.status as string)?.trim();
 
-    const filter: any = {};
-    if (search) {
-      filter.name = { $regex: search, $options: 'i' };
-    }
-    if (status) {
-      filter.status = status;
-    }
-
     const [items, total] = await Promise.all([
-      Tier.find(filter)
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean(),
-      Tier.countDocuments(filter),
+      listTiers({
+        search: search || undefined,
+        status: status || undefined,
+        limit,
+        offset: (page - 1) * limit,
+      }),
+      countTiers({ search: search || undefined, status: status || undefined }),
     ]);
 
     res.json({
@@ -93,7 +113,7 @@ router.get('/tiers', authenticate, requireAdmin, async (req, res) => {
 
 router.post('/tiers', authenticate, requireAdmin, async (req, res) => {
   try {
-    const tier = await Tier.create(req.body || {});
+    const tier = await createTier(req.body || {});
     res.status(201).json({ data: tier });
   } catch (error: any) {
     console.error('Admin create tier error:', error);
@@ -103,9 +123,9 @@ router.post('/tiers', authenticate, requireAdmin, async (req, res) => {
 
 router.get('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const tier = await Tier.findById(req.params.id).lean();
+    const tier = await getTierById(req.params.id);
     if (!tier) return res.status(404).json({ error: 'Tier not found' });
-    const userCount = await User.countDocuments({ tierId: tier._id });
+    const userCount = await countUsers({ tierId: tier._id });
     res.json({ data: { ...tier, userCount } });
   } catch (error) {
     console.error('Admin get tier error:', error);
@@ -115,7 +135,7 @@ router.get('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
 
 router.put('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const tier = await Tier.findByIdAndUpdate(req.params.id, req.body || {}, { new: true });
+    const tier = await updateTier(req.params.id, req.body || {});
     if (!tier) return res.status(404).json({ error: 'Tier not found' });
     res.json({ data: tier });
   } catch (error: any) {
@@ -126,13 +146,13 @@ router.put('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
 
 router.delete('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const tier = await Tier.findById(req.params.id);
+    const tier = await getTierById(req.params.id);
     if (!tier) return res.status(404).json({ error: 'Tier not found' });
-    const userCount = await User.countDocuments({ tierId: tier._id });
+    const userCount = await countUsers({ tierId: tier._id });
     if (tier.isDefault || userCount > 0) {
       return res.status(400).json({ error: 'Cannot delete a default or in-use tier' });
     }
-    await Tier.deleteOne({ _id: req.params.id });
+    await deleteTier(req.params.id);
     res.json({ data: { success: true } });
   } catch (error) {
     console.error('Admin delete tier error:', error);
@@ -142,10 +162,10 @@ router.delete('/tiers/:id', authenticate, requireAdmin, async (req, res) => {
 
 router.post('/tiers/:id/assign/:userId', authenticate, requireAdmin, async (req, res) => {
   try {
-    const tier = await Tier.findById(req.params.id);
+    const tier = await getTierById(req.params.id);
     if (!tier) return res.status(404).json({ error: 'Tier not found' });
 
-    const user = await User.findById(req.params.userId);
+    const user = await getUserById(req.params.userId, { includePassword: true });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const billingAccount = await ensureBillingAccountForUser(user._id);
@@ -153,8 +173,7 @@ router.post('/tiers/:id/assign/:userId', authenticate, requireAdmin, async (req,
 
     await upsertActiveSubscription(billingAccount._id, tier._id);
 
-    user.tierId = tier._id;
-    await user.save();
+    await updateUser(user._id, { tierId: tier._id });
 
     res.json({ data: { success: true } });
   } catch (error) {
@@ -163,47 +182,33 @@ router.post('/tiers/:id/assign/:userId', authenticate, requireAdmin, async (req,
   }
 });
 
-// Admin god-eye: list all workspaces
 router.get('/workspaces', authenticate, requireAdmin, async (req, res) => {
   try {
     const page = Math.max(1, toInt(req.query.page, 1));
     const limit = Math.min(100, Math.max(1, toInt(req.query.limit, 20)));
     const search = (req.query.search as string)?.trim();
 
-    const filter: any = {};
-    if (search) {
-      filter.name = { $regex: search, $options: 'i' };
-    }
-
     const [items, total] = await Promise.all([
-      Workspace.find(filter)
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean(),
-      Workspace.countDocuments(filter),
+      listWorkspaces({ search: search || undefined, limit, offset: (page - 1) * limit }),
+      countWorkspaces({ search: search || undefined }),
     ]);
 
     const workspaceIds = items.map((w: any) => w._id);
     const [memberCounts, convoCounts] = await Promise.all([
-      WorkspaceMember.aggregate([
-        { $match: { workspaceId: { $in: workspaceIds } } },
-        { $group: { _id: '$workspaceId', count: { $sum: 1 } } },
-      ]),
+      countWorkspaceMembersByWorkspaceIds(workspaceIds),
       Conversation.aggregate([
         { $match: { workspaceId: { $in: workspaceIds } } },
         { $group: { _id: '$workspaceId', count: { $sum: 1 } } },
       ]),
     ]);
 
-    const memberMap = Object.fromEntries(memberCounts.map((m: any) => [String(m._id), m.count]));
     const convoMap = Object.fromEntries(convoCounts.map((c: any) => [String(c._id), c.count]));
 
     res.json({
       data: {
         workspaces: items.map((w: any) => ({
           ...w,
-          memberCount: memberMap[String(w._id)] || 0,
+          memberCount: memberCounts[String(w._id)] || 0,
           conversationCount: convoMap[String(w._id)] || 0,
         })),
         pagination: {
@@ -219,39 +224,25 @@ router.get('/workspaces', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-// Admin god-eye: list all users
 router.get('/users', authenticate, requireAdmin, async (_req, res) => {
   try {
     const page = Math.max(1, toInt(_req.query.page, 1));
     const limit = Math.min(100, Math.max(1, toInt(_req.query.limit, 20)));
     const search = (_req.query.search as string)?.trim();
 
-    const filter: any = {};
-    if (search) {
-      filter.$or = [
-        { email: { $regex: search, $options: 'i' } },
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-      ];
-    }
-
     const [items, total] = await Promise.all([
-      User.find(filter)
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean(),
-      User.countDocuments(filter),
+      listUsers({ search: search || undefined, limit, offset: (page - 1) * limit }),
+      countUsers({ search: search || undefined }),
     ]);
 
-    const tierIds = items.map((u: any) => u.tierId).filter(Boolean);
-    const tiers = await Tier.find({ _id: { $in: tierIds } }).lean();
+    const tierIds = items.map((u: any) => u.tierId).filter(Boolean) as string[];
+    const tiers = await listTiersByIds(tierIds);
     const tierMap = Object.fromEntries(tiers.map((t: any) => [String(t._id), t]));
 
     const userIds = items.map((u: any) => u._id);
-    const memberships = await WorkspaceMember.find({ userId: { $in: userIds } }).lean();
+    const memberships = await listWorkspaceMembersByUserIds(userIds);
     const workspaceIds = memberships.map((m: any) => m.workspaceId);
-    const workspaces = await Workspace.find({ _id: { $in: workspaceIds } }).lean();
+    const workspaces = await listWorkspacesByIds(workspaceIds);
     const workspaceMap = Object.fromEntries(workspaces.map((w: any) => [String(w._id), w]));
 
     const membershipsByUser: Record<string, any[]> = {};
@@ -286,7 +277,6 @@ router.get('/users', authenticate, requireAdmin, async (_req, res) => {
   }
 });
 
-// Admin god-eye: list all conversations
 router.get('/conversations', authenticate, requireAdmin, async (req, res) => {
   try {
     const page = Math.max(1, toInt(req.query.page, 1));
@@ -307,7 +297,7 @@ router.get('/conversations', authenticate, requireAdmin, async (req, res) => {
 
     const workspaceIds = items.map((c: any) => c.workspaceId);
     const workspaceMap = Object.fromEntries(
-      (await Workspace.find({ _id: { $in: workspaceIds } }).lean()).map((w: any) => [String(w._id), w])
+      (await listWorkspacesByIds(workspaceIds)).map((w: any) => [String(w._id), w])
     );
 
     res.json({
@@ -329,12 +319,11 @@ router.get('/conversations', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-// Admin god-eye: platform stats
 router.get('/dashboard/stats', authenticate, requireAdmin, async (_req, res) => {
   try {
     const [userCount, workspaceCount, conversationCount, messageCount] = await Promise.all([
-      User.countDocuments({}),
-      Workspace.countDocuments({}),
+      countUsers(),
+      countWorkspaces(),
       Conversation.countDocuments({}),
       Message.countDocuments({}),
     ]);
@@ -343,11 +332,11 @@ router.get('/dashboard/stats', authenticate, requireAdmin, async (_req, res) => 
       data: {
         totalWorkspaces: workspaceCount,
         totalUsers: userCount,
-        conversations24h: conversationCount, // placeholder
+        conversations24h: conversationCount,
         activeEscalations: await Escalation.countDocuments({ status: { $in: ['pending', 'in_progress'] } }),
         aiResponseRate: 0,
         avgResponseTime: '0s',
-        messages24h: messageCount, // placeholder
+        messages24h: messageCount,
         successRate: 0,
         recentEscalations: [],
         topWorkspaces: [],
@@ -359,7 +348,6 @@ router.get('/dashboard/stats', authenticate, requireAdmin, async (_req, res) => 
   }
 });
 
-// System metrics (basic placeholders)
 router.get('/system/metrics', authenticate, requireAdmin, async (_req, res) => {
   try {
     const memoryUsage = process.memoryUsage();
@@ -367,7 +355,7 @@ router.get('/system/metrics', authenticate, requireAdmin, async (_req, res) => {
     res.json({
       data: {
         uptime: `${uptime.toFixed(0)}s`,
-        cpuUsage: 0, // placeholder
+        cpuUsage: 0,
         memoryUsage: Math.round((memoryUsage.rss / 1024 / 1024) * 100) / 100,
       },
     });
@@ -377,20 +365,18 @@ router.get('/system/metrics', authenticate, requireAdmin, async (_req, res) => {
   }
 });
 
-// Analytics placeholder
 router.get('/analytics', authenticate, requireAdmin, async (_req, res) => {
   res.json({ data: { series: [], range: _req.query.range || '30d' } });
 });
 
-// Workspace detail
 router.get('/workspaces/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const workspace = await Workspace.findById(id).lean();
+    const workspace = await getWorkspaceById(id);
     if (!workspace) return res.status(404).json({ error: 'Workspace not found' });
 
     const [memberCount, convoCount] = await Promise.all([
-      WorkspaceMember.countDocuments({ workspaceId: id }),
+      listWorkspaceMembersByWorkspaceId(id).then(members => members.length),
       Conversation.countDocuments({ workspaceId: id }),
     ]);
 
@@ -409,11 +395,44 @@ router.get('/workspaces/:id', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
+router.get('/workspaces/:id/usage', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rangeDays = toRangeDays(req.query.range, 30);
+    const endAt = new Date();
+    const startAt = new Date(endAt);
+    startAt.setUTCDate(startAt.getUTCDate() - rangeDays);
+
+    const summary = await getWorkspaceOpenAiUsageSummary(id, startAt, endAt);
+
+    res.json({
+      data: {
+        rangeDays,
+        startAt,
+        endAt,
+        ...summary,
+      },
+    });
+  } catch (error) {
+    console.error('Admin workspace usage error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.get('/workspaces/:id/members', authenticate, requireAdmin, async (req, res) => {
   try {
-    const members = await WorkspaceMember.find({ workspaceId: req.params.id })
-      .populate('userId', 'email firstName lastName')
-      .lean();
+    const memberships = await listWorkspaceMembersByWorkspaceId(req.params.id);
+    const users = await listUsersByIds(memberships.map(member => member.userId));
+    const userMap = Object.fromEntries(users.map(user => [user._id, user]));
+    const members = memberships.map(member => ({
+      ...member,
+      userId: {
+        _id: member.userId,
+        email: userMap[member.userId]?.email,
+        firstName: userMap[member.userId]?.firstName,
+        lastName: userMap[member.userId]?.lastName,
+      },
+    }));
     res.json({ data: { members } });
   } catch (error) {
     console.error('Admin workspace members error:', error);
@@ -421,14 +440,13 @@ router.get('/workspaces/:id/members', authenticate, requireAdmin, async (req, re
   }
 });
 
-// User detail
 router.get('/users/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).lean();
+    const user = await getUserById(req.params.id, { includePassword: true });
     if (!user) return res.status(404).json({ error: 'User not found' });
-    const tier = user.tierId ? await Tier.findById(user.tierId).lean() : undefined;
-    const memberships = await WorkspaceMember.find({ userId: req.params.id }).lean();
-    const workspaces = await Workspace.find({ _id: { $in: memberships.map((m: any) => m.workspaceId) } }).lean();
+    const tier = user.tierId ? await getTierById(user.tierId) : undefined;
+    const memberships = await listWorkspaceMembersByUserId(req.params.id);
+    const workspaces = await listWorkspacesByIds(memberships.map((m: any) => m.workspaceId));
     const workspaceMap = Object.fromEntries(workspaces.map((w: any) => [String(w._id), w]));
     res.json({
       data: {
@@ -447,7 +465,6 @@ router.get('/users/:id', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-// Conversation detail
 router.get('/conversations/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const convo = await Conversation.findById(req.params.id).lean();
@@ -460,7 +477,6 @@ router.get('/conversations/:id', authenticate, requireAdmin, async (req, res) =>
   }
 });
 
-// Escalations list
 router.get('/escalations', authenticate, requireAdmin, async (req, res) => {
   try {
     const page = Math.max(1, toInt(req.query.page, 1));
@@ -494,7 +510,6 @@ router.get('/escalations', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-// Health & system info
 router.get('/health', authenticate, requireAdmin, async (_req, res) => {
   res.json({
     data: {
@@ -512,8 +527,8 @@ router.get('/health', authenticate, requireAdmin, async (_req, res) => {
 router.get('/system/database', authenticate, requireAdmin, async (_req, res) => {
   try {
     const [workspaces, users, conversations, messages] = await Promise.all([
-      Workspace.countDocuments({}),
-      User.countDocuments({}),
+      countWorkspaces(),
+      countUsers(),
       Conversation.countDocuments({}),
       Message.countDocuments({}),
     ]);
@@ -533,7 +548,6 @@ router.get('/system/connections', authenticate, requireAdmin, async (_req, res) 
   res.json({ data: { connections: [] } });
 });
 
-// Assistant config (uses WorkspaceSettings)
 router.get('/assistant/config/:workspaceId', authenticate, requireAdmin, async (req, res) => {
   try {
     const { workspaceId } = req.params;
@@ -561,143 +575,198 @@ router.put('/assistant/config/:workspaceId', authenticate, requireAdmin, async (
       { $set: { assistantName, assistantDescription, systemPrompt } },
       { new: true, upsert: true },
     );
-    res.json({ data: { success: true, message: 'Configuration updated', settings } });
+    res.json({ data: settings });
   } catch (error) {
     console.error('Admin assistant config update error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Global assistant config (god-eye)
 router.get('/assistant/config', authenticate, requireAdmin, async (_req, res) => {
   try {
-    const config = await GlobalAssistantConfig.findOneAndUpdate(
-      {},
-      {
-        $setOnInsert: {
-          assistantName: 'SendFx Assistant',
-          assistantDescription: 'Ask about product, pricing, or guardrails',
-          systemPrompt: '',
-        },
-      },
-      { new: true, upsert: true },
-    ).lean<IGlobalAssistantConfig>();
-
-    res.json({
-      data: {
-        assistantName: config?.assistantName || 'SendFx Assistant',
-        assistantDescription: config?.assistantDescription || 'Ask about product, pricing, or guardrails',
-        systemPrompt: config?.systemPrompt || '',
-      },
-    });
+    const config = await GlobalAssistantConfig.findOne({ key: 'global' }).lean();
+    res.json({ data: config || {} });
   } catch (error) {
-    console.error('Admin global assistant config get error:', error);
+    console.error('Admin global assistant config error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 router.put('/assistant/config', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { assistantName, assistantDescription, systemPrompt } = req.body || {};
+    const payload: Partial<IGlobalAssistantConfig> = req.body || {};
     const config = await GlobalAssistantConfig.findOneAndUpdate(
-      {},
-      { $set: { assistantName, assistantDescription, systemPrompt } },
+      { key: 'global' },
+      { $set: payload },
       { new: true, upsert: true },
     );
-    res.json({
-      data: {
-        success: true,
-        message: 'Configuration updated',
-        settings: {
-          assistantName: config?.assistantName || 'SendFx Assistant',
-          assistantDescription: config?.assistantDescription || 'Ask about product, pricing, or guardrails',
-          systemPrompt: config?.systemPrompt || '',
-        },
-      },
-    });
+    res.json({ data: config });
   } catch (error) {
     console.error('Admin global assistant config update error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Global UI settings (theme + branding)
 router.get('/ui-settings', authenticate, requireAdmin, async (_req, res) => {
   try {
     const settings = await GlobalUiSettings.findOneAndUpdate(
-      {},
-      { $setOnInsert: { uiTheme: 'legacy' } },
+      { key: 'global' },
+      { $setOnInsert: { key: 'global', uiTheme: 'legacy' } },
       { new: true, upsert: true },
-    ).lean<IGlobalUiSettings>();
-
-    res.json({
-      data: {
-        uiTheme: settings?.uiTheme || 'legacy',
-      },
-    });
+    ).lean();
+    res.json({ data: settings || {} });
   } catch (error) {
-    console.error('Admin UI settings get error:', error);
+    console.error('Admin UI settings error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 router.put('/ui-settings', authenticate, requireAdmin, async (req, res) => {
   try {
-    const uiTheme = typeof req.body?.uiTheme === 'string' ? req.body.uiTheme.trim() : undefined;
-    if (uiTheme && uiTheme !== 'legacy' && uiTheme !== 'comic') {
-      return res.status(400).json({ error: 'Invalid uiTheme value' });
-    }
-
+    const payload: Partial<IGlobalUiSettings> = req.body || {};
     const settings = await GlobalUiSettings.findOneAndUpdate(
-      {},
-      { $set: { ...(uiTheme ? { uiTheme } : {}) } },
+      { key: 'global' },
+      { $set: payload },
       { new: true, upsert: true },
-    ).lean<IGlobalUiSettings>();
-
-    res.json({
-      data: {
-        success: true,
-        uiTheme: settings?.uiTheme || 'legacy',
-      },
-    });
+    );
+    res.json({ data: settings });
   } catch (error) {
     console.error('Admin UI settings update error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Admin log settings (console logging controls)
+router.get('/knowledge', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const storageMode = req.query.storageMode as string | undefined;
+
+    const filter: any = {};
+    if (workspaceId) filter.workspaceId = workspaceId;
+    if (storageMode) filter.storageMode = storageMode;
+
+    const items = await KnowledgeItem.find(filter).sort({ createdAt: -1 }).lean();
+    res.json({ data: { items } });
+  } catch (error) {
+    console.error('Admin list knowledge error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/knowledge', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { title, content, storageMode = 'vector', workspaceId } = req.body;
+    if (!title || !content || !STORAGE_MODES.includes(storageMode)) {
+      return res.status(400).json({ error: 'Invalid payload' });
+    }
+
+    const item = await KnowledgeItem.create({
+      title,
+      content,
+      storageMode,
+      workspaceId: workspaceId || undefined,
+    });
+
+    if (storageMode === 'vector') {
+      await upsertKnowledgeEmbedding({
+        id: item._id.toString(),
+        workspaceId: workspaceId || GLOBAL_WORKSPACE_KEY,
+        title,
+        content,
+      });
+    }
+
+    res.status(201).json({ data: item });
+  } catch (error) {
+    console.error('Admin create knowledge error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/knowledge/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, content, storageMode } = req.body;
+
+    if (storageMode && !STORAGE_MODES.includes(storageMode)) {
+      return res.status(400).json({ error: 'Invalid storageMode' });
+    }
+
+    const item = await KnowledgeItem.findById(id);
+    if (!item) return res.status(404).json({ error: 'Knowledge item not found' });
+
+    if (title) item.title = title;
+    if (content) item.content = content;
+    if (storageMode) item.storageMode = storageMode;
+
+    await item.save();
+
+    if (item.storageMode === 'vector') {
+      await upsertKnowledgeEmbedding({
+        id: item._id.toString(),
+        workspaceId: item.workspaceId?.toString() || GLOBAL_WORKSPACE_KEY,
+        title: item.title,
+        content: item.content,
+      });
+    } else {
+      await deleteKnowledgeEmbedding(item._id.toString());
+    }
+
+    res.json({ data: item });
+  } catch (error) {
+    console.error('Admin update knowledge error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.delete('/knowledge/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const item = await KnowledgeItem.findById(req.params.id);
+    if (!item) return res.status(404).json({ error: 'Knowledge item not found' });
+
+    await KnowledgeItem.deleteOne({ _id: req.params.id });
+    await deleteKnowledgeEmbedding(item._id.toString());
+
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin delete knowledge error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/knowledge/reindex-vector', authenticate, requireAdmin, async (_req, res) => {
+  try {
+    await reindexGlobalKnowledge();
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin reindex global knowledge error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/knowledge/reindex-vector/:workspaceId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    await reindexWorkspaceKnowledge(req.params.workspaceId);
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin reindex workspace knowledge error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.get('/log-settings', authenticate, requireAdmin, async (_req, res) => {
   try {
     const settings = await getLogSettings();
     res.json({ data: settings });
   } catch (error) {
-    console.error('Admin log settings get error:', error);
+    console.error('Admin log settings error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 router.put('/log-settings', authenticate, requireAdmin, async (req, res) => {
   try {
-    const aiTimingEnabled = toOptionalBoolean(req.body?.aiTimingEnabled);
-    const aiLogsEnabled = toOptionalBoolean(req.body?.aiLogsEnabled);
-    const automationLogsEnabled = toOptionalBoolean(req.body?.automationLogsEnabled);
-    const automationStepsEnabled = toOptionalBoolean(req.body?.automationStepsEnabled);
-    const instagramWebhookLogsEnabled = toOptionalBoolean(req.body?.instagramWebhookLogsEnabled);
-    const igApiLogsEnabled = toOptionalBoolean(req.body?.igApiLogsEnabled);
-    const openaiApiLogsEnabled = toOptionalBoolean(req.body?.openaiApiLogsEnabled);
-    const consoleLogsEnabled = toOptionalBoolean(req.body?.consoleLogsEnabled);
-
-    const settings = await updateLogSettings({
-      ...(aiTimingEnabled === undefined ? {} : { aiTimingEnabled }),
-      ...(aiLogsEnabled === undefined ? {} : { aiLogsEnabled }),
-      ...(automationLogsEnabled === undefined ? {} : { automationLogsEnabled }),
-      ...(automationStepsEnabled === undefined ? {} : { automationStepsEnabled }),
-      ...(instagramWebhookLogsEnabled === undefined ? {} : { instagramWebhookLogsEnabled }),
-      ...(igApiLogsEnabled === undefined ? {} : { igApiLogsEnabled }),
-      ...(openaiApiLogsEnabled === undefined ? {} : { openaiApiLogsEnabled }),
-      ...(consoleLogsEnabled === undefined ? {} : { consoleLogsEnabled }),
-    });
+    const settings = await updateLogSettings(req.body || {});
     res.json({ data: settings });
   } catch (error) {
     console.error('Admin log settings update error:', error);
@@ -705,32 +774,28 @@ router.put('/log-settings', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-// Admin log events (stored in Mongo with TTL)
 router.get('/log-events', authenticate, requireAdmin, async (req, res) => {
   try {
-    const limit = Math.min(500, Math.max(1, toInt(req.query.limit, 200)));
-    const category = typeof req.query.category === 'string' ? req.query.category.trim() : undefined;
-    const level = typeof req.query.level === 'string' ? req.query.level.trim() : undefined;
-    const workspaceId = typeof req.query.workspaceId === 'string'
-      ? req.query.workspaceId.trim()
-      : undefined;
-    const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId.trim() : undefined;
-    const beforeRaw = typeof req.query.before === 'string' ? req.query.before.trim() : undefined;
-    const before = beforeRaw ? new Date(beforeRaw) : undefined;
-    const beforeDate = before && !Number.isNaN(before.getTime()) ? before : undefined;
+    const limit = Math.min(500, Math.max(1, toInt(req.query.limit, 100)));
+    const category = req.query.category as string | undefined;
+    const level = req.query.level as 'info' | 'warn' | 'error' | undefined;
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const sessionId = req.query.sessionId as string | undefined;
+    const before = req.query.before as string | undefined;
+    const beforeDate = before ? new Date(before) : undefined;
 
     const events = await getAdminLogEvents({
       limit,
       category,
-      level: level === 'warn' || level === 'error' || level === 'info' ? level : undefined,
+      level,
       workspaceId,
       sessionId,
-      before: beforeDate,
+      before: beforeDate && !Number.isNaN(beforeDate.getTime()) ? beforeDate : undefined,
     });
 
-    res.json({ data: events });
+    res.json({ data: { events } });
   } catch (error) {
-    console.error('Admin log events get error:', error);
+    console.error('Admin log events error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -740,599 +805,305 @@ router.delete('/log-events', authenticate, requireAdmin, async (_req, res) => {
     await deleteAdminLogEvents();
     res.json({ data: { success: true } });
   } catch (error) {
-    console.error('Admin log events delete error:', error);
+    console.error('Admin delete log events error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Automation session history
-router.get('/automation-sessions', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const limit = Math.min(200, Math.max(1, toInt(req.query.limit, 50)));
-    const page = Math.max(1, toInt(req.query.page, 1));
-    const workspaceId = typeof req.query.workspaceId === 'string' ? req.query.workspaceId.trim() : undefined;
-    const channelRaw = typeof req.query.channel === 'string' ? req.query.channel.trim() : undefined;
-    const channel = channelRaw === 'preview' ? 'preview' : channelRaw === 'live' ? 'live' : undefined;
-
-    const query: Record<string, any> = {};
-    if (workspaceId) {
-      query.workspaceId = toObjectId(workspaceId);
-    }
-    if (channel) {
-      query.channel = channel;
-    }
-
-    const skip = (page - 1) * limit;
-    const [total, sessions] = await Promise.all([
-      AutomationSession.countDocuments(query),
-      AutomationSession.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-    ]);
-
-    const instanceIds = Array.from(new Set(sessions.map((session) => session.automationInstanceId?.toString()).filter(Boolean)));
-    const instances = instanceIds.length
-      ? await AutomationInstance.find({ _id: { $in: instanceIds } }).select('name templateId').lean()
-      : [];
-    const instanceMap = new Map(instances.map((instance) => [instance._id.toString(), instance]));
-
-    const templateIds = Array.from(new Set(instances.map((instance) => instance.templateId?.toString()).filter(Boolean)));
-    const templates = templateIds.length
-      ? await FlowTemplate.find({ _id: { $in: templateIds } }).select('name').lean()
-      : [];
-    const templateMap = new Map(templates.map((template) => [template._id.toString(), template]));
-
-    const payload = sessions.map((session) => {
-      const instance = session.automationInstanceId
-        ? instanceMap.get(session.automationInstanceId.toString())
-        : null;
-      const templateId = instance?.templateId || session.templateId;
-      const template = templateId ? templateMap.get(templateId.toString()) : null;
-      return {
-        ...session,
-        automationName: instance?.name,
-        templateId,
-        templateName: template?.name,
-      };
-    });
-
-    res.json({
-      data: {
-        sessions: payload,
-        total,
-        page,
-        limit,
-      },
-    });
-  } catch (error) {
-    console.error('Admin automation sessions get error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Automation intents (used by internal flow router)
-router.get('/automation-intents', authenticate, requireAdmin, async (_req, res) => {
-  try {
-    const intents = await listAutomationIntents();
-    res.json({ data: intents });
-  } catch (error) {
-    console.error('Admin automation intents list error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-router.post('/automation-intents', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const value = typeof req.body?.value === 'string' ? req.body.value.trim() : '';
-    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
-    if (!value || !description) {
-      return res.status(400).json({ error: 'value and description are required' });
-    }
-
-    const exists = await AutomationIntent.findOne({ value }).lean();
-    if (exists) {
-      return res.status(409).json({ error: 'Intent value already exists' });
-    }
-
-    const intent = await AutomationIntent.create({ value, description });
-    res.status(201).json({ data: intent });
-  } catch (error: any) {
-    console.error('Admin automation intent create error:', error);
-    res.status(400).json({ error: error.message || 'Failed to create automation intent' });
-  }
-});
-
-router.put('/automation-intents/:id', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const intent = await AutomationIntent.findById(req.params.id);
-    if (!intent) return res.status(404).json({ error: 'Automation intent not found' });
-
-    const value = typeof req.body?.value === 'string' ? req.body.value.trim() : '';
-    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
-
-    if (value) {
-      intent.value = value;
-    }
-    if (description) {
-      intent.description = description;
-    }
-
-    await intent.save();
-    res.json({ data: intent });
-  } catch (error: any) {
-    console.error('Admin automation intent update error:', error);
-    res.status(400).json({ error: error.message || 'Failed to update automation intent' });
-  }
-});
-
-router.delete('/automation-intents/:id', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const intent = await AutomationIntent.findByIdAndDelete(req.params.id);
-    if (!intent) return res.status(404).json({ error: 'Automation intent not found' });
-    res.json({ data: { success: true } });
-  } catch (error: any) {
-    console.error('Admin automation intent delete error:', error);
-    res.status(400).json({ error: error.message || 'Failed to delete automation intent' });
-  }
-});
-
-// Flow drafts (internal builder)
 router.get('/flow-drafts', authenticate, requireAdmin, async (req, res) => {
   try {
-    const templateId = typeof req.query.templateId === 'string' ? req.query.templateId.trim() : undefined;
-    const status = typeof req.query.status === 'string' ? req.query.status.trim() : undefined;
-    const filter: Record<string, any> = {};
+    const templateId = req.query.templateId as string | undefined;
+    const status = req.query.status as string | undefined;
+
+    const filter: any = {};
     if (templateId) filter.templateId = templateId;
     if (status) filter.status = status;
+
     const drafts = await FlowDraft.find(filter).sort({ updatedAt: -1 }).lean();
-    res.json({ data: drafts });
+    res.json({ data: { drafts } });
   } catch (error) {
-    console.error('Admin flow drafts list error:', error);
+    console.error('Admin list flow drafts error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-router.post('/flow-drafts', authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.get('/flow-drafts/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { name, description, templateId, dsl, triggers, exposedFields, status, display } = req.body || {};
-    if (!name || !dsl) {
-      return res.status(400).json({ error: 'name and dsl are required' });
-    }
+    const draft = await FlowDraft.findById(req.params.id).lean();
+    if (!draft) return res.status(404).json({ error: 'Draft not found' });
+    res.json({ data: draft });
+  } catch (error) {
+    console.error('Admin get flow draft error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
-    let resolvedTemplateId = templateId;
-    if (resolvedTemplateId) {
-      const template = await FlowTemplate.findById(resolvedTemplateId).lean();
-      if (!template) {
-        return res.status(400).json({ error: 'Template not found for templateId' });
-      }
-    }
-
-    const draft = await FlowDraft.create({
-      name: String(name).trim(),
-      description: typeof description === 'string' ? description.trim() : undefined,
-      status: status === 'archived' ? 'archived' : 'draft',
-      templateId: resolvedTemplateId || undefined,
-      dsl,
-      triggers: Array.isArray(triggers) ? triggers : [],
-      exposedFields: Array.isArray(exposedFields) ? exposedFields : [],
-      display: display || undefined,
-      createdBy: toObjectId(req.userId),
-      updatedBy: toObjectId(req.userId),
-    });
-
+router.post('/flow-drafts', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const draft = await FlowDraft.create(req.body || {});
     res.status(201).json({ data: draft });
-  } catch (error: any) {
-    console.error('Admin flow drafts create error:', error);
-    res.status(400).json({ error: error.message || 'Failed to create flow draft' });
-  }
-});
-
-router.get('/flow-drafts/:draftId', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const { draftId } = req.params;
-    const draft = await FlowDraft.findById(draftId).lean();
-    if (!draft) {
-      return res.status(404).json({ error: 'Flow draft not found' });
-    }
-    res.json({ data: draft });
   } catch (error) {
-    console.error('Admin flow drafts get error:', error);
+    console.error('Admin create flow draft error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-router.put('/flow-drafts/:draftId', authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.put('/flow-drafts/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { draftId } = req.params;
-    const draft = await FlowDraft.findById(draftId);
-    if (!draft) {
-      return res.status(404).json({ error: 'Flow draft not found' });
-    }
-
-    const { name, description, templateId, dsl, triggers, exposedFields, status, display } = req.body || {};
-    if (name !== undefined) {
-      const normalized = String(name).trim();
-      if (!normalized) {
-        return res.status(400).json({ error: 'name cannot be empty' });
-      }
-      draft.name = normalized;
-    }
-    if (description !== undefined) {
-      const normalized = typeof description === 'string' ? description.trim() : '';
-      draft.description = normalized || undefined;
-    }
-    if (dsl !== undefined) draft.dsl = dsl;
-    if (Array.isArray(triggers)) draft.triggers = triggers;
-    if (Array.isArray(exposedFields)) draft.exposedFields = exposedFields;
-    if (display !== undefined) draft.display = display;
-    if (status === 'archived' || status === 'draft') draft.status = status;
-
-    if (templateId !== undefined) {
-      if (!templateId) {
-        draft.templateId = undefined;
-      } else {
-        const template = await FlowTemplate.findById(templateId).lean();
-        if (!template) {
-          return res.status(400).json({ error: 'Template not found for templateId' });
-        }
-        draft.templateId = template._id;
-      }
-    }
-
-    draft.updatedBy = toObjectId(req.userId);
-    await draft.save();
+    const draft = await FlowDraft.findByIdAndUpdate(req.params.id, req.body || {}, { new: true });
+    if (!draft) return res.status(404).json({ error: 'Draft not found' });
     res.json({ data: draft });
-  } catch (error: any) {
-    console.error('Admin flow drafts update error:', error);
-    res.status(400).json({ error: error.message || 'Failed to update flow draft' });
+  } catch (error) {
+    console.error('Admin update flow draft error:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-router.post('/flow-drafts/:draftId/publish', authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.post('/flow-drafts/:id/publish', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { draftId } = req.params;
-    const draft = await FlowDraft.findById(draftId);
-    if (!draft) {
-      return res.status(404).json({ error: 'Flow draft not found' });
-    }
+    const draft = await FlowDraft.findById(req.params.id);
+    if (!draft) return res.status(404).json({ error: 'Draft not found' });
 
-    const {
-      compiled,
-      dslSnapshot,
-      triggers,
-      exposedFields,
-      templateId,
-      versionLabel,
-      display,
-    } = req.body || {};
-
-    const snapshot = dslSnapshot || draft.dsl;
-    if (!snapshot && !compiled) {
-      return res.status(400).json({ error: 'dslSnapshot or compiled artifact is required to publish' });
-    }
-
-    let compiledArtifact = compiled;
-    if (!compiledArtifact) {
-      try {
-        compiledArtifact = compileFlow(snapshot);
-      } catch (error: any) {
-        return res.status(400).json({
-          error: error.message || 'Failed to compile flow draft',
-          details: error.details,
-        });
-      }
-    }
-
-    let template: any = null;
-    const resolvedTemplateId = templateId || draft.templateId;
-    if (resolvedTemplateId) {
-      template = await FlowTemplate.findById(resolvedTemplateId);
-      if (!template) {
-        return res.status(400).json({ error: 'Template not found for templateId' });
-      }
-    }
+    const compiled = compileFlow(draft.dsl);
+    let template = draft.templateId ? await FlowTemplate.findById(draft.templateId) : null;
 
     if (!template) {
       template = await FlowTemplate.create({
         name: draft.name,
         description: draft.description,
         status: 'active',
-        createdBy: toObjectId(req.userId),
-        updatedBy: toObjectId(req.userId),
       });
+      draft.templateId = template._id;
+      await draft.save();
     }
 
-    const latestVersion = await FlowTemplateVersion.findOne({ templateId: template._id })
-      .sort({ version: -1 })
-      .lean();
-    const nextVersion = latestVersion ? latestVersion.version + 1 : 1;
-
-    const version = await FlowTemplateVersion.create({
+    const versionCount = await FlowTemplateVersion.countDocuments({ templateId: template._id });
+    const newVersion = await FlowTemplateVersion.create({
       templateId: template._id,
-      version: nextVersion,
-      versionLabel: typeof versionLabel === 'string' ? versionLabel.trim() : undefined,
+      version: versionCount + 1,
       status: 'published',
-      compiled: compiledArtifact,
-      dslSnapshot: snapshot,
-      triggers: Array.isArray(triggers) ? triggers : (draft.triggers || []),
-      exposedFields: Array.isArray(exposedFields) ? exposedFields : (draft.exposedFields || []),
-      display: display || draft.display,
+      compiled,
+      dslSnapshot: draft.dsl,
+      triggers: draft.triggers,
+      exposedFields: draft.exposedFields,
+      display: draft.display,
       publishedAt: new Date(),
-      createdBy: toObjectId(req.userId),
+      createdBy: draft.createdBy,
     });
 
-    template.currentVersionId = version._id;
+    template.currentVersionId = newVersion._id;
     template.status = 'active';
-    template.updatedBy = toObjectId(req.userId);
     await template.save();
 
-    draft.templateId = template._id;
-    draft.updatedBy = toObjectId(req.userId);
+    draft.status = 'archived';
     await draft.save();
 
-    res.status(201).json({ data: { template, version } });
-  } catch (error: any) {
-    console.error('Admin flow drafts publish error:', error);
-    res.status(400).json({ error: error.message || 'Failed to publish flow draft' });
+    res.json({ data: newVersion });
+  } catch (error) {
+    console.error('Admin publish flow draft error:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Flow templates (published)
 router.get('/flow-templates', authenticate, requireAdmin, async (_req, res) => {
   try {
     const templates = await FlowTemplate.find({}).sort({ updatedAt: -1 }).lean();
-    const versionIds = templates
-      .map((template) => template.currentVersionId)
-      .filter(Boolean);
-
-    const versions = versionIds.length
-      ? await FlowTemplateVersion.find({ _id: { $in: versionIds } }).lean()
-      : [];
-    const versionMap = new Map(versions.map((version: any) => [version._id.toString(), version]));
-
-    const payload = templates.map((template: any) => ({
-      ...template,
-      currentVersion: template.currentVersionId
-        ? versionMap.get(template.currentVersionId.toString()) || null
-        : null,
-    }));
-
-    res.json({ data: payload });
+    res.json({ data: { templates } });
   } catch (error) {
-    console.error('Admin flow templates list error:', error);
+    console.error('Admin list flow templates error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-router.post('/flow-templates', authenticate, requireAdmin, async (req: AuthRequest, res) => {
+router.get('/flow-templates/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { name, description, status } = req.body || {};
-    if (!name) {
-      return res.status(400).json({ error: 'name is required' });
-    }
-
-    const template = await FlowTemplate.create({
-      name: String(name).trim(),
-      description: typeof description === 'string' ? description.trim() : undefined,
-      status: status === 'archived' ? 'archived' : 'active',
-      createdBy: toObjectId(req.userId),
-      updatedBy: toObjectId(req.userId),
-    });
-
-    res.status(201).json({ data: template });
-  } catch (error: any) {
-    console.error('Admin flow templates create error:', error);
-    res.status(400).json({ error: error.message || 'Failed to create flow template' });
-  }
-});
-
-router.get('/flow-templates/:templateId', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const { templateId } = req.params;
-    const template = await FlowTemplate.findById(templateId).lean();
-    if (!template) {
-      return res.status(404).json({ error: 'Flow template not found' });
-    }
-    let currentVersion = null;
-    if (template.currentVersionId) {
-      currentVersion = await FlowTemplateVersion.findById(template.currentVersionId).lean();
-    }
-    res.json({ data: { ...template, currentVersion } });
-  } catch (error) {
-    console.error('Admin flow templates get error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-router.put('/flow-templates/:templateId', authenticate, requireAdmin, async (req: AuthRequest, res) => {
-  try {
-    const { templateId } = req.params;
-    const template = await FlowTemplate.findById(templateId);
-    if (!template) {
-      return res.status(404).json({ error: 'Flow template not found' });
-    }
-
-    const { name, description, status, currentVersionId } = req.body || {};
-    if (name !== undefined) {
-      const normalized = String(name).trim();
-      if (!normalized) {
-        return res.status(400).json({ error: 'name cannot be empty' });
-      }
-      template.name = normalized;
-    }
-    if (description !== undefined) {
-      const normalized = typeof description === 'string' ? description.trim() : '';
-      template.description = normalized || undefined;
-    }
-    if (status === 'archived' || status === 'active') template.status = status;
-
-    if (currentVersionId !== undefined) {
-      if (!currentVersionId) {
-        template.currentVersionId = undefined;
-      } else {
-        const version = await FlowTemplateVersion.findOne({ _id: currentVersionId, templateId }).lean();
-        if (!version) {
-          return res.status(400).json({ error: 'Version not found for template' });
-        }
-        template.currentVersionId = version._id;
-      }
-    }
-
-    template.updatedBy = toObjectId(req.userId);
-    await template.save();
+    const template = await FlowTemplate.findById(req.params.id).lean();
+    if (!template) return res.status(404).json({ error: 'Flow template not found' });
     res.json({ data: template });
-  } catch (error: any) {
-    console.error('Admin flow templates update error:', error);
-    res.status(400).json({ error: error.message || 'Failed to update flow template' });
-  }
-});
-
-router.get('/flow-templates/:templateId/versions', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const { templateId } = req.params;
-    const template = await FlowTemplate.findById(templateId).lean();
-    if (!template) {
-      return res.status(404).json({ error: 'Flow template not found' });
-    }
-    const versions = await FlowTemplateVersion.find({ templateId }).sort({ version: -1 }).lean();
-    res.json({ data: versions });
   } catch (error) {
-    console.error('Admin flow templates versions list error:', error);
+    console.error('Admin get flow template error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-router.get('/flow-templates/:templateId/versions/:versionId', authenticate, requireAdmin, async (req, res) => {
+router.put('/flow-templates/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { templateId, versionId } = req.params;
-    const version = await FlowTemplateVersion.findOne({ _id: versionId, templateId }).lean();
-    if (!version) {
-      return res.status(404).json({ error: 'Flow template version not found' });
-    }
+    const template = await FlowTemplate.findByIdAndUpdate(req.params.id, req.body || {}, { new: true });
+    if (!template) return res.status(404).json({ error: 'Flow template not found' });
+    res.json({ data: template });
+  } catch (error) {
+    console.error('Admin update flow template error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/flow-templates/:id/versions', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const versions = await FlowTemplateVersion.find({ templateId: req.params.id }).sort({ version: -1 }).lean();
+    res.json({ data: { versions } });
+  } catch (error) {
+    console.error('Admin list flow template versions error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/flow-templates/:id/versions/:versionId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const version = await FlowTemplateVersion.findById(req.params.versionId).lean();
+    if (!version) return res.status(404).json({ error: 'Flow template version not found' });
     res.json({ data: version });
   } catch (error) {
-    console.error('Admin flow templates version get error:', error);
+    console.error('Admin get flow template version error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Admin knowledge passthrough (no membership filter)
-router.get('/knowledge/workspace/:workspaceId', authenticate, requireAdmin, async (req, res) => {
+router.get('/automation-intents', authenticate, requireAdmin, async (_req, res) => {
   try {
-    const items = await KnowledgeItem.find({ workspaceId: req.params.workspaceId }).sort({ createdAt: -1 }).lean();
-    res.json({ data: items });
+    const intents = await listAutomationIntents();
+    res.json({ data: { intents } });
   } catch (error) {
-    console.error('Admin knowledge list error:', error);
+    console.error('Admin list automation intents error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Global knowledge (workspace-agnostic)
-router.get('/knowledge', authenticate, requireAdmin, async (_req, res) => {
+router.post('/automation-intents', authenticate, requireAdmin, async (req, res) => {
   try {
-    const items = await KnowledgeItem.find({ $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] })
-      .sort({ createdAt: -1 })
-      .lean();
-    res.json({ data: items });
-  } catch (error) {
-    console.error('Admin knowledge global list error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-router.post('/knowledge', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const { title, content, workspaceId, storageMode = 'vector' } = req.body || {};
-    if (!title || !content) {
-      return res.status(400).json({ error: 'title and content are required' });
+    const { value, description } = req.body || {};
+    if (!value) {
+      return res.status(400).json({ error: 'Intent value is required' });
     }
-    const normalizedWorkspaceId = workspaceId || null;
-    const normalizedStorageMode = STORAGE_MODES.includes(storageMode) ? storageMode : 'vector';
-    const item = await KnowledgeItem.create({
-      title,
-      content,
-      workspaceId: normalizedWorkspaceId,
-      storageMode: normalizedStorageMode,
+    const intent = await AutomationIntent.create({ value, description });
+    res.status(201).json({ data: intent });
+  } catch (error) {
+    console.error('Admin create automation intent error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/automation-intents/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const intent = await AutomationIntent.findByIdAndUpdate(req.params.id, req.body || {}, { new: true });
+    if (!intent) return res.status(404).json({ error: 'Intent not found' });
+    res.json({ data: intent });
+  } catch (error) {
+    console.error('Admin update automation intent error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.delete('/automation-intents/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const intent = await AutomationIntent.findById(req.params.id);
+    if (!intent) return res.status(404).json({ error: 'Intent not found' });
+    await AutomationIntent.deleteOne({ _id: req.params.id });
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin delete automation intent error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/automation-sessions', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const page = Math.max(1, toInt(req.query.page, 1));
+    const limit = Math.min(100, Math.max(1, toInt(req.query.limit, 20)));
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const channel = req.query.channel as string | undefined;
+
+    const filter: any = {};
+    if (workspaceId) filter.workspaceId = workspaceId;
+    if (channel) filter.channel = channel;
+
+    const [items, total] = await Promise.all([
+      AutomationSession.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      AutomationSession.countDocuments(filter),
+    ]);
+
+    res.json({
+      data: {
+        sessions: items,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit) || 1,
+          totalItems: total,
+        },
+      },
     });
-
-    if (normalizedStorageMode === 'vector') {
-      await upsertKnowledgeEmbedding({
-        id: item._id.toString(),
-        workspaceId: normalizedWorkspaceId || GLOBAL_WORKSPACE_KEY,
-        title,
-        content,
-      });
-    }
-    res.status(201).json({ data: item });
   } catch (error) {
-    console.error('Admin knowledge create error:', error);
+    console.error('Admin list automation sessions error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-router.put('/knowledge/:id', authenticate, requireAdmin, async (req, res) => {
+router.get('/automation-instances', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { title, content, storageMode } = req.body || {};
-    const item = await KnowledgeItem.findById(req.params.id);
-    if (!item) return res.status(404).json({ error: 'Knowledge item not found' });
+    const page = Math.max(1, toInt(req.query.page, 1));
+    const limit = Math.min(100, Math.max(1, toInt(req.query.limit, 20)));
+    const workspaceId = req.query.workspaceId as string | undefined;
 
-    const nextStorageMode = storageMode && STORAGE_MODES.includes(storageMode)
-      ? storageMode
-      : (item.storageMode || 'vector');
+    const filter: any = {};
+    if (workspaceId) filter.workspaceId = workspaceId;
 
-    item.title = title || item.title;
-    item.content = content || item.content;
-    item.storageMode = nextStorageMode;
-    await item.save();
+    const [items, total] = await Promise.all([
+      AutomationInstance.find(filter)
+        .sort({ updatedAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      AutomationInstance.countDocuments(filter),
+    ]);
 
-    const workspaceKey = item.workspaceId ? item.workspaceId.toString() : GLOBAL_WORKSPACE_KEY;
-    if (nextStorageMode === 'vector') {
-      await upsertKnowledgeEmbedding({
-        id: item._id.toString(),
-        workspaceId: workspaceKey,
-        title: item.title,
-        content: item.content,
-      });
-    } else {
-      await deleteKnowledgeEmbedding(item._id.toString());
-    }
-    res.json({ data: item });
+    res.json({
+      data: {
+        instances: items,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(total / limit) || 1,
+          totalItems: total,
+        },
+      },
+    });
   } catch (error) {
-    console.error('Admin knowledge update error:', error);
+    console.error('Admin list automation instances error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-router.delete('/knowledge/:id', authenticate, requireAdmin, async (req, res) => {
+router.get('/automation-instances/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    await KnowledgeItem.findByIdAndDelete(req.params.id);
-    await deleteKnowledgeEmbedding(req.params.id);
-    res.json({ data: { success: true } });
+    const instance = await AutomationInstance.findById(req.params.id).lean();
+    if (!instance) return res.status(404).json({ error: 'Automation instance not found' });
+    res.json({ data: instance });
   } catch (error) {
-    console.error('Admin knowledge delete error:', error);
+    console.error('Admin get automation instance error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-router.post('/knowledge/workspace/:workspaceId/reindex-vector', authenticate, requireAdmin, async (req, res) => {
+router.get('/flow-template-versions/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    await reindexWorkspaceKnowledge(req.params.workspaceId);
-    res.json({ data: { success: true } });
+    const version = await FlowTemplateVersion.findById(req.params.id).lean();
+    if (!version) return res.status(404).json({ error: 'Flow template version not found' });
+    res.json({ data: version });
   } catch (error) {
-    console.error('Admin knowledge reindex error:', error);
+    console.error('Admin get flow template version error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-router.post('/knowledge/reindex-vector', authenticate, requireAdmin, async (_req, res) => {
+router.post('/automations/compile', authenticate, requireAdmin, async (req, res) => {
   try {
-    await reindexGlobalKnowledge();
-    res.json({ data: { success: true, message: 'Global knowledge reindexed' } });
+    const compiled = compileFlow(req.body);
+    res.json({ data: compiled });
   } catch (error) {
-    console.error('Admin knowledge global reindex error:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Admin compile flow error:', error);
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to compile flow' });
   }
 });
 

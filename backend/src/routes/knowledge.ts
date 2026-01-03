@@ -1,6 +1,5 @@
 import express, { Response } from 'express';
 import KnowledgeItem from '../models/KnowledgeItem';
-import Workspace from '../models/Workspace';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import {
@@ -9,16 +8,15 @@ import {
   upsertKnowledgeEmbedding,
 } from '../services/vectorStore';
 import { assertWorkspaceLimit } from '../services/tierService';
+import { getWorkspaceById } from '../repositories/core/workspaceRepository';
 
 const router = express.Router();
 const STORAGE_MODES = ['vector', 'text'];
 
-// Get all knowledge items for a workspace (all members can view)
 router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId } = req.params;
 
-    // Check if user has access to this workspace
     const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
 
     if (!hasAccess) {
@@ -33,7 +31,6 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   }
 });
 
-// Create knowledge item (owner and admin only)
 router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { title, content, workspaceId, storageMode = 'vector' } = req.body;
@@ -42,7 +39,6 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'title, content, workspaceId, and valid storageMode are required' });
     }
 
-    // Check if user is owner or admin
     const { hasAccess, isOwner, role } = await checkWorkspaceAccess(workspaceId, req.userId!);
 
     if (!hasAccess) {
@@ -67,7 +63,6 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     });
 
     if (storageMode === 'vector') {
-      // Best-effort vector upsert
       await upsertKnowledgeEmbedding({
         id: item._id.toString(),
         workspaceId,
@@ -83,7 +78,6 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Update knowledge item
 router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { title, content, storageMode } = req.body;
@@ -102,13 +96,8 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'workspaceId missing on knowledge item' });
     }
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: item.workspaceId,
-      userId: req.userId,
-    });
-
-    if (!workspace) {
+    const workspace = await getWorkspaceById(item.workspaceId.toString());
+    if (!workspace || workspace.userId !== req.userId) {
       return res.status(404).json({ error: 'Unauthorized' });
     }
 
@@ -137,7 +126,6 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Delete knowledge item
 router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -151,13 +139,8 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'workspaceId missing on knowledge item' });
     }
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: item.workspaceId,
-      userId: req.userId,
-    });
-
-    if (!workspace) {
+    const workspace = await getWorkspaceById(item.workspaceId.toString());
+    if (!workspace || workspace.userId !== req.userId) {
       return res.status(404).json({ error: 'Unauthorized' });
     }
 
@@ -170,7 +153,6 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Reindex all knowledge items into pgvector for a workspace (owner/admin)
 router.post('/workspace/:workspaceId/reindex-vector', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId } = req.params;

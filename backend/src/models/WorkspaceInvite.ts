@@ -1,5 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { WorkspaceMemberRole } from './WorkspaceMember';
+import { WorkspaceMemberRole } from '../types/core';
 
 export interface IWorkspaceInvite extends Document {
   workspaceId: mongoose.Types.ObjectId;

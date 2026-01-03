@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
+import { logOpenAiUsage } from './openAiUsageService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -92,6 +93,13 @@ export async function askAssistant(request: AssistantRequest): Promise<Assistant
     logAiTiming('assistant', model, requestStart, false);
     throw error;
   }
+
+  await logOpenAiUsage({
+    workspaceId: request.workspaceId ? String(request.workspaceId) : null,
+    model: completion.model || model,
+    usage: completion.usage,
+    requestId: completion.id,
+  });
 
   const answer = completion.choices[0]?.message?.content?.trim() || 'Sorry, I could not generate a response right now.';
 

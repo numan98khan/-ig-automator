@@ -1,17 +1,16 @@
-import mongoose from 'mongoose';
-import BillingAccount from '../models/BillingAccount';
-import Subscription from '../models/Subscription';
-import User from '../models/User';
 import { getDefaultTier } from './tierService';
+import { getUserById, updateUser } from '../repositories/core/userRepository';
+import { createBillingAccount, getBillingAccountById } from '../repositories/core/billingAccountRepository';
+import {
+  cancelActiveSubscriptions,
+  createSubscription,
+  getActiveSubscriptionForBillingAccount as fetchActiveSubscriptionForBillingAccount,
+} from '../repositories/core/subscriptionRepository';
 
-export const upsertActiveSubscription = async (billingAccountId: mongoose.Types.ObjectId | string, tierId: mongoose.Types.ObjectId | string) => {
-  // Cancel any existing active subscription
-  await Subscription.updateMany(
-    { billingAccountId, status: 'active' },
-    { $set: { status: 'canceled', canceledAt: new Date() } }
-  );
+export const upsertActiveSubscription = async (billingAccountId: string, tierId: string) => {
+  await cancelActiveSubscriptions(billingAccountId);
 
-  const subscription = await Subscription.create({
+  const subscription = await createSubscription({
     billingAccountId,
     tierId,
     status: 'active',
@@ -21,15 +20,15 @@ export const upsertActiveSubscription = async (billingAccountId: mongoose.Types.
   return subscription;
 };
 
-export const ensureBillingAccountForUser = async (userId: mongoose.Types.ObjectId | string) => {
-  const user = await User.findById(userId);
+export const ensureBillingAccountForUser = async (userId: string) => {
+  const user = await getUserById(userId, { includePassword: true });
   if (!user) return null;
 
   if (user.billingAccountId) {
-    return BillingAccount.findById(user.billingAccountId);
+    return getBillingAccountById(user.billingAccountId);
   }
 
-  const billingAccount = await BillingAccount.create({
+  const billingAccount = await createBillingAccount({
     ownerUserId: user._id,
     name: user.email ? `${user.email} Billing` : 'Billing Account',
   });
@@ -37,15 +36,16 @@ export const ensureBillingAccountForUser = async (userId: mongoose.Types.ObjectI
   const defaultTier = await getDefaultTier();
   if (defaultTier) {
     await upsertActiveSubscription(billingAccount._id, defaultTier._id);
-    user.tierId = user.tierId || defaultTier._id;
+    if (!user.tierId) {
+      await updateUser(user._id, { tierId: defaultTier._id });
+    }
   }
 
-  user.billingAccountId = billingAccount._id;
-  await user.save();
+  await updateUser(user._id, { billingAccountId: billingAccount._id });
 
   return billingAccount;
 };
 
-export const getActiveSubscriptionForBillingAccount = async (billingAccountId: mongoose.Types.ObjectId | string) => {
-  return Subscription.findOne({ billingAccountId, status: 'active' }).sort({ createdAt: -1 });
+export const getActiveSubscriptionForBillingAccount = async (billingAccountId: string) => {
+  return fetchActiveSubscriptionForBillingAccount(billingAccountId);
 };

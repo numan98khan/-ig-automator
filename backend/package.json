@@ -7,7 +7,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "seed:tiers": "tsx src/utils/runSeedTiers.ts"
+    "seed:tiers": "tsx src/utils/runSeedTiers.ts",
+    "migrate:core": "tsx src/utils/migrateCoreData.ts",
+    "reset:factory": "tsx src/utils/resetFactoryData.ts"
   },
   "dependencies": {
     "axios": "^1.7.7",

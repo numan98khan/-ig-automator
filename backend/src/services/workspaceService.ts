@@ -1,92 +1,72 @@
-import mongoose from 'mongoose';
-import WorkspaceMember, { WorkspaceMemberRole } from '../models/WorkspaceMember';
-import Workspace from '../models/Workspace';
-import User from '../models/User';
+import { WorkspaceMemberRole } from '../types/core';
 import { assignTierFromOwner, assertWorkspaceLimit } from './tierService';
+import { getWorkspaceById } from '../repositories/core/workspaceRepository';
+import {
+  countWorkspaceMembers,
+  createWorkspaceMember,
+  deleteWorkspaceMember,
+  getWorkspaceMember,
+  listWorkspaceMembersByUserId,
+  listWorkspaceMembersByWorkspaceId,
+  updateWorkspaceMemberRole,
+} from '../repositories/core/workspaceMemberRepository';
+import { getUserById } from '../repositories/core/userRepository';
+import { listWorkspacesByIds } from '../repositories/core/workspaceRepository';
 
-/**
- * Check if a user is a member of a workspace
- */
-export async function isMemberOf(
-  userId: mongoose.Types.ObjectId | string,
-  workspaceId: mongoose.Types.ObjectId | string
-): Promise<boolean> {
-  const membership = await WorkspaceMember.findOne({
-    workspaceId,
-    userId,
-  });
+export async function isMemberOf(userId: string, workspaceId: string): Promise<boolean> {
+  const membership = await getWorkspaceMember(workspaceId, userId);
   return !!membership;
 }
 
-/**
- * Get user's role in a workspace
- */
 export async function getUserRole(
-  userId: mongoose.Types.ObjectId | string,
-  workspaceId: mongoose.Types.ObjectId | string
+  userId: string,
+  workspaceId: string
 ): Promise<WorkspaceMemberRole | null> {
-  const membership = await WorkspaceMember.findOne({
-    workspaceId,
-    userId,
-  });
+  const membership = await getWorkspaceMember(workspaceId, userId);
   return membership?.role || null;
 }
 
-/**
- * Get all workspaces a user belongs to
- */
-export async function getUserWorkspaces(
-  userId: mongoose.Types.ObjectId | string
-): Promise<any[]> {
-  const memberships = await WorkspaceMember.find({ userId })
-    .populate('workspaceId')
-    .sort({ createdAt: -1 });
+export async function getUserWorkspaces(userId: string): Promise<any[]> {
+  const memberships = await listWorkspaceMembersByUserId(userId);
+  const workspaces = await listWorkspacesByIds(memberships.map(m => m.workspaceId));
+  const workspaceMap = Object.fromEntries(workspaces.map(workspace => [workspace._id, workspace]));
 
-  return memberships.map((m: any) => ({
-    workspace: m.workspaceId,
-    role: m.role,
-    joinedAt: m.createdAt,
+  return memberships.map(member => ({
+    workspace: workspaceMap[member.workspaceId],
+    role: member.role,
+    joinedAt: member.createdAt,
   }));
 }
 
-/**
- * Get all members of a workspace
- */
-export async function getWorkspaceMembers(
-  workspaceId: mongoose.Types.ObjectId | string
-): Promise<any[]> {
-  const memberships = await WorkspaceMember.find({ workspaceId })
-    .populate('userId')
-    .sort({ createdAt: 1 });
+export async function getWorkspaceMembers(workspaceId: string): Promise<any[]> {
+  const memberships = await listWorkspaceMembersByWorkspaceId(workspaceId);
+  const users = await Promise.all(memberships.map(member => getUserById(member.userId, { includePassword: true })));
+  const userMap = Object.fromEntries(users.filter(Boolean).map(user => [user!._id, user]));
 
-  return memberships.map((m: any) => ({
-    user: m.userId,
-    role: m.role,
-    joinedAt: m.createdAt,
+  return memberships.map(member => ({
+    user: userMap[member.userId],
+    role: member.role,
+    joinedAt: member.createdAt,
   }));
 }
 
-/**
- * Add a member to a workspace
- */
 export async function addMember(
-  workspaceId: mongoose.Types.ObjectId | string,
-  userId: mongoose.Types.ObjectId | string,
+  workspaceId: string,
+  userId: string,
   role: WorkspaceMemberRole = 'agent'
 ): Promise<any> {
-  // Check if already a member
-  const existing = await WorkspaceMember.findOne({ workspaceId, userId });
+  const existing = await getWorkspaceMember(workspaceId, userId);
   if (existing) {
     throw new Error('User is already a member of this workspace');
   }
 
-  const currentCount = await WorkspaceMember.countDocuments({ workspaceId });
+  const currentCount = await countWorkspaceMembers(workspaceId);
   const limitCheck = await assertWorkspaceLimit(workspaceId, 'teamMembers', currentCount + 1);
   if (!limitCheck.allowed) {
     throw new Error(`Team member limit reached for this workspace (limit: ${limitCheck.limit})`);
   }
 
-  const membership = await WorkspaceMember.create({
+  const membership = await createWorkspaceMember({
     workspaceId,
     userId,
     role,
@@ -97,56 +77,40 @@ export async function addMember(
   return membership;
 }
 
-/**
- * Remove a member from a workspace
- */
-export async function removeMember(
-  workspaceId: mongoose.Types.ObjectId | string,
-  userId: mongoose.Types.ObjectId | string
-): Promise<void> {
-  // Don't allow removing the owner
-  const membership = await WorkspaceMember.findOne({ workspaceId, userId });
+export async function removeMember(workspaceId: string, userId: string): Promise<void> {
+  const membership = await getWorkspaceMember(workspaceId, userId);
   if (membership?.role === 'owner') {
     throw new Error('Cannot remove workspace owner');
   }
 
-  await WorkspaceMember.deleteOne({ workspaceId, userId });
+  await deleteWorkspaceMember(workspaceId, userId);
 }
 
-/**
- * Update member role
- */
 export async function updateMemberRole(
-  workspaceId: mongoose.Types.ObjectId | string,
-  userId: mongoose.Types.ObjectId | string,
+  workspaceId: string,
+  userId: string,
   newRole: WorkspaceMemberRole
 ): Promise<void> {
-  const membership = await WorkspaceMember.findOne({ workspaceId, userId });
+  const membership = await getWorkspaceMember(workspaceId, userId);
   if (!membership) {
     throw new Error('Membership not found');
   }
 
-  // Don't allow changing owner role
   if (membership.role === 'owner' && newRole !== 'owner') {
     throw new Error('Cannot change owner role. Transfer ownership first.');
   }
 
-  membership.role = newRole;
-  await membership.save();
+  await updateWorkspaceMemberRole(workspaceId, userId, newRole);
 }
 
-/**
- * Check if user has permission for an action in a workspace
- */
 export async function hasPermission(
-  userId: mongoose.Types.ObjectId | string,
-  workspaceId: mongoose.Types.ObjectId | string,
+  userId: string,
+  workspaceId: string,
   requiredRole: WorkspaceMemberRole
 ): Promise<boolean> {
   const role = await getUserRole(userId, workspaceId);
   if (!role) return false;
 
-  // Define role hierarchy: owner > admin > agent > viewer
   const hierarchy: Record<WorkspaceMemberRole, number> = {
     owner: 4,
     admin: 3,
@@ -156,3 +120,19 @@ export async function hasPermission(
 
   return hierarchy[role] >= hierarchy[requiredRole];
 }
+
+export const checkWorkspaceAccess = async (workspaceId: string, userId: string) => {
+  const membership = await getWorkspaceMember(workspaceId, userId);
+  return { hasAccess: !!membership, role: membership?.role };
+};
+
+export const checkWorkspaceAdminAccess = async (workspaceId: string, userId: string) => {
+  const membership = await getWorkspaceMember(workspaceId, userId);
+  return { hasAccess: membership?.role === 'owner' || membership?.role === 'admin' };
+};
+
+export const resolveWorkspaceName = async (workspaceId?: string) => {
+  if (!workspaceId) return undefined;
+  const workspace = await getWorkspaceById(workspaceId);
+  return workspace?.name;
+};
