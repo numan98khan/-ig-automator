@@ -73,6 +73,35 @@ const getLegacyCollections = () => {
   };
 };
 
+const mapLegacyUserToCoreInput = (legacyUser: LegacyUserDoc) => ({
+  _id: legacyUser._id.toString(),
+  email: legacyUser.email ?? undefined,
+  password: legacyUser.password ?? undefined,
+  firstName: legacyUser.firstName ?? undefined,
+  lastName: legacyUser.lastName ?? undefined,
+  role: legacyUser.role ?? 'user',
+  instagramUserId: legacyUser.instagramUserId ?? undefined,
+  instagramUsername: legacyUser.instagramUsername ?? undefined,
+  isProvisional: legacyUser.isProvisional ?? true,
+  emailVerified: legacyUser.emailVerified ?? false,
+  defaultWorkspaceId: legacyUser.defaultWorkspaceId?.toString() ?? undefined,
+  billingAccountId: legacyUser.billingAccountId?.toString() ?? undefined,
+  tierId: legacyUser.tierId?.toString() ?? undefined,
+  tierLimitOverrides: legacyUser.tierLimitOverrides ?? undefined,
+  createdAt: legacyUser.createdAt ?? undefined,
+  updatedAt: legacyUser.updatedAt ?? undefined,
+});
+
+const findLegacyUserById = async (userId: string) => {
+  try {
+    const objectId = new mongoose.Types.ObjectId(userId);
+    const { users } = getLegacyCollections();
+    return users.findOne({ _id: objectId });
+  } catch (error) {
+    return null;
+  }
+};
+
 // Signup
 router.post('/signup', async (req: Request, res: Response) => {
   try {
@@ -121,24 +150,7 @@ router.post('/login', async (req: Request, res: Response) => {
       const { users, workspaces, workspaceMembers } = getLegacyCollections();
       const legacyUser = await users.findOne({ email: email.toLowerCase() });
       if (legacyUser) {
-        user = await upsertUserFromLegacy({
-          _id: legacyUser._id.toString(),
-          email: legacyUser.email ?? undefined,
-          password: legacyUser.password ?? undefined,
-          firstName: legacyUser.firstName ?? undefined,
-          lastName: legacyUser.lastName ?? undefined,
-          role: legacyUser.role ?? 'user',
-          instagramUserId: legacyUser.instagramUserId ?? undefined,
-          instagramUsername: legacyUser.instagramUsername ?? undefined,
-          isProvisional: legacyUser.isProvisional ?? true,
-          emailVerified: legacyUser.emailVerified ?? false,
-          defaultWorkspaceId: legacyUser.defaultWorkspaceId?.toString() ?? undefined,
-          billingAccountId: legacyUser.billingAccountId?.toString() ?? undefined,
-          tierId: legacyUser.tierId?.toString() ?? undefined,
-          tierLimitOverrides: legacyUser.tierLimitOverrides ?? undefined,
-          createdAt: legacyUser.createdAt ?? undefined,
-          updatedAt: legacyUser.updatedAt ?? undefined,
-        });
+        user = await upsertUserFromLegacy(mapLegacyUserToCoreInput(legacyUser));
 
         const legacyWorkspaces = await workspaces.find({ userId: legacyUser._id }).toArray();
         const legacyMemberships = await workspaceMembers.find({ userId: legacyUser._id }).toArray();
@@ -337,7 +349,13 @@ router.get('/verify-email', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid token payload' });
     }
 
-    const user = await getUserById(payload.userId, { includePassword: true });
+    let user = await getUserById(payload.userId, { includePassword: true });
+    if (!user) {
+      const legacyUser = await findLegacyUserById(payload.userId);
+      if (legacyUser) {
+        user = await upsertUserFromLegacy(mapLegacyUserToCoreInput(legacyUser));
+      }
+    }
     if (!user) {
       console.log('❌ User not found:', payload.userId);
       return res.status(404).json({ error: 'User not found' });
