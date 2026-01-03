@@ -362,13 +362,17 @@ const Landing: React.FC = () => {
                 <img
                   src="/sd_phone.jpg"
                   alt="SendFx product preview"
-                  className="relative z-10 h-full w-full object-cover"
+                  // className="relative z-10 h-full w-full object-cover object-[35%_center]"
+                  className="relative z-10 h-full w-full object-cover object-[85%_center]"
                   loading="eager"
                   decoding="async"
                 />
               </div>
               <div className="absolute inset-0 z-20 pointer-events-none">
-                <div className="hidden sm:block absolute -right-4 -top-4 w-[260px] sm:w-[300px] md:w-[320px] lg:w-[340px] md:-right-6 md:-top-6">
+                <div 
+                // className="hidden sm:block absolute -right-4 -top-4 w-[260px] sm:w-[300px] md:w-[320px] lg:w-[340px] md:-right-6 md:-top-6"
+                className="hidden sm:block absolute -right-4 -top-4 w-[260px] sm:w-[300px] md:w-[320px] lg:w-[340px] md:-right-6 md:-top-6"
+                >
                   <div className={heroOverlayClass}>
                     <Badge variant="warning" className="gap-1">
                       <ShieldCheck className="w-3 h-3" />
