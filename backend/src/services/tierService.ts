@@ -1,4 +1,4 @@
-import { TierLimits } from '../types/core';
+import { TierFeature, TierLimits } from '../types/core';
 import { getActiveSubscriptionForBillingAccount } from './billingService';
 import { getUserById, updateUser } from '../repositories/core/userRepository';
 import {
@@ -19,6 +19,12 @@ export interface TierSummary {
   tier: CoreTier | null;
   limits: TierLimits;
 }
+
+const isFeatureEnabled = (limits: TierLimits | undefined, feature: TierFeature) => {
+  const value = limits?.[feature];
+  if (value === undefined || value === null) return true;
+  return Boolean(value);
+};
 
 export const getUsageWindow = () => {
   const now = new Date();
@@ -166,6 +172,14 @@ export const assertWorkspaceLimit = async (
   }
 
   return { allowed: true, limit: limitValue, tier };
+};
+
+export const assertWorkspaceFeatureAccess = async (workspaceId: string, feature: TierFeature) => {
+  const { limits, tier } = await getWorkspaceOwnerTier(workspaceId);
+  return {
+    allowed: isFeatureEnabled(limits, feature),
+    tier,
+  };
 };
 
 export const assignTierFromOwner = async (workspaceId: string, userId: string) => {

@@ -462,6 +462,9 @@ export interface TierLimits {
   teamMembers?: number;
   automations?: number;
   knowledgeItems?: number;
+  crm?: boolean;
+  integrations?: boolean;
+  flowBuilder?: boolean;
 }
 
 export interface Tier {

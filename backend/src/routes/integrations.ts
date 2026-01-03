@@ -11,6 +11,7 @@ import {
 } from '../services/googleSheetsService';
 import { analyzeInventoryMapping } from '../services/googleSheetsMappingService';
 import { getWorkspaceById } from '../repositories/core/workspaceRepository';
+import { assertWorkspaceFeatureAccess } from '../services/tierService';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -59,6 +60,15 @@ const loadWorkspaceForUser = async (workspaceId: string, userId: string) => {
   return workspace;
 };
 
+const ensureIntegrationsAccess = async (workspaceId: string, res: Response) => {
+  const featureCheck = await assertWorkspaceFeatureAccess(workspaceId, 'integrations');
+  if (!featureCheck.allowed) {
+    res.status(403).json({ error: 'Integrations feature not available for this tier', tier: featureCheck.tier });
+    return false;
+  }
+  return true;
+};
+
 router.get('/google-sheets/oauth/start', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
@@ -69,6 +79,10 @@ router.get('/google-sheets/oauth/start', authenticate, async (req: AuthRequest, 
     const workspace = await loadWorkspaceForUser(workspaceId, req.userId!);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+    const integrationsAllowed = await ensureIntegrationsAccess(workspaceId, res);
+    if (!integrationsAllowed) {
+      return;
     }
 
     const state = jwt.sign(
@@ -96,6 +110,10 @@ router.get('/google-sheets/oauth/callback', async (req: AuthRequest, res: Respon
     try {
       decoded = jwt.verify(state, JWT_SECRET);
     } catch (error) {
+      return res.redirect(`${FRONTEND_URL}/automations?section=integrations&googleSheets=error`);
+    }
+    const featureCheck = await assertWorkspaceFeatureAccess(decoded.workspaceId, 'integrations');
+    if (!featureCheck.allowed) {
       return res.redirect(`${FRONTEND_URL}/automations?section=integrations&googleSheets=error`);
     }
 
@@ -155,6 +173,10 @@ router.post('/google-sheets/oauth/disconnect', authenticate, async (req: AuthReq
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
+    const integrationsAllowed = await ensureIntegrationsAccess(workspaceId, res);
+    if (!integrationsAllowed) {
+      return;
+    }
 
     await WorkspaceSettings.findOneAndUpdate(
       { workspaceId },
@@ -187,6 +209,10 @@ router.get('/google-sheets/files', authenticate, async (req: AuthRequest, res: R
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
+    const integrationsAllowed = await ensureIntegrationsAccess(workspaceId, res);
+    if (!integrationsAllowed) {
+      return;
+    }
 
     const settings = await WorkspaceSettings.findOne({ workspaceId });
     const refreshToken = settings?.googleSheets?.oauthRefreshToken;
@@ -214,6 +240,10 @@ router.get('/google-sheets/tabs', authenticate, async (req: AuthRequest, res: Re
     const workspace = await loadWorkspaceForUser(workspaceId, req.userId!);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+    const integrationsAllowed = await ensureIntegrationsAccess(workspaceId, res);
+    if (!integrationsAllowed) {
+      return;
     }
 
     const settings = await WorkspaceSettings.findOne({ workspaceId });
@@ -250,6 +280,10 @@ router.post('/google-sheets/test', authenticate, async (req: AuthRequest, res: R
     const workspace = await loadWorkspaceForUser(workspaceId, req.userId!);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+    const integrationsAllowed = await ensureIntegrationsAccess(workspaceId, res);
+    if (!integrationsAllowed) {
+      return;
     }
 
     const settings = await WorkspaceSettings.findOne({ workspaceId });
@@ -339,6 +373,10 @@ router.post('/google-sheets/analyze', authenticate, async (req: AuthRequest, res
     const workspace = await loadWorkspaceForUser(workspaceId, req.userId!);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+    const integrationsAllowed = await ensureIntegrationsAccess(workspaceId, res);
+    if (!integrationsAllowed) {
+      return;
     }
 
     const settings = await WorkspaceSettings.findOne({ workspaceId });

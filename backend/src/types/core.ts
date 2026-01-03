@@ -6,8 +6,13 @@ export interface TierLimits {
   teamMembers?: number;
   automations?: number;
   knowledgeItems?: number;
+  crm?: boolean;
+  integrations?: boolean;
+  flowBuilder?: boolean;
 }
 
 export type UsageResourceType = keyof TierLimits;
 
 export type WorkspaceMemberRole = 'owner' | 'admin' | 'agent' | 'viewer';
+
+export type TierFeature = 'crm' | 'integrations' | 'flowBuilder';
