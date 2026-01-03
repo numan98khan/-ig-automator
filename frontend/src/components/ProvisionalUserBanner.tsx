@@ -45,7 +45,7 @@ const ProvisionalUserBanner: React.FC = () => {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <a
-              href="/settings"
+              href="/app/settings"
               className="px-3 py-1.5 text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition shadow-sm"
             >
               Secure My Account

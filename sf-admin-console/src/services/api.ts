@@ -75,6 +75,8 @@ export const adminApi = {
   // Global AI Assistant Configuration (public assistant)
   getGlobalAssistantConfig: () => api.get('/assistant/config'),
   updateGlobalAssistantConfig: (config: any) => api.put('/assistant/config', config),
+  getUiSettings: () => api.get('/ui-settings'),
+  updateUiSettings: (payload: { uiTheme?: 'legacy' | 'comic' }) => api.put('/ui-settings', payload),
 
   // Global Knowledge Base Management (public assistant)
   getGlobalKnowledgeItems: () => api.get('/knowledge'),

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, User, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { workspaceInviteAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import Seo from '../components/Seo';
 
 const AcceptInvite: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -86,7 +87,7 @@ const AcceptInvite: React.FC = () => {
       // Redirect to inbox after 2 seconds
       setTimeout(() => {
         console.log('🔄 Redirecting to inbox...');
-        navigate('/inbox', { replace: true });
+        navigate('/app/inbox', { replace: true });
       }, 2000);
     } catch (error: any) {
       console.error('❌ Failed to accept invite:', error);
@@ -96,9 +97,11 @@ const AcceptInvite: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-        <div className="text-center">
+    <>
+      <Seo title="Accept Invite | SendFx" robots="noindex, nofollow" />
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+          <div className="text-center">
           {/* Icon */}
           <div className="mx-auto w-16 h-16 mb-6 flex items-center justify-center">
             {status === 'loading' && (
@@ -242,7 +245,7 @@ const AcceptInvite: React.FC = () => {
           {/* Error Actions */}
           {status === 'error' && (
             <button
-              onClick={() => navigate('/landing')}
+              onClick={() => navigate('/')}
               className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
             >
               Go to Login
@@ -257,8 +260,9 @@ const AcceptInvite: React.FC = () => {
             </div>
           </div>
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

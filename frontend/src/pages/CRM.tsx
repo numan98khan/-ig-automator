@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   CalendarClock,
@@ -198,6 +198,7 @@ const serializeContactForm = (form: ContactForm) => JSON.stringify({
 
 const CRM: React.FC = () => {
   const { currentWorkspace } = useAuth();
+  const navigate = useNavigate();
   const [contacts, setContacts] = useState<CrmContact[]>([]);
   const [stageCounts, setStageCounts] = useState<Record<CrmStage, number>>({
     new: 0,
@@ -223,7 +224,7 @@ const CRM: React.FC = () => {
   const [tagFilter, setTagFilter] = useState('');
   const [inactiveDays, setInactiveDays] = useState(0);
   const [sortBy, setSortBy] = useState<SortBy>('last_activity');
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   const [quickFilters, setQuickFilters] = useState(DEFAULT_QUICK_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
@@ -935,9 +936,10 @@ const CRM: React.FC = () => {
                   size="sm"
                   variant="outline"
                   leftIcon={<MessageSquare className="w-4 h-4" />}
-                  asChild
+                  type="button"
+                  onClick={() => navigate(`/app/inbox?conversationId=${selectedContact._id}`)}
                 >
-                  <Link to={`/inbox?conversationId=${selectedContact._id}`}>Open in Inbox</Link>
+                  Open in Inbox
                 </Button>
               )}
             </div>
@@ -1858,9 +1860,10 @@ const CRM: React.FC = () => {
                     size="sm"
                     variant="outline"
                     leftIcon={<MessageSquare className="w-4 h-4" />}
-                    asChild
+                    type="button"
+                    onClick={() => navigate(`/app/inbox?conversationId=${selectedContact._id}`)}
                   >
-                    <Link to={`/inbox?conversationId=${selectedContact._id}`}>Open in Inbox</Link>
+                    Open in Inbox
                   </Button>
                 </div>
 

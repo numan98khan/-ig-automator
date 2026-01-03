@@ -1,5 +1,6 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
@@ -20,7 +21,12 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props
 }) => {
+  const { uiTheme } = useTheme();
+  const isComicTheme = uiTheme === 'comic';
   const baseStyles = 'inline-flex items-center justify-center font-medium transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed rounded-lg active:scale-95';
+  const comicStyles = isComicTheme
+    ? 'comic-button active:translate-x-[1px] active:translate-y-[1px] active:scale-100'
+    : '';
 
   const variants = {
     primary: 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 border border-transparent',
@@ -30,15 +36,21 @@ export const Button: React.FC<ButtonProps> = ({
     danger: 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/25',
   };
 
-  const sizes = {
-    sm: 'text-xs px-3 py-1.5 gap-1.5',
-    md: 'text-sm px-4 py-2 gap-2',
-    lg: 'text-base px-6 py-3 gap-2.5',
-  };
+  const sizes = isComicTheme
+    ? {
+      sm: 'text-sm px-5 py-2.5 gap-2',
+      md: 'text-sm px-5 py-2.5 gap-2',
+      lg: 'text-sm px-5 py-2.5 gap-2',
+    }
+    : {
+      sm: 'text-xs px-3 py-1.5 gap-1.5',
+      md: 'text-sm px-4 py-2 gap-2',
+      lg: 'text-base px-6 py-3 gap-2.5',
+    };
 
   return (
     <button
-      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${comicStyles} ${className}`}
       disabled={disabled || isLoading}
       {...props}
     >
