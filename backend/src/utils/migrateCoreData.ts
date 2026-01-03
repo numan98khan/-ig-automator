@@ -4,6 +4,72 @@ import { ensureCoreSchema } from '../db/coreSchema';
 import { closePostgresPool, postgresQuery } from '../db/postgres';
 
 const insertUser = async (user: any) => {
+  const email = user.email?.toLowerCase() ?? null;
+  const instagramUserId = user.instagramUserId ?? null;
+  let existingId: string | null = null;
+
+  if (email || instagramUserId) {
+    const conditions: string[] = [];
+    const params: Array<string> = [];
+
+    if (email) {
+      params.push(email);
+      conditions.push(`email = $${params.length}`);
+    }
+
+    if (instagramUserId) {
+      params.push(instagramUserId);
+      conditions.push(`instagram_user_id = $${params.length}`);
+    }
+
+    const existing = await postgresQuery(
+      `SELECT id FROM core.users WHERE ${conditions.join(' OR ')} LIMIT 1`,
+      params
+    );
+    existingId = existing.rows[0]?.id ?? null;
+  }
+
+  if (existingId) {
+    await postgresQuery(
+      `UPDATE core.users SET
+        email = $2,
+        password = $3,
+        first_name = $4,
+        last_name = $5,
+        role = $6,
+        instagram_user_id = $7,
+        instagram_username = $8,
+        is_provisional = $9,
+        email_verified = $10,
+        default_workspace_id = $11,
+        billing_account_id = $12,
+        tier_id = $13,
+        tier_limit_overrides = $14,
+        created_at = $15,
+        updated_at = $16
+      WHERE id = $1`,
+      [
+        existingId,
+        email,
+        user.password ?? null,
+        user.firstName ?? null,
+        user.lastName ?? null,
+        user.role ?? 'user',
+        instagramUserId,
+        user.instagramUsername ?? null,
+        user.isProvisional ?? true,
+        user.emailVerified ?? false,
+        user.defaultWorkspaceId?.toString() ?? null,
+        user.billingAccountId?.toString() ?? null,
+        user.tierId?.toString() ?? null,
+        user.tierLimitOverrides ? JSON.stringify(user.tierLimitOverrides) : null,
+        user.createdAt ?? new Date(),
+        user.updatedAt ?? user.createdAt ?? new Date(),
+      ]
+    );
+    return;
+  }
+
   await postgresQuery(
     `INSERT INTO core.users (
       id, email, password, first_name, last_name, role, instagram_user_id, instagram_username,
@@ -30,12 +96,12 @@ const insertUser = async (user: any) => {
       updated_at = EXCLUDED.updated_at`,
     [
       user._id.toString(),
-      user.email?.toLowerCase() ?? null,
+      email,
       user.password ?? null,
       user.firstName ?? null,
       user.lastName ?? null,
       user.role ?? 'user',
-      user.instagramUserId ?? null,
+      instagramUserId,
       user.instagramUsername ?? null,
       user.isProvisional ?? true,
       user.emailVerified ?? false,
