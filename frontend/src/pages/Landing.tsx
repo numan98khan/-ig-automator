@@ -210,26 +210,30 @@ const Landing: React.FC = () => {
 
       {/* Background Ambience */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {/* Mesh gradient blobs */}
-        <div className={`absolute ${isComic && isLight ? 'top-[-20%] left-[-20%] w-[50%] h-[50%]' : 'top-[-10%] left-[-10%] w-[45%] h-[45%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,79,216,0.28),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.14),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.2),_transparent_60%)] blur-3xl'}`} />
-        <div className={`absolute ${isComic && isLight ? 'top-[5%] right-[-20%] w-[55%] h-[55%]' : 'top-[10%] right-[-12%] w-[50%] h-[50%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(0,212,255,0.25),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.1),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.18),_transparent_60%)] blur-3xl'}`} />
-        <div className={`absolute ${isComic && isLight ? 'bottom-[-18%] left-[0%] w-[65%] h-[65%]' : 'bottom-[-12%] left-[5%] w-[60%] h-[60%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,226,74,0.25),_transparent_65%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.08),_transparent_65%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(94,234,212,0.16),_transparent_65%)] blur-3xl'}`} />
+        {!isLight && (
+          <>
+            {/* Mesh gradient blobs */}
+            <div className={`absolute ${isComic && isLight ? 'top-[-20%] left-[-20%] w-[50%] h-[50%]' : 'top-[-10%] left-[-10%] w-[45%] h-[45%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,79,216,0.28),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.14),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.2),_transparent_60%)] blur-3xl'}`} />
+            <div className={`absolute ${isComic && isLight ? 'top-[5%] right-[-20%] w-[55%] h-[55%]' : 'top-[10%] right-[-12%] w-[50%] h-[50%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(0,212,255,0.25),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.1),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.18),_transparent_60%)] blur-3xl'}`} />
+            <div className={`absolute ${isComic && isLight ? 'bottom-[-18%] left-[0%] w-[65%] h-[65%]' : 'bottom-[-12%] left-[5%] w-[60%] h-[60%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,226,74,0.25),_transparent_65%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.08),_transparent_65%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(94,234,212,0.16),_transparent_65%)] blur-3xl'}`} />
 
-        {/* Grid overlay */}
-        <div
-          className="absolute inset-0 mix-blend-soft-light"
-          style={{
-            backgroundImage: isLight
-              ? (isComic
-                ? 'radial-gradient(rgba(15,23,42,0.18) 1px, transparent 1px)'
-                : 'linear-gradient(to right, rgba(15,23,42,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.05) 1px, transparent 1px)')
-              : `linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)`,
-            backgroundSize: isLight ? (isComic ? '26px 26px' : '44px 44px') : '44px 44px',
-          }}
-        />
+            {/* Grid overlay */}
+            <div
+              className="absolute inset-0 mix-blend-soft-light"
+              style={{
+                backgroundImage: isLight
+                  ? (isComic
+                    ? 'radial-gradient(rgba(15,23,42,0.18) 1px, transparent 1px)'
+                    : 'linear-gradient(to right, rgba(15,23,42,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.05) 1px, transparent 1px)')
+                  : `linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)`,
+                backgroundSize: isLight ? (isComic ? '26px 26px' : '44px 44px') : '44px 44px',
+              }}
+            />
 
-        {/* Vignette */}
-        <div className={`absolute inset-0 ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0)_0%,_rgba(15,23,42,0.08)_72%,_rgba(15,23,42,0.18)_100%)]' : 'bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0)_0%,_rgba(15,23,42,0.06)_70%,_rgba(15,23,42,0.12)_100%)]') : 'bg-[radial-gradient(circle_at_center,_rgba(0,0,0,0)_0%,_rgba(0,0,0,0.25)_70%,_rgba(0,0,0,0.5)_100%)]'}`} />
+            {/* Vignette */}
+            <div className={`absolute inset-0 ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0)_0%,_rgba(15,23,42,0.08)_72%,_rgba(15,23,42,0.18)_100%)]' : 'bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0)_0%,_rgba(15,23,42,0.06)_70%,_rgba(15,23,42,0.12)_100%)]') : 'bg-[radial-gradient(circle_at_center,_rgba(0,0,0,0)_0%,_rgba(0,0,0,0.25)_70%,_rgba(0,0,0,0.5)_100%)]'}`} />
+          </>
+        )}
 
         {/* Subtle Grain Overlay */}
         <div className="absolute inset-0 opacity-[0.05] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noiseFilter\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.65\' numOctaves=\'3\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noiseFilter)\'/%3E%3C/svg%3E")' }} />
