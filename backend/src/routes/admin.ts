@@ -622,7 +622,7 @@ router.put('/ui-settings', authenticate, requireAdmin, async (req, res) => {
     const payload: Partial<IGlobalUiSettings> = req.body || {};
     const settings = await GlobalUiSettings.findOneAndUpdate(
       { key: 'global' },
-      { $set: payload },
+      { $set: payload, $setOnInsert: { key: 'global' } },
       { new: true, upsert: true },
     );
     res.json({ data: settings });
