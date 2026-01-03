@@ -7,6 +7,7 @@ import {
   MessageSquare,
   AlertCircle,
   ArrowRight,
+  Clock,
   Mail,
   Lock,
   Sun,
@@ -27,8 +28,8 @@ const Landing: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showEmailLogin, setShowEmailLogin] = useState(false);
-  const [showAuthPanel, setShowAuthPanel] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -55,13 +56,13 @@ const Landing: React.FC = () => {
       demoSection.scrollIntoView({ behavior: 'smooth' });
     }
   };
-  const openAuthPanel = (useEmailLogin = false) => {
-    setShowAuthPanel(true);
-    setShowEmailLogin(useEmailLogin);
+  const openEmailModal = () => {
+    setError(null);
+    setShowEmailModal(true);
   };
-  const closeAuthPanel = () => {
-    setShowAuthPanel(false);
-    setShowEmailLogin(false);
+  const closeEmailModal = () => {
+    setShowEmailModal(false);
+    setError(null);
   };
 
   const location = useLocation();
@@ -97,15 +98,13 @@ const Landing: React.FC = () => {
       // Use custom message if provided, otherwise use default error message
       if (messageParam) {
         setError(decodeURIComponent(messageParam));
-        setShowEmailLogin(true); // Show email login form if account is secured
+        setShowEmailModal(true);
       } else if (errorParam === 'account_secured') {
         setError('You have already secured your account. Please log in with your email and password.');
-        setShowEmailLogin(true);
+        setShowEmailModal(true);
       } else {
         setError(`Authentication failed: ${errorParam}`);
-        setShowEmailLogin(false);
       }
-      setShowAuthPanel(true);
       console.error('❌ OAuth error:', errorParam);
       // Keep error in URL for 5 seconds before cleaning
       setTimeout(() => {
@@ -126,6 +125,29 @@ const Landing: React.FC = () => {
       navigate(target, { replace: true });
     }
   }, [user, currentWorkspace, navigate, location]);
+
+  useEffect(() => {
+    if (showAssistant) return;
+
+    const reveal = () => setShowAssistant(true);
+    const handleScroll = () => {
+      const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+      if (scrollable <= 0) return;
+      const progress = window.scrollY / scrollable;
+      if (progress >= 0.3) {
+        reveal();
+      }
+    };
+
+    const timeoutId = window.setTimeout(reveal, 9000);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [showAssistant]);
 
   const handleInstagramLogin = async () => {
     try {
@@ -231,19 +253,9 @@ const Landing: React.FC = () => {
             <a href="#overview" className="hover:text-foreground transition-colors">Overview</a>
             <a href="#product" className="hover:text-foreground transition-colors">Product</a>
             <a href="#templates" className="hover:text-foreground transition-colors">Use cases</a>
-            <a href="#demo" className="hover:text-foreground transition-colors">Demo</a>
             <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
-            <a href="#trust" className="hover:text-foreground transition-colors">Trust</a>
           </div>
           <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              className="hidden md:inline-flex items-center gap-2"
-              onClick={handleWatchDemo}
-            >
-              <PlayCircle className="w-4 h-4" />
-              Watch demo (60s)
-            </Button>
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               className="p-2 rounded-full bg-background/50 border border-border text-foreground/80 hover:text-foreground hover:bg-muted transition-colors backdrop-blur-md"
@@ -261,208 +273,79 @@ const Landing: React.FC = () => {
         <div className="max-w-7xl mx-auto space-y-16 md:space-y-24">
 
           {/* Hero */}
-          <section id="overview" className="grid md:grid-cols-2 gap-10 md:gap-10 items-center">
+          <section id="overview" className="grid md:grid-cols-[1.05fr,0.95fr] gap-10 md:gap-12 items-start">
             <div
-              className={`relative text-left ${isComic && isLight ? 'comic-panel-soft bg-white/70 backdrop-blur-md p-6 md:p-8' : ''}`}
+              className={`space-y-4 md:space-y-5 text-left ${isComic && isLight ? 'comic-panel-soft bg-white/70 backdrop-blur-md p-6 md:p-8' : ''}`}
             >
               <div
-                className={`space-y-5 md:space-y-6 transition-opacity duration-300 ${showAuthPanel ? 'opacity-0 pointer-events-none select-none' : 'opacity-100'}`}
-                aria-hidden={showAuthPanel}
+                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium backdrop-blur-md ${isComic ? 'comic-sticker text-foreground font-semibold' : 'bg-muted/40 border border-border text-muted-foreground'}`}
               >
-                <div
-                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium backdrop-blur-md ${isComic ? 'comic-sticker text-foreground font-semibold' : 'bg-muted/40 border border-border text-muted-foreground'}`}
-                >
-                  <Sparkles className="w-3 h-3 text-amber-500" />
-                  <span>Instagram-first automation for SMBs</span>
-                </div>
-                <h1 className={`text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[1.05] md:leading-[1.08] ${isComic ? 'text-[#ff3fd0] comic-display comic-shadow-text' : 'text-foreground tracking-tight md:tracking-tighter'}`}>
-                  Instagram DM automation + lightweight CRM for SMBs.
-                </h1>
-                <p className="text-lg md:text-xl text-muted-foreground leading-relaxed md:leading-[1.7]">
-                  Route and qualify inbound DMs, reply with guardrails and approvals, and sync leads to Google Sheets without losing the human touch.
-                </p>
-
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Button
-                      onClick={() => openAuthPanel()}
-                      className="group inline-flex items-center gap-3 px-6 py-3 text-base"
-                    >
-                      <Instagram className="w-4 h-4" />
-                      <span>Start free</span>
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className={`inline-flex items-center gap-2 ${isComic ? 'shadow-none bg-white/70' : ''}`}
-                      onClick={handleWatchDemo}
-                    >
-                      <PlayCircle className="w-4 h-4" />
-                      Watch demo (60s)
-                    </Button>
-                  </div>
-                  <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-3">
-                    <span>Free plan</span>
-                    <span className="w-1 h-1 rounded-full bg-border" />
-                    <span>Setup in 5 min</span>
-                    <span className="w-1 h-1 rounded-full bg-border" />
-                    <span>Cancel anytime</span>
-                  </div>
-                  <div className="mt-2">
-                    <button
-                      onClick={() => openAuthPanel(true)}
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium"
-                    >
-                      Prefer email? Log in with email
-                    </button>
-                  </div>
-                </div>
+                <Sparkles className="w-3 h-3 text-amber-500" />
+                <span>Instagram-first automation for SMBs</span>
               </div>
+              <h1 className={`text-4xl sm:text-5xl md:text-5xl lg:text-6xl font-extrabold leading-[1.04] md:leading-[1.06] ${isComic ? 'text-[#ff3fd0] comic-display comic-shadow-text' : 'text-foreground tracking-tight md:tracking-tighter'}`}>
+                Instagram DM automation + lightweight CRM for SMBs.
+              </h1>
+              <p className="text-lg md:text-xl text-muted-foreground leading-[1.5] md:leading-[1.6]">
+                Route and qualify inbound DMs, reply with guardrails and approvals, and sync leads to Google Sheets without losing the human touch.
+              </p>
 
-              <div
-                className={`absolute inset-0 flex flex-col gap-3 transition-opacity duration-300 ${showAuthPanel ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-                aria-hidden={!showAuthPanel}
-              >
-                {/* Error Message */}
-                {error && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    onClick={handleInstagramLogin}
+                    disabled={loading}
+                    className="group inline-flex items-center gap-3 px-6 py-3 text-base"
+                  >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Instagram className="w-4 h-4" />}
+                    <span>Start free</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={`inline-flex items-center gap-2 ${isComic ? 'shadow-none bg-white/70' : ''}`}
+                    onClick={handleWatchDemo}
+                  >
+                    <PlayCircle className="w-4 h-4" />
+                    Watch demo (60s)
+                  </Button>
+                </div>
+                {error && !showEmailModal && (
                   <div className="animate-fade-in">
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center gap-3 text-left max-w-xl">
-                      <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-                      <div>
-                        <p className="text-red-200 text-sm font-medium">Notice</p>
-                        <p className="text-red-300/80 text-xs mt-0.5">{error}</p>
-                      </div>
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-center gap-2 text-left max-w-xl">
+                      <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                      <p className="text-xs text-red-300/80">{error}</p>
                     </div>
                   </div>
                 )}
-
-                <div className="w-full max-w-none">
-                  <div className={`rounded-2xl p-7 sm:p-8 md:p-10 min-h-[420px] sm:min-h-[460px] md:min-h-[520px] ${authCardClass}`}>
-                    {showEmailLogin ? (
-                      <form onSubmit={handleEmailLogin} className="space-y-4 animate-fade-in">
-                        <h2 className="text-xl font-bold text-foreground text-left">Log in with email</h2>
-
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-muted-foreground mb-2">Email</label>
-                            <div className="relative">
-                              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                              <input
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="w-full pl-11 pr-4 py-3 bg-background/50 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                placeholder="your@email.com"
-                                required
-                              />
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-muted-foreground mb-2">Password</label>
-                            <div className="relative">
-                              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                              <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full pl-11 pr-4 py-3 bg-background/50 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                                placeholder="Enter your password"
-                                required
-                              />
-                            </div>
-                          </div>
-
-                          <button
-                            type="submit"
-                            disabled={loginLoading}
-                            className="w-full px-6 py-3 bg-gradient-primary rounded-xl text-white font-semibold hover:shadow-glow hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                          >
-                            {loginLoading ? (
-                              <>
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                <span>Logging in...</span>
-                              </>
-                            ) : (
-                              <>
-                                <span>Log In</span>
-                                <ArrowRight className="w-5 h-5" />
-                              </>
-                            )}
-                          </button>
-
-                          <div className="text-left">
-                            <button
-                              type="button"
-                              onClick={() => setShowEmailLogin(false)}
-                              className="text-sm text-muted-foreground hover:text-foreground transition"
-                            >
-                              ← Back to Instagram Login
-                            </button>
-                          </div>
-                        </div>
-                      </form>
-                    ) : (
-                      <div className="space-y-3 animate-fade-in">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <Button
-                            onClick={handleInstagramLogin}
-                            disabled={loading}
-                            className="group inline-flex items-center gap-3 px-6 py-3 text-base"
-                          >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Instagram className="w-4 h-4" />}
-                            <span>Start free</span>
-                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className={`inline-flex items-center gap-2 ${isComic ? 'shadow-none bg-white/70' : ''}`}
-                            onClick={handleWatchDemo}
-                          >
-                            <PlayCircle className="w-4 h-4" />
-                            Watch demo (60s)
-                          </Button>
-                        </div>
-                        <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-3">
-                          <span>Free plan</span>
-                          <span className="w-1 h-1 rounded-full bg-border" />
-                          <span>Setup in 5 min</span>
-                          <span className="w-1 h-1 rounded-full bg-border" />
-                          <span>Cancel anytime</span>
-                        </div>
-                        <div className="mt-2">
-                          <button
-                            onClick={() => setShowEmailLogin(true)}
-                            className="text-sm text-muted-foreground hover:text-foreground transition-colors font-medium"
-                          >
-                            Prefer email? Log in with email
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    <div className="pt-2 text-left">
-                      <button
-                        type="button"
-                        onClick={closeAuthPanel}
-                        className="text-sm text-muted-foreground hover:text-foreground transition"
-                      >
-                        ← Back to overview
-                      </button>
-                    </div>
-                  </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-2.5 py-1">
+                    <CreditCard className="w-3.5 h-3.5 text-primary" />
+                    Free plan
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-2.5 py-1">
+                    <Clock className="w-3.5 h-3.5 text-primary" />
+                    Setup in 5 min
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-2.5 py-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+                    Cancel anytime
+                  </span>
                 </div>
+                <button
+                  type="button"
+                  onClick={openEmailModal}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors font-medium"
+                >
+                  Prefer email? Continue with email
+                </button>
               </div>
-
-              {/* <div className={`text-sm border rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 backdrop-blur-md w-full max-w-full text-left sm:inline-flex sm:w-auto ${isComic ? 'text-foreground border-2 border-black bg-white/90 shadow-[4px_4px_0_rgba(0,0,0,0.8)]' : 'text-muted-foreground border-border/70 bg-background/60'}`}>
-                <Sparkles className="w-4 h-4 text-primary" />
-                <span>Built for SMBs on Instagram: bookings, restaurants, salons, ecommerce, local services</span>
-              </div> */}
             </div>
 
             {/* Hero Visual */}
-            <div className="relative">
+            <div className="relative md:pt-8">
               <div
-                className={`relative overflow-hidden p-2 md:p-4 flex items-center justify-center ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.04]' : 'glass-panel rounded-3xl'}`}
+                className={`relative overflow-hidden p-2 md:p-3 flex items-center justify-center ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.04]' : 'glass-panel rounded-3xl'}`}
               >
                 <div
                   className="absolute -right-12 top-6 h-56 w-56 rounded-full bg-primary/20 blur-3xl opacity-70"
@@ -475,7 +358,7 @@ const Landing: React.FC = () => {
                 <img
                   src="/sd_phone.jpg"
                   alt="SendFx product preview"
-                  className="relative z-10 w-full h-auto max-h-[580px] object-contain scale-[1.08] md:scale-[1.12]"
+                  className="relative z-10 w-full h-auto max-h-[620px] md:max-h-[680px] object-contain scale-[1.12] md:scale-[1.16]"
                   loading="eager"
                   decoding="async"
                 />
@@ -497,7 +380,7 @@ const Landing: React.FC = () => {
           </section>
 
           {/* Typical outcomes */}
-          <section className="grid md:grid-cols-3 gap-4 text-left">
+          <section className="grid md:grid-cols-3 gap-4 text-left mt-10 md:mt-16">
             {[
               { label: 'Faster first response', value: '2-4x', detail: 'Automated triage + safe suggested replies' },
               { label: 'Fewer missed DMs', value: '95%+', detail: 'Routing + alerts prevent inbox drops' },
@@ -755,8 +638,94 @@ const Landing: React.FC = () => {
       </main>
 
       
+      {showEmailModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6 py-10 backdrop-blur-sm"
+          onClick={closeEmailModal}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="email-login-title"
+        >
+          <div
+            className={`w-full max-w-lg rounded-2xl p-7 md:p-8 ${authCardClass}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 id="email-login-title" className="text-xl font-bold text-foreground">Log in with email</h2>
+              <button
+                type="button"
+                onClick={closeEmailModal}
+                className="text-muted-foreground hover:text-foreground transition"
+                aria-label="Close email login"
+              >
+                ✕
+              </button>
+            </div>
+
+            {error && (
+              <div className="mt-4">
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-center gap-2 text-left">
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <p className="text-xs text-red-300/80">{error}</p>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleEmailLogin} className="mt-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-2">Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3 bg-background/50 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    placeholder="your@email.com"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-2">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3 bg-background/50 border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    placeholder="Enter your password"
+                    required
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="w-full px-6 py-3 bg-gradient-primary rounded-xl text-white font-semibold hover:shadow-glow hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loginLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Logging in...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Log In</span>
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Floating Assistant */}
-      <AssistantWidget locationHint="landing" />
+      {showAssistant && <AssistantWidget locationHint="landing" />}
 
       {/* Templates modal */}
       {previewTemplate && (
