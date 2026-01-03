@@ -336,8 +336,8 @@ const Landing: React.FC = () => {
                   </div>
                 )}
 
-                <div className="w-full max-w-md">
-                  <div className={`rounded-2xl p-6 min-h-[360px] ${authCardClass}`}>
+                <div className="w-full max-w-none">
+                  <div className={`rounded-2xl p-7 sm:p-8 md:p-10 min-h-[420px] sm:min-h-[460px] md:min-h-[520px] ${authCardClass}`}>
                     {showEmailLogin ? (
                       <form onSubmit={handleEmailLogin} className="space-y-4 animate-fade-in">
                         <h2 className="text-xl font-bold text-foreground text-left">Log in with email</h2>
