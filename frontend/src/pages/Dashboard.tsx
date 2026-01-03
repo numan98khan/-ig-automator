@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { AiHandledCard } from '../components/AiHandledCard';
 import { dashboardAPI, DashboardAttentionItem, DashboardInsightsResponse, DashboardSummaryResponse } from '../services/api';
 
 type TimeRange = 'today' | '7d' | '30d';
@@ -167,17 +168,10 @@ const Dashboard: React.FC = () => {
           <p className="text-xs text-muted-foreground mt-2">Customer messages received in this window.</p>
         </div>
 
-        <div className="glass-panel rounded-2xl p-4 shadow-sm">
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>AI-handled %</span>
-            <ShieldCheck className="w-4 h-4 text-primary" />
-          </div>
-          <div className="mt-3 flex items-end gap-2">
-            <span className="text-3xl font-bold text-foreground">{formatPercent(kpis.aiHandledRate)}</span>
-            <Badge variant="primary">AI replies / threads</Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">Share of inbound threads where AI replied.</p>
-        </div>
+        <AiHandledCard
+          value={formatPercent(kpis.aiHandledRate)}
+          className="glass-panel shadow-sm"
+        />
 
         <div className="glass-panel rounded-2xl p-4 shadow-sm">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
