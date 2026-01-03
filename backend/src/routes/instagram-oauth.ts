@@ -1,34 +1,34 @@
 import express, { Request, Response } from 'express';
 import InstagramAccount from '../models/InstagramAccount';
-import Workspace from '../models/Workspace';
-import User from '../models/User';
-import WorkspaceMember from '../models/WorkspaceMember';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
+import {
+  createUser,
+  getUserByInstagramUserId,
+  updateUser,
+} from '../repositories/core/userRepository';
+import { createWorkspace, getWorkspaceById } from '../repositories/core/workspaceRepository';
+import { createWorkspaceMember, getWorkspaceMember } from '../repositories/core/workspaceMemberRepository';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-// Instagram OAuth Configuration
 const INSTAGRAM_CLIENT_ID = process.env.INSTAGRAM_CLIENT_ID;
 const INSTAGRAM_CLIENT_SECRET = process.env.INSTAGRAM_CLIENT_SECRET;
 const INSTAGRAM_REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI || 'http://localhost:5000/api/instagram/callback';
 
-// Generate Instagram OAuth authorization URL for login (no authentication required)
 router.get('/auth-login', async (req: Request, res: Response) => {
   try {
     if (!INSTAGRAM_CLIENT_ID) {
       return res.status(500).json({ error: 'Instagram OAuth not configured' });
     }
 
-    // Generate state parameter for OAuth flow (no user/workspace info yet)
     const state = Buffer.from(JSON.stringify({
       isLogin: true,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     })).toString('base64');
 
-    // Instagram OAuth URL
     const authUrl = 'https://api.instagram.com/oauth/authorize' +
       `?client_id=${INSTAGRAM_CLIENT_ID}` +
       `&redirect_uri=${encodeURIComponent(INSTAGRAM_REDIRECT_URI)}` +
@@ -43,7 +43,6 @@ router.get('/auth-login', async (req: Request, res: Response) => {
   }
 });
 
-// Generate Instagram OAuth authorization URL
 router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId } = req.query;
@@ -52,13 +51,9 @@ router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'workspaceId is required' });
     }
 
-    // Verify workspace belongs to user
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
+    const workspace = await getWorkspaceById(workspaceId as string);
 
-    if (!workspace) {
+    if (!workspace || workspace.userId !== req.userId) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
@@ -66,14 +61,12 @@ router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(500).json({ error: 'Instagram OAuth not configured' });
     }
 
-    // Generate state parameter with workspace ID for callback
     const state = Buffer.from(JSON.stringify({
       workspaceId,
       userId: req.userId,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     })).toString('base64');
 
-    // Instagram OAuth URL
     const authUrl = 'https://api.instagram.com/oauth/authorize' +
       `?client_id=${INSTAGRAM_CLIENT_ID}` +
       `&redirect_uri=${encodeURIComponent(INSTAGRAM_REDIRECT_URI)}` +
@@ -88,7 +81,6 @@ router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Handle Instagram OAuth callback
 router.get('/callback', async (req: Request, res: Response) => {
   const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
@@ -116,12 +108,10 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     console.log('✅ Code and state received');
 
-    // Decode state to get flow type and info
     const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
     const { isLogin, workspaceId, userId } = stateData;
     console.log('State data:', { isLogin, workspaceId, userId });
 
-    // Exchange code for access token
     console.log('🔄 Exchanging code for access token...');
     const tokenResponse = await axios.post('https://api.instagram.com/oauth/access_token', new URLSearchParams({
       client_id: INSTAGRAM_CLIENT_ID!,
@@ -138,7 +128,6 @@ router.get('/callback', async (req: Request, res: Response) => {
     const { access_token, user_id } = tokenResponse.data;
     console.log('✅ Received short-lived access token, user_id:', user_id);
 
-    // Exchange short-lived token for long-lived token
     console.log('🔄 Exchanging for long-lived token...');
     const longLivedResponse = await axios.get('https://graph.instagram.com/access_token', {
       params: {
@@ -152,7 +141,6 @@ router.get('/callback', async (req: Request, res: Response) => {
     const expiresIn = longLivedResponse.data.expires_in || 3600;
     console.log(`✅ Received long-lived token (expires in ${expiresIn}s)`);
 
-    // Get Instagram account info
     console.log('🔄 Fetching Instagram account info...');
     const accountResponse = await axios.get('https://graph.instagram.com/me', {
       params: {
@@ -165,33 +153,28 @@ router.get('/callback', async (req: Request, res: Response) => {
     console.log('✅ Instagram account data:', {
       username: accountData.username,
       user_id: accountData.user_id,
-      account_type: accountData.account_type
+      account_type: accountData.account_type,
     });
 
-    // Calculate token expiration
     const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
 
-    // Handle login flow - create user + workspace if needed
     if (isLogin) {
       console.log('🔄 Login flow: Creating/finding user + workspace...');
 
-      // Check if user exists with this Instagram ID
       console.log('🔍 Looking for user with Instagram ID:', accountData.user_id || user_id);
-      let user = await User.findOne({ instagramUserId: accountData.user_id || user_id });
+      let user = await getUserByInstagramUserId(accountData.user_id || user_id);
 
-      // If user exists and has secured their account with email/password, redirect them to use email login
       if (user && !user.isProvisional && user.email) {
         console.log('⚠️  User has secured account, redirecting to email login');
         return res.redirect(`${FRONTEND_URL}/landing?error=account_secured&message=You have already secured your account. Please log in with your email and password.`);
       }
 
       if (!user) {
-        // Create new user (Instagram-only, provisional)
         console.log('🔄 User not found, creating new user...');
-        user = await User.create({
+        user = await createUser({
           instagramUserId: accountData.user_id || user_id,
           instagramUsername: accountData.username,
-          isProvisional: true, // User created via Instagram only
+          isProvisional: true,
           emailVerified: false,
         });
         console.log('✅ Created new user via Instagram OAuth:', user._id);
@@ -199,9 +182,8 @@ router.get('/callback', async (req: Request, res: Response) => {
         console.log('✅ Found existing user:', user._id);
       }
 
-      // Check if Instagram account already exists to determine workspace
       console.log('🔍 Looking for existing Instagram account to find workspace...');
-      let existingIgAccount = await InstagramAccount.findOne({
+      const existingIgAccount = await InstagramAccount.findOne({
         $or: [
           { instagramAccountId: accountData.user_id || user_id },
           { username: accountData.username },
@@ -212,17 +194,15 @@ router.get('/callback', async (req: Request, res: Response) => {
       let isNewWorkspace = false;
 
       if (existingIgAccount) {
-        // Instagram account already exists, use its workspace
         console.log('✅ Found existing Instagram account, using workspace:', existingIgAccount.workspaceId);
-        workspace = await Workspace.findById(existingIgAccount.workspaceId);
+        workspace = await getWorkspaceById(existingIgAccount.workspaceId.toString());
 
         if (!workspace) {
           throw new Error('Instagram account exists but workspace not found');
         }
       } else {
-        // No existing Instagram account, create new workspace
         console.log('🔄 No existing Instagram account, creating new workspace...');
-        workspace = await Workspace.create({
+        workspace = await createWorkspace({
           userId: user._id,
           name: `@${accountData.username}`,
         });
@@ -230,35 +210,27 @@ router.get('/callback', async (req: Request, res: Response) => {
         console.log('✅ Created new workspace:', workspace._id);
       }
 
-      // Ensure WorkspaceMember exists for this user
       console.log('🔍 Checking workspace membership...');
-      let membership = await WorkspaceMember.findOne({
-        workspaceId: workspace._id,
-        userId: user._id,
-      });
+      let membership = await getWorkspaceMember(workspace._id, user._id);
 
       if (!membership) {
-        // Create workspace membership with owner role
         console.log('🔄 Creating workspace membership...');
-        membership = await WorkspaceMember.create({
+        membership = await createWorkspaceMember({
           workspaceId: workspace._id,
           userId: user._id,
-          role: isNewWorkspace ? 'owner' : 'admin', // Owner if new workspace, admin if joining existing
+          role: isNewWorkspace ? 'owner' : 'admin',
         });
-        console.log('✅ Created workspace membership:', membership._id, 'with role:', membership.role);
+        console.log('✅ Created workspace membership:', membership.id, 'with role:', membership.role);
       } else {
-        console.log('✅ Found existing workspace membership:', membership._id, 'with role:', membership.role);
+        console.log('✅ Found existing workspace membership:', membership.id, 'with role:', membership.role);
       }
 
-      // Set default workspace if not already set
       if (!user.defaultWorkspaceId) {
         console.log('🔄 Setting default workspace for user...');
-        user.defaultWorkspaceId = workspace._id;
-        await user.save();
+        await updateUser(user._id, { defaultWorkspaceId: workspace._id });
         console.log('✅ Set default workspace:', workspace._id);
       }
 
-      // Check if Instagram account already connected
       console.log('🔍 Looking for Instagram account connection...');
       let instagramAccount = await InstagramAccount.findOne({
         workspaceId: workspace._id,
@@ -269,7 +241,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
 
       if (instagramAccount) {
-        // Update existing account
         console.log('🔄 Instagram account found, updating...');
         instagramAccount.username = accountData.username;
         instagramAccount.name = accountData.name || accountData.username;
@@ -288,7 +259,6 @@ router.get('/callback', async (req: Request, res: Response) => {
         await instagramAccount.save();
         console.log('✅ Updated existing Instagram account:', instagramAccount._id);
       } else {
-        // Create new Instagram account
         console.log('🔄 Instagram account not found, creating new one...');
         instagramAccount = await InstagramAccount.create({
           workspaceId: workspace._id,
@@ -309,7 +279,6 @@ router.get('/callback', async (req: Request, res: Response) => {
         console.log('✅ Created new Instagram account:', instagramAccount._id);
       }
 
-      // Subscribe to webhooks
       try {
         console.log('🔄 Subscribing to Instagram webhooks...');
         const webhookUrl = `https://graph.instagram.com/v21.0/${accountData.user_id || user_id}/subscribed_apps`;
@@ -322,20 +291,21 @@ router.get('/callback', async (req: Request, res: Response) => {
         console.error('⚠️ Failed to subscribe to webhooks (non-fatal):', webhookError);
       }
 
-      // Generate JWT token
       console.log('🔄 Generating JWT token for user:', user._id);
       const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
       console.log('✅ JWT token generated');
 
-      // Redirect to frontend with token and success
       const redirectUrl = `${FRONTEND_URL}/landing?token=${token}&instagram_connected=true`;
       console.log('🎉 OAuth flow complete! Redirecting to:', redirectUrl);
       console.log('=== Instagram OAuth Callback Completed Successfully ===\n');
       return res.redirect(redirectUrl);
     }
 
-    // Original flow - connecting Instagram to existing workspace
-    // Check if account already exists
+    const workspace = await getWorkspaceById(workspaceId);
+    if (!workspace || workspace.userId !== userId) {
+      return res.redirect(`${FRONTEND_URL}/landing?error=workspace_not_found`);
+    }
+
     const existingAccount = await InstagramAccount.findOne({
       workspaceId,
       $or: [
@@ -345,7 +315,6 @@ router.get('/callback', async (req: Request, res: Response) => {
     });
 
     if (existingAccount) {
-      // Update existing account
       existingAccount.username = accountData.username;
       existingAccount.name = accountData.name || accountData.username;
       existingAccount.instagramAccountId = accountData.user_id || user_id;
@@ -362,7 +331,6 @@ router.get('/callback', async (req: Request, res: Response) => {
 
       await existingAccount.save();
     } else {
-      // Create new account
       await InstagramAccount.create({
         workspaceId,
         username: accountData.username,
@@ -381,7 +349,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
     }
 
-    // Subscribe to webhooks
     try {
       const webhookUrl = `https://graph.instagram.com/v21.0/${accountData.user_id || user_id}/subscribed_apps`;
       await axios.post(webhookUrl, new URLSearchParams({
@@ -393,7 +360,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       console.error('⚠️ Failed to subscribe to webhooks (non-fatal):', webhookError);
     }
 
-    // Redirect back to frontend with success
     console.log('Redirecting to frontend with success');
     res.redirect(`${FRONTEND_URL}/landing?instagram_connected=true`);
   } catch (error: any) {
@@ -401,7 +367,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     console.error('Error details:', {
       message: error.message,
       response: error.response?.data,
-      stack: error.stack
+      stack: error.stack,
     });
     console.log('=== Instagram OAuth Callback Failed ===\n');
 

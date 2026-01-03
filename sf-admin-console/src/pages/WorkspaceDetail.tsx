@@ -36,13 +36,25 @@ export default function WorkspaceDetail() {
     queryFn: () => adminApi.getWorkspaceMembers(id!),
   })
 
+  const { data: usageData } = useQuery({
+    queryKey: ['workspace-usage', id],
+    queryFn: () => adminApi.getWorkspaceUsage(id!),
+  })
+
   const workspacePayload = unwrapData<any>(workspaceData)
   const conversationsPayload = unwrapData<any>(conversationsData)
   const membersPayload = unwrapData<any>(membersData)
+  const usagePayload = unwrapData<any>(usageData)
 
   const workspace = workspacePayload
   const conversations = conversationsPayload?.conversations || []
   const members = membersPayload?.members || []
+  const usage = usagePayload || {}
+
+  const formatNumber = (value?: number) =>
+    new Intl.NumberFormat('en-US').format(value || 0)
+  const formatCost = (cents?: number) =>
+    `$${((cents || 0) / 100).toFixed(2)}`
 
   if (loadingWorkspace) {
     return (
@@ -204,6 +216,51 @@ export default function WorkspaceDetail() {
                     </p>
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-foreground">
+                  AI Usage (last {usage.rangeDays || 30} days)
+                </h3>
+                <span className="text-xs text-muted-foreground">
+                  Updated {usage.endAt ? new Date(usage.endAt).toLocaleString() : '—'}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                    Input Tokens
+                  </p>
+                  <p className="text-xl font-semibold text-foreground">
+                    {formatNumber(usage.promptTokens)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                    Output Tokens
+                  </p>
+                  <p className="text-xl font-semibold text-foreground">
+                    {formatNumber(usage.completionTokens)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                    Total Tokens
+                  </p>
+                  <p className="text-xl font-semibold text-foreground">
+                    {formatNumber(usage.totalTokens)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
+                    Estimated Cost
+                  </p>
+                  <p className="text-xl font-semibold text-foreground">
+                    {formatCost(usage.costCents)}
+                  </p>
+                </div>
               </div>
             </div>
 

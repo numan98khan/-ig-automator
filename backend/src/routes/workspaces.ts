@@ -1,14 +1,18 @@
 import express, { Response } from 'express';
-import Workspace from '../models/Workspace';
-import WorkspaceMember from '../models/WorkspaceMember';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { getWorkspaceMembers, updateMemberRole, removeMember, hasPermission } from '../services/workspaceService';
 import { ensureUserTier } from '../services/tierService';
 import { ensureBillingAccountForUser } from '../services/billingService';
+import {
+  createWorkspace,
+  getWorkspaceById,
+  getWorkspaceByUserId,
+  listWorkspacesByUserId,
+} from '../repositories/core/workspaceRepository';
+import { createWorkspaceMember, getWorkspaceMember } from '../repositories/core/workspaceMemberRepository';
 
 const router = express.Router();
 
-// Create workspace
 router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { name } = req.body;
@@ -17,23 +21,22 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Workspace name is required' });
     }
 
-    const existing = await Workspace.findOne({ userId: req.userId });
+    const existing = await getWorkspaceByUserId(req.userId!);
     if (existing) {
       return res.status(200).json(existing);
     }
 
     const billingAccount = await ensureBillingAccountForUser(req.userId!);
-    const workspace = await Workspace.create({
+    const workspace = await createWorkspace({
       name,
-      userId: req.userId,
-      billingAccountId: billingAccount?._id,
+      userId: req.userId!,
+      billingAccountId: billingAccount?._id ?? null,
     });
     await ensureUserTier(req.userId!);
 
-    // Create WorkspaceMember entry for the owner
-    await WorkspaceMember.create({
+    await createWorkspaceMember({
       workspaceId: workspace._id,
-      userId: req.userId,
+      userId: req.userId!,
       role: 'owner',
     });
 
@@ -44,10 +47,9 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Get all workspaces for current user
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const workspaces = await Workspace.find({ userId: req.userId });
+    const workspaces = await listWorkspacesByUserId(req.userId!);
     res.json(workspaces);
   } catch (error) {
     console.error('Get workspaces error:', error);
@@ -55,15 +57,11 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Get workspace by ID
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const workspace = await Workspace.findOne({
-      _id: req.params.id,
-      userId: req.userId,
-    });
+    const workspace = await getWorkspaceById(req.params.id);
 
-    if (!workspace) {
+    if (!workspace || workspace.userId !== req.userId) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
@@ -74,12 +72,10 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Get workspace members
 router.get('/:id/members', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
 
-    // Check if user has access to this workspace (must be at least a viewer)
     const canView = await hasPermission(req.userId!, id, 'viewer');
     if (!canView) {
       return res.status(403).json({ error: 'You do not have permission to view members of this workspace' });
@@ -93,7 +89,6 @@ router.get('/:id/members', authenticate, async (req: AuthRequest, res: Response)
   }
 });
 
-// Update member role
 router.put('/:id/members/:userId/role', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id, userId } = req.params;
@@ -103,7 +98,6 @@ router.put('/:id/members/:userId/role', authenticate, async (req: AuthRequest, r
       return res.status(400).json({ error: 'Role is required' });
     }
 
-    // Only owners and admins can change roles
     const canManage = await hasPermission(req.userId!, id, 'admin');
     if (!canManage) {
       return res.status(403).json({ error: 'You do not have permission to change member roles' });
@@ -117,12 +111,10 @@ router.put('/:id/members/:userId/role', authenticate, async (req: AuthRequest, r
   }
 });
 
-// Remove member
 router.delete('/:id/members/:userId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { id, userId } = req.params;
 
-    // Only owners and admins can remove members
     const canManage = await hasPermission(req.userId!, id, 'admin');
     if (!canManage) {
       return res.status(403).json({ error: 'You do not have permission to remove members' });
@@ -136,27 +128,20 @@ router.delete('/:id/members/:userId', authenticate, async (req: AuthRequest, res
   }
 });
 
-// Migration endpoint: Fix missing workspace members
 router.post('/migrate-members', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     console.log('🔄 Starting workspace member migration...');
 
-    // Find all workspaces owned by current user
-    const workspaces = await Workspace.find({ userId: req.userId });
+    const workspaces = await listWorkspacesByUserId(req.userId!);
 
     let created = 0;
     let skipped = 0;
 
     for (const workspace of workspaces) {
-      // Check if WorkspaceMember already exists
-      const existing = await WorkspaceMember.findOne({
-        workspaceId: workspace._id,
-        userId: workspace.userId,
-      });
+      const existing = await getWorkspaceMember(workspace._id, workspace.userId);
 
       if (!existing) {
-        // Create WorkspaceMember entry for the owner
-        await WorkspaceMember.create({
+        await createWorkspaceMember({
           workspaceId: workspace._id,
           userId: workspace.userId,
           role: 'owner',

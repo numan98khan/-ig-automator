@@ -7,10 +7,10 @@ import AutomationSession from '../models/AutomationSession';
 import AutomationInstance from '../models/AutomationInstance';
 import FlowTemplate from '../models/FlowTemplate';
 import Message from '../models/Message';
-import User from '../models/User';
-import WorkspaceMember from '../models/WorkspaceMember';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
+import { existsWorkspaceMember } from '../repositories/core/workspaceMemberRepository';
+import { getUserById, listUsersByIds } from '../repositories/core/userRepository';
 
 const router = express.Router();
 
@@ -95,6 +95,12 @@ const formatUser = (user: any) => {
   };
 };
 
+const mapUserIdsToMap = async (ids: Array<string | undefined>) => {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean))) as string[];
+  const users = await listUsersByIds(uniqueIds);
+  return Object.fromEntries(users.map(user => [user._id, user]));
+};
+
 router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const workspaceId = typeof req.query.workspaceId === 'string' ? req.query.workspaceId.trim() : '';
@@ -158,164 +164,72 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
       tagFilters.push({ tags: { $in: tagMatchers } });
     }
 
-    if (inactiveDays > 0) {
-      const cutoff = new Date(Date.now() - inactiveDays * 24 * 60 * 60 * 1000);
-      baseAndFilters.push({ lastMessageAt: { $lte: cutoff } });
+    const inactivityCutoff = inactiveDays > 0
+      ? new Date(Date.now() - inactiveDays * 24 * 60 * 60 * 1000)
+      : undefined;
+
+    const andFilters = [...baseAndFilters, ...tagFilters, ...stageFilters];
+    if (inactivityCutoff) {
+      andFilters.push({ lastMessageAt: { $lte: inactivityCutoff } });
+    }
+    if (andFilters.length > 0) {
+      baseFilter.$and = andFilters;
     }
 
-    const buildFilter = (extras: Record<string, any>[]) => {
-      const filter: Record<string, any> = { ...baseFilter };
-      const combined = [...baseAndFilters, ...extras];
-      if (combined.length > 0) {
-        filter.$and = combined;
-      }
-      return filter;
-    };
-
-    const listFilter = buildFilter([...tagFilters, ...stageFilters]);
-    const stageCountFilter = buildFilter(tagFilters);
-    const tagCountFilter = buildFilter(stageFilters);
-
-    const [contacts, total] = await Promise.all([
-      Conversation.find(listFilter)
+    const [contacts, total, stageCounts, tagCounts, newTodayCount, overdueCount, waitingCount, qualifiedCount] = await Promise.all([
+      Conversation.find(baseFilter)
         .sort({ lastMessageAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
-      Conversation.countDocuments(listFilter),
-    ]);
-
-    const contactIds = contacts.map((contact: any) => contact._id);
-    const now = new Date();
-    const [taskSummary, unreadSummary] = await Promise.all([
-      contactIds.length
-        ? CrmTask.aggregate([
-            { $match: { conversationId: { $in: contactIds }, status: 'open' } },
-            {
-              $group: {
-                _id: '$conversationId',
-                openCount: { $sum: 1 },
-                nextDueAt: { $min: '$dueAt' },
-                overdueCount: {
-                  $sum: {
-                    $cond: [
-                      { $and: [{ $ifNull: ['$dueAt', false] }, { $lt: ['$dueAt', now] }] },
-                      1,
-                      0,
-                    ],
-                  },
-                },
-              },
-            },
-          ])
-        : [],
-      contactIds.length
-        ? Message.aggregate([
-            {
-              $match: {
-                conversationId: { $in: contactIds },
-                from: 'customer',
-                $or: [{ seenAt: { $exists: false } }, { seenAt: null }],
-              },
-            },
-            { $group: { _id: '$conversationId', count: { $sum: 1 } } },
-          ])
-        : [],
-    ]);
-
-    const taskMap = new Map<string, { openCount: number; overdueCount: number; nextDueAt?: Date }>();
-    taskSummary.forEach((row: any) => {
-      taskMap.set(row._id.toString(), {
-        openCount: row.openCount || 0,
-        overdueCount: row.overdueCount || 0,
-        nextDueAt: row.nextDueAt || undefined,
-      });
-    });
-
-    const unreadMap = new Map<string, number>();
-    unreadSummary.forEach((row: any) => {
-      unreadMap.set(row._id.toString(), row.count || 0);
-    });
-
-    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-    const [stageRows, tagRows, newTodayCount, qualifiedCount, waitingCount, overdueRows] = await Promise.all([
+      Conversation.countDocuments(baseFilter),
       Conversation.aggregate([
-        { $match: stageCountFilter },
-        { $project: { stage: { $ifNull: ['$stage', 'new'] } } },
+        { $match: { workspaceId: workspaceObjectId } },
         { $group: { _id: '$stage', count: { $sum: 1 } } },
       ]),
       Conversation.aggregate([
-        { $match: { ...tagCountFilter, tags: { $exists: true, $ne: [] } } },
-        { $unwind: '$tags' },
-        { $project: { tag: { $toLower: '$tags' } } },
-        { $group: { _id: '$tag', count: { $sum: 1 } } },
+        { $match: { workspaceId: workspaceObjectId } },
+        { $unwind: { path: '$tags', preserveNullAndEmptyArrays: false } },
+        { $group: { _id: '$tags', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
-        { $limit: 50 },
+        { $limit: 12 },
       ]),
       Conversation.countDocuments({
-        ...baseFilter,
-        createdAt: { $gte: startToday },
+        workspaceId: workspaceObjectId,
+        createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       }),
       Conversation.countDocuments({
-        ...baseFilter,
+        workspaceId: workspaceObjectId,
+        stage: { $in: ['won', 'lost'] },
+        updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      }),
+      Conversation.countDocuments({
+        workspaceId: workspaceObjectId,
+        stage: 'engaged',
+      }),
+      Conversation.countDocuments({
+        workspaceId: workspaceObjectId,
         stage: 'qualified',
-        updatedAt: { $gte: startWeek },
       }),
-      Conversation.countDocuments({
-        ...baseFilter,
-        lastBusinessMessageAt: { $exists: true, $ne: null },
-        $expr: {
-          $gt: [
-            '$lastBusinessMessageAt',
-            { $ifNull: ['$lastCustomerMessageAt', new Date(0)] },
-          ],
-        },
-      }),
-      CrmTask.aggregate([
-        {
-          $match: {
-            workspaceId: workspaceObjectId,
-            status: 'open',
-            dueAt: { $lt: now },
-          },
-        },
-        { $group: { _id: '$conversationId' } },
-        { $count: 'count' },
-      ]),
     ]);
 
-    const stageCounts = STAGES.reduce((acc, stageKey) => {
-      acc[stageKey] = 0;
-      return acc;
-    }, {} as Record<CrmStage, number>);
-    stageRows.forEach((row: any) => {
-      if (row?._id && stageCounts[row._id as CrmStage] !== undefined) {
-        stageCounts[row._id as CrmStage] = row.count;
-      }
-    });
-
-    const tagCounts = tagRows.reduce((acc: Record<string, number>, row: any) => {
-      if (row?._id) {
-        acc[row._id] = row.count;
-      }
+    const stageCountsMap = stageCounts.reduce((acc: Record<string, number>, entry: any) => {
+      const key = entry._id || 'new';
+      acc[key] = entry.count;
       return acc;
     }, {});
 
-    const contactsPayload = contacts.map((contact: any) => {
-      const base = formatContact(contact);
-      const taskInfo = taskMap.get(contact._id.toString()) || { openCount: 0, overdueCount: 0 };
-      const unreadCount = unreadMap.get(contact._id.toString()) || 0;
-      return {
-        ...base,
-        openTaskCount: taskInfo.openCount,
-        overdueTaskCount: taskInfo.overdueCount,
-        nextTaskDueAt: taskInfo.nextDueAt,
-        unreadCount,
-      };
-    });
+    const stageCountsPayload = STAGES.map((stageName) => ({
+      stage: stageName,
+      count: stageCountsMap[stageName] || 0,
+    }));
 
-    const overdueCount = overdueRows?.[0]?.count || 0;
+    const tagCountsPayload = tagCounts.map((entry: any) => ({
+      tag: entry._id,
+      count: entry.count,
+    }));
+
+    const contactsPayload = contacts.map((contact) => formatContact(contact));
 
     res.json({
       data: {
@@ -325,8 +239,8 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
           totalPages: Math.ceil(total / limit) || 1,
           totalItems: total,
         },
-        stageCounts,
-        tagCounts,
+        stageCounts: stageCountsPayload,
+        tagCounts: tagCountsPayload,
         summary: {
           newToday: newTodayCount || 0,
           overdue: overdueCount,
@@ -393,10 +307,7 @@ router.patch('/contacts/:id', authenticate, async (req: AuthRequest, res: Respon
       if (!req.body.ownerId) {
         updates.ownerId = undefined;
       } else if (mongoose.isValidObjectId(req.body.ownerId)) {
-        const isMember = await WorkspaceMember.exists({
-          workspaceId: conversation.workspaceId,
-          userId: req.body.ownerId,
-        });
+        const isMember = await existsWorkspaceMember(conversation.workspaceId.toString(), req.body.ownerId);
         if (!isMember) {
           return res.status(400).json({ error: 'Owner must belong to the workspace' });
         }
@@ -425,13 +336,14 @@ router.get('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: Re
 
     const notes = await ContactNote.find({ conversationId: conversation._id })
       .sort({ createdAt: -1 })
-      .populate('authorId', 'email firstName lastName instagramUsername')
       .lean();
+
+    const userMap = await mapUserIdsToMap(notes.map(note => note.authorId?.toString()));
 
     const payload = notes.map((note: any) => ({
       ...note,
-      author: formatUser(note.authorId),
-      authorId: note.authorId?._id || note.authorId,
+      author: formatUser(userMap[note.authorId?.toString()] ?? null),
+      authorId: note.authorId?.toString() || note.authorId,
     }));
 
     res.json({ data: { notes: payload } });
@@ -443,6 +355,10 @@ router.get('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: Re
 
 router.post('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     const { conversation, error } = await loadConversationForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
@@ -465,7 +381,7 @@ router.post('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: R
       body,
     });
 
-    const author = await User.findById(req.userId).select('email firstName lastName instagramUsername').lean();
+    const author = await getUserById(req.userId, { includePassword: true });
 
     res.status(201).json({
       data: {
@@ -542,15 +458,22 @@ router.get('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: Re
 
     const tasks = await CrmTask.find({ conversationId: conversation._id })
       .sort({ status: 1, dueAt: 1, createdAt: -1 })
-      .populate('assignedTo', 'email firstName lastName instagramUsername')
-      .populate('createdBy', 'email firstName lastName instagramUsername')
       .lean();
 
-    const payload = tasks.map((task: any) => ({
-      ...task,
-      assignedTo: formatUser(task.assignedTo),
-      createdBy: formatUser(task.createdBy),
-    }));
+    const userMap = await mapUserIdsToMap([
+      ...tasks.map(task => task.assignedTo?.toString()),
+      ...tasks.map(task => task.createdBy?.toString()),
+    ]);
+
+    const payload = tasks.map((task: any) => {
+      const assignedId = task.assignedTo?.toString();
+      const createdId = task.createdBy?.toString();
+      return {
+        ...task,
+        assignedTo: formatUser(assignedId ? userMap[assignedId] : null),
+        createdBy: formatUser(createdId ? userMap[createdId] : null),
+      };
+    });
 
     res.json({ data: { tasks: payload } });
   } catch (error) {
@@ -586,10 +509,7 @@ router.post('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: R
       if (!mongoose.isValidObjectId(req.body.assignedTo)) {
         return res.status(400).json({ error: 'Assigned user must be valid' });
       }
-      const isMember = await WorkspaceMember.exists({
-        workspaceId: conversation.workspaceId,
-        userId: req.body.assignedTo,
-      });
+      const isMember = await existsWorkspaceMember(conversation.workspaceId.toString(), req.body.assignedTo);
       if (!isMember) {
         return res.status(400).json({ error: 'Assignee must belong to the workspace' });
       }
@@ -610,20 +530,22 @@ router.post('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: R
       completedAt: status === 'completed' ? new Date() : undefined,
     });
 
-    const populated = await CrmTask.findById(task._id)
-      .populate('assignedTo', 'email firstName lastName instagramUsername')
-      .populate('createdBy', 'email firstName lastName instagramUsername')
-      .lean();
+    const userMap = await mapUserIdsToMap([
+      task.assignedTo?.toString(),
+      task.createdBy?.toString(),
+    ]);
+
+    const assignedId = task.assignedTo?.toString();
+    const createdId = task.createdBy?.toString();
+    const taskPayload = {
+      ...task.toObject(),
+      assignedTo: formatUser(assignedId ? userMap[assignedId] : null),
+      createdBy: formatUser(createdId ? userMap[createdId] : null),
+    };
 
     res.status(201).json({
       data: {
-        task: populated
-          ? {
-            ...populated,
-            assignedTo: formatUser(populated.assignedTo),
-            createdBy: formatUser(populated.createdBy),
-          }
-          : task,
+        task: taskPayload,
       },
     });
   } catch (error) {
@@ -674,10 +596,7 @@ router.patch('/contacts/:id/tasks/:taskId', authenticate, async (req: AuthReques
       if (!req.body.assignedTo) {
         task.assignedTo = undefined;
       } else if (mongoose.isValidObjectId(req.body.assignedTo)) {
-        const isMember = await WorkspaceMember.exists({
-          workspaceId: conversation.workspaceId,
-          userId: req.body.assignedTo,
-        });
+        const isMember = await existsWorkspaceMember(conversation.workspaceId.toString(), req.body.assignedTo);
         if (!isMember) {
           return res.status(400).json({ error: 'Assignee must belong to the workspace' });
         }
@@ -689,20 +608,22 @@ router.patch('/contacts/:id/tasks/:taskId', authenticate, async (req: AuthReques
 
     await task.save();
 
-    const populated = await CrmTask.findById(task._id)
-      .populate('assignedTo', 'email firstName lastName instagramUsername')
-      .populate('createdBy', 'email firstName lastName instagramUsername')
-      .lean();
+    const userMap = await mapUserIdsToMap([
+      task.assignedTo?.toString(),
+      task.createdBy?.toString(),
+    ]);
+
+    const updatedAssignedId = task.assignedTo?.toString();
+    const updatedCreatedId = task.createdBy?.toString();
+    const taskPayload = {
+      ...task.toObject(),
+      assignedTo: formatUser(updatedAssignedId ? userMap[updatedAssignedId] : null),
+      createdBy: formatUser(updatedCreatedId ? userMap[updatedCreatedId] : null),
+    };
 
     res.json({
       data: {
-        task: populated
-          ? {
-            ...populated,
-            assignedTo: formatUser(populated.assignedTo),
-            createdBy: formatUser(populated.createdBy),
-          }
-          : task,
+        task: taskPayload,
       },
     });
   } catch (error) {

@@ -1,31 +1,24 @@
 import express, { Response } from 'express';
-import mongoose from 'mongoose';
 import Escalation from '../models/Escalation';
 import Conversation from '../models/Conversation';
-import Workspace from '../models/Workspace';
-import WorkspaceMember from '../models/WorkspaceMember';
 import Message from '../models/Message';
 import { authenticate, AuthRequest } from '../middleware/auth';
-import { resolveTicket } from '../services/escalationService';
+import { getWorkspaceById } from '../repositories/core/workspaceRepository';
+import { getWorkspaceMember } from '../repositories/core/workspaceMemberRepository';
 
 const router = express.Router();
 
-// List escalations for a workspace
 router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId } = req.params;
 
-    // Check if user has access to this workspace (either as owner or member)
-    const workspace = await Workspace.findById(workspaceId);
+    const workspace = await getWorkspaceById(workspaceId);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    const isOwner = workspace.userId.toString() === req.userId;
-    const isMember = await WorkspaceMember.findOne({
-      workspaceId,
-      userId: req.userId,
-    });
+    const isOwner = workspace.userId === req.userId;
+    const isMember = await getWorkspaceMember(workspaceId, req.userId!);
 
     if (!isOwner && !isMember) {
       return res.status(403).json({ error: 'Access denied to this workspace' });
@@ -72,7 +65,6 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   }
 });
 
-// Resolve escalation
 router.post('/:id/resolve', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const escalation = await Escalation.findById(req.params.id);
@@ -85,12 +77,8 @@ router.post('/:id/resolve', authenticate, async (req: AuthRequest, res: Response
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    const workspace = await Workspace.findOne({
-      _id: conversation.workspaceId,
-      userId: req.userId,
-    });
-
-    if (!workspace) {
+    const workspace = await getWorkspaceById(conversation.workspaceId.toString());
+    if (!workspace || workspace.userId !== req.userId) {
       return res.status(404).json({ error: 'Unauthorized' });
     }
 

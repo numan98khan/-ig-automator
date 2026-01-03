@@ -22,7 +22,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
-          <Route path="/landing" element={<Navigate to="/" replace />} />
+          <Route path="/landing" element={<Landing />} />
           <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/verify-email" element={<VerifyEmail />} />

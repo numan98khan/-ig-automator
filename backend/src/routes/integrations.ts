@@ -2,7 +2,6 @@ import express, { Response } from 'express';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
 import { authenticate, AuthRequest } from '../middleware/auth';
-import Workspace from '../models/Workspace';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import {
   getGoogleSheetPreview,
@@ -11,6 +10,7 @@ import {
   listGoogleSpreadsheets,
 } from '../services/googleSheetsService';
 import { analyzeInventoryMapping } from '../services/googleSheetsMappingService';
+import { getWorkspaceById } from '../repositories/core/workspaceRepository';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -51,6 +51,14 @@ function decodeJwt(token: string): any | null {
   }
 }
 
+const loadWorkspaceForUser = async (workspaceId: string, userId: string) => {
+  const workspace = await getWorkspaceById(workspaceId);
+  if (!workspace || workspace.userId !== userId) {
+    return null;
+  }
+  return workspace;
+};
+
 router.get('/google-sheets/oauth/start', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
@@ -58,11 +66,7 @@ router.get('/google-sheets/oauth/start', authenticate, async (req: AuthRequest, 
       return res.status(400).json({ error: 'workspaceId is required' });
     }
 
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
-
+    const workspace = await loadWorkspaceForUser(workspaceId, req.userId!);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
@@ -147,11 +151,7 @@ router.post('/google-sheets/oauth/disconnect', authenticate, async (req: AuthReq
       return res.status(400).json({ error: 'workspaceId is required' });
     }
 
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
-
+    const workspace = await loadWorkspaceForUser(workspaceId, req.userId!);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
@@ -183,11 +183,7 @@ router.get('/google-sheets/files', authenticate, async (req: AuthRequest, res: R
       return res.status(400).json({ error: 'workspaceId is required' });
     }
 
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
-
+    const workspace = await loadWorkspaceForUser(workspaceId, req.userId!);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
@@ -215,11 +211,7 @@ router.get('/google-sheets/tabs', authenticate, async (req: AuthRequest, res: Re
       return res.status(400).json({ error: 'workspaceId and spreadsheetId are required' });
     }
 
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
-
+    const workspace = await loadWorkspaceForUser(workspaceId, req.userId!);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
@@ -255,11 +247,7 @@ router.post('/google-sheets/test', authenticate, async (req: AuthRequest, res: R
       return res.status(400).json({ error: 'workspaceId is required' });
     }
 
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
-
+    const workspace = await loadWorkspaceForUser(workspaceId, req.userId!);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
@@ -348,11 +336,7 @@ router.post('/google-sheets/analyze', authenticate, async (req: AuthRequest, res
       return res.status(400).json({ error: 'workspaceId is required' });
     }
 
-    const workspace = await Workspace.findOne({
-      _id: workspaceId,
-      userId: req.userId,
-    });
-
+    const workspace = await loadWorkspaceForUser(workspaceId, req.userId!);
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }

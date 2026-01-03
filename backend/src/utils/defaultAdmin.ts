@@ -1,37 +1,33 @@
-import User from '../models/User';
+import { createUser, getUserByEmail, updateUser } from '../repositories/core/userRepository';
 
 const DEFAULT_ADMIN_EMAIL = 'admin@sendfx.ai';
 const DEFAULT_ADMIN_PASSWORD = 'Rentto@123';
 
 export const ensureDefaultAdmin = async () => {
   try {
-    const existing = await User.findOne({ email: DEFAULT_ADMIN_EMAIL.toLowerCase() });
+    const existing = await getUserByEmail(DEFAULT_ADMIN_EMAIL.toLowerCase(), { includePassword: true });
     if (existing) {
-      let needsSave = false;
+      const updates: Record<string, any> = {};
       if (existing.role !== 'admin') {
-        existing.role = 'admin';
-        needsSave = true;
+        updates.role = 'admin';
       }
       if (!existing.password) {
-        existing.password = DEFAULT_ADMIN_PASSWORD;
-        needsSave = true;
+        updates.password = DEFAULT_ADMIN_PASSWORD;
       }
       if (!existing.emailVerified) {
-        existing.emailVerified = true;
-        needsSave = true;
+        updates.emailVerified = true;
       }
       if (existing.isProvisional) {
-        existing.isProvisional = false;
-        needsSave = true;
+        updates.isProvisional = false;
       }
-      if (needsSave) {
-        await existing.save();
+      if (Object.keys(updates).length > 0) {
+        await updateUser(existing._id, updates);
         console.log('✅ Default admin ensured (updated existing)');
       }
       return;
     }
 
-    await User.create({
+    await createUser({
       email: DEFAULT_ADMIN_EMAIL.toLowerCase(),
       password: DEFAULT_ADMIN_PASSWORD,
       role: 'admin',

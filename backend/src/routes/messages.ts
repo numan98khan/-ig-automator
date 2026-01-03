@@ -1,7 +1,6 @@
 import express, { Response } from 'express';
 import Message from '../models/Message';
 import Conversation from '../models/Conversation';
-import Workspace from '../models/Workspace';
 import InstagramAccount from '../models/InstagramAccount';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import AutomationSession from '../models/AutomationSession';
@@ -139,7 +138,13 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
       return res.status(404).json({ error: 'Instagram account not found or not connected' });
     }
 
-    const usageCheck = await assertUsageLimit(req.userId!, 'aiMessages', 1, conversation.workspaceId, { increment: false });
+    const usageCheck = await assertUsageLimit(
+      req.userId!,
+      'aiMessages',
+      1,
+      conversation.workspaceId.toString(),
+      { increment: false }
+    );
     if (!usageCheck.allowed) {
       return res.status(429).json({
         error: 'AI message limit reached for your tier',
@@ -290,7 +295,7 @@ router.post('/generate-ai-reply', authenticate, async (req: AuthRequest, res: Re
     Object.assign(increments, responseMetrics);
 
     await trackDailyMetric(conversation.workspaceId, new Date(sentAt), increments);
-    await assertUsageLimit(req.userId!, 'aiMessages', 1, conversation.workspaceId);
+    await assertUsageLimit(req.userId!, 'aiMessages', 1, conversation.workspaceId.toString());
 
     res.status(201).json({
       ...message.toObject(),

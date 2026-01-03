@@ -1,31 +1,24 @@
 import express, { Response } from 'express';
 import InstagramAccount from '../models/InstagramAccount';
-import Workspace from '../models/Workspace';
-import WorkspaceMember from '../models/WorkspaceMember';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { getWorkspaceById } from '../repositories/core/workspaceRepository';
+import { getWorkspaceMember } from '../repositories/core/workspaceMemberRepository';
 
 const router = express.Router();
 
-// Get Instagram accounts for workspace
 router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId } = req.params;
 
-    // Check if user has access to this workspace (either as owner or member)
-    const workspace = await Workspace.findById(workspaceId);
+    const workspace = await getWorkspaceById(workspaceId);
 
     if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    // Check if user is owner
-    const isOwner = workspace.userId.toString() === req.userId;
+    const isOwner = workspace.userId === req.userId;
 
-    // Check if user is a member
-    const isMember = await WorkspaceMember.findOne({
-      workspaceId,
-      userId: req.userId,
-    });
+    const isMember = await getWorkspaceMember(workspaceId, req.userId!);
 
     if (!isOwner && !isMember) {
       return res.status(403).json({ error: 'Access denied to this workspace' });
