@@ -3,7 +3,11 @@ import { CoreUser } from '../repositories/core/userRepository';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const EMAIL_FROM = process.env.EMAIL_FROM || 'no-reply@yourdomain.com';
-const APP_BASE_URL = (process.env.APP_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
+const APP_BASE_URL = (
+  process.env.APP_BASE_URL ||
+  process.env.FRONTEND_URL ||
+  'https://sendfx.ai'
+).replace(/\/$/, '');
 
 if (!RESEND_API_KEY) {
   console.warn('⚠️ RESEND_API_KEY not set. Email sending will fail.');
