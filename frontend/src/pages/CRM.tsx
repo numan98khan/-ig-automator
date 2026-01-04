@@ -33,6 +33,7 @@ import {
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { useTheme } from '../context/ThemeContext';
 
 const stageTabs: Array<{ value: CrmStage | 'all'; label: string }> = [
   { value: 'all', label: 'All' },
@@ -199,6 +200,7 @@ const serializeContactForm = (form: ContactForm) => JSON.stringify({
 
 const CRM: React.FC = () => {
   const { currentWorkspace } = useAuth();
+  const { theme } = useTheme();
   const navigate = useNavigate();
   const [contacts, setContacts] = useState<CrmContact[]>([]);
   const [stageCounts, setStageCounts] = useState<Record<CrmStage, number>>({
@@ -354,6 +356,12 @@ const CRM: React.FC = () => {
   }, [contacts, quickFilters, sortBy]);
 
   const crmAccessBlocked = crmLocked && !crmAccessLoading;
+  const isLightTheme = useMemo(() => {
+    if (theme === 'light') return true;
+    if (theme === 'dark') return false;
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-color-scheme: light)').matches;
+  }, [theme]);
 
   const openTasks = useMemo(
     () => tasks.filter((task) => task.status === 'open'),
@@ -749,6 +757,7 @@ const CRM: React.FC = () => {
   useEffect(() => {
     if (!currentWorkspace) return;
     let isActive = true;
+    let pollTimer: number | undefined;
     const loadTierAccess = async () => {
       setCrmAccessLoading(true);
       try {
@@ -772,8 +781,12 @@ const CRM: React.FC = () => {
       }
     };
     loadTierAccess();
+    pollTimer = window.setInterval(loadTierAccess, 15000);
     return () => {
       isActive = false;
+      if (pollTimer) {
+        window.clearInterval(pollTimer);
+      }
     };
   }, [currentWorkspace]);
 
@@ -1321,7 +1334,9 @@ const CRM: React.FC = () => {
   return (
     <div className="relative h-full flex flex-col gap-4">
       {crmAccessBlocked && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-black/60 backdrop-blur-sm p-6">
+        <div
+          className={`absolute inset-0 z-40 flex items-center justify-center rounded-2xl p-6 ${isLightTheme ? 'bg-slate-200/70' : 'bg-black/60'} backdrop-blur-sm`}
+        >
           <div className="max-w-xl w-full rounded-2xl border border-border bg-card p-6 shadow-xl text-center space-y-4">
             <Badge variant="secondary" className="uppercase tracking-[0.3em] text-[10px]">
               Upgrade required
