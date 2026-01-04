@@ -1410,7 +1410,7 @@ const CRM: React.FC = () => {
             </div>
           )}
         </div>
-        </div>
+      </div>
       </div>
       <div className="flex-1 min-h-0">
           {viewMode === 'kanban' ? (
