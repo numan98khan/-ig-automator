@@ -713,22 +713,6 @@ const CRM: React.FC = () => {
     setDrawerFocus(focus || null);
   };
 
-  const handleOutcome = async (stage: 'won' | 'lost') => {
-    if (!selectedContact) return;
-    const reason = window.prompt(`Why was this marked ${stage.toUpperCase()}? (optional)`);
-    const updatedForm = { ...contactForm, stage } as ContactForm;
-    setContactForm(updatedForm);
-    await saveContact(updatedForm, true);
-    if (reason && reason.trim()) {
-      try {
-        const note = await crmAPI.addNote(selectedContact._id, `${stage.toUpperCase()} reason: ${reason.trim()}`);
-        setNotes((prev) => [note, ...prev]);
-      } catch (error) {
-        console.error('Failed to add outcome note', error);
-      }
-    }
-  };
-
   useEffect(() => {
     if (!currentWorkspace) return;
     let isActive = true;
