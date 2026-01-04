@@ -1098,7 +1098,7 @@ const CRM: React.FC = () => {
         </div>
       )}
       <div className={crmAccessBlocked ? 'pointer-events-none select-none blur-sm' : ''}>
-        <div className="flex flex-col h-full min-h-0 gap-4">
+        <div className="flex flex-col h-full min-h-0 gap-3">
           <div className="sticky top-0 z-20">
           <div className="glass-panel rounded-2xl px-2.5 py-2 space-y-2 overflow-visible">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 md:flex-nowrap md:min-h-[52px]">
