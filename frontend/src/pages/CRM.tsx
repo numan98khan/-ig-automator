@@ -1055,7 +1055,7 @@ const CRM: React.FC = () => {
   );
 
   return (
-    <div className="relative h-full flex flex-col gap-4">
+    <div className="relative h-full flex flex-col">
       {crmAccessBlocked && (
         <div
           className={`absolute inset-0 z-40 flex items-center justify-center rounded-2xl p-6 ${isLightTheme ? 'bg-slate-200/70' : 'bg-black/60'} backdrop-blur-sm`}
@@ -1098,7 +1098,8 @@ const CRM: React.FC = () => {
         </div>
       )}
       <div className={crmAccessBlocked ? 'pointer-events-none select-none blur-sm' : ''}>
-        <div className="sticky top-0 z-20">
+        <div className="flex flex-col h-full min-h-0 gap-4">
+          <div className="sticky top-0 z-20">
           <div className="glass-panel rounded-2xl px-2.5 py-2 space-y-2 overflow-visible">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 md:flex-nowrap md:min-h-[52px]">
             {viewMode !== 'kanban' && (
@@ -1409,100 +1410,233 @@ const CRM: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
-
-      {viewMode === 'kanban' ? (
-        <div className="flex-1 min-h-0 relative">
-          <div className="glass-panel rounded-2xl p-4 h-full overflow-hidden relative">
-            <div className="absolute inset-y-0 left-0 w-6 pointer-events-none bg-gradient-to-r from-background/80 to-transparent" />
-            <div className="absolute inset-y-0 right-0 w-6 pointer-events-none bg-gradient-to-l from-background/80 to-transparent" />
-            <div className="flex gap-3 overflow-x-auto h-full pr-4 pb-2">
-              {(['new', 'engaged', 'qualified', 'won', 'lost'] as CrmStage[]).map((stage) => {
-                const columnContacts = activeContacts.filter((contact) => (contact.stage || 'new') === stage);
-                const isCollapsed = collapsedColumns.has(stage);
-                return (
-                  <div
-                    key={stage}
-                    className={`flex flex-col h-full flex-shrink-0 ${isCollapsed ? 'min-w-[96px]' : 'min-w-[260px] max-w-[280px]'}`}
-                    onDragOver={handleColumnDragOver}
-                    onDrop={handleColumnDrop(stage)}
-                  >
-                    <div className={`flex items-center justify-between mb-2 px-2 ${isCollapsed ? 'justify-center' : ''}`}>
-                      <button
-                        onClick={() => toggleColumnCollapse(stage)}
-                        className="text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+        </div>
+        <div className="flex-1 min-h-0">
+          {viewMode === 'kanban' ? (
+            <div className="flex-1 min-h-0 relative">
+              <div className="glass-panel rounded-2xl p-4 h-full overflow-hidden relative">
+                <div className="absolute inset-y-0 left-0 w-6 pointer-events-none bg-gradient-to-r from-background/80 to-transparent" />
+                <div className="absolute inset-y-0 right-0 w-6 pointer-events-none bg-gradient-to-l from-background/80 to-transparent" />
+                <div className="flex gap-3 overflow-x-auto h-full pr-4 pb-2">
+                  {(['new', 'engaged', 'qualified', 'won', 'lost'] as CrmStage[]).map((stage) => {
+                    const columnContacts = activeContacts.filter((contact) => (contact.stage || 'new') === stage);
+                    const isCollapsed = collapsedColumns.has(stage);
+                    return (
+                      <div
+                        key={stage}
+                        className={`flex flex-col h-full flex-shrink-0 ${isCollapsed ? 'min-w-[96px]' : 'min-w-[260px] max-w-[280px]'}`}
+                        onDragOver={handleColumnDragOver}
+                        onDrop={handleColumnDrop(stage)}
                       >
-                        {stageLabels[stage]} ({columnContacts.length})
-                      </button>
-                      {!isCollapsed && (
-                        <button
-                          onClick={() => toggleColumnCollapse(stage)}
-                          className="text-[10px] text-muted-foreground hover:text-foreground"
-                        >
-                          Collapse
-                        </button>
-                      )}
-                    </div>
-                    {!isCollapsed && (
-                      <div className="flex-1 overflow-y-auto pr-1 space-y-2">
-                        {columnContacts.length === 0 && (
-                          <div className="rounded-xl border border-border/40 bg-muted/30 p-3 text-xs text-muted-foreground">
-                            <p>No leads here.</p>
-                            {hasActiveFilters && (
-                              <button
-                                onClick={handleClearFilters}
-                                className="mt-2 text-primary hover:text-primary/80"
-                              >
-                                Clear filters
-                              </button>
+                        <div className={`flex items-center justify-between mb-2 px-2 ${isCollapsed ? 'justify-center' : ''}`}>
+                          <button
+                            onClick={() => toggleColumnCollapse(stage)}
+                            className="text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+                          >
+                            {stageLabels[stage]} ({columnContacts.length})
+                          </button>
+                          {!isCollapsed && (
+                            <button
+                              onClick={() => toggleColumnCollapse(stage)}
+                              className="text-[10px] text-muted-foreground hover:text-foreground"
+                            >
+                              Collapse
+                            </button>
+                          )}
+                        </div>
+                        {!isCollapsed && (
+                          <div className="flex-1 overflow-y-auto pr-1 space-y-2">
+                            {columnContacts.length === 0 && (
+                              <div className="rounded-xl border border-border/40 bg-muted/30 p-3 text-xs text-muted-foreground">
+                                <p>No leads here.</p>
+                                {hasActiveFilters && (
+                                  <button
+                                    onClick={handleClearFilters}
+                                    className="mt-2 text-primary hover:text-primary/80"
+                                  >
+                                    Clear filters
+                                  </button>
+                                )}
+                              </div>
                             )}
+                            {columnContacts.map((contact) => {
+                              const tags = contact.tags || [];
+                              const visibleTags = tags.slice(0, 2);
+                              const extraTags = tags.length - visibleTags.length;
+                              const isHot = tags.some((tag) => ['hot', 'vip', 'priority'].includes(tag));
+                              const hasUnread = (contact.unreadCount || 0) > 0;
+                              const hasTask = (contact.openTaskCount || 0) > 0;
+                              const hasOverdue = (contact.overdueTaskCount || 0) > 0;
+                              return (
+                                <div
+                                  key={contact._id}
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => openDrawerForContact(contact._id)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter') openDrawerForContact(contact._id);
+                                  }}
+                                  draggable
+                                  onDragStart={handleDragStart(contact._id)}
+                                  onDragEnd={handleDragEnd}
+                                  className="group relative rounded-xl bg-card/70 border border-border/40 p-3 text-left cursor-pointer hover:border-primary/40 transition"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-foreground truncate">
+                                        {contact.participantName || 'Unknown'}
+                                        <span className="ml-2 text-xs text-muted-foreground">
+                                          {contact.participantHandle}
+                                        </span>
+                                      </p>
+                                    </div>
+                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                      {formatRelativeTime(contact.lastMessageAt)}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-1 truncate">
+                                    {contact.lastMessage || 'No messages yet'}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground">
+                                    {hasUnread && <span className="h-2 w-2 rounded-full bg-primary" />}
+                                    {hasTask && <ClipboardList className="w-3 h-3" />}
+                                    {hasOverdue && <CalendarClock className="w-3 h-3 text-amber-500" />}
+                                    {isHot && <Sparkles className="w-3 h-3 text-amber-400" />}
+                                  </div>
+                                  <div className="flex items-center gap-1 mt-2">
+                                    {visibleTags.map((tag) => (
+                                      <span key={tag} className={tagPillClass}>
+                                        {tag}
+                                      </span>
+                                    ))}
+                                    {extraTags > 0 && (
+                                      <span className={tagPillClass}>+{extraTags}</span>
+                                    )}
+                                  </div>
+                                  <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition">
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          openDrawerForContact(contact._id, 'task');
+                                        }}
+                                        className={`${tagPillClass} hover:text-foreground`}
+                                      >
+                                        Task
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          openDrawerForContact(contact._id, 'note');
+                                        }}
+                                        className={`${tagPillClass} hover:text-foreground`}
+                                      >
+                                        Note
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
-                        {columnContacts.map((contact) => {
-                          const tags = contact.tags || [];
-                          const visibleTags = tags.slice(0, 2);
-                          const extraTags = tags.length - visibleTags.length;
-                          const isHot = tags.some((tag) => ['hot', 'vip', 'priority'].includes(tag));
-                          const hasUnread = (contact.unreadCount || 0) > 0;
-                          const hasTask = (contact.openTaskCount || 0) > 0;
-                          const hasOverdue = (contact.overdueTaskCount || 0) > 0;
-                          return (
-                            <div
-                              key={contact._id}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => openDrawerForContact(contact._id)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') openDrawerForContact(contact._id);
-                              }}
-                              draggable
-                              onDragStart={handleDragStart(contact._id)}
-                              onDragEnd={handleDragEnd}
-                              className="group relative rounded-xl bg-card/70 border border-border/40 p-3 text-left cursor-pointer hover:border-primary/40 transition"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-foreground truncate">
-                                    {contact.participantName || 'Unknown'}
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                      {contact.participantHandle}
-                                    </span>
-                                  </p>
-                                </div>
-                                <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                                  {formatRelativeTime(contact.lastMessageAt)}
-                                </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {kanbanDrawerOpen && (
+                <>
+                  <button
+                    type="button"
+                    className="absolute inset-0 bg-background/40 backdrop-blur-sm z-20"
+                    onClick={() => setKanbanDrawerOpen(false)}
+                  />
+                  <div className="absolute inset-y-0 right-0 w-full max-w-[440px] md:max-w-[35%] bg-background border-l border-border shadow-2xl z-30 flex flex-col">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background">
+                      <div className="text-sm font-semibold text-foreground">Contact details</div>
+                      <button
+                        type="button"
+                        onClick={() => setKanbanDrawerOpen(false)}
+                        className="h-8 w-8 rounded-full bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted/80 flex items-center justify-center"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-background">
+                      <div className="flex flex-col min-h-0">{detailsPanelContent}</div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr_360px] gap-4 flex-1 min-h-0">
+              <div className="glass-panel rounded-2xl p-3 flex flex-col min-h-0">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <p className="text-xs font-semibold text-muted-foreground">Contact list</p>
+                  </div>
+                  {loading && <span className="text-xs text-muted-foreground">Loading...</span>}
+                </div>
+                <div className="space-y-2 overflow-y-auto pr-1 flex-1 min-h-0">
+                  {activeContacts.length === 0 && !loading && (
+                    <div className="text-xs text-muted-foreground text-center py-8">
+                      No contacts match your filters.
+                    </div>
+                  )}
+                  {activeContacts.map((contact) => {
+                    const tags = contact.tags || [];
+                    const visibleTags = tags.slice(0, 2);
+                    const extraTags = tags.length - visibleTags.length;
+                    const owner = contact.ownerId ? memberById.get(contact.ownerId) : undefined;
+                    return (
+                      <button
+                        key={contact._id}
+                        onClick={() => setSelectedContactId(contact._id)}
+                        className={`w-full text-left border rounded-xl px-3 py-2 transition ${contact._id === selectedContactId
+                          ? 'border-primary/50 bg-primary/5'
+                          : 'border-border/60 hover:border-primary/30'
+                          }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
+                            {getInitials(contact)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-foreground truncate">
+                                  {contact.participantName || 'Unknown'}
+                                </p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {contact.participantHandle}
+                                </p>
                               </div>
-                              <p className="text-xs text-muted-foreground mt-1 truncate">
-                                {contact.lastMessage || 'No messages yet'}
-                              </p>
-                              <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground">
-                                {hasUnread && <span className="h-2 w-2 rounded-full bg-primary" />}
-                                {hasTask && <ClipboardList className="w-3 h-3" />}
-                                {hasOverdue && <CalendarClock className="w-3 h-3 text-amber-500" />}
-                                {isHot && <Sparkles className="w-3 h-3 text-amber-400" />}
+                              <Badge variant={stageVariant[contact.stage || 'new']}>
+                                {(contact.stage || 'new').toUpperCase()}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 truncate">
+                              {contact.lastMessage || 'No messages yet'}
+                            </p>
+                            <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground">
+                              <div className="flex items-center gap-2">
+                                <span>{formatRelativeTime(contact.lastMessageAt)}</span>
+                                {contact.unreadCount ? (
+                                  <span className="rounded-full bg-primary text-primary-foreground px-2 py-0.5 text-[10px]">
+                                    {contact.unreadCount}
+                                  </span>
+                                ) : null}
+                                {owner && (
+                                  <span className="text-[10px]">{owner.user.email || owner.user.instagramUsername}</span>
+                                )}
                               </div>
-                              <div className="flex items-center gap-1 mt-2">
+                              <div className="flex items-center gap-1">
                                 {visibleTags.map((tag) => (
                                   <span key={tag} className={tagPillClass}>
                                     {tag}
@@ -1512,437 +1646,306 @@ const CRM: React.FC = () => {
                                   <span className={tagPillClass}>+{extraTags}</span>
                                 )}
                               </div>
-                              <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition">
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      openDrawerForContact(contact._id, 'task');
-                                    }}
-                                    className={`${tagPillClass} hover:text-foreground`}
-                                  >
-                                    Task
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      openDrawerForContact(contact._id, 'note');
-                                    }}
-                                    className={`${tagPillClass} hover:text-foreground`}
-                                  >
-                                    Note
-                                  </button>
-                                </div>
-                              </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {kanbanDrawerOpen && (
-            <>
-              <button
-                type="button"
-                className="absolute inset-0 bg-background/40 backdrop-blur-sm z-20"
-                onClick={() => setKanbanDrawerOpen(false)}
-              />
-              <div className="absolute inset-y-0 right-0 w-full max-w-[440px] md:max-w-[35%] bg-background border-l border-border shadow-2xl z-30 flex flex-col">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background">
-                  <div className="text-sm font-semibold text-foreground">Contact details</div>
-                  <button
-                    type="button"
-                    onClick={() => setKanbanDrawerOpen(false)}
-                    className="h-8 w-8 rounded-full bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted/80 flex items-center justify-center"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-background">
-                  <div className="flex flex-col min-h-0">{detailsPanelContent}</div>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr_360px] gap-4 flex-1 min-h-0">
-          <div className="glass-panel rounded-2xl p-3 flex flex-col min-h-0">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-muted-foreground" />
-                <p className="text-xs font-semibold text-muted-foreground">Contact list</p>
-              </div>
-              {loading && <span className="text-xs text-muted-foreground">Loading...</span>}
-            </div>
-            <div className="space-y-2 overflow-y-auto pr-1 flex-1 min-h-0">
-              {activeContacts.length === 0 && !loading && (
-                <div className="text-xs text-muted-foreground text-center py-8">
-                  No contacts match your filters.
-                </div>
-              )}
-              {activeContacts.map((contact) => {
-                const tags = contact.tags || [];
-                const visibleTags = tags.slice(0, 2);
-                const extraTags = tags.length - visibleTags.length;
-                const owner = contact.ownerId ? memberById.get(contact.ownerId) : undefined;
-                return (
-                  <button
-                    key={contact._id}
-                    onClick={() => setSelectedContactId(contact._id)}
-                    className={`w-full text-left border rounded-xl px-3 py-2 transition ${contact._id === selectedContactId
-                      ? 'border-primary/50 bg-primary/5'
-                      : 'border-border/60 hover:border-primary/30'
-                      }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
-                        {getInitials(contact)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-foreground truncate">
-                              {contact.participantName || 'Unknown'}
-                            </p>
-                            <p className="text-xs text-muted-foreground truncate">
-                              {contact.participantHandle}
-                            </p>
-                          </div>
-                          <Badge variant={stageVariant[contact.stage || 'new']}>
-                            {(contact.stage || 'new').toUpperCase()}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1 truncate">
-                          {contact.lastMessage || 'No messages yet'}
-                        </p>
-                        <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground">
-                          <div className="flex items-center gap-2">
-                            <span>{formatRelativeTime(contact.lastMessageAt)}</span>
-                            {contact.unreadCount ? (
-                              <span className="rounded-full bg-primary text-primary-foreground px-2 py-0.5 text-[10px]">
-                                {contact.unreadCount}
-                              </span>
-                            ) : null}
-                            {owner && (
-                              <span className="text-[10px]">{owner.user.email || owner.user.instagramUsername}</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {visibleTags.map((tag) => (
-                              <span key={tag} className={tagPillClass}>
-                                {tag}
-                              </span>
-                            ))}
-                            {extraTags > 0 && (
-                              <span className={tagPillClass}>+{extraTags}</span>
-                            )}
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="glass-panel rounded-2xl p-4 flex flex-col min-h-0">
-            {!selectedContact && !detailLoading && (
-              <div className="text-sm text-muted-foreground">Select a contact to view activity.</div>
-            )}
-            {detailLoading && (
-              <div className="text-sm text-muted-foreground">Loading conversation...</div>
-            )}
-            {selectedContact && !detailLoading && (
-              <>
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
-                      {getInitials(selectedContact)}
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-foreground">{selectedContact.participantName || 'Contact'}</p>
-                      <p className="text-xs text-muted-foreground">{selectedContact.participantHandle}</p>
-                    </div>
-                    <Badge variant={stageVariant[selectedContact.stage || 'new']}>
-                      {(selectedContact.stage || 'new').toUpperCase()}
-                    </Badge>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    leftIcon={<MessageSquare className="w-4 h-4" />}
-                    type="button"
-                    onClick={() => navigate(`/app/inbox?conversationId=${selectedContact._id}`)}
-                  >
-                    Open in Inbox
-                  </Button>
+                      </button>
+                    );
+                  })}
                 </div>
+              </div>
 
-                <div className="flex flex-wrap items-center gap-2 mb-3">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    leftIcon={<CalendarClock className="w-4 h-4" />}
-                    onClick={handleQuickFollowup}
-                    isLoading={quickTaskSaving}
-                  >
-                    Create follow-up
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    leftIcon={<Plus className="w-4 h-4" />}
-                    onClick={handleOpenTaskForm}
-                  >
-                    Create task
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    leftIcon={<StickyNote className="w-4 h-4" />}
-                    onClick={handleOpenNoteForm}
-                  >
-                    Add note
-                  </Button>
-                  <Button size="sm" variant="outline" disabled>
-                    Quote / Order
-                  </Button>
-                </div>
-
-                {activityView !== 'activity' && (
-                  <div className="mb-3">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      leftIcon={<ChevronDown className="w-4 h-4 rotate-90" />}
-                      onClick={() => setActivityView('activity')}
-                    >
-                      Back to activity
-                    </Button>
-                  </div>
+              <div className="glass-panel rounded-2xl p-4 flex flex-col min-h-0">
+                {!selectedContact && !detailLoading && (
+                  <div className="text-sm text-muted-foreground">Select a contact to view activity.</div>
                 )}
-
-                {activityView === 'activity' && (
+                {detailLoading && (
+                  <div className="text-sm text-muted-foreground">Loading conversation...</div>
+                )}
+                {selectedContact && !detailLoading && (
                   <>
-                    <div className="border border-border/60 rounded-xl p-3 mb-3">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Sparkles className="w-4 h-4" />
-                        Quick replies
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
+                          {getInitials(selectedContact)}
+                        </div>
+                        <div>
+                          <p className="text-lg font-semibold text-foreground">{selectedContact.participantName || 'Contact'}</p>
+                          <p className="text-xs text-muted-foreground">{selectedContact.participantHandle}</p>
+                        </div>
+                        <Badge variant={stageVariant[selectedContact.stage || 'new']}>
+                          {(selectedContact.stage || 'new').toUpperCase()}
+                        </Badge>
                       </div>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {quickReplies.map((reply) => (
-                          <button
-                            key={reply.label}
-                            onClick={() => handleQuickReplyCopy(reply.text)}
-                            className="px-3 py-1 rounded-full border border-border/70 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40"
-                          >
-                            {reply.label}
-                          </button>
-                        ))}
-                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        leftIcon={<MessageSquare className="w-4 h-4" />}
+                        type="button"
+                        onClick={() => navigate(`/app/inbox?conversationId=${selectedContact._id}`)}
+                      >
+                        Open in Inbox
+                      </Button>
                     </div>
 
-                    <div className="flex-1 min-h-0">
-                      {hasMoreMessages && (
-                        <p className="text-xs text-muted-foreground mb-2">
-                          Showing the latest {visibleMessages.length} messages.
-                        </p>
-                      )}
-                      <div className="max-h-[360px] overflow-y-auto space-y-3 pr-1">
-                        {messages.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">No messages recorded yet.</p>
-                        ) : (
-                          visibleMessages.map((message) => (
-                            <div
-                              key={message._id}
-                              className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${message.from === 'customer'
-                                ? 'bg-muted text-foreground'
-                                : message.from === 'ai'
-                                  ? 'bg-primary/10 text-foreground ml-auto'
-                                  : 'bg-secondary text-secondary-foreground ml-auto'
-                                }`}
-                            >
-                              <p>{message.text || 'Attachment'}</p>
-                              <p className="text-[10px] text-muted-foreground mt-1 text-right">
-                                {formatDateTime(message.createdAt)}
-                              </p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {activityView === 'task' && (
-                  <div className="space-y-4 flex-1 min-h-0">
-                    <div className="rounded-xl border border-border/60 p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <ClipboardList className="w-4 h-4 text-primary" />
-                        <h3 className="text-sm font-semibold text-foreground">Create task</h3>
-                      </div>
-                      <Input
-                        label="Title"
-                        value={taskDraft.title}
-                        onChange={(e) => setTaskDraft((prev) => ({ ...prev, title: e.target.value }))}
-                      />
-                      <Input
-                        label="Description"
-                        value={taskDraft.description}
-                        onChange={(e) => setTaskDraft((prev) => ({ ...prev, description: e.target.value }))}
-                      />
-                      <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-1">Due date/time</label>
-                        <input
-                          type="datetime-local"
-                          className="input-field"
-                          value={taskDraft.dueAt}
-                          onChange={(e) => setTaskDraft((prev) => ({ ...prev, dueAt: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-1">Assignee</label>
-                        <select
-                          className="input-field"
-                          value={taskDraft.assignedTo}
-                          onChange={(e) => setTaskDraft((prev) => ({ ...prev, assignedTo: e.target.value }))}
-                        >
-                          <option value="">Unassigned</option>
-                          {members.map((member) => (
-                            <option key={member.user.id || member.user._id} value={member.user.id || member.user._id}>
-                              {member.user.email || member.user.instagramUsername || 'Teammate'}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-muted-foreground mb-1">Task type</label>
-                        <select
-                          className="input-field"
-                          value={taskDraft.taskType}
-                          onChange={(e) => setTaskDraft((prev) => ({
-                            ...prev,
-                            taskType: e.target.value as 'follow_up' | 'general',
-                          }))}
-                        >
-                          <option value="follow_up">Follow-up</option>
-                          <option value="general">General</option>
-                        </select>
-                      </div>
-                      <Button onClick={handleAddTask} isLoading={savingTask} size="sm">
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        leftIcon={<CalendarClock className="w-4 h-4" />}
+                        onClick={handleQuickFollowup}
+                        isLoading={quickTaskSaving}
+                      >
+                        Create follow-up
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        leftIcon={<Plus className="w-4 h-4" />}
+                        onClick={handleOpenTaskForm}
+                      >
                         Create task
                       </Button>
-                    </div>
-
-                    <div className="rounded-xl border border-border/60 p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <CalendarClock className="w-4 h-4 text-primary" />
-                          <h3 className="text-sm font-semibold text-foreground">Open tasks</h3>
-                        </div>
-                        <Badge variant="secondary">{openTasks.length}</Badge>
-                      </div>
-                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                        {tasks.length === 0 && (
-                          <p className="text-xs text-muted-foreground">No tasks yet.</p>
-                        )}
-                        {tasks.map((task) => (
-                          <div
-                            key={task._id}
-                            className="border border-border/60 rounded-xl p-3 flex items-start justify-between gap-3"
-                          >
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-semibold text-foreground text-sm">{task.title}</p>
-                                <Badge variant={task.status === 'completed' ? 'success' : 'secondary'}>
-                                  {task.status}
-                                </Badge>
-                              </div>
-                              {task.description && (
-                                <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
-                              )}
-                              <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
-                                <span className="flex items-center gap-1">
-                                  <CalendarClock className="w-3 h-3" />
-                                  Due {formatDateTime(task.dueAt)}
-                                </span>
-                                <span>{formatSla(task.dueAt)}</span>
-                              </div>
-                            </div>
-                            {task.status === 'open' && (
-                              <button
-                                onClick={() => handleTaskStatus(task._id, 'completed')}
-                                className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
-                              >
-                                <CheckCircle2 className="w-4 h-4" />
-                                Complete
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activityView === 'note' && (
-                  <div className="space-y-4 flex-1 min-h-0">
-                    <div className="rounded-xl border border-border/60 p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <StickyNote className="w-4 h-4 text-primary" />
-                        <h3 className="text-sm font-semibold text-foreground">Add note</h3>
-                      </div>
-                      <textarea
-                        className="input-field min-h-[120px]"
-                        placeholder="Capture context, next steps, or personal preferences."
-                        value={noteDraft}
-                        onChange={(e) => setNoteDraft(e.target.value)}
-                      />
-                      <Button onClick={handleAddNote} isLoading={savingNote} size="sm">
-                        Save note
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        leftIcon={<StickyNote className="w-4 h-4" />}
+                        onClick={handleOpenNoteForm}
+                      >
+                        Add note
+                      </Button>
+                      <Button size="sm" variant="outline" disabled>
+                        Quote / Order
                       </Button>
                     </div>
 
-                    <div className="rounded-xl border border-border/60 p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <StickyNote className="w-4 h-4 text-primary" />
-                        <h3 className="text-sm font-semibold text-foreground">Recent notes</h3>
+                    {activityView !== 'activity' && (
+                      <div className="mb-3">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          leftIcon={<ChevronDown className="w-4 h-4 rotate-90" />}
+                          onClick={() => setActivityView('activity')}
+                        >
+                          Back to activity
+                        </Button>
                       </div>
-                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                        {notes.length === 0 && (
-                          <p className="text-xs text-muted-foreground">No notes yet.</p>
-                        )}
-                        {notes.map((note) => (
-                          <div key={note._id} className="border border-border/60 rounded-xl p-3">
-                            <p className="text-sm text-foreground">{note.body}</p>
-                            <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
-                              <span>{note.author?.name || 'Teammate'}</span>
-                              <span>{formatDateTime(note.createdAt)}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+                    )}
 
-          <div className="glass-panel rounded-2xl p-4 flex flex-col min-h-0">
-            {detailsPanelContent}
-          </div>
+                    {activityView === 'activity' && (
+                      <>
+                        <div className="border border-border/60 rounded-xl p-3 mb-3">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Sparkles className="w-4 h-4" />
+                            Quick replies
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {quickReplies.map((reply) => (
+                              <button
+                                key={reply.label}
+                                onClick={() => handleQuickReplyCopy(reply.text)}
+                                className="px-3 py-1 rounded-full border border-border/70 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40"
+                              >
+                                {reply.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex-1 min-h-0">
+                          {hasMoreMessages && (
+                            <p className="text-xs text-muted-foreground mb-2">
+                              Showing the latest {visibleMessages.length} messages.
+                            </p>
+                          )}
+                          <div className="max-h-[360px] overflow-y-auto space-y-3 pr-1">
+                            {messages.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No messages recorded yet.</p>
+                            ) : (
+                              visibleMessages.map((message) => (
+                                <div
+                                  key={message._id}
+                                  className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${message.from === 'customer'
+                                    ? 'bg-muted text-foreground'
+                                    : message.from === 'ai'
+                                      ? 'bg-primary/10 text-foreground ml-auto'
+                                      : 'bg-secondary text-secondary-foreground ml-auto'
+                                    }`}
+                                >
+                                  <p>{message.text || 'Attachment'}</p>
+                                  <p className="text-[10px] text-muted-foreground mt-1 text-right">
+                                    {formatDateTime(message.createdAt)}
+                                  </p>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {activityView === 'task' && (
+                      <div className="space-y-4 flex-1 min-h-0">
+                        <div className="rounded-xl border border-border/60 p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <ClipboardList className="w-4 h-4 text-primary" />
+                            <h3 className="text-sm font-semibold text-foreground">Create task</h3>
+                          </div>
+                          <Input
+                            label="Title"
+                            value={taskDraft.title}
+                            onChange={(e) => setTaskDraft((prev) => ({ ...prev, title: e.target.value }))}
+                          />
+                          <Input
+                            label="Description"
+                            value={taskDraft.description}
+                            onChange={(e) => setTaskDraft((prev) => ({ ...prev, description: e.target.value }))}
+                          />
+                          <div>
+                            <label className="block text-xs font-medium text-muted-foreground mb-1">Due date/time</label>
+                            <input
+                              type="datetime-local"
+                              className="input-field"
+                              value={taskDraft.dueAt}
+                              onChange={(e) => setTaskDraft((prev) => ({ ...prev, dueAt: e.target.value }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-muted-foreground mb-1">Assignee</label>
+                            <select
+                              className="input-field"
+                              value={taskDraft.assignedTo}
+                              onChange={(e) => setTaskDraft((prev) => ({ ...prev, assignedTo: e.target.value }))}
+                            >
+                              <option value="">Unassigned</option>
+                              {members.map((member) => (
+                                <option key={member.user.id || member.user._id} value={member.user.id || member.user._id}>
+                                  {member.user.email || member.user.instagramUsername || 'Teammate'}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-muted-foreground mb-1">Task type</label>
+                            <select
+                              className="input-field"
+                              value={taskDraft.taskType}
+                              onChange={(e) => setTaskDraft((prev) => ({
+                                ...prev,
+                                taskType: e.target.value as 'follow_up' | 'general',
+                              }))}
+                            >
+                              <option value="follow_up">Follow-up</option>
+                              <option value="general">General</option>
+                            </select>
+                          </div>
+                          <Button onClick={handleAddTask} isLoading={savingTask} size="sm">
+                            Create task
+                          </Button>
+                        </div>
+
+                        <div className="rounded-xl border border-border/60 p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CalendarClock className="w-4 h-4 text-primary" />
+                              <h3 className="text-sm font-semibold text-foreground">Open tasks</h3>
+                            </div>
+                            <Badge variant="secondary">{openTasks.length}</Badge>
+                          </div>
+                          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                            {tasks.length === 0 && (
+                              <p className="text-xs text-muted-foreground">No tasks yet.</p>
+                            )}
+                            {tasks.map((task) => (
+                              <div
+                                key={task._id}
+                                className="border border-border/60 rounded-xl p-3 flex items-start justify-between gap-3"
+                              >
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-semibold text-foreground text-sm">{task.title}</p>
+                                    <Badge variant={task.status === 'completed' ? 'success' : 'secondary'}>
+                                      {task.status}
+                                    </Badge>
+                                  </div>
+                                  {task.description && (
+                                    <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
+                                  )}
+                                  <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
+                                    <span className="flex items-center gap-1">
+                                      <CalendarClock className="w-3 h-3" />
+                                      Due {formatDateTime(task.dueAt)}
+                                    </span>
+                                    <span>{formatSla(task.dueAt)}</span>
+                                  </div>
+                                </div>
+                                {task.status === 'open' && (
+                                  <button
+                                    onClick={() => handleTaskStatus(task._id, 'completed')}
+                                    className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    Complete
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {activityView === 'note' && (
+                      <div className="space-y-4 flex-1 min-h-0">
+                        <div className="rounded-xl border border-border/60 p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <StickyNote className="w-4 h-4 text-primary" />
+                            <h3 className="text-sm font-semibold text-foreground">Add note</h3>
+                          </div>
+                          <textarea
+                            className="input-field min-h-[120px]"
+                            placeholder="Capture context, next steps, or personal preferences."
+                            value={noteDraft}
+                            onChange={(e) => setNoteDraft(e.target.value)}
+                          />
+                          <Button onClick={handleAddNote} isLoading={savingNote} size="sm">
+                            Save note
+                          </Button>
+                        </div>
+
+                        <div className="rounded-xl border border-border/60 p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <StickyNote className="w-4 h-4 text-primary" />
+                            <h3 className="text-sm font-semibold text-foreground">Recent notes</h3>
+                          </div>
+                          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                            {notes.length === 0 && (
+                              <p className="text-xs text-muted-foreground">No notes yet.</p>
+                            )}
+                            {notes.map((note) => (
+                              <div key={note._id} className="border border-border/60 rounded-xl p-3">
+                                <p className="text-sm text-foreground">{note.body}</p>
+                                <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
+                                  <span>{note.author?.name || 'Teammate'}</span>
+                                  <span>{formatDateTime(note.createdAt)}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="glass-panel rounded-2xl p-4 flex flex-col min-h-0">
+                {detailsPanelContent}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {saveToast && (
         <div className={`fixed bottom-6 right-6 z-50 rounded-full px-4 py-2 text-xs font-semibold shadow-lg ${saveToast.status === 'success'
@@ -1970,7 +1973,6 @@ const CRM: React.FC = () => {
           )}
         </div>
       )}
-      </div>
     </div>
   );
 };
