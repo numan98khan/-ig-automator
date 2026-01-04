@@ -86,6 +86,7 @@ export interface Conversation {
   contactEmail?: string;
   contactPhone?: string;
   tags?: string[];
+  customFields?: Record<string, any>;
   stage?: 'new' | 'engaged' | 'qualified' | 'won' | 'lost';
   ownerId?: string;
   workspaceId: string;

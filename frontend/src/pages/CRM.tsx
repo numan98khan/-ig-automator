@@ -102,6 +102,7 @@ const activityOptions = [
 ];
 
 const tagPillClass = 'inline-flex items-center rounded-full bg-muted/40 text-muted-foreground text-[11px] font-semibold px-2.5 py-1';
+const customFieldPillClass = 'inline-flex items-center rounded-full bg-muted/30 text-foreground text-[11px] font-semibold px-2.5 py-1';
 
 const DEFAULT_QUICK_FILTERS = {
   unread: false,
@@ -180,6 +181,17 @@ const formatSla = (value?: string) => {
   if (hours < 24) return diffMs < 0 ? `Overdue ${hours}h` : `Due in ${hours}h`;
   const days = Math.floor(hours / 24);
   return diffMs < 0 ? `Overdue ${days}d` : `Due in ${days}d`;
+};
+
+const formatCustomFieldValue = (value: unknown) => {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 };
 
 const getInitials = (contact: CrmContact) => {
@@ -349,6 +361,15 @@ const CRM: React.FC = () => {
 
     return result;
   }, [contacts, quickFilters, sortBy]);
+
+  const customFieldEntries = useMemo(() => {
+    const customFields = selectedContact?.customFields;
+    if (!customFields || typeof customFields !== 'object' || Array.isArray(customFields)) {
+      return [];
+    }
+    return Object.entries(customFields)
+      .filter(([key, value]) => key && String(key).trim() && value !== undefined && value !== null);
+  }, [selectedContact]);
 
   const crmAccessBlocked = crmLocked && !crmAccessLoading;
   const isLightTheme = useMemo(() => {
@@ -1280,7 +1301,15 @@ const CRM: React.FC = () => {
             <div>
               <p className="text-xs font-semibold text-muted-foreground">Custom fields</p>
               <div className="flex flex-wrap gap-2 mt-2">
-                <span className={tagPillClass}>No custom fields</span>
+                {customFieldEntries.length > 0 ? (
+                  customFieldEntries.map(([key, value]) => (
+                    <span key={key} className={customFieldPillClass}>
+                      {key}: {formatCustomFieldValue(value)}
+                    </span>
+                  ))
+                ) : (
+                  <span className={tagPillClass}>No custom fields</span>
+                )}
               </div>
             </div>
           </div>
