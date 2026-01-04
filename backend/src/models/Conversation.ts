@@ -7,6 +7,7 @@ export interface IConversation extends Document {
   contactEmail?: string;
   contactPhone?: string;
   tags?: string[];
+  customFields?: Record<string, any>;
   stage?: 'new' | 'engaged' | 'qualified' | 'won' | 'lost';
   ownerId?: mongoose.Types.ObjectId;
   workspaceId: mongoose.Types.ObjectId;
@@ -63,6 +64,10 @@ const conversationSchema = new Schema<IConversation>({
   tags: {
     type: [String],
     default: [],
+  },
+  customFields: {
+    type: Schema.Types.Mixed,
+    default: {},
   },
   stage: {
     type: String,

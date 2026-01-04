@@ -13,6 +13,9 @@ type FlowRuntimeStep = {
   message?: string;
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
+  actionTags?: string[];
+  actionCustomFieldKey?: string;
+  actionCustomFieldValue?: string;
   aiSettings?: AutomationAiSettings;
   agentSystemPrompt?: string;
   agentSteps?: string[];
@@ -76,6 +79,11 @@ const normalizeText = (node: Record<string, any>) =>
 const normalizeButtons = (node: Record<string, any>) => node.buttons ?? node.data?.buttons;
 
 const normalizeTags = (node: Record<string, any>) => node.tags ?? node.data?.tags;
+const normalizeActionTags = (node: Record<string, any>) => node.actionTags ?? node.data?.actionTags;
+const normalizeActionCustomFieldKey = (node: Record<string, any>) =>
+  node.actionCustomFieldKey ?? node.data?.actionCustomFieldKey;
+const normalizeActionCustomFieldValue = (node: Record<string, any>) =>
+  node.actionCustomFieldValue ?? node.data?.actionCustomFieldValue;
 
 const normalizeAiSettings = (node: Record<string, any>) => node.aiSettings ?? node.data?.aiSettings;
 const normalizeIntentSettings = (node: Record<string, any>) =>
@@ -217,6 +225,9 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const message = node.message ?? node.data?.message;
     const buttons = normalizeButtons(node);
     const tags = normalizeTags(node);
+    const actionTags = normalizeActionTags(node);
+    const actionCustomFieldKey = normalizeActionCustomFieldKey(node);
+    const actionCustomFieldValue = normalizeActionCustomFieldValue(node);
     const aiSettings = normalizeAiSettings(node);
     const agentSystemPrompt = normalizeAgentSystemPrompt(node);
     const agentSteps = normalizeAgentSteps(node);
@@ -254,6 +265,15 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       message,
       buttons,
       tags,
+      actionTags: Array.isArray(actionTags)
+        ? actionTags.map((tag) => (typeof tag === 'string' ? tag.trim() : '')).filter(Boolean)
+        : undefined,
+      actionCustomFieldKey: typeof actionCustomFieldKey === 'string'
+        ? actionCustomFieldKey.trim()
+        : undefined,
+      actionCustomFieldValue: typeof actionCustomFieldValue === 'string'
+        ? actionCustomFieldValue.trim()
+        : actionCustomFieldValue,
       aiSettings,
       agentSystemPrompt: typeof agentSystemPrompt === 'string' ? agentSystemPrompt : undefined,
       agentSteps: Array.isArray(agentSteps)

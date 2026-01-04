@@ -76,6 +76,7 @@ export type FlowNodeType =
   | 'trigger'
   | 'detect_intent'
   | 'send_message'
+  | 'action'
   | 'ai_reply'
   | 'ai_agent'
   | 'handoff'
@@ -157,6 +158,9 @@ export type FlowNode = Node<FlowNodeData> & {
   message?: string
   buttons?: FlowButton[]
   tags?: string[]
+  actionTags?: string[]
+  actionCustomFieldKey?: string
+  actionCustomFieldValue?: string
   aiSettings?: FlowAiSettings
   agentSystemPrompt?: string
   agentSteps?: string[]

@@ -1585,6 +1585,7 @@ export default function AutomationTemplates() {
             )}
             {selectedNode.type !== 'trigger'
               && selectedNode.type !== 'detect_intent'
+              && selectedNode.type !== 'action'
               && selectedNode.type !== 'router' && (
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Wait for reply</label>
@@ -1758,6 +1759,56 @@ export default function AutomationTemplates() {
                       }))
                     }
                   />
+                </div>
+              </>
+            )}
+
+            {selectedNode.type === 'action' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Contact tags (comma-separated)</label>
+                  <input
+                    className="input w-full"
+                    value={formatTags(selectedNode.actionTags)}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        actionTags: parseTags(event.target.value),
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Adds or updates tags for the customer who triggered the flow.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Custom field key</label>
+                  <input
+                    className="input w-full"
+                    value={selectedNode.actionCustomFieldKey || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        actionCustomFieldKey: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Custom field value</label>
+                  <input
+                    className="input w-full"
+                    value={selectedNode.actionCustomFieldValue || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        actionCustomFieldValue: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Leave blank to skip updating the custom field.
+                  </div>
                 </div>
               </>
             )}

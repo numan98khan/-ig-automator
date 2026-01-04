@@ -63,6 +63,9 @@ type FlowRuntimeStep = {
   message?: string;
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
+  actionTags?: string[];
+  actionCustomFieldKey?: string;
+  actionCustomFieldValue?: string;
   aiSettings?: AutomationAiSettings;
   agentSystemPrompt?: string;
   agentSteps?: string[];
@@ -482,10 +485,13 @@ const buildExecutionPlan = (graph: FlowRuntimeGraph): ExecutionPlan | null => {
 
 const normalizeStepType = (
   step?: FlowRuntimeStep,
-): 'send_message' | 'ai_reply' | 'ai_agent' | 'handoff' | 'trigger' | 'detect_intent' | 'router' | 'unknown' => {
+): 'send_message' | 'ai_reply' | 'ai_agent' | 'handoff' | 'trigger' | 'detect_intent' | 'router' | 'action' | 'unknown' => {
   const raw = (step?.type || '').toLowerCase();
   if (raw === 'send_message' || raw === 'message' || raw === 'send' || raw === 'reply') {
     return 'send_message';
+  }
+  if (raw === 'action') {
+    return 'action';
   }
   if (raw === 'ai_reply' || raw === 'ai' || raw === 'ai_message') {
     return 'ai_reply';
@@ -582,6 +588,21 @@ const applyConversationTags = (conversation: any, tags?: string[]) => {
     existing.push(tag);
   });
   conversation.tags = existing;
+};
+
+const applyConversationCustomField = (
+  conversation: any,
+  key?: string,
+  value?: string,
+) => {
+  if (typeof key !== 'string') return;
+  const trimmedKey = key.trim();
+  if (!trimmedKey) return;
+  const normalizedValue = typeof value === 'string' ? value.trim() : value;
+  if (normalizedValue === '' || normalizedValue === undefined) return;
+  const current = conversation.customFields;
+  const base = current && typeof current === 'object' && !Array.isArray(current) ? current : {};
+  conversation.customFields = { ...base, [trimmedKey]: normalizedValue };
 };
 
 async function ensureAutomationSession(params: {
@@ -1493,6 +1514,20 @@ async function executeFlowPlan(params: {
           });
         }
         sentCount += 1;
+      }
+    } else if (stepType === 'action') {
+      await markTriggeredOnce();
+      const actionTags = Array.isArray(step.actionTags) ? step.actionTags : [];
+      if (actionTags.length > 0) {
+        applyConversationTags(conversation, actionTags);
+      }
+      applyConversationCustomField(
+        conversation,
+        step.actionCustomFieldKey,
+        step.actionCustomFieldValue,
+      );
+      if (actionTags.length > 0 || step.actionCustomFieldKey?.trim()) {
+        await conversation.save();
       }
     } else if (stepType === 'detect_intent') {
       const intentStart = nowMs();

@@ -1,6 +1,6 @@
 import type { NodeProps, NodeTypes } from '@xyflow/react'
 import { Handle, Position } from '@xyflow/react'
-import { Bot, Flag, GitBranch, MessageSquare, Search, Sparkles, Zap } from 'lucide-react'
+import { Bot, Flag, GitBranch, MessageSquare, Search, Sparkles, Tags, Zap } from 'lucide-react'
 import type { FlowNodeStyle } from '../constants'
 import { FLOW_NODE_LABELS, FLOW_NODE_STYLES } from '../constants'
 import type { FlowNode } from '../types'
@@ -128,6 +128,18 @@ const RouterNode = ({ data, selected }: NodeProps<FlowNode>) => (
   />
 )
 
+const ActionNode = ({ data, selected }: NodeProps<FlowNode>) => (
+  <NodeShell
+    title={data.label || FLOW_NODE_LABELS.action}
+    subtitle={data.subtitle}
+    icon={Tags}
+    style={FLOW_NODE_STYLES.action}
+    selected={selected}
+    isStart={data.isStart}
+    branchTag={data.branchTag}
+  />
+)
+
 const HandoffNode = ({ data, selected }: NodeProps<FlowNode>) => (
   <NodeShell
     title={data.label || FLOW_NODE_LABELS.handoff}
@@ -145,6 +157,7 @@ export const buildFlowNodeTypes = (): NodeTypes => ({
   detect_intent: DetectIntentNode,
   send_message: MessageNode,
   router: RouterNode,
+  action: ActionNode,
   ai_reply: AiReplyNode,
   ai_agent: AiAgentNode,
   handoff: HandoffNode,

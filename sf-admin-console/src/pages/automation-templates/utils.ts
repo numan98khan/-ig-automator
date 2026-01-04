@@ -190,6 +190,15 @@ export const buildNodeSubtitle = (node: FlowNode) => {
       ? 'Routes to all matching branches'
       : 'Routes to the first matching branch'
   }
+  if (node.type === 'action') {
+    const details = []
+    const tagCount = Array.isArray(node.actionTags) ? node.actionTags.filter(Boolean).length : 0
+    if (tagCount > 0) details.push(`Tags: ${tagCount}`)
+    if (node.actionCustomFieldKey?.trim()) {
+      details.push(`Field: ${node.actionCustomFieldKey.trim()}`)
+    }
+    return details.length > 0 ? details.join(' · ') : 'No updates configured'
+  }
   return ''
 }
 
@@ -230,6 +239,9 @@ export const normalizeFlowNode = (node: any, index: number): FlowNode => {
     message: node?.message,
     buttons: node?.buttons,
     tags: node?.tags,
+    actionTags: node?.actionTags ?? node?.data?.actionTags,
+    actionCustomFieldKey: node?.actionCustomFieldKey ?? node?.data?.actionCustomFieldKey,
+    actionCustomFieldValue: node?.actionCustomFieldValue ?? node?.data?.actionCustomFieldValue,
     aiSettings: node?.aiSettings,
     agentSystemPrompt: node?.agentSystemPrompt ?? node?.data?.agentSystemPrompt,
     agentSteps: node?.agentSteps ?? node?.data?.agentSteps,
@@ -292,6 +304,9 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     message: node.message,
     buttons: node.buttons,
     tags: node.tags,
+    actionTags: node.actionTags,
+    actionCustomFieldKey: node.actionCustomFieldKey,
+    actionCustomFieldValue: node.actionCustomFieldValue,
     aiSettings: node.aiSettings,
     agentSystemPrompt: node.agentSystemPrompt,
     agentSteps: node.agentSteps,

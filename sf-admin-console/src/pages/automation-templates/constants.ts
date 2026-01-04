@@ -5,6 +5,7 @@ import {
   MessageSquare,
   Search,
   Sparkles,
+  Tags,
   Zap,
 } from 'lucide-react'
 import type { FlowAiSettings, FlowDisplay, FlowField, FlowNodeType, TriggerType } from './types'
@@ -143,6 +144,12 @@ export const FLOW_NODE_LIBRARY: Array<{
     icon: GitBranch,
   },
   {
+    type: 'action',
+    label: 'Action',
+    description: 'Update contact tags or custom fields.',
+    icon: Tags,
+  },
+  {
     type: 'ai_reply',
     label: 'AI Reply',
     description: 'Generate a response with AI.',
@@ -166,6 +173,7 @@ export const FLOW_NODE_LABELS: Record<FlowNodeType, string> = {
   trigger: 'Trigger',
   detect_intent: 'Detect intent',
   send_message: 'Message',
+  action: 'Action',
   router: 'Router',
   ai_reply: 'AI Reply',
   ai_agent: 'AI Agent',
@@ -205,6 +213,14 @@ export const FLOW_NODE_STYLES: Record<FlowNodeType, FlowNodeStyle> = {
     handle: '!bg-sky-400/80 !border-sky-500/70',
     ring: 'ring-sky-200/70 border-sky-200/70',
     miniMap: '#4B9AD5',
+  },
+  action: {
+    badge: 'bg-amber-500/10',
+    border: 'border-l-amber-400/80',
+    dot: 'bg-amber-400',
+    handle: '!bg-amber-400/80 !border-amber-500/70',
+    ring: 'ring-amber-200/70 border-amber-200/70',
+    miniMap: '#E0A04E',
   },
   router: {
     badge: 'bg-teal-500/10',

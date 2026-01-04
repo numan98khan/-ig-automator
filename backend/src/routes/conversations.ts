@@ -124,6 +124,13 @@ const buildNodeSummary = (node: any, options: {
     add('Topic', truncateText(node.handoff?.topic, 120));
     add('Summary', truncateText(node.handoff?.summary, 160));
     add('Message', truncateText(node.handoff?.message, 160));
+  } else if (nodeType === 'action') {
+    const actionTags = Array.isArray(node.actionTags) ? node.actionTags : [];
+    if (actionTags.length > 0) {
+      add('Tags', formatList(actionTags, 4) || `${actionTags.length}`);
+    }
+    add('Field', truncateText(node.actionCustomFieldKey, 80));
+    add('Value', truncateText(node.actionCustomFieldValue, 120));
   } else if (nodeType === 'router') {
     const routing = node.routing || {};
     add('Match mode', routing.matchMode);
