@@ -536,7 +536,7 @@ const Inbox: React.FC = () => {
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="min-w-0">
                   <h2 className="text-base font-semibold leading-tight text-foreground">Inbox</h2>
-                  <p className="text-xs text-muted-foreground truncate">@{instagramAccounts?.[0]?.username}</p>
+                  <p className="text-xs text-muted-foreground truncate">{instagramAccounts?.[0]?.username}</p>
                 </div>
                 {hasUnsynced && (
                   <Button
@@ -673,7 +673,7 @@ const Inbox: React.FC = () => {
                         {selectedConversation.participantName}
                       </h2>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
-                        <span>@{selectedConversation.participantHandle}</span>
+                        <span>{selectedConversation.participantHandle}</span>
                         {selectedConversation.humanRequired && (
                           <span className="px-2 py-0.5 rounded-full text-[11px] bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100">
                             Escalated
