@@ -11,7 +11,12 @@ export interface TierLimits {
   flowBuilder?: boolean;
 }
 
-export type UsageResourceType = keyof TierLimits;
+export type UsageResourceType =
+  | 'aiMessages'
+  | 'instagramAccounts'
+  | 'teamMembers'
+  | 'automations'
+  | 'knowledgeItems';
 
 export type WorkspaceMemberRole = 'owner' | 'admin' | 'agent' | 'viewer';
 

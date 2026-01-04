@@ -1,4 +1,4 @@
-import { TierFeature, TierLimits } from '../types/core';
+import { TierFeature, TierLimits, UsageResourceType } from '../types/core';
 import { getActiveSubscriptionForBillingAccount } from './billingService';
 import { getUserById, updateUser } from '../repositories/core/userRepository';
 import {
@@ -120,7 +120,7 @@ export const getWorkspaceOwnerTier = async (
 
 export const assertUsageLimit = async (
   userId: string,
-  resource: keyof TierLimits,
+  resource: UsageResourceType,
   increment = 1,
   workspaceId?: string,
   options?: { increment?: boolean }
@@ -158,7 +158,7 @@ export const assertUsageLimit = async (
 
 export const assertWorkspaceLimit = async (
   workspaceId: string,
-  resource: keyof TierLimits,
+  resource: UsageResourceType,
   projectedCount: number
 ) => {
   const { limits, tier } = await getWorkspaceOwnerTier(workspaceId);
