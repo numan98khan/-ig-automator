@@ -196,6 +196,8 @@ export default function AutomationTemplates() {
     () => flowNodes.find((node) => node.id === selectedNodeId) || null,
     [flowNodes, selectedNodeId],
   )
+  const aiModelValue = selectedNode?.aiSettings?.model || ''
+  const hasCustomAiModel = Boolean(aiModelValue) && !AI_MODEL_SUGGESTIONS.includes(aiModelValue)
   const selectedTriggerConfig: FlowTriggerConfig = selectedNode?.triggerConfig || {}
   const flowStats = useMemo(
     () => ({ nodes: flowNodes.length, edges: flowEdges.length }),
@@ -1856,10 +1858,9 @@ export default function AutomationTemplates() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Model</label>
-                  <input
+                  <select
                     className="input w-full"
-                    list="ai-model-options"
-                    value={selectedNode.aiSettings?.model || ''}
+                    value={aiModelValue}
                     onChange={(event) =>
                       updateNode(selectedNode.id, (node) => ({
                         ...node,
@@ -1869,7 +1870,17 @@ export default function AutomationTemplates() {
                         },
                       }))
                     }
-                  />
+                  >
+                    <option value="">Auto (workspace default)</option>
+                    {AI_MODEL_SUGGESTIONS.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                    {hasCustomAiModel && (
+                      <option value={aiModelValue}>Custom: {aiModelValue}</option>
+                    )}
+                  </select>
                   <div className="text-[11px] text-muted-foreground">
                     Leave blank to use the workspace default model.
                   </div>
@@ -2238,10 +2249,9 @@ export default function AutomationTemplates() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Model</label>
-                  <input
+                  <select
                     className="input w-full"
-                    list="ai-model-options"
-                    value={selectedNode.aiSettings?.model || ''}
+                    value={aiModelValue}
                     onChange={(event) =>
                       updateNode(selectedNode.id, (node) => ({
                         ...node,
@@ -2251,7 +2261,17 @@ export default function AutomationTemplates() {
                         },
                       }))
                     }
-                  />
+                  >
+                    <option value="">Auto (workspace default)</option>
+                    {AI_MODEL_SUGGESTIONS.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                    {hasCustomAiModel && (
+                      <option value={aiModelValue}>Custom: {aiModelValue}</option>
+                    )}
+                  </select>
                   <div className="text-[11px] text-muted-foreground">
                     Leave blank to use the workspace default model.
                   </div>
