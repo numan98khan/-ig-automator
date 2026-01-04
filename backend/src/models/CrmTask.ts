@@ -5,7 +5,8 @@ export type CrmTaskType = 'follow_up' | 'general';
 
 export interface ICrmTask extends Document {
   workspaceId: mongoose.Types.ObjectId;
-  conversationId: mongoose.Types.ObjectId;
+  conversationId?: mongoose.Types.ObjectId;
+  contactId?: mongoose.Types.ObjectId;
   title: string;
   description?: string;
   taskType: CrmTaskType;
@@ -29,7 +30,11 @@ const crmTaskSchema = new Schema<ICrmTask>({
   conversationId: {
     type: Schema.Types.ObjectId,
     ref: 'Conversation',
-    required: true,
+    index: true,
+  },
+  contactId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Contact',
     index: true,
   },
   title: {
@@ -73,6 +78,7 @@ const crmTaskSchema = new Schema<ICrmTask>({
 });
 
 crmTaskSchema.index({ workspaceId: 1, conversationId: 1 });
+crmTaskSchema.index({ workspaceId: 1, contactId: 1 });
 crmTaskSchema.index({ assignedTo: 1, status: 1, dueAt: 1 });
 
 export default mongoose.model<ICrmTask>('CrmTask', crmTaskSchema);

@@ -9,7 +9,7 @@ import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
-import { fetchConversations, fetchUserDetails } from '../utils/instagram-api';
+import { fetchConversations, fetchMessagingUserProfile, fetchUserDetails } from '../utils/instagram-api';
 
 const router = express.Router();
 
@@ -228,7 +228,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       const igAccount = await InstagramAccount.findOne({
         workspaceId: workspaceId as string,
         status: 'connected',
-      }).select('+accessToken');
+      }).select('+accessToken +pageAccessToken');
 
       if (igAccount && igAccount.accessToken) {
         const instagramConversations = await fetchConversations(igAccount.accessToken);
@@ -248,8 +248,8 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
         );
 
         // Find unsynced conversations
-        const unsyncedConversations = instagramConversations
-          .map((igConv: any) => {
+        const unsyncedConversations = (await Promise.all(instagramConversations
+          .map(async (igConv: any) => {
             const participants = igConv.participants?.data || [];
             let participant = participants.find((p: any) => {
               const isMeById = p.id === myId;
@@ -267,10 +267,18 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
               return null;
             }
 
+            const participantDetails = igAccount.pageAccessToken
+              ? await fetchMessagingUserProfile(participant.id, igAccount.pageAccessToken)
+              : { id: participant.id, username: participant.username, name: participant.name };
+            const participantProfilePictureUrl = participantDetails.profile_pic
+              || participantDetails.profile_picture_url
+              || participantDetails.profilePictureUrl;
+
             return {
               instagramConversationId: igConv.id,
               participantName: participant.name || participant.username || 'Instagram User',
               participantHandle: `@${participant.username || 'unknown'}`,
+              participantProfilePictureUrl,
               participantInstagramId: participant.id,
               lastMessageAt: new Date(igConv.updated_time),
               platform: 'instagram',
@@ -278,7 +286,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
               instagramAccountId: igAccount._id.toString(),
               workspaceId: workspaceId,
             };
-          })
+          })))
           .filter((conv): conv is NonNullable<typeof conv> => conv !== null);
 
         // Merge synced and unsynced conversations

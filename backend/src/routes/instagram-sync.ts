@@ -1,5 +1,6 @@
 import express, { Response } from 'express';
 import InstagramAccount from '../models/InstagramAccount';
+import Contact from '../models/Contact';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import AutomationSession from '../models/AutomationSession';
@@ -8,6 +9,7 @@ import {
   fetchConversations,
   fetchConversationMessages,
   fetchUserDetails,
+  fetchMessagingUserProfile,
   sendMessage as sendInstagramMessage,
   sendMediaMessage,
   sendButtonMessage,
@@ -35,7 +37,7 @@ router.get('/available-conversations', authenticate, async (req: AuthRequest, re
     const igAccount = await InstagramAccount.findOne({
       workspaceId: workspaceId as string,
       status: 'connected',
-    }).select('+accessToken');
+    }).select('+accessToken +pageAccessToken');
 
     if (!igAccount || !igAccount.accessToken) {
       return res.status(404).json({ error: 'No connected Instagram account found' });
@@ -119,7 +121,7 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
     const igAccount = await InstagramAccount.findOne({
       workspaceId,
       status: 'connected',
-    }).select('+accessToken');
+    }).select('+accessToken +pageAccessToken');
 
     if (!igAccount || !igAccount.accessToken) {
       return res.status(404).json({ error: 'No connected Instagram account found for this workspace' });
@@ -180,16 +182,27 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
         }
 
         // Fetch participant details
-        let participantDetails = await fetchUserDetails(participant.id, igAccount.accessToken);
+        const profileToken = igAccount.pageAccessToken;
+        let participantDetails = profileToken
+          ? await fetchMessagingUserProfile(participant.id, profileToken)
+          : {
+              id: participant.id,
+              username: participant.username || 'unknown',
+              name: participant.name || participant.username || 'Instagram User',
+            };
 
         // If fetchUserDetails failed (returns unknown), try to use data from participant object itself if available
         if (participantDetails.username === 'unknown' && participant.username) {
           participantDetails = {
             id: participant.id,
             username: participant.username,
-            name: participant.name || participant.username || 'Instagram User'
+            name: participant.name || participant.username || 'Instagram User',
           };
         }
+
+        const profilePictureUrl = participantDetails.profile_pic
+          || participantDetails.profile_picture_url
+          || participantDetails.profilePictureUrl;
 
         // Create or update conversation in database
         let conversation = await Conversation.findOne({
@@ -198,23 +211,43 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
         });
 
         if (conversation) {
+          if (!conversation.contactId) {
+            const contact = await Contact.create({
+              workspaceId,
+              participantName: participantDetails.name || participantDetails.username || 'Unknown',
+              participantHandle: `@${participantDetails.username || 'unknown'}`,
+              profilePictureUrl,
+            });
+            conversation.contactId = contact._id;
+          }
           conversation.participantName = participantDetails.name || participantDetails.username || 'Unknown';
           conversation.participantHandle = `@${participantDetails.username || 'unknown'}`;
           conversation.participantInstagramId = participant.id;
+          if (profilePictureUrl) {
+            conversation.participantProfilePictureUrl = profilePictureUrl;
+          }
           conversation.lastMessageAt = new Date(igConv.updated_time);
           conversation.platform = 'instagram';
 
           await conversation.save();
         } else {
+          const contact = await Contact.create({
+            workspaceId,
+            participantName: participantDetails.name || participantDetails.username || 'Unknown',
+            participantHandle: `@${participantDetails.username || 'unknown'}`,
+            profilePictureUrl,
+          });
           conversation = await Conversation.create({
             workspaceId,
             instagramAccountId: igAccount._id,
             participantName: participantDetails.name || participantDetails.username || 'Unknown',
             participantHandle: `@${participantDetails.username || 'unknown'}`,
+            participantProfilePictureUrl: profilePictureUrl,
             participantInstagramId: participant.id,
             instagramConversationId: igConv.id,
             platform: 'instagram',
             lastMessageAt: new Date(igConv.updated_time),
+            contactId: contact._id,
           });
         }
 
@@ -330,7 +363,7 @@ router.post('/send-message', authenticate, async (req: AuthRequest, res: Respons
     const workspaceId = conversation.workspaceId.toString();
 
     // Get Instagram account
-    const igAccount = await InstagramAccount.findById(conversation.instagramAccountId).select('+accessToken');
+    const igAccount = await InstagramAccount.findById(conversation.instagramAccountId).select('+accessToken +pageAccessToken');
     if (!igAccount || !igAccount.accessToken || !igAccount.instagramAccountId) {
       return res.status(404).json({ error: 'Instagram account not found or not connected' });
     }
@@ -532,7 +565,7 @@ router.post('/mark-as-read', authenticate, async (req: AuthRequest, res: Respons
     }
 
     // Get Instagram account
-    const igAccount = await InstagramAccount.findById(conversation.instagramAccountId).select('+accessToken');
+    const igAccount = await InstagramAccount.findById(conversation.instagramAccountId).select('+accessToken +pageAccessToken');
     if (!igAccount || !igAccount.accessToken || !igAccount.instagramAccountId) {
       return res.status(404).json({ error: 'Instagram account not found or not connected' });
     }
@@ -574,7 +607,7 @@ router.get('/message/:messageId', authenticate, async (req: AuthRequest, res: Re
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    const igAccount = await InstagramAccount.findById(conversation.instagramAccountId).select('+accessToken');
+    const igAccount = await InstagramAccount.findById(conversation.instagramAccountId).select('+accessToken +pageAccessToken');
     if (!igAccount || !igAccount.accessToken) {
       return res.status(404).json({ error: 'Instagram account not found' });
     }

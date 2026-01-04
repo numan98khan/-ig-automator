@@ -83,6 +83,7 @@ export interface Conversation {
   _id: string;
   participantName: string;
   participantHandle: string;
+  participantProfilePictureUrl?: string;
   contactEmail?: string;
   contactPhone?: string;
   tags?: string[];
@@ -107,12 +108,24 @@ export interface Conversation {
 
 export type CrmStage = 'new' | 'engaged' | 'qualified' | 'won' | 'lost';
 
-export interface CrmContact extends Conversation {
-  stage?: CrmStage;
-  tags?: string[];
+export interface CrmContact {
+  _id: string;
+  workspaceId: string;
+  participantName: string;
+  participantHandle: string;
+  participantProfilePictureUrl?: string;
   contactEmail?: string;
   contactPhone?: string;
+  stage?: CrmStage;
+  tags?: string[];
   ownerId?: string;
+  primaryConversationId?: string;
+  lastMessageAt?: string;
+  lastMessage?: string;
+  lastCustomerMessageAt?: string;
+  lastBusinessMessageAt?: string;
+  createdAt: string;
+  updatedAt?: string;
   openTaskCount?: number;
   overdueTaskCount?: number;
   nextTaskDueAt?: string;
@@ -828,37 +841,37 @@ export const crmAPI = {
     };
   },
 
-  getContact: async (conversationId: string): Promise<{ contact: CrmContact }> => {
-    const { data } = await api.get(`/api/crm/contacts/${conversationId}`);
+  getContact: async (contactId: string): Promise<{ contact: CrmContact }> => {
+    const { data } = await api.get(`/api/crm/contacts/${contactId}`);
     return data?.data || data;
   },
 
-  updateContact: async (conversationId: string, updates: Partial<CrmContact>): Promise<CrmContact> => {
-    const { data } = await api.patch(`/api/crm/contacts/${conversationId}`, updates);
+  updateContact: async (contactId: string, updates: Partial<CrmContact>): Promise<CrmContact> => {
+    const { data } = await api.patch(`/api/crm/contacts/${contactId}`, updates);
     const payload = data?.data || data;
     return payload.contact || payload;
   },
 
-  getNotes: async (conversationId: string): Promise<CrmNote[]> => {
-    const { data } = await api.get(`/api/crm/contacts/${conversationId}/notes`);
+  getNotes: async (contactId: string): Promise<CrmNote[]> => {
+    const { data } = await api.get(`/api/crm/contacts/${contactId}/notes`);
     const payload = data?.data || data;
     return payload.notes || [];
   },
 
-  addNote: async (conversationId: string, body: string): Promise<CrmNote> => {
-    const { data } = await api.post(`/api/crm/contacts/${conversationId}/notes`, { body });
+  addNote: async (contactId: string, body: string): Promise<CrmNote> => {
+    const { data } = await api.post(`/api/crm/contacts/${contactId}/notes`, { body });
     const payload = data?.data || data;
     return payload.note || payload;
   },
 
-  getTasks: async (conversationId: string): Promise<CrmTask[]> => {
-    const { data } = await api.get(`/api/crm/contacts/${conversationId}/tasks`);
+  getTasks: async (contactId: string): Promise<CrmTask[]> => {
+    const { data } = await api.get(`/api/crm/contacts/${contactId}/tasks`);
     const payload = data?.data || data;
     return payload.tasks || [];
   },
 
   addTask: async (
-    conversationId: string,
+    contactId: string,
     task: {
       title: string;
       description?: string;
@@ -868,13 +881,13 @@ export const crmAPI = {
       taskType?: CrmTaskType;
     },
   ): Promise<CrmTask> => {
-    const { data } = await api.post(`/api/crm/contacts/${conversationId}/tasks`, task);
+    const { data } = await api.post(`/api/crm/contacts/${contactId}/tasks`, task);
     const payload = data?.data || data;
     return payload.task || payload;
   },
 
   updateTask: async (
-    conversationId: string,
+    contactId: string,
     taskId: string,
     updates: Partial<{
       title: string;
@@ -886,19 +899,19 @@ export const crmAPI = {
       taskType?: CrmTaskType;
     }>,
   ): Promise<CrmTask> => {
-    const { data } = await api.patch(`/api/crm/contacts/${conversationId}/tasks/${taskId}`, updates);
+    const { data } = await api.patch(`/api/crm/contacts/${contactId}/tasks/${taskId}`, updates);
     const payload = data?.data || data;
     return payload.task || payload;
   },
 
-  getAutomationEvents: async (conversationId: string): Promise<CrmAutomationEvent[]> => {
-    const { data } = await api.get(`/api/crm/contacts/${conversationId}/automation-events`);
+  getAutomationEvents: async (contactId: string): Promise<CrmAutomationEvent[]> => {
+    const { data } = await api.get(`/api/crm/contacts/${contactId}/automation-events`);
     const payload = data?.data || data;
     return payload.sessions || [];
   },
 
-  getMessages: async (conversationId: string): Promise<Message[]> => {
-    const { data } = await api.get(`/api/messages/conversation/${conversationId}`);
+  getMessages: async (contactId: string): Promise<Message[]> => {
+    const { data } = await api.get(`/api/crm/contacts/${contactId}/messages`);
     return data;
   },
 };

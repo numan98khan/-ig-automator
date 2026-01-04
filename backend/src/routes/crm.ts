@@ -1,5 +1,6 @@
 import express, { Response } from 'express';
 import mongoose from 'mongoose';
+import Contact from '../models/Contact';
 import Conversation from '../models/Conversation';
 import ContactNote from '../models/ContactNote';
 import CrmTask from '../models/CrmTask';
@@ -66,24 +67,31 @@ const formatContactTags = (tags: any): string[] => {
   return Array.from(new Set(cleaned));
 };
 
-const formatContact = (contact: any) => ({
+const formatContact = (contact: any, summary?: any) => ({
   ...contact,
+  workspaceId: contact.workspaceId?.toString ? contact.workspaceId.toString() : contact.workspaceId,
   ownerId: contact.ownerId?.toString ? contact.ownerId.toString() : contact.ownerId,
   stage: contact.stage || 'new',
   tags: formatContactTags(contact.tags),
+  primaryConversationId: summary?._id?.toString?.() || summary?._id,
+  lastMessageAt: summary?.lastMessageAt,
+  lastMessage: summary?.lastMessage,
+  lastCustomerMessageAt: summary?.lastCustomerMessageAt,
+  lastBusinessMessageAt: summary?.lastBusinessMessageAt,
+  participantProfilePictureUrl: contact.profilePictureUrl || summary?.participantProfilePictureUrl,
 });
 
-const loadConversationForUser = async (conversationId: string, userId: string) => {
-  if (!mongoose.isValidObjectId(conversationId)) {
+const loadContactForUser = async (contactId: string, userId: string) => {
+  if (!mongoose.isValidObjectId(contactId)) {
     return { error: 'invalid' as const };
   }
-  const conversation = await Conversation.findById(conversationId);
-  if (!conversation) return { error: 'not_found' as const };
-  const { hasAccess } = await checkWorkspaceAccess(conversation.workspaceId.toString(), userId);
+  const contact = await Contact.findById(contactId);
+  if (!contact) return { error: 'not_found' as const };
+  const { hasAccess } = await checkWorkspaceAccess(contact.workspaceId.toString(), userId);
   if (!hasAccess) return { error: 'forbidden' as const };
-  const featureCheck = await assertWorkspaceFeatureAccess(conversation.workspaceId.toString(), 'crm');
+  const featureCheck = await assertWorkspaceFeatureAccess(contact.workspaceId.toString(), 'crm');
   if (!featureCheck.allowed) return { error: 'feature_disabled' as const, tier: featureCheck.tier };
-  return { conversation };
+  return { contact };
 };
 
 const formatUser = (user: any) => {
@@ -102,6 +110,28 @@ const mapUserIdsToMap = async (ids: Array<string | undefined>) => {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean))) as string[];
   const users = await listUsersByIds(uniqueIds);
   return Object.fromEntries(users.map(user => [user._id, user]));
+};
+
+const getConversationSummariesByContact = async (contactIds: string[]) => {
+  if (contactIds.length === 0) return new Map<string, any>();
+  const conversations = await Conversation.find({ contactId: { $in: contactIds } })
+    .sort({ lastMessageAt: -1 })
+    .lean();
+  const map = new Map<string, any>();
+  conversations.forEach((conv) => {
+    const contactId = conv.contactId?.toString();
+    if (!contactId || map.has(contactId)) return;
+    map.set(contactId, conv);
+  });
+  return map;
+};
+
+const getContactConversationIds = async (contactId: string) => {
+  const conversations = await Conversation.find({ contactId })
+    .select('_id')
+    .sort({ lastMessageAt: -1 })
+    .lean();
+  return conversations.map((conv) => conv._id.toString());
 };
 
 router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) => {
@@ -133,7 +163,6 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
     const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
     const baseFilter: Record<string, any> = {
       workspaceId: workspaceObjectId,
-      platform: { $ne: 'mock' },
     };
     const baseAndFilters: Record<string, any>[] = [];
     const tagFilters: Record<string, any>[] = [];
@@ -175,46 +204,54 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
       ? new Date(Date.now() - inactiveDays * 24 * 60 * 60 * 1000)
       : undefined;
 
-    const andFilters = [...baseAndFilters, ...tagFilters, ...stageFilters];
     if (inactivityCutoff) {
-      andFilters.push({ lastMessageAt: { $lte: inactivityCutoff } });
+      const inactiveContacts = await Conversation.aggregate([
+        { $match: { workspaceId: workspaceObjectId, contactId: { $exists: true, $ne: null } } },
+        { $group: { _id: '$contactId', lastMessageAt: { $max: '$lastMessageAt' } } },
+        { $match: { lastMessageAt: { $lte: inactivityCutoff } } },
+        { $project: { _id: 1 } },
+      ]);
+      const inactiveIds = inactiveContacts.map((entry: any) => entry._id);
+      baseAndFilters.push({ _id: { $in: inactiveIds } });
     }
+
+    const andFilters = [...baseAndFilters, ...tagFilters, ...stageFilters];
     if (andFilters.length > 0) {
       baseFilter.$and = andFilters;
     }
 
     const [contacts, total, stageCounts, tagCounts, newTodayCount, overdueCount, waitingCount, qualifiedCount] = await Promise.all([
-      Conversation.find(baseFilter)
-        .sort({ lastMessageAt: -1 })
+      Contact.find(baseFilter)
+        .sort({ updatedAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
-      Conversation.countDocuments(baseFilter),
-      Conversation.aggregate([
+      Contact.countDocuments(baseFilter),
+      Contact.aggregate([
         { $match: { workspaceId: workspaceObjectId } },
         { $group: { _id: '$stage', count: { $sum: 1 } } },
       ]),
-      Conversation.aggregate([
+      Contact.aggregate([
         { $match: { workspaceId: workspaceObjectId } },
         { $unwind: { path: '$tags', preserveNullAndEmptyArrays: false } },
         { $group: { _id: '$tags', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 12 },
       ]),
-      Conversation.countDocuments({
+      Contact.countDocuments({
         workspaceId: workspaceObjectId,
         createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       }),
-      Conversation.countDocuments({
+      Contact.countDocuments({
         workspaceId: workspaceObjectId,
         stage: { $in: ['won', 'lost'] },
         updatedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       }),
-      Conversation.countDocuments({
+      Contact.countDocuments({
         workspaceId: workspaceObjectId,
         stage: 'engaged',
       }),
-      Conversation.countDocuments({
+      Contact.countDocuments({
         workspaceId: workspaceObjectId,
         stage: 'qualified',
       }),
@@ -236,7 +273,12 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
       count: entry.count,
     }));
 
-    const contactsPayload = contacts.map((contact) => formatContact(contact));
+    const contactIds = contacts.map((contact: any) => contact._id.toString());
+    const summaryMap = await getConversationSummariesByContact(contactIds);
+    const contactsPayload = contacts.map((contact: any) => {
+      const summary = summaryMap.get(contact._id.toString());
+      return formatContact(contact, summary);
+    });
 
     res.json({
       data: {
@@ -262,9 +304,54 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
   }
 });
 
+router.post('/contacts/backfill', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const workspaceId = typeof req.body?.workspaceId === 'string' ? req.body.workspaceId.trim() : '';
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'workspaceId is required' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+    const featureCheck = await assertWorkspaceFeatureAccess(workspaceId, 'crm');
+    if (!featureCheck.allowed) {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier: featureCheck.tier });
+    }
+
+    const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
+    const conversations = await Conversation.find({
+      workspaceId: workspaceObjectId,
+      platform: { $ne: 'mock' },
+      contactId: { $exists: false },
+    }).lean();
+
+    let createdCount = 0;
+    for (const conv of conversations) {
+      const contact = await Contact.create({
+        workspaceId: workspaceObjectId,
+        participantName: conv.participantName,
+        participantHandle: conv.participantHandle,
+        profilePictureUrl: conv.participantProfilePictureUrl,
+      });
+      await Conversation.updateOne(
+        { _id: conv._id },
+        { $set: { contactId: contact._id } },
+      );
+      createdCount += 1;
+    }
+
+    res.json({ data: { createdCount } });
+  } catch (error) {
+    console.error('CRM contact backfill error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.get('/contacts/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
+    const { contact, error, tier } = await loadContactForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
@@ -272,7 +359,11 @@ router.get('/contacts/:id', authenticate, async (req: AuthRequest, res: Response
       return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
     }
 
-    res.json({ data: { contact: formatContact(conversation.toObject()) } });
+    const summary = await Conversation.findOne({ contactId: contact._id })
+      .sort({ lastMessageAt: -1 })
+      .lean();
+
+    res.json({ data: { contact: formatContact(contact.toObject(), summary) } });
   } catch (error) {
     console.error('CRM get contact error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -281,7 +372,7 @@ router.get('/contacts/:id', authenticate, async (req: AuthRequest, res: Response
 
 router.patch('/contacts/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
+    const { contact, error, tier } = await loadContactForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
@@ -320,7 +411,7 @@ router.patch('/contacts/:id', authenticate, async (req: AuthRequest, res: Respon
       if (!req.body.ownerId) {
         updates.ownerId = undefined;
       } else if (mongoose.isValidObjectId(req.body.ownerId)) {
-        const isMember = await existsWorkspaceMember(conversation.workspaceId.toString(), req.body.ownerId);
+        const isMember = await existsWorkspaceMember(contact.workspaceId.toString(), req.body.ownerId);
         if (!isMember) {
           return res.status(400).json({ error: 'Owner must belong to the workspace' });
         }
@@ -330,10 +421,14 @@ router.patch('/contacts/:id', authenticate, async (req: AuthRequest, res: Respon
       }
     }
 
-    Object.assign(conversation, updates);
-    await conversation.save();
+    Object.assign(contact, updates);
+    await contact.save();
 
-    res.json({ data: { contact: formatContact(conversation.toObject()) } });
+    const summary = await Conversation.findOne({ contactId: contact._id })
+      .sort({ lastMessageAt: -1 })
+      .lean();
+
+    res.json({ data: { contact: formatContact(contact.toObject(), summary) } });
   } catch (error) {
     console.error('CRM update contact error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -342,7 +437,7 @@ router.patch('/contacts/:id', authenticate, async (req: AuthRequest, res: Respon
 
 router.get('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
+    const { contact, error, tier } = await loadContactForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
@@ -350,7 +445,13 @@ router.get('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: Re
       return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
     }
 
-    const notes = await ContactNote.find({ conversationId: conversation._id })
+    const conversationIds = await getContactConversationIds(contact._id.toString());
+    const notes = await ContactNote.find({
+      $or: [
+        { contactId: contact._id },
+        { conversationId: { $in: conversationIds } },
+      ],
+    })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -375,7 +476,7 @@ router.post('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: R
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
+    const { contact, error, tier } = await loadContactForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
@@ -393,9 +494,13 @@ router.post('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: R
       return res.status(400).json({ error: 'Note body is required' });
     }
 
+    const primaryConversation = await Conversation.findOne({ contactId: contact._id })
+      .sort({ lastMessageAt: -1 })
+      .lean();
     const note = await ContactNote.create({
-      workspaceId: conversation.workspaceId,
-      conversationId: conversation._id,
+      workspaceId: contact.workspaceId,
+      contactId: contact._id,
+      conversationId: primaryConversation?._id,
       authorId: req.userId,
       body,
     });
@@ -418,7 +523,7 @@ router.post('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: R
 
 router.get('/contacts/:id/automation-events', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
+    const { contact, error, tier } = await loadContactForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
@@ -426,7 +531,8 @@ router.get('/contacts/:id/automation-events', authenticate, async (req: AuthRequ
       return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
     }
 
-    const sessions = await AutomationSession.find({ conversationId: conversation._id })
+    const conversationIds = await getContactConversationIds(contact._id.toString());
+    const sessions = await AutomationSession.find({ conversationId: { $in: conversationIds } })
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();
@@ -473,7 +579,7 @@ router.get('/contacts/:id/automation-events', authenticate, async (req: AuthRequ
 
 router.get('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
+    const { contact, error, tier } = await loadContactForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
@@ -481,7 +587,13 @@ router.get('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: Re
       return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
     }
 
-    const tasks = await CrmTask.find({ conversationId: conversation._id })
+    const conversationIds = await getContactConversationIds(contact._id.toString());
+    const tasks = await CrmTask.find({
+      $or: [
+        { contactId: contact._id },
+        { conversationId: { $in: conversationIds } },
+      ],
+    })
       .sort({ status: 1, dueAt: 1, createdAt: -1 })
       .lean();
 
@@ -509,7 +621,7 @@ router.get('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: Re
 
 router.post('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
+    const { contact, error, tier } = await loadContactForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
@@ -537,16 +649,20 @@ router.post('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: R
       if (!mongoose.isValidObjectId(req.body.assignedTo)) {
         return res.status(400).json({ error: 'Assigned user must be valid' });
       }
-      const isMember = await existsWorkspaceMember(conversation.workspaceId.toString(), req.body.assignedTo);
+      const isMember = await existsWorkspaceMember(contact.workspaceId.toString(), req.body.assignedTo);
       if (!isMember) {
         return res.status(400).json({ error: 'Assignee must belong to the workspace' });
       }
       assignedTo = new mongoose.Types.ObjectId(req.body.assignedTo);
     }
 
+    const primaryConversation = await Conversation.findOne({ contactId: contact._id })
+      .sort({ lastMessageAt: -1 })
+      .lean();
     const task = await CrmTask.create({
-      workspaceId: conversation.workspaceId,
-      conversationId: conversation._id,
+      workspaceId: contact.workspaceId,
+      contactId: contact._id,
+      conversationId: primaryConversation?._id,
       title,
       description,
       taskType,
@@ -584,7 +700,7 @@ router.post('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: R
 
 router.patch('/contacts/:id/tasks/:taskId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
+    const { contact, error, tier } = await loadContactForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
@@ -596,10 +712,20 @@ router.patch('/contacts/:id/tasks/:taskId', authenticate, async (req: AuthReques
       return res.status(400).json({ error: 'Task id must be valid' });
     }
 
-    const task = await CrmTask.findOne({
+    let task = await CrmTask.findOne({
       _id: req.params.taskId,
-      conversationId: conversation._id,
+      contactId: contact._id,
     });
+    if (!task) {
+      const conversationIds = await getContactConversationIds(contact._id.toString());
+      task = await CrmTask.findOne({
+        _id: req.params.taskId,
+        conversationId: { $in: conversationIds },
+      });
+      if (task && !task.contactId) {
+        task.contactId = contact._id;
+      }
+    }
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
@@ -627,7 +753,7 @@ router.patch('/contacts/:id/tasks/:taskId', authenticate, async (req: AuthReques
       if (!req.body.assignedTo) {
         task.assignedTo = undefined;
       } else if (mongoose.isValidObjectId(req.body.assignedTo)) {
-        const isMember = await existsWorkspaceMember(conversation.workspaceId.toString(), req.body.assignedTo);
+        const isMember = await existsWorkspaceMember(contact.workspaceId.toString(), req.body.assignedTo);
         if (!isMember) {
           return res.status(400).json({ error: 'Assignee must belong to the workspace' });
         }
@@ -659,6 +785,136 @@ router.patch('/contacts/:id/tasks/:taskId', authenticate, async (req: AuthReques
     });
   } catch (error) {
     console.error('CRM update task error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/contacts/:id/messages', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { contact, error, tier } = await loadContactForUser(req.params.id, req.userId!);
+    if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
+    if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
+    if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
+    if (error === 'feature_disabled') {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
+    }
+
+    const conversation = await Conversation.findOne({ contactId: contact._id })
+      .sort({ lastMessageAt: -1 })
+      .lean();
+    if (!conversation) {
+      return res.json([]);
+    }
+
+    const messages = await Message.find({ conversationId: conversation._id })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    res.json(messages);
+  } catch (error) {
+    console.error('CRM contact messages error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/contacts/:id/merge', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { contact: sourceContact, error, tier } = await loadContactForUser(req.params.id, req.userId!);
+    if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
+    if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
+    if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
+    if (error === 'feature_disabled') {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
+    }
+
+    const targetContactId = typeof req.body?.targetContactId === 'string'
+      ? req.body.targetContactId
+      : typeof req.body?.targetId === 'string'
+        ? req.body.targetId
+        : '';
+
+    if (!mongoose.isValidObjectId(targetContactId)) {
+      return res.status(400).json({ error: 'Target contact id must be valid' });
+    }
+    if (targetContactId === sourceContact._id.toString()) {
+      return res.status(400).json({ error: 'Cannot merge a contact into itself' });
+    }
+
+    const targetContact = await Contact.findById(targetContactId);
+    if (!targetContact) {
+      return res.status(404).json({ error: 'Target contact not found' });
+    }
+    if (targetContact.workspaceId.toString() !== sourceContact.workspaceId.toString()) {
+      return res.status(403).json({ error: 'Contacts must belong to the same workspace' });
+    }
+
+    const sourceConversationIds = await getContactConversationIds(sourceContact._id.toString());
+
+    await Conversation.updateMany(
+      { contactId: sourceContact._id },
+      { $set: { contactId: targetContact._id } },
+    );
+
+    await ContactNote.updateMany(
+      { contactId: sourceContact._id },
+      { $set: { contactId: targetContact._id } },
+    );
+    if (sourceConversationIds.length > 0) {
+      await ContactNote.updateMany(
+        { conversationId: { $in: sourceConversationIds }, contactId: { $in: [null, undefined] } },
+        { $set: { contactId: targetContact._id } },
+      );
+    }
+
+    await CrmTask.updateMany(
+      { contactId: sourceContact._id },
+      { $set: { contactId: targetContact._id } },
+    );
+    if (sourceConversationIds.length > 0) {
+      await CrmTask.updateMany(
+        { conversationId: { $in: sourceConversationIds }, contactId: { $in: [null, undefined] } },
+        { $set: { contactId: targetContact._id } },
+      );
+    }
+
+    const mergedTags = Array.from(new Set([...(targetContact.tags || []), ...(sourceContact.tags || [])]));
+    const updates: Record<string, any> = {};
+    if (!targetContact.participantName && sourceContact.participantName) {
+      updates.participantName = sourceContact.participantName;
+    }
+    if (!targetContact.participantHandle && sourceContact.participantHandle) {
+      updates.participantHandle = sourceContact.participantHandle;
+    }
+    if (!targetContact.contactEmail && sourceContact.contactEmail) {
+      updates.contactEmail = sourceContact.contactEmail;
+    }
+    if (!targetContact.contactPhone && sourceContact.contactPhone) {
+      updates.contactPhone = sourceContact.contactPhone;
+    }
+    if (!targetContact.profilePictureUrl && sourceContact.profilePictureUrl) {
+      updates.profilePictureUrl = sourceContact.profilePictureUrl;
+    }
+    if (mergedTags.length > 0) {
+      updates.tags = mergedTags;
+    }
+    if (!targetContact.ownerId && sourceContact.ownerId) {
+      updates.ownerId = sourceContact.ownerId;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      Object.assign(targetContact, updates);
+      await targetContact.save();
+    }
+
+    await Contact.deleteOne({ _id: sourceContact._id });
+
+    const summary = await Conversation.findOne({ contactId: targetContact._id })
+      .sort({ lastMessageAt: -1 })
+      .lean();
+
+    res.json({ data: { contact: formatContact(targetContact.toObject(), summary) } });
+  } catch (error) {
+    console.error('CRM merge contact error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -66,6 +66,8 @@ const Inbox: React.FC = () => {
   const [automationSession, setAutomationSession] = useState<AutomationSessionSummary | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionAction, setSessionAction] = useState<'pause' | 'stop' | null>(null);
+  const [conversationMenuOpen, setConversationMenuOpen] = useState(false);
+  const conversationMenuRef = useRef<HTMLDivElement | null>(null);
 
   const handleSyncConversation = async () => {
     if (!selectedConversation || !selectedConversation.instagramConversationId) return;
@@ -159,6 +161,25 @@ const Inbox: React.FC = () => {
     }, 5000);
     return () => clearInterval(interval);
   }, [currentWorkspace, selectedConversation, activeAccount]);
+
+  useEffect(() => {
+    if (!conversationMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!conversationMenuRef.current) return;
+      if (!conversationMenuRef.current.contains(event.target as Node)) {
+        setConversationMenuOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setConversationMenuOpen(false);
+    };
+    window.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [conversationMenuOpen]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -259,6 +280,7 @@ const Inbox: React.FC = () => {
       } else {
         loadMessages();
       }
+      setConversationMenuOpen(false);
       loadAutomationSession({ silent: true });
       setShouldAutoScroll(true);
     }
@@ -366,6 +388,14 @@ const Inbox: React.FC = () => {
     if (hours < 24) return `${hours}h ago`;
     if (days < 7) return `${days}d ago`;
     return d.toLocaleDateString();
+  };
+
+  const getInitials = (name?: string, handle?: string) => {
+    const base = (name || handle || '').replace('@', '').trim();
+    if (!base) return 'IG';
+    const parts = base.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   };
 
   const getSessionStatusMeta = (status?: string) => {
@@ -571,26 +601,39 @@ const Inbox: React.FC = () => {
                     }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <h3 className="text-sm font-semibold truncate text-foreground">{conv.participantName}</h3>
-                        <span className="text-xs text-muted-foreground truncate">{conv.participantHandle}</span>
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="h-10 w-10 rounded-full bg-muted/60 flex items-center justify-center text-xs font-semibold text-muted-foreground overflow-hidden flex-shrink-0">
+                        {conv.participantProfilePictureUrl ? (
+                          <img
+                            src={conv.participantProfilePictureUrl}
+                            alt={conv.participantName || 'Instagram user'}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span>{getInitials(conv.participantName, conv.participantHandle)}</span>
+                        )}
                       </div>
-                      {conv.lastMessage && (
-                        <p className="text-xs text-muted-foreground truncate mt-1">{conv.lastMessage}</p>
-                      )}
-                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        {!conv.isSynced && (
-                          <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100 inline-flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            Needs sync
-                          </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h3 className="text-sm font-semibold truncate text-foreground">{conv.participantName}</h3>
+                          <span className="text-xs text-muted-foreground truncate">{conv.participantHandle}</span>
+                        </div>
+                        {conv.lastMessage && (
+                          <p className="text-xs text-muted-foreground truncate mt-1">{conv.lastMessage}</p>
                         )}
-                        {conv.humanRequired && (
-                          <span className="px-2 py-0.5 rounded-full text-[11px] bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100">
-                            Escalated
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                          {!conv.isSynced && (
+                            <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100 inline-flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              Needs sync
+                            </span>
+                          )}
+                          {conv.humanRequired && (
+                            <span className="px-2 py-0.5 rounded-full text-[11px] bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100">
+                              Escalated
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <span className="text-[11px] text-muted-foreground whitespace-nowrap mt-0.5">{formatTime(conv.lastMessageAt)}</span>
@@ -614,6 +657,17 @@ const Inbox: React.FC = () => {
                     >
                       <ArrowLeft className="w-5 h-5" />
                     </button>
+                    <div className="h-10 w-10 rounded-full bg-muted/60 flex items-center justify-center text-xs font-semibold text-muted-foreground overflow-hidden flex-shrink-0">
+                      {selectedConversation.participantProfilePictureUrl ? (
+                        <img
+                          src={selectedConversation.participantProfilePictureUrl}
+                          alt={selectedConversation.participantName || 'Instagram user'}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span>{getInitials(selectedConversation.participantName, selectedConversation.participantHandle)}</span>
+                      )}
+                    </div>
                     <div className="min-w-0">
                       <h2 className="font-semibold text-base md:text-lg leading-tight text-foreground truncate">
                         {selectedConversation.participantName}
@@ -641,9 +695,32 @@ const Inbox: React.FC = () => {
                         Sync
                       </Button>
                     )}
-                    <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground">
-                      <MoreVertical className="w-4 h-4" />
-                    </Button>
+                    <div className="relative" ref={conversationMenuRef}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => setConversationMenuOpen((prev) => !prev)}
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                      {conversationMenuOpen && (
+                        <div className="absolute right-0 mt-2 w-44 rounded-lg border border-border bg-background shadow-lg z-20">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConversationMenuOpen(false);
+                              handleSyncConversation();
+                            }}
+                            disabled={syncing}
+                            className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-muted/70 flex items-center gap-2 disabled:opacity-60"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                            Sync conversation
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     <Button
                       size="sm"
                       variant="ghost"

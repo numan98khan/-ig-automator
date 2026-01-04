@@ -2,7 +2,8 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IContactNote extends Document {
   workspaceId: mongoose.Types.ObjectId;
-  conversationId: mongoose.Types.ObjectId;
+  conversationId?: mongoose.Types.ObjectId;
+  contactId?: mongoose.Types.ObjectId;
   authorId: mongoose.Types.ObjectId;
   body: string;
   createdAt: Date;
@@ -19,7 +20,11 @@ const contactNoteSchema = new Schema<IContactNote>({
   conversationId: {
     type: Schema.Types.ObjectId,
     ref: 'Conversation',
-    required: true,
+    index: true,
+  },
+  contactId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Contact',
     index: true,
   },
   authorId: {
@@ -37,5 +42,6 @@ const contactNoteSchema = new Schema<IContactNote>({
 });
 
 contactNoteSchema.index({ workspaceId: 1, conversationId: 1, createdAt: -1 });
+contactNoteSchema.index({ workspaceId: 1, contactId: 1, createdAt: -1 });
 
 export default mongoose.model<IContactNote>('ContactNote', contactNoteSchema);

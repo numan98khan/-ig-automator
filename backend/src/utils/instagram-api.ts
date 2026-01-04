@@ -8,6 +8,7 @@ import { webhookLogger } from './webhook-logger';
 
 const API_VERSION = 'v24.0';
 const BASE_URL = `https://graph.instagram.com/${API_VERSION}`;
+const FB_GRAPH_URL = `https://graph.facebook.com/${API_VERSION}`;
 const TEST_ACCESS_TOKEN_PREFIX = 'test_';
 const MOCK_INSTAGRAM_ACCOUNT_PREFIX = 'test_ig_';
 
@@ -186,7 +187,7 @@ export async function fetchUserDetails(userId: string, accessToken: string) {
   const endpoint = `${BASE_URL}/${userId}`;
   const params = {
     access_token: accessToken,
-    fields: 'id,username,name',
+    fields: 'id,username,name,profile_picture_url',
   };
 
   webhookLogger.logApiCall(endpoint, 'GET', params);
@@ -199,6 +200,34 @@ export async function fetchUserDetails(userId: string, accessToken: string) {
     console.error('Error fetching user details:', error.response?.data || error.message);
     webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
     // Return minimal data if user details can't be fetched
+    return {
+      id: userId,
+      username: 'unknown',
+      name: 'Unknown User',
+    };
+  }
+}
+
+/**
+ * Fetch profile details for IG messaging users (IGBusinessScopedID).
+ * Uses Graph API host + profile_pic field.
+ */
+export async function fetchMessagingUserProfile(userId: string, accessToken: string) {
+  const endpoint = `${FB_GRAPH_URL}/${userId}`;
+  const params = {
+    access_token: accessToken,
+    fields: 'id,username,name,profile_pic',
+  };
+
+  webhookLogger.logApiCall(endpoint, 'GET', params);
+
+  try {
+    const response = await axios.get(endpoint, { params });
+    webhookLogger.logApiResponse(endpoint, response.status, response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching messaging user profile:', error.response?.data || error.message);
+    webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
     return {
       id: userId,
       username: 'unknown',
