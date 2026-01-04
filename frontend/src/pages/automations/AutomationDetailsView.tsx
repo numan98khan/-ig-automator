@@ -115,6 +115,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [personaDraft, setPersonaDraft] = useState<AutomationPreviewPersona>(DEFAULT_PERSONA);
   const [profileBusy, setProfileBusy] = useState(false);
   const [consoleExpanded, setConsoleExpanded] = useState(false);
+  const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state'>('persona');
 
   const sessionStatus = previewState.session?.status || previewSessionStatus;
   const statusConfig = sessionStatus
@@ -586,228 +587,253 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     </Card>
   );
 
-  const renderRightPane = () => (
-    <div className="flex flex-col gap-6 min-h-0 overflow-y-auto pr-1">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
-          <div>
-            <CardTitle>Mock Persona</CardTitle>
-            <p className="text-xs text-muted-foreground">Saved presets keep test sessions consistent.</p>
+  const renderPersonaCard = () => (
+    <Card className="flex flex-col min-h-0 flex-1">
+      <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
+        <div>
+          <CardTitle>Mock Persona</CardTitle>
+          <p className="text-xs text-muted-foreground">Saved presets keep test sessions consistent.</p>
+        </div>
+        {profilesLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+      </CardHeader>
+      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="h-14 w-14 rounded-full overflow-hidden bg-muted/60 flex items-center justify-center text-sm font-semibold text-muted-foreground">
+            {personaDraft.avatarUrl ? (
+              <img src={personaDraft.avatarUrl} alt={personaDraft.name} className="h-full w-full object-cover" />
+            ) : (
+              personaInitials
+            )}
           </div>
-          {profilesLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="h-14 w-14 rounded-full overflow-hidden bg-muted/60 flex items-center justify-center text-sm font-semibold text-muted-foreground">
-              {personaDraft.avatarUrl ? (
-                <img src={personaDraft.avatarUrl} alt={personaDraft.name} className="h-full w-full object-cover" />
-              ) : (
-                personaInitials
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-semibold text-muted-foreground uppercase">Avatar</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="cursor-pointer">
+                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                <span className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">
+                  Upload
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={handleClearAvatar}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label="Display name"
+            value={personaDraft.name}
+            onChange={(event) => setPersonaDraft((prev) => ({ ...prev, name: event.target.value }))}
+          />
+          <Input
+            label="Mock IG handle"
+            value={personaDraft.handle}
+            onChange={(event) => setPersonaDraft((prev) => ({ ...prev, handle: event.target.value }))}
+          />
+          <Input
+            label="Mock user ID"
+            value={personaDraft.userId}
+            onChange={(event) => setPersonaDraft((prev) => ({ ...prev, userId: event.target.value }))}
+          />
+        </div>
+
+        <div className="rounded-lg border border-border/60 bg-background/60 p-3 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold uppercase text-muted-foreground">Saved profiles</span>
+            {profilesError && <span className="text-xs text-destructive">{profilesError}</span>}
+          </div>
+          <select
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            value={selectedProfileId || 'custom'}
+            onChange={(event) => void handleSelectProfile(event.target.value)}
+          >
+            <option value="custom">Custom (unsaved)</option>
+            {profiles.map((profile) => (
+              <option key={profile._id} value={profile._id}>
+                {profile.name}{profile.isDefault ? ' (Default)' : ''}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<UserCircle2 className="w-4 h-4" />}
+              onClick={() => {
+                setSelectedProfileId(null);
+                setPersonaDraft(DEFAULT_PERSONA);
+                void syncPersona({ persona: DEFAULT_PERSONA });
+              }}
+            >
+              New
+            </Button>
+            <Button
+              size="sm"
+              leftIcon={<Save className="w-4 h-4" />}
+              onClick={handleSaveProfile}
+              isLoading={profileBusy}
+            >
+              Save
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Copy className="w-4 h-4" />}
+              onClick={handleDuplicateProfile}
+              disabled={!selectedProfileId || profileBusy}
+            >
+              Duplicate
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Star className="w-4 h-4" />}
+              onClick={handleSetDefaultProfile}
+              disabled={!selectedProfileId || profileBusy}
+            >
+              Set default
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<Trash2 className="w-4 h-4" />}
+              onClick={handleDeleteProfile}
+              disabled={!selectedProfileId || profileBusy}
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderStateCard = () => (
+    <Card className="flex flex-col min-h-0 flex-1">
+      <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
+        <div>
+          <CardTitle>Live Automation State</CardTitle>
+          <p className="text-xs text-muted-foreground">Auto-updates every few seconds.</p>
+        </div>
+        <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
+      </CardHeader>
+      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto">
+        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+          <div className="text-xs font-semibold uppercase text-muted-foreground">Current step</div>
+          {previewState.currentNode ? (
+            <div className="mt-2 space-y-2">
+              <div>
+                <div className="text-sm font-semibold">
+                  {previewState.currentNode.label || previewState.currentNode.id || 'Active node'}
+                </div>
+                <div className="text-xs text-muted-foreground capitalize">
+                  {previewState.currentNode.type.replace(/_/g, ' ')}
+                </div>
+              </div>
+              {previewState.currentNode.preview && (
+                <div className="text-xs text-muted-foreground">"{previewState.currentNode.preview}"</div>
+              )}
+              {previewState.currentNode.summary && previewState.currentNode.summary.length > 0 && (
+                <div className="grid gap-1">
+                  {previewState.currentNode.summary.map((item) => (
+                    <div key={`${item.label}-${item.value}`} className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{item.label}</span>
+                      <span className="font-medium">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-            <div className="flex flex-col gap-2">
-              <span className="text-xs font-semibold text-muted-foreground uppercase">Avatar</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="cursor-pointer">
-                  <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
-                  <span className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">
-                    Upload
-                  </span>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleClearAvatar}
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-          </div>
+          ) : (
+            <div className="mt-2 text-xs text-muted-foreground">Waiting for the next trigger.</div>
+          )}
+        </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input
-              label="Display name"
-              value={personaDraft.name}
-              onChange={(event) => setPersonaDraft((prev) => ({ ...prev, name: event.target.value }))}
-            />
-            <Input
-              label="Mock IG handle"
-              value={personaDraft.handle}
-              onChange={(event) => setPersonaDraft((prev) => ({ ...prev, handle: event.target.value }))}
-            />
-            <Input
-              label="Mock user ID"
-              value={personaDraft.userId}
-              onChange={(event) => setPersonaDraft((prev) => ({ ...prev, userId: event.target.value }))}
-            />
-          </div>
-
-          <div className="rounded-lg border border-border/60 bg-background/60 p-3 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold uppercase text-muted-foreground">Saved profiles</span>
-              {profilesError && <span className="text-xs text-destructive">{profilesError}</span>}
-            </div>
-            <select
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              value={selectedProfileId || 'custom'}
-              onChange={(event) => void handleSelectProfile(event.target.value)}
-            >
-              <option value="custom">Custom (unsaved)</option>
-              {profiles.map((profile) => (
-                <option key={profile._id} value={profile._id}>
-                  {profile.name}{profile.isDefault ? ' (Default)' : ''}
-                </option>
-              ))}
-            </select>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<UserCircle2 className="w-4 h-4" />}
-                onClick={() => {
-                  setSelectedProfileId(null);
-                  setPersonaDraft(DEFAULT_PERSONA);
-                  void syncPersona({ persona: DEFAULT_PERSONA });
-                }}
-              >
-                New
-              </Button>
-              <Button
-                size="sm"
-                leftIcon={<Save className="w-4 h-4" />}
-                onClick={handleSaveProfile}
-                isLoading={profileBusy}
-              >
-                Save
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<Copy className="w-4 h-4" />}
-                onClick={handleDuplicateProfile}
-                disabled={!selectedProfileId || profileBusy}
-              >
-                Duplicate
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<Star className="w-4 h-4" />}
-                onClick={handleSetDefaultProfile}
-                disabled={!selectedProfileId || profileBusy}
-              >
-                Set default
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                leftIcon={<Trash2 className="w-4 h-4" />}
-                onClick={handleDeleteProfile}
-                disabled={!selectedProfileId || profileBusy}
-              >
-                Delete
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="flex flex-col min-h-0 flex-1">
-        <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
-          <div>
-            <CardTitle>Live Automation State</CardTitle>
-            <p className="text-xs text-muted-foreground">Auto-updates every few seconds.</p>
-          </div>
-          <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
-        </CardHeader>
-        <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto">
-          <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-            <div className="text-xs font-semibold uppercase text-muted-foreground">Current step</div>
-            {previewState.currentNode ? (
-              <div className="mt-2 space-y-2">
-                <div>
-                  <div className="text-sm font-semibold">
-                    {previewState.currentNode.label || previewState.currentNode.id || 'Active node'}
-                  </div>
-                  <div className="text-xs text-muted-foreground capitalize">
-                    {previewState.currentNode.type.replace(/_/g, ' ')}
-                  </div>
+        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+          <div className="text-xs font-semibold uppercase text-muted-foreground">Collected fields</div>
+          {fieldEntries.length > 0 ? (
+            <div className="mt-2 grid gap-2">
+              {fieldEntries.map((field) => (
+                <div key={field.key} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{field.key}</span>
+                  <span className="font-medium text-right">{field.value}</span>
                 </div>
-                {previewState.currentNode.preview && (
-                  <div className="text-xs text-muted-foreground">"{previewState.currentNode.preview}"</div>
-                )}
-                {previewState.currentNode.summary && previewState.currentNode.summary.length > 0 && (
-                  <div className="grid gap-1">
-                    {previewState.currentNode.summary.map((item) => (
-                      <div key={`${item.label}-${item.value}`} className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">{item.label}</span>
-                        <span className="font-medium">{item.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="mt-2 text-xs text-muted-foreground">Waiting for the next trigger.</div>
-            )}
-          </div>
-
-          <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-            <div className="text-xs font-semibold uppercase text-muted-foreground">Collected fields</div>
-            {fieldEntries.length > 0 ? (
-              <div className="mt-2 grid gap-2">
-                {fieldEntries.map((field) => (
-                  <div key={field.key} className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">{field.key}</span>
-                    <span className="font-medium text-right">{field.value}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-2 text-xs text-muted-foreground">No fields collected yet.</div>
-            )}
-          </div>
-
-          <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-            <div className="text-xs font-semibold uppercase text-muted-foreground">Tags</div>
-            {tags.length > 0 ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <Badge key={tag} variant="secondary">{tag}</Badge>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-2 text-xs text-muted-foreground">No tags applied yet.</div>
-            )}
-          </div>
-
-          <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase text-muted-foreground">Execution timeline</span>
+              ))}
             </div>
-            {events.length > 0 ? (
-              <div className="mt-3 max-h-64 overflow-y-auto space-y-3 pr-1">
-                {events.map((event) => {
-                  const badge = EVENT_BADGES[event.type] || EVENT_BADGES.info;
-                  return (
-                    <div key={event.id} className="flex items-start gap-3">
-                      <Badge variant={badge.variant}>{badge.label}</Badge>
-                      <div className="flex-1">
-                        <div className="text-sm">{event.message}</div>
-                        <div className="text-xs text-muted-foreground">{formatTime(event.createdAt)}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="mt-2 text-xs text-muted-foreground">No events yet.</div>
-            )}
+          ) : (
+            <div className="mt-2 text-xs text-muted-foreground">No fields collected yet.</div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+          <div className="text-xs font-semibold uppercase text-muted-foreground">Tags</div>
+          {tags.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {tags.map((tag) => (
+                <Badge key={tag} variant="secondary">{tag}</Badge>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-2 text-xs text-muted-foreground">No tags applied yet.</div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase text-muted-foreground">Execution timeline</span>
           </div>
-        </CardContent>
-      </Card>
+          {events.length > 0 ? (
+            <div className="mt-3 max-h-64 overflow-y-auto space-y-3 pr-1">
+              {events.map((event) => {
+                const badge = EVENT_BADGES[event.type] || EVENT_BADGES.info;
+                return (
+                  <div key={event.id} className="flex items-start gap-3">
+                    <Badge variant={badge.variant}>{badge.label}</Badge>
+                    <div className="flex-1">
+                      <div className="text-sm">{event.message}</div>
+                      <div className="text-xs text-muted-foreground">{formatTime(event.createdAt)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-2 text-xs text-muted-foreground">No events yet.</div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderRightPane = () => (
+    <div className="flex flex-col gap-4 min-h-0">
+      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1">
+        {([
+          { id: 'persona', label: 'Mock Persona' },
+          { id: 'state', label: 'Automation State' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setRightPaneTab(tab.id)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+              rightPaneTab === tab.id
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {rightPaneTab === 'persona' ? renderPersonaCard() : renderStateCard()}
     </div>
   );
 
