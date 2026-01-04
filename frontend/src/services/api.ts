@@ -270,7 +270,7 @@ export interface AutomationPreviewMessage {
   createdAt?: string;
 }
 
-export interface AutomationPreviewSession {
+export interface AutomationPreviewSession extends AutomationPreviewSessionState {
   sessionId: string;
   conversationId: string;
   status: 'active' | 'paused' | 'completed' | 'handoff';
@@ -279,6 +279,69 @@ export interface AutomationPreviewSession {
 
 export interface AutomationPreviewSessionResponse {
   session: AutomationSession;
+}
+
+export interface AutomationPreviewConversation {
+  _id: string;
+  participantName: string;
+  participantHandle: string;
+  participantInstagramId?: string;
+  participantProfilePictureUrl?: string;
+  tags?: string[];
+  lastMessageAt?: string;
+}
+
+export interface AutomationPreviewPersona {
+  name: string;
+  handle?: string;
+  userId?: string;
+  avatarUrl?: string;
+}
+
+export interface AutomationPreviewProfile {
+  _id: string;
+  workspaceId: string;
+  name: string;
+  handle?: string;
+  userId?: string;
+  avatarUrl?: string;
+  isDefault?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AutomationPreviewEventType =
+  | 'node_start'
+  | 'node_complete'
+  | 'field_update'
+  | 'field_clear'
+  | 'tag_added'
+  | 'tag_removed'
+  | 'error'
+  | 'info';
+
+export interface AutomationPreviewEvent {
+  id: string;
+  type: AutomationPreviewEventType;
+  message: string;
+  createdAt: string;
+  details?: Record<string, any>;
+}
+
+export interface AutomationPreviewSessionState {
+  session: AutomationSession | null;
+  conversation?: AutomationPreviewConversation | null;
+  currentNode?: AutomationSessionNodeSummary | null;
+  events?: AutomationPreviewEvent[];
+  profile?: AutomationPreviewProfile | null;
+  persona?: AutomationPreviewPersona | null;
+}
+
+export interface AutomationPreviewSendResponse extends AutomationPreviewSessionState {
+  success: boolean;
+  error?: string;
+  sessionId: string;
+  messages: AutomationPreviewMessage[];
 }
 
 export interface AutomationSessionNodeSummaryItem {
@@ -982,17 +1045,74 @@ export const automationAPI = {
     await api.delete(`/api/automations/${id}`);
   },
 
-  createPreviewSession: async (id: string, payload?: { reset?: boolean }): Promise<AutomationPreviewSession> => {
+  createPreviewSession: async (
+    id: string,
+    payload?: { reset?: boolean; sessionId?: string; profileId?: string; persona?: AutomationPreviewPersona },
+  ): Promise<AutomationPreviewSession> => {
     const { data } = await api.post(`/api/automations/${id}/preview-session`, payload);
     return data;
   },
 
   sendPreviewMessage: async (
     id: string,
-    payload: { text: string; sessionId?: string },
-  ): Promise<{ success: boolean; error?: string; sessionId: string; messages: AutomationPreviewMessage[] }> => {
+    payload: { text: string; sessionId?: string; profileId?: string; persona?: AutomationPreviewPersona },
+  ): Promise<AutomationPreviewSendResponse> => {
     const { data } = await api.post(`/api/automations/${id}/preview-session/message`, payload);
     return data;
+  },
+
+  getPreviewSessionStatus: async (
+    id: string,
+    sessionId?: string,
+  ): Promise<AutomationPreviewSessionState> => {
+    const { data } = await api.get(`/api/automations/${id}/preview-session/status`, {
+      params: sessionId ? { sessionId } : undefined,
+    });
+    return data;
+  },
+
+  updatePreviewPersona: async (
+    id: string,
+    payload: { sessionId?: string; profileId?: string; persona?: AutomationPreviewPersona },
+  ): Promise<AutomationPreviewSessionState> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-session/persona`, payload);
+    return data;
+  },
+
+  listPreviewProfiles: async (id: string): Promise<AutomationPreviewProfile[]> => {
+    const { data } = await api.get(`/api/automations/${id}/preview-profiles`);
+    return data.profiles || [];
+  },
+
+  createPreviewProfile: async (
+    id: string,
+    payload: { name: string; handle?: string; userId?: string; avatarUrl?: string; isDefault?: boolean },
+  ): Promise<AutomationPreviewProfile> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-profiles`, payload);
+    return data.profile;
+  },
+
+  updatePreviewProfile: async (
+    id: string,
+    profileId: string,
+    payload: { name?: string; handle?: string; userId?: string; avatarUrl?: string },
+  ): Promise<AutomationPreviewProfile> => {
+    const { data } = await api.put(`/api/automations/${id}/preview-profiles/${profileId}`, payload);
+    return data.profile;
+  },
+
+  duplicatePreviewProfile: async (id: string, profileId: string): Promise<AutomationPreviewProfile> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-profiles/${profileId}/duplicate`);
+    return data.profile;
+  },
+
+  setDefaultPreviewProfile: async (id: string, profileId: string): Promise<AutomationPreviewProfile> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-profiles/${profileId}/default`);
+    return data.profile;
+  },
+
+  deletePreviewProfile: async (id: string, profileId: string): Promise<void> => {
+    await api.delete(`/api/automations/${id}/preview-profiles/${profileId}`);
   },
 
   pausePreviewSession: async (

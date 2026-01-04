@@ -33,6 +33,11 @@ utils). Collection names follow Mongoose's default pluralization of the model na
     `backend/src/routes/messages.ts`, `backend/src/routes/instagram-sync.ts`, `backend/src/routes/admin.ts`,
     `backend/src/routes/crm.ts`, `backend/src/services/automationService.ts`
 
+- **AutomationPreviewProfile**
+  - Status: used
+  - Purpose: saved mock personas for automation preview sessions.
+  - Used by: `backend/src/routes/automation-instances.ts`
+
 - **CommentDMLog**
   - Status: used
   - Purpose: comment-to-DM automation audit log (status, DM text, errors).

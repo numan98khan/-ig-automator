@@ -14,6 +14,7 @@ import { AlertTriangle, PlayCircle, Clock } from 'lucide-react';
 import { AutomationsSidebar } from './automations/AutomationsSidebar';
 import { AutomationsListView } from './automations/AutomationsListView';
 import { AutomationsCreateView } from './automations/AutomationsCreateView';
+import { AutomationDetailsView } from './automations/AutomationDetailsView';
 import { AutomationPlaceholderSection } from './automations/AutomationPlaceholderSection';
 import { AutomationsHumanAlerts } from './automations/AutomationsHumanAlerts';
 import Knowledge from './Knowledge';
@@ -101,13 +102,14 @@ const Automations: React.FC = () => {
   const { activeAccount } = useAccountContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeSection, setActiveSection] = useState<'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'>('automations');
-  const [automationView, setAutomationView] = useState<'list' | 'create' | 'edit'>('list');
+  const [automationView, setAutomationView] = useState<'list' | 'create' | 'edit' | 'details'>('list');
   const [automations, setAutomations] = useState<AutomationInstance[]>([]);
   const [templates, setTemplates] = useState<FlowTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [editingAutomation, setEditingAutomation] = useState<AutomationInstance | null>(null);
+  const [selectedAutomation, setSelectedAutomation] = useState<AutomationInstance | null>(null);
   const [formData, setFormData] = useState<CreateFormData>({
     name: '',
     description: '',
@@ -130,6 +132,7 @@ const Automations: React.FC = () => {
   const accountInitial = accountDisplayName.charAt(0).toUpperCase();
   const isAutomationsSection = activeSection === 'automations';
   const isCreateView = isAutomationsSection && (automationView === 'create' || automationView === 'edit');
+  const isDetailsView = isAutomationsSection && automationView === 'details';
 
   const [creationMode, setCreationMode] = useState<'templates' | 'custom'>('templates');
   const [currentStep, setCurrentStep] = useState<'gallery' | 'setup' | 'review'>('gallery');
@@ -230,6 +233,7 @@ const Automations: React.FC = () => {
 
   const handleOpenCreateModal = () => {
     setEditingAutomation(null);
+    setSelectedAutomation(null);
     setFormData({ name: '', description: '' });
     setConfigValues({});
     setCreationMode('templates');
@@ -262,6 +266,7 @@ const Automations: React.FC = () => {
 
   const handleOpenEditAutomation = (automation: AutomationInstance) => {
     setEditingAutomation(automation);
+    setSelectedAutomation(null);
     setFormData({
       name: automation.name,
       description: automation.description || '',
@@ -280,9 +285,16 @@ const Automations: React.FC = () => {
     setAutomationView('edit');
   };
 
+  const handleOpenAutomationDetails = (automation: AutomationInstance) => {
+    setSelectedAutomation(automation);
+    setEditingAutomation(null);
+    setAutomationView('details');
+  };
+
   const handleCloseCreateView = () => {
     setAutomationView('list');
     setEditingAutomation(null);
+    setSelectedAutomation(null);
     setCreationMode('templates');
     setCurrentStep('gallery');
     setSelectedTemplate(null);
@@ -583,13 +595,27 @@ const Automations: React.FC = () => {
                   onPreviewStop={handlePreviewStop}
                   onPreviewReset={handlePreviewReset}
                 />
+              ) : isDetailsView && selectedAutomation ? (
+                <AutomationDetailsView
+                  automation={selectedAutomation}
+                  accountDisplayName={accountDisplayName}
+                  accountHandle={accountHandle}
+                  accountAvatarUrl={accountAvatarUrl}
+                  accountInitial={accountInitial}
+                  onBack={() => {
+                    setAutomationView('list');
+                    setSelectedAutomation(null);
+                  }}
+                  onEdit={handleOpenEditAutomation}
+                />
               ) : (
                 <AutomationsListView
                   automations={automations}
                   summaryStats={summaryStats}
                   loading={loading}
                   onCreate={handleOpenCreateModal}
-                  onOpen={handleOpenEditAutomation}
+                  onOpen={handleOpenAutomationDetails}
+                  onEdit={handleOpenEditAutomation}
                   onToggle={handleToggle}
                   onDuplicate={handleDuplicate}
                   onDelete={handleDelete}

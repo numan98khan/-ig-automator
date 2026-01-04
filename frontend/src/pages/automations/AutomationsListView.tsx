@@ -17,6 +17,7 @@ type AutomationsListViewProps = {
   loading: boolean;
   onCreate: () => void;
   onOpen?: (automation: AutomationInstance) => void;
+  onEdit?: (automation: AutomationInstance) => void;
   onToggle: (automation: AutomationInstance) => void;
   onDuplicate: (automation: AutomationInstance) => void;
   onDelete: (automation: AutomationInstance) => void;
@@ -28,11 +29,13 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
   loading,
   onCreate,
   onOpen,
+  onEdit,
   onToggle,
   onDuplicate,
   onDelete,
 }) => {
   const isOpenEnabled = typeof onOpen === 'function';
+  const isEditEnabled = typeof onEdit === 'function';
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const filteredAutomations = useMemo(() => {
@@ -239,8 +242,9 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                 <button
                   onClick={(event) => {
                     event.stopPropagation();
-                    onOpen?.(automation);
+                    onEdit?.(automation);
                   }}
+                  disabled={!isEditEnabled}
                   className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
                 >
                   <Pencil className="h-4 w-4" />
