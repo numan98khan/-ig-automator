@@ -28,7 +28,9 @@ export default function AutomationIntentions() {
 
   const intents = useMemo(() => {
     const payload = unwrapData<any>(data)
-    return Array.isArray(payload) ? payload : []
+    if (Array.isArray(payload)) return payload
+    if (Array.isArray(payload?.intents)) return payload.intents
+    return []
   }, [data])
 
   const sortedIntents = useMemo(

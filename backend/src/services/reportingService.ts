@@ -7,8 +7,8 @@ import BookingRequest from '../models/BookingRequest';
 import OrderIntent from '../models/OrderIntent';
 import SupportTicketStub from '../models/SupportTicketStub';
 import ReportDailyWorkspace from '../models/ReportDailyWorkspace';
-import Workspace from '../models/Workspace';
 import { GoalType } from '../types/automationGoals';
+import { listAllWorkspaceIds } from '../repositories/core/workspaceRepository';
 
 export type DashboardRange = 'today' | '7d' | '30d';
 
@@ -192,16 +192,16 @@ export async function rebuildWorkspaceReportForDate(workspaceId: string, date: D
 }
 
 export async function rebuildYesterdayReports() {
-  const workspaces = await Workspace.find({}, { _id: 1 });
+  const workspaceIds = await listAllWorkspaceIds();
   const yesterday = new Date();
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
 
   await Promise.all(
-    workspaces.map(async (workspace) => {
+    workspaceIds.map(async (workspaceId) => {
       try {
-        await rebuildWorkspaceReportForDate(workspace._id.toString(), yesterday);
+        await rebuildWorkspaceReportForDate(workspaceId, yesterday);
       } catch (error) {
-        console.error('Failed to rebuild report for workspace', workspace._id, error);
+        console.error('Failed to rebuild report for workspace', workspaceId, error);
       }
     })
   );

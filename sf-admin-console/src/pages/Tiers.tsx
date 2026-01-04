@@ -24,6 +24,9 @@ type TierFormState = {
     teamMembers?: number | null
     automations?: number | null
     knowledgeItems?: number | null
+    crm?: boolean | null
+    integrations?: boolean | null
+    flowBuilder?: boolean | null
   }
 }
 
@@ -93,12 +96,18 @@ export default function Tiers() {
     setModalOpen(true)
   }
 
-  const limitFields: Array<{ key: keyof TierFormState['limits']; label: string }> = [
+  const limitFields: Array<{ key: NumericLimitKey; label: string }> = [
     { key: 'aiMessages', label: 'AI messages' },
     { key: 'instagramAccounts', label: 'Instagram accounts' },
     { key: 'teamMembers', label: 'Team members' },
     { key: 'automations', label: 'Automations' },
     { key: 'knowledgeItems', label: 'Knowledge items' },
+  ]
+
+  const featureFields: Array<{ key: FeatureFlagKey; label: string; description: string }> = [
+    { key: 'crm', label: 'CRM', description: 'Access CRM contacts, notes, and tasks.' },
+    { key: 'integrations', label: 'Integrations', description: 'Enable third-party integrations.' },
+    { key: 'flowBuilder', label: 'Flow builder', description: 'Create and manage automation flows.' },
   ]
 
   return (
@@ -142,6 +151,12 @@ export default function Tiers() {
                       <span key={field.key} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1">
                         <Zap className="w-3 h-3 text-primary" />
                         {field.label}: {displayLimit(tier.limits?.[field.key])}
+                      </span>
+                    ))}
+                    {featureFields.map((field) => (
+                      <span key={field.key} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1">
+                        <Zap className="w-3 h-3 text-primary" />
+                        {field.label}: {displayFeature(tier.limits?.[field.key])}
                       </span>
                     ))}
                   </div>
@@ -235,6 +250,25 @@ export default function Tiers() {
                   />
                 ))}
               </div>
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-foreground">Feature access</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {featureFields.map((field) => (
+                    <FeatureSelect
+                      key={field.key}
+                      label={field.label}
+                      description={field.description}
+                      value={formState.limits[field.key]}
+                      onChange={(value) =>
+                        setFormState((prev) => ({
+                          ...prev,
+                          limits: { ...prev.limits, [field.key]: value },
+                        }))
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="flex items-center justify-end gap-3 px-4 py-3 border-t border-border">
               <button className="btn btn-ghost" onClick={() => setModalOpen(false)}>
@@ -284,8 +318,13 @@ function displayLimit(value?: number | null) {
   return value === null || value === undefined ? '∞' : value
 }
 
+function displayFeature(value?: boolean | null) {
+  if (value === undefined || value === null) return 'Default'
+  return value ? 'On' : 'Off'
+}
+
 function normalizeLimits(limits: TierFormState['limits']) {
-  const cleaned: Record<string, number | undefined> = {}
+  const cleaned: Record<string, number | boolean | undefined> = {}
   Object.entries(limits || {}).forEach(([key, val]) => {
     if (val === null || val === undefined || Number.isNaN(val)) {
       cleaned[key] = undefined
@@ -305,6 +344,38 @@ function LabeledInput(props: React.InputHTMLAttributes<HTMLInputElement> & { lab
         {...rest}
         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
       />
+    </label>
+  )
+}
+
+type NumericLimitKey = 'aiMessages' | 'instagramAccounts' | 'teamMembers' | 'automations' | 'knowledgeItems'
+type FeatureFlagKey = 'crm' | 'integrations' | 'flowBuilder'
+
+type FeatureSelectProps = {
+  label: string
+  description: string
+  value?: boolean | null
+  onChange: (value: boolean | null) => void
+}
+
+function FeatureSelect({ label, description, value, onChange }: FeatureSelectProps) {
+  const currentValue = value === null || value === undefined ? 'default' : value ? 'enabled' : 'disabled'
+  return (
+    <label className="space-y-1 text-sm text-muted-foreground">
+      <span className="text-foreground">{label}</span>
+      <p className="text-xs text-muted-foreground">{description}</p>
+      <select
+        value={currentValue}
+        onChange={(event) => {
+          const next = event.target.value
+          onChange(next === 'default' ? null : next === 'enabled')
+        }}
+        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+      >
+        <option value="default">Use default</option>
+        <option value="enabled">Enabled</option>
+        <option value="disabled">Disabled</option>
+      </select>
     </label>
   )
 }

@@ -163,12 +163,16 @@ export default function AutomationTemplates() {
 
   const drafts = useMemo(() => {
     const payload = unwrapData<any>(draftData)
-    return Array.isArray(payload) ? (payload as FlowDraft[]) : []
+    if (Array.isArray(payload)) return payload as FlowDraft[]
+    if (Array.isArray(payload?.drafts)) return payload.drafts as FlowDraft[]
+    return []
   }, [draftData])
 
   const templates = useMemo(() => {
     const payload = unwrapData<any>(templateData)
-    return Array.isArray(payload) ? (payload as FlowTemplate[]) : []
+    if (Array.isArray(payload)) return payload as FlowTemplate[]
+    if (Array.isArray(payload?.templates)) return payload.templates as FlowTemplate[]
+    return []
   }, [templateData])
 
   const intentOptions = useMemo(() => {
@@ -416,6 +420,13 @@ export default function AutomationTemplates() {
       setNewDraftDescription('')
       setNewDraftTemplateId('')
       setNewDraftOpen(false)
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.error ||
+        error?.message ||
+        'Failed to create draft.'
+      setError(message)
     },
   })
 

@@ -1,20 +1,20 @@
 import express from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { getTierForUser, getWorkspaceOwnerTier, getUsageWindow } from '../services/tierService';
-import UsageCounter from '../models/UsageCounter';
 import InstagramAccount from '../models/InstagramAccount';
-import WorkspaceMember from '../models/WorkspaceMember';
 import KnowledgeItem from '../models/KnowledgeItem';
-import Workspace from '../models/Workspace';
 import { WorkspaceInvite } from '../models/WorkspaceInvite';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
+import { countWorkspaceMembers } from '../repositories/core/workspaceMemberRepository';
+import { getUsageCounter } from '../repositories/core/usageCounterRepository';
+import { getWorkspaceById } from '../repositories/core/workspaceRepository';
 
 const router = express.Router();
 
 const buildWorkspaceUsage = async (workspaceId: string) => {
   const [accounts, members, knowledge, pendingInvites] = await Promise.all([
     InstagramAccount.countDocuments({ workspaceId }),
-    WorkspaceMember.countDocuments({ workspaceId }),
+    countWorkspaceMembers(workspaceId),
     KnowledgeItem.countDocuments({ workspaceId }),
     WorkspaceInvite.countDocuments({
       workspaceId,
@@ -35,16 +35,12 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
     const tierSummary = await getTierForUser(req.userId!);
     const { periodStart, periodEnd } = getUsageWindow();
 
-    const aiUsage = await UsageCounter.findOne({
-      userId: req.userId,
-      resource: 'aiMessages',
-      periodStart,
-    });
+    const aiUsage = await getUsageCounter(req.userId!, 'aiMessages', periodStart);
 
     let workspaceSummary: any = undefined;
     const workspaceId = req.query.workspaceId as string | undefined;
     if (workspaceId) {
-      const workspace = await Workspace.findById(workspaceId);
+      const workspace = await getWorkspaceById(workspaceId);
       if (workspace) {
         const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
         if (!hasAccess) {

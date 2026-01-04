@@ -462,6 +462,9 @@ export interface TierLimits {
   teamMembers?: number;
   automations?: number;
   knowledgeItems?: number;
+  crm?: boolean;
+  integrations?: boolean;
+  flowBuilder?: boolean;
 }
 
 export interface Tier {
@@ -812,7 +815,30 @@ export const crmAPI = {
         tags: params.tags?.join(','),
       },
     });
-    return data?.data || data;
+    const payload = data?.data || data;
+    const rawStageCounts = Array.isArray(payload?.stageCounts) ? payload.stageCounts : [];
+    const rawTagCounts = Array.isArray(payload?.tagCounts) ? payload.tagCounts : [];
+    const stageCounts = rawStageCounts.reduce((acc: Record<CrmStage, number>, entry: any) => {
+      if (!entry?.stage) return acc;
+      acc[entry.stage as CrmStage] = entry.count ?? 0;
+      return acc;
+    }, {
+      new: 0,
+      engaged: 0,
+      qualified: 0,
+      won: 0,
+      lost: 0,
+    });
+    const tagCounts = rawTagCounts.reduce((acc: Record<string, number>, entry: any) => {
+      if (!entry?.tag) return acc;
+      acc[entry.tag] = entry.count ?? 0;
+      return acc;
+    }, {});
+    return {
+      ...payload,
+      stageCounts,
+      tagCounts,
+    };
   },
 
   getContact: async (conversationId: string): Promise<{ contact: CrmContact }> => {
