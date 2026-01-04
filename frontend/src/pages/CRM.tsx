@@ -939,6 +939,291 @@ const CRM: React.FC = () => {
   const selectedActivityLabel = activityOptions.find((option) => option.value === inactiveDays)?.label || 'All';
   const visibleMessages = messages.slice(-8);
   const hasMoreMessages = messages.length > visibleMessages.length;
+  const activityPanelContent = (
+    <>
+      {!selectedContact && !detailLoading && (
+        <div className="text-sm text-muted-foreground">Select a contact to view activity.</div>
+      )}
+      {detailLoading && (
+        <div className="text-sm text-muted-foreground">Loading conversation...</div>
+      )}
+      {selectedContact && !detailLoading && (
+        <>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
+                {getInitials(selectedContact)}
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-foreground">{selectedContact.participantName || 'Contact'}</p>
+                <p className="text-xs text-muted-foreground">{selectedContact.participantHandle}</p>
+              </div>
+              <Badge variant={stageVariant[selectedContact.stage || 'new']}>
+                {(selectedContact.stage || 'new').toUpperCase()}
+              </Badge>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<MessageSquare className="w-4 h-4" />}
+              type="button"
+              onClick={() => navigate(`/app/inbox?conversationId=${selectedContact._id}`)}
+            >
+              Open in Inbox
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <Button
+              size="sm"
+              variant="secondary"
+              leftIcon={<CalendarClock className="w-4 h-4" />}
+              onClick={handleQuickFollowup}
+              isLoading={quickTaskSaving}
+            >
+              Create follow-up
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<Plus className="w-4 h-4" />}
+              onClick={handleOpenTaskForm}
+            >
+              Create task
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<StickyNote className="w-4 h-4" />}
+              onClick={handleOpenNoteForm}
+            >
+              Add note
+            </Button>
+            <Button size="sm" variant="outline" disabled>
+              Quote / Order
+            </Button>
+          </div>
+
+          {activityView !== 'activity' && (
+            <div className="mb-3">
+              <Button
+                size="sm"
+                variant="ghost"
+                leftIcon={<ChevronDown className="w-4 h-4 rotate-90" />}
+                onClick={() => setActivityView('activity')}
+              >
+                Back to activity
+              </Button>
+            </div>
+          )}
+
+          {activityView === 'activity' && (
+            <>
+              <div className="border border-border/60 rounded-xl p-3 mb-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Sparkles className="w-4 h-4" />
+                  Quick replies
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {quickReplies.map((reply) => (
+                    <button
+                      key={reply.label}
+                      onClick={() => handleQuickReplyCopy(reply.text)}
+                      className="px-3 py-1 rounded-full border border-border/70 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40"
+                    >
+                      {reply.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex-1 min-h-0">
+                {hasMoreMessages && (
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Showing the latest {visibleMessages.length} messages.
+                  </p>
+                )}
+                <div className="max-h-[360px] overflow-y-auto space-y-3 pr-1">
+                  {messages.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No messages recorded yet.</p>
+                  ) : (
+                    visibleMessages.map((message) => (
+                      <div
+                        key={message._id}
+                        className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${message.from === 'customer'
+                          ? 'bg-muted text-foreground'
+                          : message.from === 'ai'
+                            ? 'bg-primary/10 text-foreground ml-auto'
+                            : 'bg-secondary text-secondary-foreground ml-auto'
+                          }`}
+                      >
+                        <p>{message.text || 'Attachment'}</p>
+                        <p className="text-[10px] text-muted-foreground mt-1 text-right">
+                          {formatDateTime(message.createdAt)}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {activityView === 'task' && (
+            <div className="space-y-4 flex-1 min-h-0">
+              <div className="rounded-xl border border-border/60 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Create task</h3>
+                </div>
+                <Input
+                  label="Title"
+                  value={taskDraft.title}
+                  onChange={(e) => setTaskDraft((prev) => ({ ...prev, title: e.target.value }))}
+                />
+                <Input
+                  label="Description"
+                  value={taskDraft.description}
+                  onChange={(e) => setTaskDraft((prev) => ({ ...prev, description: e.target.value }))}
+                />
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Due date/time</label>
+                  <input
+                    type="datetime-local"
+                    className="input-field"
+                    value={taskDraft.dueAt}
+                    onChange={(e) => setTaskDraft((prev) => ({ ...prev, dueAt: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Assignee</label>
+                  <select
+                    className="input-field"
+                    value={taskDraft.assignedTo}
+                    onChange={(e) => setTaskDraft((prev) => ({ ...prev, assignedTo: e.target.value }))}
+                  >
+                    <option value="">Unassigned</option>
+                    {members.map((member) => (
+                      <option key={member.user.id || member.user._id} value={member.user.id || member.user._id}>
+                        {member.user.email || member.user.instagramUsername || 'Teammate'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Task type</label>
+                  <select
+                    className="input-field"
+                    value={taskDraft.taskType}
+                    onChange={(e) => setTaskDraft((prev) => ({
+                      ...prev,
+                      taskType: e.target.value as 'follow_up' | 'general',
+                    }))}
+                  >
+                    <option value="follow_up">Follow-up</option>
+                    <option value="general">General</option>
+                  </select>
+                </div>
+                <Button onClick={handleAddTask} isLoading={savingTask} size="sm">
+                  Create task
+                </Button>
+              </div>
+
+              <div className="rounded-xl border border-border/60 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CalendarClock className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-semibold text-foreground">Open tasks</h3>
+                  </div>
+                  <Badge variant="secondary">{openTasks.length}</Badge>
+                </div>
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {tasks.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No tasks yet.</p>
+                  )}
+                  {tasks.map((task) => (
+                    <div
+                      key={task._id}
+                      className="border border-border/60 rounded-xl p-3 flex items-start justify-between gap-3"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-foreground text-sm">{task.title}</p>
+                          <Badge variant={task.status === 'completed' ? 'success' : 'secondary'}>
+                            {task.status}
+                          </Badge>
+                        </div>
+                        {task.description && (
+                          <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
+                        )}
+                        <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <CalendarClock className="w-3 h-3" />
+                            Due {formatDateTime(task.dueAt)}
+                          </span>
+                          <span>{formatSla(task.dueAt)}</span>
+                        </div>
+                      </div>
+                      {task.status === 'open' && (
+                        <button
+                          onClick={() => handleTaskStatus(task._id, 'completed')}
+                          className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          Complete
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activityView === 'note' && (
+            <div className="space-y-4 flex-1 min-h-0">
+              <div className="rounded-xl border border-border/60 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <StickyNote className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Add note</h3>
+                </div>
+                <textarea
+                  className="input-field min-h-[120px]"
+                  placeholder="Capture context, next steps, or personal preferences."
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                />
+                <Button onClick={handleAddNote} isLoading={savingNote} size="sm">
+                  Save note
+                </Button>
+              </div>
+
+              <div className="rounded-xl border border-border/60 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <StickyNote className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Recent notes</h3>
+                </div>
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {notes.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No notes yet.</p>
+                  )}
+                  {notes.map((note) => (
+                    <div key={note._id} className="border border-border/60 rounded-xl p-3">
+                      <p className="text-sm text-foreground">{note.body}</p>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
+                        <span>{note.author?.name || 'Teammate'}</span>
+                        <span>{formatDateTime(note.createdAt)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
   const detailsPanelContent = (
     <>
       {!selectedContact && !detailLoading && (
@@ -1555,7 +1840,7 @@ const CRM: React.FC = () => {
                     className="fixed inset-0 bg-background/40 backdrop-blur-sm z-40"
                     onClick={() => setKanbanDrawerOpen(false)}
                   />
-                  <div className="fixed inset-y-0 right-0 w-full max-w-[440px] md:max-w-[35%] bg-background border-l border-border shadow-2xl z-50 flex flex-col">
+                  <div className="fixed inset-y-0 right-0 w-full max-w-[1000px] bg-background border-l border-border shadow-2xl z-50 flex flex-col">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background">
                       <div className="text-sm font-semibold text-foreground">Contact details</div>
                       <button
@@ -1566,8 +1851,13 @@ const CRM: React.FC = () => {
                         <X className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-background">
-                      <div className="flex flex-col min-h-0">{detailsPanelContent}</div>
+                    <div className="flex-1 min-h-0 flex flex-col lg:flex-row bg-background">
+                      <div className="flex-1 min-h-0 overflow-y-auto p-4 border-b border-border/60 lg:border-b-0 lg:border-r lg:border-border/60">
+                        {activityPanelContent}
+                      </div>
+                      <div className="w-full lg:w-[360px] min-h-0 overflow-y-auto p-4">
+                        {detailsPanelContent}
+                      </div>
                     </div>
                   </div>
                 </>
@@ -1655,289 +1945,9 @@ const CRM: React.FC = () => {
                 </div>
               </div>
 
-              <div className="glass-panel rounded-2xl p-4 flex flex-col min-h-0">
-                {!selectedContact && !detailLoading && (
-                  <div className="text-sm text-muted-foreground">Select a contact to view activity.</div>
-                )}
-                {detailLoading && (
-                  <div className="text-sm text-muted-foreground">Loading conversation...</div>
-                )}
-                {selectedContact && !detailLoading && (
-                  <>
-                    <div className="flex items-center justify-between gap-3 mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
-                          {getInitials(selectedContact)}
-                        </div>
-                        <div>
-                          <p className="text-lg font-semibold text-foreground">{selectedContact.participantName || 'Contact'}</p>
-                          <p className="text-xs text-muted-foreground">{selectedContact.participantHandle}</p>
-                        </div>
-                        <Badge variant={stageVariant[selectedContact.stage || 'new']}>
-                          {(selectedContact.stage || 'new').toUpperCase()}
-                        </Badge>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        leftIcon={<MessageSquare className="w-4 h-4" />}
-                        type="button"
-                        onClick={() => navigate(`/app/inbox?conversationId=${selectedContact._id}`)}
-                      >
-                        Open in Inbox
-                      </Button>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        leftIcon={<CalendarClock className="w-4 h-4" />}
-                        onClick={handleQuickFollowup}
-                        isLoading={quickTaskSaving}
-                      >
-                        Create follow-up
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        leftIcon={<Plus className="w-4 h-4" />}
-                        onClick={handleOpenTaskForm}
-                      >
-                        Create task
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        leftIcon={<StickyNote className="w-4 h-4" />}
-                        onClick={handleOpenNoteForm}
-                      >
-                        Add note
-                      </Button>
-                      <Button size="sm" variant="outline" disabled>
-                        Quote / Order
-                      </Button>
-                    </div>
-
-                    {activityView !== 'activity' && (
-                      <div className="mb-3">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          leftIcon={<ChevronDown className="w-4 h-4 rotate-90" />}
-                          onClick={() => setActivityView('activity')}
-                        >
-                          Back to activity
-                        </Button>
-                      </div>
-                    )}
-
-                    {activityView === 'activity' && (
-                      <>
-                        <div className="border border-border/60 rounded-xl p-3 mb-3">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Sparkles className="w-4 h-4" />
-                            Quick replies
-                          </div>
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {quickReplies.map((reply) => (
-                              <button
-                                key={reply.label}
-                                onClick={() => handleQuickReplyCopy(reply.text)}
-                                className="px-3 py-1 rounded-full border border-border/70 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40"
-                              >
-                                {reply.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="flex-1 min-h-0">
-                          {hasMoreMessages && (
-                            <p className="text-xs text-muted-foreground mb-2">
-                              Showing the latest {visibleMessages.length} messages.
-                            </p>
-                          )}
-                          <div className="max-h-[360px] overflow-y-auto space-y-3 pr-1">
-                            {messages.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">No messages recorded yet.</p>
-                            ) : (
-                              visibleMessages.map((message) => (
-                                <div
-                                  key={message._id}
-                                  className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${message.from === 'customer'
-                                    ? 'bg-muted text-foreground'
-                                    : message.from === 'ai'
-                                      ? 'bg-primary/10 text-foreground ml-auto'
-                                      : 'bg-secondary text-secondary-foreground ml-auto'
-                                    }`}
-                                >
-                                  <p>{message.text || 'Attachment'}</p>
-                                  <p className="text-[10px] text-muted-foreground mt-1 text-right">
-                                    {formatDateTime(message.createdAt)}
-                                  </p>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {activityView === 'task' && (
-                      <div className="space-y-4 flex-1 min-h-0">
-                        <div className="rounded-xl border border-border/60 p-4 space-y-3">
-                          <div className="flex items-center gap-2">
-                            <ClipboardList className="w-4 h-4 text-primary" />
-                            <h3 className="text-sm font-semibold text-foreground">Create task</h3>
-                          </div>
-                          <Input
-                            label="Title"
-                            value={taskDraft.title}
-                            onChange={(e) => setTaskDraft((prev) => ({ ...prev, title: e.target.value }))}
-                          />
-                          <Input
-                            label="Description"
-                            value={taskDraft.description}
-                            onChange={(e) => setTaskDraft((prev) => ({ ...prev, description: e.target.value }))}
-                          />
-                          <div>
-                            <label className="block text-xs font-medium text-muted-foreground mb-1">Due date/time</label>
-                            <input
-                              type="datetime-local"
-                              className="input-field"
-                              value={taskDraft.dueAt}
-                              onChange={(e) => setTaskDraft((prev) => ({ ...prev, dueAt: e.target.value }))}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-muted-foreground mb-1">Assignee</label>
-                            <select
-                              className="input-field"
-                              value={taskDraft.assignedTo}
-                              onChange={(e) => setTaskDraft((prev) => ({ ...prev, assignedTo: e.target.value }))}
-                            >
-                              <option value="">Unassigned</option>
-                              {members.map((member) => (
-                                <option key={member.user.id || member.user._id} value={member.user.id || member.user._id}>
-                                  {member.user.email || member.user.instagramUsername || 'Teammate'}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-muted-foreground mb-1">Task type</label>
-                            <select
-                              className="input-field"
-                              value={taskDraft.taskType}
-                              onChange={(e) => setTaskDraft((prev) => ({
-                                ...prev,
-                                taskType: e.target.value as 'follow_up' | 'general',
-                              }))}
-                            >
-                              <option value="follow_up">Follow-up</option>
-                              <option value="general">General</option>
-                            </select>
-                          </div>
-                          <Button onClick={handleAddTask} isLoading={savingTask} size="sm">
-                            Create task
-                          </Button>
-                        </div>
-
-                        <div className="rounded-xl border border-border/60 p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <CalendarClock className="w-4 h-4 text-primary" />
-                              <h3 className="text-sm font-semibold text-foreground">Open tasks</h3>
-                            </div>
-                            <Badge variant="secondary">{openTasks.length}</Badge>
-                          </div>
-                          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                            {tasks.length === 0 && (
-                              <p className="text-xs text-muted-foreground">No tasks yet.</p>
-                            )}
-                            {tasks.map((task) => (
-                              <div
-                                key={task._id}
-                                className="border border-border/60 rounded-xl p-3 flex items-start justify-between gap-3"
-                              >
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-semibold text-foreground text-sm">{task.title}</p>
-                                    <Badge variant={task.status === 'completed' ? 'success' : 'secondary'}>
-                                      {task.status}
-                                    </Badge>
-                                  </div>
-                                  {task.description && (
-                                    <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
-                                  )}
-                                  <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
-                                    <span className="flex items-center gap-1">
-                                      <CalendarClock className="w-3 h-3" />
-                                      Due {formatDateTime(task.dueAt)}
-                                    </span>
-                                    <span>{formatSla(task.dueAt)}</span>
-                                  </div>
-                                </div>
-                                {task.status === 'open' && (
-                                  <button
-                                    onClick={() => handleTaskStatus(task._id, 'completed')}
-                                    className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
-                                  >
-                                    <CheckCircle2 className="w-4 h-4" />
-                                    Complete
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {activityView === 'note' && (
-                      <div className="space-y-4 flex-1 min-h-0">
-                        <div className="rounded-xl border border-border/60 p-4 space-y-3">
-                          <div className="flex items-center gap-2">
-                            <StickyNote className="w-4 h-4 text-primary" />
-                            <h3 className="text-sm font-semibold text-foreground">Add note</h3>
-                          </div>
-                          <textarea
-                            className="input-field min-h-[120px]"
-                            placeholder="Capture context, next steps, or personal preferences."
-                            value={noteDraft}
-                            onChange={(e) => setNoteDraft(e.target.value)}
-                          />
-                          <Button onClick={handleAddNote} isLoading={savingNote} size="sm">
-                            Save note
-                          </Button>
-                        </div>
-
-                        <div className="rounded-xl border border-border/60 p-4 space-y-3">
-                          <div className="flex items-center gap-2">
-                            <StickyNote className="w-4 h-4 text-primary" />
-                            <h3 className="text-sm font-semibold text-foreground">Recent notes</h3>
-                          </div>
-                          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                            {notes.length === 0 && (
-                              <p className="text-xs text-muted-foreground">No notes yet.</p>
-                            )}
-                            {notes.map((note) => (
-                              <div key={note._id} className="border border-border/60 rounded-xl p-3">
-                                <p className="text-sm text-foreground">{note.body}</p>
-                                <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
-                                  <span>{note.author?.name || 'Teammate'}</span>
-                                  <span>{formatDateTime(note.createdAt)}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+          <div className="glass-panel rounded-2xl p-4 flex flex-col min-h-0">
+            {activityPanelContent}
+          </div>
 
               <div className="glass-panel rounded-2xl p-4 flex flex-col min-h-0">
                 {detailsPanelContent}
