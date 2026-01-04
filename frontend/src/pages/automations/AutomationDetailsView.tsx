@@ -528,9 +528,9 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           )}
         </div>
       </CardHeader>
-      <CardContent className="flex-1 min-h-0 flex flex-col gap-4">
+      <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
         <div className="flex-1 min-h-0 flex items-center justify-center">
-          <div className="h-full max-h-[640px] aspect-[9/19.5] w-auto max-w-full">
+          <div className="h-full max-h-full aspect-[9/19.5] w-auto max-w-full">
             <AutomationPreviewPhone
               accountDisplayName={accountDisplayName}
               accountHandle={accountHandle}
@@ -587,7 +587,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   );
 
   const renderRightPane = () => (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 min-h-0 overflow-y-auto pr-1">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
           <div>
@@ -714,7 +714,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         </CardContent>
       </Card>
 
-      <Card className="flex flex-col min-h-0">
+      <Card className="flex flex-col min-h-0 flex-1">
         <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
           <div>
             <CardTitle>Live Automation State</CardTitle>
@@ -722,7 +722,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           </div>
           <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto">
           <div className="rounded-lg border border-border/60 bg-background/60 p-3">
             <div className="text-xs font-semibold uppercase text-muted-foreground">Current step</div>
             {previewState.currentNode ? (
@@ -812,8 +812,8 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-4">
+    <div className="h-full flex flex-col min-h-0 gap-6">
+      <div className="flex flex-wrap items-center gap-4 flex-shrink-0">
         <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="w-4 h-4" />} onClick={onBack}>
           Back
         </Button>
@@ -829,7 +829,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         </Button>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] flex-1 min-h-0 overflow-hidden">
         {renderTestConsole(false)}
         {renderRightPane()}
       </div>
@@ -841,7 +841,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         size="full"
         className="h-[85vh]"
       >
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] h-full">
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] h-full min-h-0 overflow-hidden">
           {renderTestConsole(true)}
           {renderRightPane()}
         </div>

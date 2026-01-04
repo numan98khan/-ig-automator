@@ -133,6 +133,7 @@ const Automations: React.FC = () => {
   const isAutomationsSection = activeSection === 'automations';
   const isCreateView = isAutomationsSection && (automationView === 'create' || automationView === 'edit');
   const isDetailsView = isAutomationsSection && automationView === 'details';
+  const isAutomationFullHeightView = isCreateView || isDetailsView;
 
   const [creationMode, setCreationMode] = useState<'templates' | 'custom'>('templates');
   const [currentStep, setCurrentStep] = useState<'gallery' | 'setup' | 'review'>('gallery');
@@ -525,8 +526,8 @@ const Automations: React.FC = () => {
   if (!currentWorkspace) return null;
 
   return (
-    <div className={`h-full flex flex-col ${isCreateSetupView ? 'overflow-hidden' : ''}`}>
-      <div className={`flex flex-col lg:flex-row gap-6 ${isCreateSetupView ? 'flex-1 min-h-0' : ''}`}>
+    <div className={`h-full flex flex-col ${isCreateSetupView || isDetailsView ? 'overflow-hidden' : ''}`}>
+      <div className={`flex flex-col lg:flex-row gap-6 ${isCreateSetupView || isDetailsView ? 'flex-1 min-h-0' : ''}`}>
         <AutomationsSidebar
           activeSection={activeSection}
           onChange={handleSectionChange}
@@ -534,7 +535,7 @@ const Automations: React.FC = () => {
 
         <div
           className={`flex-1 min-h-0 ${
-            isCreateSetupView ? 'flex flex-col gap-6 overflow-hidden' : 'space-y-6'
+            isCreateSetupView || isDetailsView ? 'flex flex-col gap-6 overflow-hidden' : 'space-y-6'
           }`}
         >
           {error && (
@@ -545,7 +546,11 @@ const Automations: React.FC = () => {
           )}
 
           {activeSection === 'automations' && (
-            <div className={`animate-fade-in ${isCreateView ? 'min-h-0 flex-1 flex flex-col gap-6' : 'space-y-6'}`}>
+            <div
+              className={`animate-fade-in ${
+                isAutomationFullHeightView ? 'min-h-0 flex-1 flex flex-col gap-6 overflow-hidden' : 'space-y-6'
+              }`}
+            >
               {isCreateView ? (
                 <AutomationsCreateView
                   createViewTitle={createViewTitle}
