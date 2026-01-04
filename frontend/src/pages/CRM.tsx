@@ -26,6 +26,7 @@ import {
   CrmStage,
   CrmTask,
   Message,
+  tierAPI,
   workspaceAPI,
   WorkspaceMember,
 } from '../services/api';
@@ -243,6 +244,9 @@ const CRM: React.FC = () => {
     waiting: 0,
     qualified: 0,
   });
+  const [crmLocked, setCrmLocked] = useState(false);
+  const [crmTierName, setCrmTierName] = useState<string | null>(null);
+  const [crmAccessLoading, setCrmAccessLoading] = useState(false);
 
   const [contactForm, setContactForm] = useState<ContactForm>({
     participantName: '',
@@ -349,6 +353,8 @@ const CRM: React.FC = () => {
     return result;
   }, [contacts, quickFilters, sortBy]);
 
+  const crmAccessBlocked = crmLocked && !crmAccessLoading;
+
   const openTasks = useMemo(
     () => tasks.filter((task) => task.status === 'open'),
     [tasks],
@@ -428,6 +434,7 @@ const CRM: React.FC = () => {
   }, []);
 
   const loadMembers = async (workspaceId: string) => {
+    if (crmAccessBlocked) return;
     try {
       const data = await workspaceAPI.getMembers(workspaceId);
       setMembers(data);
@@ -438,6 +445,7 @@ const CRM: React.FC = () => {
   };
 
   const loadContacts = async (workspaceId: string) => {
+    if (crmAccessBlocked) return;
     setLoading(true);
     try {
       const payload = await crmAPI.listContacts({
@@ -740,13 +748,54 @@ const CRM: React.FC = () => {
 
   useEffect(() => {
     if (!currentWorkspace) return;
-    loadMembers(currentWorkspace._id);
+    let isActive = true;
+    const loadTierAccess = async () => {
+      setCrmAccessLoading(true);
+      try {
+        const summary = await tierAPI.getWorkspace(currentWorkspace._id);
+        const limits = summary?.limits || summary?.tier?.limits || {};
+        const allowed = limits.crm !== false;
+        if (isActive) {
+          setCrmLocked(!allowed);
+          setCrmTierName(summary?.tier?.name || null);
+        }
+      } catch (error) {
+        console.error('Failed to load CRM tier access', error);
+        if (isActive) {
+          setCrmLocked(false);
+          setCrmTierName(null);
+        }
+      } finally {
+        if (isActive) {
+          setCrmAccessLoading(false);
+        }
+      }
+    };
+    loadTierAccess();
+    return () => {
+      isActive = false;
+    };
   }, [currentWorkspace]);
 
   useEffect(() => {
-    if (!currentWorkspace) return;
+    if (!crmAccessBlocked) return;
+    setSelectedContactId(null);
+    setSelectedContact(null);
+    setNotes([]);
+    setTasks([]);
+    setAutomationEvents([]);
+    setMessages([]);
+  }, [crmAccessBlocked]);
+
+  useEffect(() => {
+    if (!currentWorkspace || crmAccessBlocked) return;
+    loadMembers(currentWorkspace._id);
+  }, [currentWorkspace, crmAccessBlocked]);
+
+  useEffect(() => {
+    if (!currentWorkspace || crmAccessBlocked) return;
     loadContacts(currentWorkspace._id);
-  }, [currentWorkspace, search, stageFilter, tagFilter, inactiveDays]);
+  }, [currentWorkspace, search, stageFilter, tagFilter, inactiveDays, crmAccessBlocked]);
 
   useEffect(() => {
     if (!contacts.length) {
@@ -770,8 +819,11 @@ const CRM: React.FC = () => {
       setSaveState('saved');
       return;
     }
+    if (crmAccessBlocked) {
+      return;
+    }
     loadContactDetail(selectedContactId);
-  }, [selectedContactId]);
+  }, [selectedContactId, crmAccessBlocked]);
 
   useEffect(() => {
     if (!selectedContact) return;
@@ -1267,10 +1319,50 @@ const CRM: React.FC = () => {
   );
 
   return (
-    <div className="h-full flex flex-col gap-4">
-      <div className="sticky top-0 z-20">
-        <div className="glass-panel rounded-2xl px-2.5 py-2 space-y-2 overflow-visible">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 md:flex-nowrap md:min-h-[52px]">
+    <div className="relative h-full flex flex-col gap-4">
+      {crmAccessBlocked && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-black/60 backdrop-blur-sm p-6">
+          <div className="max-w-xl w-full rounded-2xl border border-border bg-card p-6 shadow-xl text-center space-y-4">
+            <Badge variant="secondary" className="uppercase tracking-[0.3em] text-[10px]">
+              Upgrade required
+            </Badge>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-foreground">Unlock the CRM workspace</h2>
+              <p className="text-sm text-muted-foreground">
+                You&apos;re seeing a preview of the CRM workspace. Upgrade your plan to manage contacts, tasks, and automation insights.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+              {[
+                'Contact pipeline and stage tracking',
+                'Notes, tasks, and ownership assignments',
+                'Automation event history per contact',
+                'Lead scoring and smart filters',
+              ].map((item) => (
+                <div key={item} className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/30 p-3">
+                  <CheckCircle2 className="w-4 h-4 text-primary mt-0.5" />
+                  <span className="text-sm text-foreground">{item}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col md:flex-row items-center justify-center gap-3">
+              <Button
+                onClick={() => navigate('/app/settings?tab=plan')}
+                className="w-full md:w-auto"
+              >
+                View upgrade options
+              </Button>
+              {crmTierName && (
+                <span className="text-xs text-muted-foreground">Current plan: {crmTierName}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      <div className={crmAccessBlocked ? 'pointer-events-none select-none blur-sm' : ''}>
+        <div className="sticky top-0 z-20">
+          <div className="glass-panel rounded-2xl px-2.5 py-2 space-y-2 overflow-visible">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 md:flex-nowrap md:min-h-[52px]">
             {viewMode !== 'kanban' && (
               <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap min-w-[180px] md:max-w-[420px] flex-1 md:flex-none">
                 {stageTabs.map((stage) => (
@@ -1974,6 +2066,7 @@ const CRM: React.FC = () => {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 };
