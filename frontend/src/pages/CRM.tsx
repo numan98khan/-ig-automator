@@ -1552,10 +1552,10 @@ const CRM: React.FC = () => {
                 <>
                   <button
                     type="button"
-                    className="absolute inset-0 bg-background/40 backdrop-blur-sm z-20"
+                    className="fixed inset-0 bg-background/40 backdrop-blur-sm z-40"
                     onClick={() => setKanbanDrawerOpen(false)}
                   />
-                  <div className="absolute inset-y-0 right-0 w-full max-w-[440px] md:max-w-[35%] bg-background border-l border-border shadow-2xl z-30 flex flex-col">
+                  <div className="fixed inset-y-0 right-0 w-full max-w-[440px] md:max-w-[35%] bg-background border-l border-border shadow-2xl z-50 flex flex-col">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background">
                       <div className="text-sm font-semibold text-foreground">Contact details</div>
                       <button
