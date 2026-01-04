@@ -322,20 +322,6 @@ export interface AutomationStats {
   lastReplySentAt?: string;
 }
 
-export interface AutomationIntent {
-  _id?: string;
-  workspaceId?: string;
-  value: string;
-  description: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface AutomationIntentListResponse {
-  systemIntents: AutomationIntent[];
-  customIntents: AutomationIntent[];
-}
-
 export interface FlowFieldOption {
   label: string;
   value: string;
@@ -1001,24 +987,6 @@ export const automationAPI = {
   ): Promise<AutomationPreviewSessionResponse> => {
     const { data } = await api.post(`/api/automations/${id}/preview-session/stop`, payload);
     return data;
-  },
-};
-
-export const automationIntentAPI = {
-  list: async (workspaceId: string): Promise<AutomationIntentListResponse> => {
-    const { data } = await api.get('/api/automation-intents', { params: { workspaceId } });
-    return data;
-  },
-  create: async (payload: { workspaceId: string; value: string; description: string }): Promise<AutomationIntent> => {
-    const { data } = await api.post('/api/automation-intents', payload);
-    return data;
-  },
-  update: async (id: string, payload: { value?: string; description?: string }): Promise<AutomationIntent> => {
-    const { data } = await api.put(`/api/automation-intents/${id}`, payload);
-    return data;
-  },
-  delete: async (id: string): Promise<void> => {
-    await api.delete(`/api/automation-intents/${id}`);
   },
 };
 
