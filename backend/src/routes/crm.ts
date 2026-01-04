@@ -11,6 +11,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { existsWorkspaceMember } from '../repositories/core/workspaceMemberRepository';
 import { getUserById, listUsersByIds } from '../repositories/core/userRepository';
+import { assertWorkspaceFeatureAccess } from '../services/tierService';
 
 const router = express.Router();
 
@@ -80,6 +81,8 @@ const loadConversationForUser = async (conversationId: string, userId: string) =
   if (!conversation) return { error: 'not_found' as const };
   const { hasAccess } = await checkWorkspaceAccess(conversation.workspaceId.toString(), userId);
   if (!hasAccess) return { error: 'forbidden' as const };
+  const featureCheck = await assertWorkspaceFeatureAccess(conversation.workspaceId.toString(), 'crm');
+  if (!featureCheck.allowed) return { error: 'feature_disabled' as const, tier: featureCheck.tier };
   return { conversation };
 };
 
@@ -114,6 +117,10 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
     const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied to this workspace' });
+    }
+    const featureCheck = await assertWorkspaceFeatureAccess(workspaceId, 'crm');
+    if (!featureCheck.allowed) {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier: featureCheck.tier });
     }
 
     const page = Math.max(1, toInt(req.query.page, 1));
@@ -257,10 +264,13 @@ router.get('/contacts', authenticate, async (req: AuthRequest, res: Response) =>
 
 router.get('/contacts/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error } = await loadConversationForUser(req.params.id, req.userId!);
+    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
+    if (error === 'feature_disabled') {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
+    }
 
     res.json({ data: { contact: formatContact(conversation.toObject()) } });
   } catch (error) {
@@ -271,10 +281,13 @@ router.get('/contacts/:id', authenticate, async (req: AuthRequest, res: Response
 
 router.patch('/contacts/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error } = await loadConversationForUser(req.params.id, req.userId!);
+    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
+    if (error === 'feature_disabled') {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
+    }
 
     const updates: Record<string, any> = {};
     if (typeof req.body?.participantName === 'string') {
@@ -329,10 +342,13 @@ router.patch('/contacts/:id', authenticate, async (req: AuthRequest, res: Respon
 
 router.get('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error } = await loadConversationForUser(req.params.id, req.userId!);
+    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
+    if (error === 'feature_disabled') {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
+    }
 
     const notes = await ContactNote.find({ conversationId: conversation._id })
       .sort({ createdAt: -1 })
@@ -359,10 +375,13 @@ router.post('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: R
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { conversation, error } = await loadConversationForUser(req.params.id, req.userId!);
+    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
+    if (error === 'feature_disabled') {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
+    }
 
     const body = typeof req.body?.body === 'string'
       ? req.body.body.trim()
@@ -399,10 +418,13 @@ router.post('/contacts/:id/notes', authenticate, async (req: AuthRequest, res: R
 
 router.get('/contacts/:id/automation-events', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error } = await loadConversationForUser(req.params.id, req.userId!);
+    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
+    if (error === 'feature_disabled') {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
+    }
 
     const sessions = await AutomationSession.find({ conversationId: conversation._id })
       .sort({ createdAt: -1 })
@@ -451,10 +473,13 @@ router.get('/contacts/:id/automation-events', authenticate, async (req: AuthRequ
 
 router.get('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error } = await loadConversationForUser(req.params.id, req.userId!);
+    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
+    if (error === 'feature_disabled') {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
+    }
 
     const tasks = await CrmTask.find({ conversationId: conversation._id })
       .sort({ status: 1, dueAt: 1, createdAt: -1 })
@@ -484,10 +509,13 @@ router.get('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: Re
 
 router.post('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error } = await loadConversationForUser(req.params.id, req.userId!);
+    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
+    if (error === 'feature_disabled') {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
+    }
 
     const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
     if (!title) {
@@ -556,10 +584,13 @@ router.post('/contacts/:id/tasks', authenticate, async (req: AuthRequest, res: R
 
 router.patch('/contacts/:id/tasks/:taskId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { conversation, error } = await loadConversationForUser(req.params.id, req.userId!);
+    const { conversation, error, tier } = await loadConversationForUser(req.params.id, req.userId!);
     if (error === 'invalid') return res.status(400).json({ error: 'Contact id must be valid' });
     if (error === 'not_found') return res.status(404).json({ error: 'Contact not found' });
     if (error === 'forbidden') return res.status(403).json({ error: 'Access denied to this workspace' });
+    if (error === 'feature_disabled') {
+      return res.status(403).json({ error: 'CRM feature not available for this tier', tier });
+    }
 
     if (!mongoose.isValidObjectId(req.params.taskId)) {
       return res.status(400).json({ error: 'Task id must be valid' });
