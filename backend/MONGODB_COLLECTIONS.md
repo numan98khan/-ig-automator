@@ -33,11 +33,6 @@ utils). Collection names follow Mongoose's default pluralization of the model na
     `backend/src/routes/messages.ts`, `backend/src/routes/instagram-sync.ts`, `backend/src/routes/admin.ts`,
     `backend/src/routes/crm.ts`, `backend/src/services/automationService.ts`
 
-- **BookingRequest**
-  - Status: used
-  - Purpose: captured booking goal info (date/time/service, summary).
-  - Used by: `backend/src/services/reportingService.ts` (analytics)
-
 - **CommentDMLog**
   - Status: used
   - Purpose: comment-to-DM automation audit log (status, DM text, errors).
@@ -141,11 +136,6 @@ utils). Collection names follow Mongoose's default pluralization of the model na
     `backend/src/routes/escalations.ts`, `backend/src/routes/automation-instances.ts`,
     `backend/src/services/automationService.ts`, `backend/src/services/aiReplyService.ts`,
     `backend/src/services/aiAgentService.ts`, `backend/src/services/reportingService.ts`
-
-- **OrderIntent**
-  - Status: used
-  - Purpose: goal-driven order intent capture (product, quantity, summary).
-  - Used by: `backend/src/services/reportingService.ts` (analytics)
 
 - **ReportDailyWorkspace**
   - Status: used

@@ -54,6 +54,10 @@ const resetMongo = async () => {
     if (name === 'adminlogsettings') {
       continue;
     }
+    
+    if (name === 'adminlogsettings') {
+      continue;
+    }
 
     if (name === 'users') {
       await db.collection(name).deleteMany({ email: { $ne: ADMIN_EMAIL } });

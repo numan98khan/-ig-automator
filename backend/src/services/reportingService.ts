@@ -3,8 +3,6 @@ import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Escalation from '../models/Escalation';
 import LeadCapture from '../models/LeadCapture';
-import BookingRequest from '../models/BookingRequest';
-import OrderIntent from '../models/OrderIntent';
 import SupportTicketStub from '../models/SupportTicketStub';
 import ReportDailyWorkspace from '../models/ReportDailyWorkspace';
 import { GoalType } from '../types/automationGoals';
@@ -96,13 +94,9 @@ export async function rebuildWorkspaceReportForDate(workspaceId: string, date: D
     Message.countDocuments({ ...match, kbItemIdsUsed: { $exists: true, $not: { $size: 0 } } }),
     Promise.all([
       LeadCapture.countDocuments({ workspaceId, createdAt: { $gte: start, $lt: end } }),
-      BookingRequest.countDocuments({ workspaceId, createdAt: { $gte: start, $lt: end } }),
-      OrderIntent.countDocuments({ workspaceId, createdAt: { $gte: start, $lt: end } }),
       SupportTicketStub.countDocuments({ workspaceId, createdAt: { $gte: start, $lt: end } }),
-    ]).then(([leads, bookings, orders, supports]) => ({
+    ]).then(([leads, supports]) => ({
       capture_lead: leads,
-      book_appointment: bookings,
-      order_now: orders,
       handle_support: supports,
     })),
     Promise.resolve({}),
