@@ -286,6 +286,7 @@ export interface KnowledgeItem {
   title: string;
   content: string;
   storageMode?: 'vector' | 'text';
+  active?: boolean;
   workspaceId: string;
   createdAt: string;
   updatedAt?: string;
@@ -914,8 +915,16 @@ export const knowledgeAPI = {
     return data;
   },
 
-  update: async (id: string, title: string, content: string, storageMode: 'vector' | 'text'): Promise<KnowledgeItem> => {
-    const { data } = await api.put(`/api/knowledge/${id}`, { title, content, storageMode });
+  update: async (
+    id: string,
+    updates: Partial<Pick<KnowledgeItem, 'title' | 'content' | 'storageMode' | 'active'>>,
+  ): Promise<KnowledgeItem> => {
+    const { data } = await api.put(`/api/knowledge/${id}`, updates);
+    return data;
+  },
+
+  setActive: async (id: string, active: boolean): Promise<KnowledgeItem> => {
+    const { data } = await api.put(`/api/knowledge/${id}`, { active });
     return data;
   },
 

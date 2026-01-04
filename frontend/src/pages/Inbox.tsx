@@ -574,7 +574,7 @@ const Inbox: React.FC = () => {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
                         <h3 className="text-sm font-semibold truncate text-foreground">{conv.participantName}</h3>
-                        <span className="text-xs text-muted-foreground truncate">@{conv.participantHandle}</span>
+                        <span className="text-xs text-muted-foreground truncate">{conv.participantHandle}</span>
                       </div>
                       {conv.lastMessage && (
                         <p className="text-xs text-muted-foreground truncate mt-1">{conv.lastMessage}</p>

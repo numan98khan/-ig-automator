@@ -190,6 +190,7 @@ export const reindexWorkspaceKnowledge = async (workspaceId: string) => {
   const workspaceKey = getWorkspaceKey(workspaceId);
   const items = await KnowledgeItem.find({
     workspaceId,
+    active: { $ne: false },
     $or: [{ storageMode: { $exists: false } }, { storageMode: 'vector' }],
   });
   for (const item of items) {
@@ -205,6 +206,7 @@ export const reindexWorkspaceKnowledge = async (workspaceId: string) => {
 export const reindexGlobalKnowledge = async () => {
   const items = await KnowledgeItem.find({
     $and: [
+      { active: { $ne: false } },
       { $or: [{ workspaceId: null }, { workspaceId: { $exists: false } }] },
       { $or: [{ storageMode: { $exists: false } }, { storageMode: 'vector' }] },
     ],

@@ -163,9 +163,13 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     messageHistory,
   } = options;
 
+  const knowledgeBaseQuery = {
+    workspaceId,
+    active: { $ne: false },
+  };
   const knowledgeQuery = Array.isArray(options.knowledgeItemIds) && options.knowledgeItemIds.length > 0
-    ? { workspaceId, _id: { $in: options.knowledgeItemIds } }
-    : { workspaceId };
+    ? { ...knowledgeBaseQuery, _id: { $in: options.knowledgeItemIds } }
+    : knowledgeBaseQuery;
 
   const [knowledgeItems, baseWorkspaceSettings] = await Promise.all([
     KnowledgeItem.find(knowledgeQuery),

@@ -3,8 +3,6 @@ import { useAuth } from '../context/AuthContext';
 import { knowledgeAPI, KnowledgeItem } from '../services/api';
 import {
   Plus,
-  Copy,
-  Eye,
   Edit2,
   Trash2,
   BookOpen,
@@ -16,7 +14,8 @@ import {
   Clock,
   Sparkles,
   Database,
-  Upload
+  Upload,
+  Power,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -36,6 +35,7 @@ const Knowledge: React.FC = () => {
   const [storageMode, setStorageMode] = useState<'vector' | 'text'>('vector');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [storageFilter, setStorageFilter] = useState<StorageFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<KnowledgeCategory>('All');
@@ -71,7 +71,7 @@ const Knowledge: React.FC = () => {
     setError(null);
     try {
       if (editingItem) {
-        await knowledgeAPI.update(editingItem._id, title, content, storageMode);
+        await knowledgeAPI.update(editingItem._id, { title, content, storageMode });
       } else {
         await knowledgeAPI.create(title, content, currentWorkspace._id, storageMode);
       }
@@ -138,21 +138,19 @@ const Knowledge: React.FC = () => {
     }
   };
 
-  const handleDuplicate = async (item: KnowledgeItem, e: React.MouseEvent) => {
+  const handleToggleActive = async (item: KnowledgeItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!currentWorkspace) return;
-
+    const isActive = item.active !== false;
     try {
-      await knowledgeAPI.create(
-        `${item.title} Copy`,
-        item.content,
-        currentWorkspace._id,
-        item.storageMode || 'vector',
-      );
-      loadKnowledge();
+      setStatusUpdatingId(item._id);
+      const updated = await knowledgeAPI.setActive(item._id, !isActive);
+      setItems(prev => prev.map(entry => (entry._id === item._id ? updated : entry)));
+      setError(null);
     } catch (error) {
-      console.error('Error duplicating knowledge:', error);
-      setError('Failed to duplicate knowledge item');
+      console.error('Error updating knowledge status:', error);
+      setError('Failed to update knowledge status');
+    } finally {
+      setStatusUpdatingId(null);
     }
   };
 
@@ -321,94 +319,101 @@ const Knowledge: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
-            {filteredItems.map((item) => (
-              <div
-                key={item._id}
-                className="group relative glass-panel hover:bg-muted/50 border border-border rounded-xl p-5 transition-all duration-200 cursor-pointer hover:shadow-md"
-                onClick={() => handleOpenModal(item)}
-              >
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-2 bg-primary/10 text-primary rounded-lg flex-shrink-0">
-                      <FileText className="w-4 h-4" />
+            {filteredItems.map((item) => {
+              const isActive = item.active !== false;
+              const isUpdating = statusUpdatingId === item._id;
+              return (
+                <div
+                  key={item._id}
+                  className={`group relative glass-panel hover:bg-muted/50 border border-border rounded-xl p-5 transition-all duration-200 cursor-pointer hover:shadow-md ${
+                    isActive ? '' : 'opacity-70'
+                  }`}
+                  onClick={() => handlePreview(item)}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2 bg-primary/10 text-primary rounded-lg flex-shrink-0">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-foreground truncate">
+                          {item.title}
+                        </h3>
+                        <span className="text-xs text-muted-foreground">{getCategory(item)}</span>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-foreground truncate">
-                        {item.title}
-                      </h3>
-                      <span className="text-xs text-muted-foreground">{getCategory(item)}</span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold flex-shrink-0 ${
+                          (item.storageMode || 'vector') === 'vector'
+                            ? 'bg-primary/10 text-primary'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {(item.storageMode || 'vector') === 'vector' ? (
+                          <Sparkles className="w-3 h-3" />
+                        ) : (
+                          <Database className="w-3 h-3" />
+                        )}
+                        {(item.storageMode || 'vector') === 'vector' ? 'RAG (pgvector)' : 'Text only'}
+                      </span>
+                      {!isActive && (
+                        <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-[11px] font-semibold text-destructive">
+                          Inactive
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold flex-shrink-0 ${
-                      (item.storageMode || 'vector') === 'vector'
-                        ? 'bg-primary/10 text-primary'
-                        : 'bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    {(item.storageMode || 'vector') === 'vector' ? (
-                      <Sparkles className="w-3 h-3" />
-                    ) : (
-                      <Database className="w-3 h-3" />
-                    )}
-                    {(item.storageMode || 'vector') === 'vector' ? 'RAG (pgvector)' : 'Text only'}
-                  </span>
-                </div>
 
-                <div className="mb-4 rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Knowledge snippet
-                </div>
-
-                <p className="text-muted-foreground text-sm line-clamp-3 mb-4 h-[60px]">
-                  {item.content}
-                </p>
-
-                <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/50">
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="w-3 h-3" />
-                    {new Date(item.createdAt).toLocaleDateString()}
+                  <div className="mb-4 rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Knowledge snippet
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-3 h-3" />
-                    {relativeTime(item.updatedAt || item.createdAt)}
+
+                  <p className="text-muted-foreground text-sm line-clamp-3 mb-4 h-[60px]">
+                    {item.content}
+                  </p>
+
+                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/50">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3 h-3" />
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3 h-3" />
+                      {relativeTime(item.updatedAt || item.createdAt)}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={(e) => handleToggleActive(item, e)}
+                      disabled={isUpdating}
+                      className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-60"
+                    >
+                      {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+                      {isActive ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenModal(item);
+                      }}
+                      className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(item._id, e)}
+                      className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-destructive hover:border-destructive/40"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </button>
                   </div>
                 </div>
-
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={(e) => handlePreview(item, e)}
-                    className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                  >
-                    <Eye className="h-4 w-4" />
-                    Preview
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenModal(item);
-                    }}
-                    className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                    Edit
-                  </button>
-                  <button
-                    onClick={(e) => handleDuplicate(item, e)}
-                    className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                  >
-                    <Copy className="h-4 w-4" />
-                    Duplicate
-                  </button>
-                  <button
-                    onClick={(e) => handleDelete(item._id, e)}
-                    className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-destructive hover:border-destructive/40"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

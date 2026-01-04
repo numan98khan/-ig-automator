@@ -5,6 +5,7 @@ export interface IKnowledgeItem extends Document {
   content: string;
   workspaceId?: mongoose.Types.ObjectId;
   storageMode: 'vector' | 'text';
+  active: boolean;
   createdAt: Date;
 }
 
@@ -27,6 +28,10 @@ const knowledgeItemSchema = new Schema<IKnowledgeItem>({
     type: String,
     enum: ['vector', 'text'],
     default: 'vector',
+  },
+  active: {
+    type: Boolean,
+    default: true,
   },
   createdAt: {
     type: Date,

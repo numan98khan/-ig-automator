@@ -33,7 +33,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
 
 router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { title, content, workspaceId, storageMode = 'vector' } = req.body;
+    const { title, content, workspaceId, storageMode = 'vector', active } = req.body;
 
     if (!title || !content || !workspaceId || !STORAGE_MODES.includes(storageMode)) {
       return res.status(400).json({ error: 'title, content, workspaceId, and valid storageMode are required' });
@@ -60,9 +60,10 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       content,
       workspaceId,
       storageMode,
+      ...(typeof active === 'boolean' ? { active } : {}),
     });
 
-    if (storageMode === 'vector') {
+    if (storageMode === 'vector' && item.active !== false) {
       await upsertKnowledgeEmbedding({
         id: item._id.toString(),
         workspaceId,
@@ -80,7 +81,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
 
 router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { title, content, storageMode } = req.body;
+    const { title, content, storageMode, active } = req.body;
     const { id } = req.params;
 
     if (storageMode && !STORAGE_MODES.includes(storageMode)) {
@@ -102,13 +103,15 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     }
 
     const nextStorageMode = storageMode || item.storageMode || 'vector';
+    const nextActive = typeof active === 'boolean' ? active : item.active !== false;
 
-    item.title = title || item.title;
-    item.content = content || item.content;
+    if (title) item.title = title;
+    if (content) item.content = content;
     item.storageMode = nextStorageMode;
+    item.active = nextActive;
     await item.save();
 
-    if (nextStorageMode === 'vector') {
+    if (nextStorageMode === 'vector' && nextActive) {
       await upsertKnowledgeEmbedding({
         id: item._id.toString(),
         workspaceId: item.workspaceId.toString(),
