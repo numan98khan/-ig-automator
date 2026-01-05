@@ -840,19 +840,14 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   return (
     <div className="h-full flex flex-col min-h-0 gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <button onClick={onBack} className="hover:text-foreground transition-colors">
-              Automations
-            </button>
-            <ArrowRight className="w-4 h-4" />
-            <span className="font-medium text-foreground">{automation.name}</span>
-            <ArrowRight className="w-4 h-4" />
-            <span className="font-medium text-foreground">Preview</span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {automation.description || 'Test and monitor your automation flow in real time.'}
-          </p>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <button onClick={onBack} className="hover:text-foreground transition-colors">
+            Automations
+          </button>
+          <ArrowRight className="w-4 h-4" />
+          <span className="font-medium text-foreground">{automation.name}</span>
+          <ArrowRight className="w-4 h-4" />
+          <span className="font-medium text-foreground">Preview</span>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
