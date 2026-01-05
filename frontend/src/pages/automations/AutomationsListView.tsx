@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Copy, Eye, Pencil, Plus, Loader2, Target, Trash2, Power, PowerOff } from 'lucide-react';
+import { Pencil, Plus, Loader2, Target, Trash2, Power, PowerOff } from 'lucide-react';
 import { AutomationInstance } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { TRIGGER_METADATA } from './constants';
@@ -19,7 +19,6 @@ type AutomationsListViewProps = {
   onOpen?: (automation: AutomationInstance) => void;
   onEdit?: (automation: AutomationInstance) => void;
   onToggle: (automation: AutomationInstance) => void;
-  onDuplicate: (automation: AutomationInstance) => void;
   onDelete: (automation: AutomationInstance) => void;
 };
 
@@ -31,7 +30,6 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
   onOpen,
   onEdit,
   onToggle,
-  onDuplicate,
   onDelete,
 }) => {
   const isOpenEnabled = typeof onOpen === 'function';
@@ -232,16 +230,6 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                 <button
                   onClick={(event) => {
                     event.stopPropagation();
-                    onOpen?.(automation);
-                  }}
-                  className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  <Eye className="h-4 w-4" />
-                  View
-                </button>
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
                     onEdit?.(automation);
                   }}
                   disabled={!isEditEnabled}
@@ -249,16 +237,6 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                 >
                   <Pencil className="h-4 w-4" />
                   Edit
-                </button>
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onDuplicate(automation);
-                  }}
-                  className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  <Copy className="h-4 w-4" />
-                  Duplicate
                 </button>
                 <button
                   onClick={(event) => {

@@ -624,7 +624,6 @@ const Automations: React.FC = () => {
                   onOpen={handleOpenAutomationDetails}
                   onEdit={handleOpenEditAutomation}
                   onToggle={handleToggle}
-                  onDuplicate={handleDuplicate}
                   onDelete={handleDelete}
                 />
               )}
