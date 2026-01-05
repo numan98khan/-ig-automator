@@ -514,14 +514,15 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     sessionStatus === 'completed';
 
   const renderTestConsole = (expanded: boolean) => (
-    <Card className={`flex flex-col min-h-0 ${expanded ? 'h-full' : ''}`}>
+    <Card className={`flex flex-col min-h-0 h-full ${expanded ? 'h-full' : ''}`}>
+      
       <CardHeader className="flex flex-col gap-3 border-b border-border/60 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
+        {/* <div className="space-y-1">
           <CardTitle>Test Console</CardTitle>
           <p className="hidden text-xs text-muted-foreground sm:block">
             Mock-only DM simulator for this automation.
           </p>
-        </div>
+        </div> */}
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="neutral" className="hidden sm:inline-flex">Preview</Badge>
           {!expanded && (
@@ -538,7 +539,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       </CardHeader>
       <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
         <div className="flex-1 min-h-0 flex items-center justify-center">
-          <div className="h-full max-h-full w-full max-w-full sm:aspect-[9/19.5] sm:w-auto sm:max-w-full sm:min-h-0 min-h-[420px]">
+          <div className="h-full max-h-full w-full max-w-full sm:aspect-[9/19.5] sm:w-auto sm:max-w-full sm:min-h-0 min-h-0">
             <AutomationPreviewPhone
               accountDisplayName={accountDisplayName}
               accountHandle={accountHandle}
@@ -822,7 +823,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   );
 
   const renderRightPane = () => (
-    <div className="flex flex-col gap-4 min-h-0">
+    <div className="flex flex-col gap-4 min-h-0 h-full">
       <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1">
         {([
           { id: 'persona', label: 'Mock Persona' },
@@ -893,11 +894,11 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         ))}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] flex-1 min-h-0 overflow-hidden">
-        <div className={`${mobileView === 'preview' ? 'block' : 'hidden'} sm:block`}>
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] grid-rows-[minmax(0,1fr)] flex-1 min-h-0 overflow-hidden">
+        <div className={`${mobileView === 'preview' ? 'block' : 'hidden'} sm:block h-full min-h-0`}>
           {renderTestConsole(false)}
         </div>
-        <div className={`${mobileView === 'details' ? 'flex' : 'hidden'} sm:flex`}>
+        <div className={`${mobileView === 'details' ? 'flex' : 'hidden'} sm:flex h-full min-h-0`}>
           {renderRightPane()}
         </div>
       </div>
@@ -909,7 +910,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         size="full"
         className="h-[85vh]"
       >
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] h-full min-h-0 overflow-hidden">
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] grid-rows-[minmax(0,1fr)] h-full min-h-0 overflow-hidden">
           {renderTestConsole(true)}
           {renderRightPane()}
         </div>
