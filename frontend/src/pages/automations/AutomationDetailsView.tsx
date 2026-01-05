@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Copy,
@@ -118,6 +118,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state'>('persona');
   const [isTyping, setIsTyping] = useState(false);
   const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
+  const previewSessionIdRef = useRef<string | null>(null);
 
   const sessionStatus = previewSessionStatus || previewState.session?.status;
   const statusConfig = sessionStatus
@@ -160,6 +161,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     reset?: boolean;
     profileId?: string;
     persona?: AutomationPreviewPersona;
+    sessionId?: string | null;
   }) => {
     setPreviewLoading(true);
     setPreviewStatus(null);
@@ -168,7 +170,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         reset: options?.reset,
         profileId: options?.profileId,
         persona: options?.persona,
-        sessionId: previewSessionId || undefined,
+        sessionId: options?.sessionId ?? previewSessionIdRef.current ?? undefined,
       });
       applyPreviewPayload(response);
       setPreviewMessages(response.messages || []);
@@ -178,7 +180,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     } finally {
       setPreviewLoading(false);
     }
-  }, [automation._id, applyPreviewPayload, previewSessionId]);
+  }, [automation._id, applyPreviewPayload]);
 
   const refreshPreviewState = useCallback(async () => {
     if (!automation._id) return;
@@ -228,6 +230,10 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       setPreviewStatus('Failed to apply mock persona.');
     }
   }, [automation._id, previewSessionId, applyPreviewPayload, startPreviewSession]);
+
+  useEffect(() => {
+    previewSessionIdRef.current = previewSessionId;
+  }, [previewSessionId]);
 
   useEffect(() => {
     let active = true;
