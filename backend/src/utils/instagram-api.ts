@@ -213,26 +213,53 @@ export async function fetchUserDetails(userId: string, accessToken: string) {
  * Uses Graph API host + profile_pic field.
  */
 export async function fetchMessagingUserProfile(userId: string, accessToken: string) {
-  const endpoint = `${FB_GRAPH_URL}/${userId}`;
   const params = {
     access_token: accessToken,
     fields: 'id,username,name,profile_pic',
   };
 
-  webhookLogger.logApiCall(endpoint, 'GET', params);
-
-  try {
+  const fetchFromEndpoint = async (endpoint: string) => {
+    webhookLogger.logApiCall(endpoint, 'GET', params);
     const response = await axios.get(endpoint, { params });
     webhookLogger.logApiResponse(endpoint, response.status, response.data);
     return response.data;
+  };
+
+  try {
+    return await fetchFromEndpoint(`${FB_GRAPH_URL}/${userId}`);
   } catch (error: any) {
-    console.error('Error fetching messaging user profile:', error.response?.data || error.message);
-    webhookLogger.logApiResponse(endpoint, error.response?.status || 500, null, error);
-    return {
-      id: userId,
-      username: 'unknown',
-      name: 'Unknown User',
-    };
+    const errorData = error.response?.data || error.message;
+    const errorCode = error.response?.data?.error?.code;
+    const errorMessage = error.response?.data?.error?.message || error.message;
+    const isTokenParseError = errorCode === 190
+      || /cannot parse access token/i.test(errorMessage || '');
+
+    webhookLogger.logApiResponse(`${FB_GRAPH_URL}/${userId}`, error.response?.status || 500, null, error);
+
+    if (!isTokenParseError) {
+      console.error('Error fetching messaging user profile:', errorData);
+      return {
+        id: userId,
+        username: 'unknown',
+        name: 'Unknown User',
+      };
+    }
+
+    console.warn('FB Graph profile lookup failed; retrying via Instagram Graph.');
+    try {
+      return await fetchFromEndpoint(`${BASE_URL}/${userId}`);
+    } catch (fallbackError: any) {
+      console.error(
+        'Error fetching messaging user profile (instagram graph fallback):',
+        fallbackError.response?.data || fallbackError.message,
+      );
+      webhookLogger.logApiResponse(`${BASE_URL}/${userId}`, fallbackError.response?.status || 500, null, fallbackError);
+      return {
+        id: userId,
+        username: 'unknown',
+        name: 'Unknown User',
+      };
+    }
   }
 }
 
