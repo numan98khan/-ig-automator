@@ -208,13 +208,11 @@ const Knowledge: React.FC = () => {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="mb-6 rounded-2xl border border-border/70 bg-card/70 p-5 shadow-sm">
+      <div className="mb-6 rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <BookOpen className="h-5 w-5" />
-              </div>
+          
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-2xl font-semibold tracking-tight">Knowledge Base</h1>
@@ -239,15 +237,7 @@ const Knowledge: React.FC = () => {
                 />
               </div>
               <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
-                <select
-                  value={storageFilter}
-                  onChange={(e) => setStorageFilter(e.target.value as StorageFilter)}
-                  className="rounded-full border border-border bg-background px-3 py-2 text-sm text-foreground"
-                >
-                  <option value="all">All sources</option>
-                  <option value="vector">RAG (pgvector)</option>
-                  <option value="text">Text only</option>
-                </select>
+              
                 <select
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value as KnowledgeCategory)}
