@@ -323,6 +323,8 @@ const CRM: React.FC = () => {
     return map;
   }, [members]);
 
+  const getMessageTime = (value?: string) => (value ? new Date(value).getTime() : 0);
+
   const filteredContacts = useMemo(() => {
     let result = [...contacts];
 
@@ -361,12 +363,12 @@ const CRM: React.FC = () => {
         const stageA = stageOrder[a.stage || 'new'];
         const stageB = stageOrder[b.stage || 'new'];
         if (stageA !== stageB) return stageA - stageB;
-        return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+        return getMessageTime(b.lastMessageAt) - getMessageTime(a.lastMessageAt);
       }
       if (sortBy === 'lead_score') {
         return (b.leadScore || 0) - (a.leadScore || 0);
       }
-      return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+      return getMessageTime(b.lastMessageAt) - getMessageTime(a.lastMessageAt);
     });
 
     return result;
