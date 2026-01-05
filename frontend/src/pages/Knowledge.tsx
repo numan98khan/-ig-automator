@@ -24,6 +24,8 @@ import { Modal } from '../components/ui/Modal';
 type KnowledgeCategory = 'All' | 'Pricing' | 'Policies' | 'FAQ' | 'Shipping' | 'General';
 type StorageFilter = 'all' | 'vector' | 'text';
 
+const knowledgeCache = new Map<string, { items: KnowledgeItem[]; updatedAt: number }>();
+
 const Knowledge: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const [items, setItems] = useState<KnowledgeItem[]>([]);
@@ -43,23 +45,37 @@ const Knowledge: React.FC = () => {
 
   useEffect(() => {
     if (currentWorkspace) {
-      loadKnowledge();
+      const cached = knowledgeCache.get(currentWorkspace._id);
+      if (cached) {
+        setItems(cached.items);
+        setInitialLoading(false);
+      }
+      loadKnowledge({ silent: Boolean(cached) });
     }
   }, [currentWorkspace]);
 
-  const loadKnowledge = async () => {
+  const loadKnowledge = async (options?: { silent?: boolean }) => {
     if (!currentWorkspace) return;
 
     try {
-      setInitialLoading(true);
+      if (options?.silent) {
+        // silent refresh: keep current UI visible
+      } else {
+        setInitialLoading(true);
+      }
       const data = await knowledgeAPI.getByWorkspace(currentWorkspace._id);
       setItems(data);
+      knowledgeCache.set(currentWorkspace._id, { items: data, updatedAt: Date.now() });
       setError(null);
     } catch (error) {
       console.error('Error loading knowledge:', error);
       setError('Failed to load knowledge items');
     } finally {
-      setInitialLoading(false);
+      if (options?.silent) {
+        // keep UI in place during background refresh
+      } else {
+        setInitialLoading(false);
+      }
     }
   };
 
@@ -71,13 +87,26 @@ const Knowledge: React.FC = () => {
     setError(null);
     try {
       if (editingItem) {
-        await knowledgeAPI.update(editingItem._id, { title, content, storageMode });
+        const updated = await knowledgeAPI.update(editingItem._id, { title, content, storageMode });
+        setItems((prev) => {
+          const next = prev.map(item => (item._id === updated._id ? updated : item));
+          if (currentWorkspace) {
+            knowledgeCache.set(currentWorkspace._id, { items: next, updatedAt: Date.now() });
+          }
+          return next;
+        });
       } else {
-        await knowledgeAPI.create(title, content, currentWorkspace._id, storageMode);
+        const created = await knowledgeAPI.create(title, content, currentWorkspace._id, storageMode);
+        setItems((prev) => {
+          const next = [created, ...prev];
+          if (currentWorkspace) {
+            knowledgeCache.set(currentWorkspace._id, { items: next, updatedAt: Date.now() });
+          }
+          return next;
+        });
       }
 
       handleCloseModal();
-      loadKnowledge();
     } catch (error) {
       console.error('Error saving knowledge:', error);
       setError('Failed to save knowledge item');
@@ -131,7 +160,13 @@ const Knowledge: React.FC = () => {
 
     try {
       await knowledgeAPI.delete(id);
-      setItems(prev => prev.filter(item => item._id !== id));
+      setItems((prev) => {
+        const next = prev.filter(item => item._id !== id);
+        if (currentWorkspace) {
+          knowledgeCache.set(currentWorkspace._id, { items: next, updatedAt: Date.now() });
+        }
+        return next;
+      });
     } catch (error) {
       console.error('Error deleting knowledge:', error);
       setError('Failed to delete knowledge item');
@@ -144,7 +179,13 @@ const Knowledge: React.FC = () => {
     try {
       setStatusUpdatingId(item._id);
       const updated = await knowledgeAPI.setActive(item._id, !isActive);
-      setItems(prev => prev.map(entry => (entry._id === item._id ? updated : entry)));
+      setItems((prev) => {
+        const next = prev.map(entry => (entry._id === item._id ? updated : entry));
+        if (currentWorkspace) {
+          knowledgeCache.set(currentWorkspace._id, { items: next, updatedAt: Date.now() });
+        }
+        return next;
+      });
       setError(null);
     } catch (error) {
       console.error('Error updating knowledge status:', error);
@@ -191,17 +232,27 @@ const Knowledge: React.FC = () => {
     };
   }, [items]);
 
-  const filteredItems = items.filter((item) => {
+  const categoryById = useMemo(() => {
+    const map = new Map<string, KnowledgeCategory>();
+    items.forEach((item) => {
+      map.set(item._id, getCategory(item));
+    });
+    return map;
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    const matchesQuery = !query
-      || item.title.toLowerCase().includes(query)
-      || item.content.toLowerCase().includes(query);
-    const matchesStorage = storageFilter === 'all'
-      || (item.storageMode || 'vector') === storageFilter;
-    const category = getCategory(item);
-    const matchesCategory = categoryFilter === 'All' || category === categoryFilter;
-    return matchesQuery && matchesStorage && matchesCategory;
-  });
+    return items.filter((item) => {
+      const matchesQuery = !query
+        || item.title.toLowerCase().includes(query)
+        || item.content.toLowerCase().includes(query);
+      const matchesStorage = storageFilter === 'all'
+        || (item.storageMode || 'vector') === storageFilter;
+      const category = categoryById.get(item._id) || 'General';
+      const matchesCategory = categoryFilter === 'All' || category === categoryFilter;
+      return matchesQuery && matchesStorage && matchesCategory;
+    });
+  }, [items, searchQuery, storageFilter, categoryFilter, categoryById]);
 
   if (!currentWorkspace) return null;
 
@@ -323,6 +374,7 @@ const Knowledge: React.FC = () => {
             {filteredItems.map((item) => {
               const isActive = item.active !== false;
               const isUpdating = statusUpdatingId === item._id;
+              const category = categoryById.get(item._id) || 'General';
               return (
                 <div
                   key={item._id}
@@ -341,7 +393,7 @@ const Knowledge: React.FC = () => {
                         <h3 className="font-semibold text-foreground truncate">{item.title}</h3>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <span className="rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-semibold">
-                            {getCategory(item)}
+                            {category}
                           </span>
                           {!isActive && (
                             <span className="rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 font-semibold text-destructive">
