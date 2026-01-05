@@ -655,7 +655,7 @@ router.get('/knowledge', authenticate, requireAdmin, async (req, res) => {
 
 router.post('/knowledge', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { title, content, storageMode = 'vector', workspaceId } = req.body;
+    const { title, content, storageMode = 'vector', workspaceId, active } = req.body;
     if (!title || !content || !STORAGE_MODES.includes(storageMode)) {
       return res.status(400).json({ error: 'Invalid payload' });
     }
@@ -665,9 +665,10 @@ router.post('/knowledge', authenticate, requireAdmin, async (req, res) => {
       content,
       storageMode,
       workspaceId: workspaceId || undefined,
+      ...(typeof active === 'boolean' ? { active } : {}),
     });
 
-    if (storageMode === 'vector') {
+    if (storageMode === 'vector' && item.active !== false) {
       await upsertKnowledgeEmbedding({
         id: item._id.toString(),
         workspaceId: workspaceId || GLOBAL_WORKSPACE_KEY,
@@ -686,7 +687,7 @@ router.post('/knowledge', authenticate, requireAdmin, async (req, res) => {
 router.put('/knowledge/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, content, storageMode } = req.body;
+    const { title, content, storageMode, active } = req.body;
 
     if (storageMode && !STORAGE_MODES.includes(storageMode)) {
       return res.status(400).json({ error: 'Invalid storageMode' });
@@ -698,10 +699,11 @@ router.put('/knowledge/:id', authenticate, requireAdmin, async (req, res) => {
     if (title) item.title = title;
     if (content) item.content = content;
     if (storageMode) item.storageMode = storageMode;
+    if (typeof active === 'boolean') item.active = active;
 
     await item.save();
 
-    if (item.storageMode === 'vector') {
+    if (item.storageMode === 'vector' && item.active !== false) {
       await upsertKnowledgeEmbedding({
         id: item._id.toString(),
         workspaceId: item.workspaceId?.toString() || GLOBAL_WORKSPACE_KEY,

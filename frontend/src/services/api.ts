@@ -83,6 +83,7 @@ export interface Conversation {
   _id: string;
   participantName: string;
   participantHandle: string;
+  participantProfilePictureUrl?: string;
   contactEmail?: string;
   contactPhone?: string;
   tags?: string[];
@@ -107,12 +108,24 @@ export interface Conversation {
 
 export type CrmStage = 'new' | 'engaged' | 'qualified' | 'won' | 'lost';
 
-export interface CrmContact extends Conversation {
-  stage?: CrmStage;
-  tags?: string[];
+export interface CrmContact {
+  _id: string;
+  workspaceId: string;
+  participantName: string;
+  participantHandle: string;
+  participantProfilePictureUrl?: string;
   contactEmail?: string;
   contactPhone?: string;
+  stage?: CrmStage;
+  tags?: string[];
   ownerId?: string;
+  primaryConversationId?: string;
+  lastMessageAt?: string;
+  lastMessage?: string;
+  lastCustomerMessageAt?: string;
+  lastBusinessMessageAt?: string;
+  createdAt: string;
+  updatedAt?: string;
   openTaskCount?: number;
   overdueTaskCount?: number;
   nextTaskDueAt?: string;
@@ -257,7 +270,7 @@ export interface AutomationPreviewMessage {
   createdAt?: string;
 }
 
-export interface AutomationPreviewSession {
+export interface AutomationPreviewSession extends AutomationPreviewSessionState {
   sessionId: string;
   conversationId: string;
   status: 'active' | 'paused' | 'completed' | 'handoff';
@@ -266,6 +279,69 @@ export interface AutomationPreviewSession {
 
 export interface AutomationPreviewSessionResponse {
   session: AutomationSession;
+}
+
+export interface AutomationPreviewConversation {
+  _id: string;
+  participantName: string;
+  participantHandle: string;
+  participantInstagramId?: string;
+  participantProfilePictureUrl?: string;
+  tags?: string[];
+  lastMessageAt?: string;
+}
+
+export interface AutomationPreviewPersona {
+  name: string;
+  handle?: string;
+  userId?: string;
+  avatarUrl?: string;
+}
+
+export interface AutomationPreviewProfile {
+  _id: string;
+  workspaceId: string;
+  name: string;
+  handle?: string;
+  userId?: string;
+  avatarUrl?: string;
+  isDefault?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AutomationPreviewEventType =
+  | 'node_start'
+  | 'node_complete'
+  | 'field_update'
+  | 'field_clear'
+  | 'tag_added'
+  | 'tag_removed'
+  | 'error'
+  | 'info';
+
+export interface AutomationPreviewEvent {
+  id: string;
+  type: AutomationPreviewEventType;
+  message: string;
+  createdAt: string;
+  details?: Record<string, any>;
+}
+
+export interface AutomationPreviewSessionState {
+  session: AutomationSession | null;
+  conversation?: AutomationPreviewConversation | null;
+  currentNode?: AutomationSessionNodeSummary | null;
+  events?: AutomationPreviewEvent[];
+  profile?: AutomationPreviewProfile | null;
+  persona?: AutomationPreviewPersona | null;
+}
+
+export interface AutomationPreviewSendResponse extends AutomationPreviewSessionState {
+  success: boolean;
+  error?: string;
+  sessionId: string;
+  messages: AutomationPreviewMessage[];
 }
 
 export interface AutomationSessionNodeSummaryItem {
@@ -286,6 +362,7 @@ export interface KnowledgeItem {
   title: string;
   content: string;
   storageMode?: 'vector' | 'text';
+  active?: boolean;
   workspaceId: string;
   createdAt: string;
   updatedAt?: string;
@@ -320,20 +397,6 @@ export interface AutomationStats {
   totalRepliesSent: number;
   lastTriggeredAt?: string;
   lastReplySentAt?: string;
-}
-
-export interface AutomationIntent {
-  _id?: string;
-  workspaceId?: string;
-  value: string;
-  description: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface AutomationIntentListResponse {
-  systemIntents: AutomationIntent[];
-  customIntents: AutomationIntent[];
 }
 
 export interface FlowFieldOption {
@@ -841,37 +904,37 @@ export const crmAPI = {
     };
   },
 
-  getContact: async (conversationId: string): Promise<{ contact: CrmContact }> => {
-    const { data } = await api.get(`/api/crm/contacts/${conversationId}`);
+  getContact: async (contactId: string): Promise<{ contact: CrmContact }> => {
+    const { data } = await api.get(`/api/crm/contacts/${contactId}`);
     return data?.data || data;
   },
 
-  updateContact: async (conversationId: string, updates: Partial<CrmContact>): Promise<CrmContact> => {
-    const { data } = await api.patch(`/api/crm/contacts/${conversationId}`, updates);
+  updateContact: async (contactId: string, updates: Partial<CrmContact>): Promise<CrmContact> => {
+    const { data } = await api.patch(`/api/crm/contacts/${contactId}`, updates);
     const payload = data?.data || data;
     return payload.contact || payload;
   },
 
-  getNotes: async (conversationId: string): Promise<CrmNote[]> => {
-    const { data } = await api.get(`/api/crm/contacts/${conversationId}/notes`);
+  getNotes: async (contactId: string): Promise<CrmNote[]> => {
+    const { data } = await api.get(`/api/crm/contacts/${contactId}/notes`);
     const payload = data?.data || data;
     return payload.notes || [];
   },
 
-  addNote: async (conversationId: string, body: string): Promise<CrmNote> => {
-    const { data } = await api.post(`/api/crm/contacts/${conversationId}/notes`, { body });
+  addNote: async (contactId: string, body: string): Promise<CrmNote> => {
+    const { data } = await api.post(`/api/crm/contacts/${contactId}/notes`, { body });
     const payload = data?.data || data;
     return payload.note || payload;
   },
 
-  getTasks: async (conversationId: string): Promise<CrmTask[]> => {
-    const { data } = await api.get(`/api/crm/contacts/${conversationId}/tasks`);
+  getTasks: async (contactId: string): Promise<CrmTask[]> => {
+    const { data } = await api.get(`/api/crm/contacts/${contactId}/tasks`);
     const payload = data?.data || data;
     return payload.tasks || [];
   },
 
   addTask: async (
-    conversationId: string,
+    contactId: string,
     task: {
       title: string;
       description?: string;
@@ -881,13 +944,13 @@ export const crmAPI = {
       taskType?: CrmTaskType;
     },
   ): Promise<CrmTask> => {
-    const { data } = await api.post(`/api/crm/contacts/${conversationId}/tasks`, task);
+    const { data } = await api.post(`/api/crm/contacts/${contactId}/tasks`, task);
     const payload = data?.data || data;
     return payload.task || payload;
   },
 
   updateTask: async (
-    conversationId: string,
+    contactId: string,
     taskId: string,
     updates: Partial<{
       title: string;
@@ -899,19 +962,19 @@ export const crmAPI = {
       taskType?: CrmTaskType;
     }>,
   ): Promise<CrmTask> => {
-    const { data } = await api.patch(`/api/crm/contacts/${conversationId}/tasks/${taskId}`, updates);
+    const { data } = await api.patch(`/api/crm/contacts/${contactId}/tasks/${taskId}`, updates);
     const payload = data?.data || data;
     return payload.task || payload;
   },
 
-  getAutomationEvents: async (conversationId: string): Promise<CrmAutomationEvent[]> => {
-    const { data } = await api.get(`/api/crm/contacts/${conversationId}/automation-events`);
+  getAutomationEvents: async (contactId: string): Promise<CrmAutomationEvent[]> => {
+    const { data } = await api.get(`/api/crm/contacts/${contactId}/automation-events`);
     const payload = data?.data || data;
     return payload.sessions || [];
   },
 
-  getMessages: async (conversationId: string): Promise<Message[]> => {
-    const { data } = await api.get(`/api/messages/conversation/${conversationId}`);
+  getMessages: async (contactId: string): Promise<Message[]> => {
+    const { data } = await api.get(`/api/crm/contacts/${contactId}/messages`);
     return data;
   },
 };
@@ -928,8 +991,16 @@ export const knowledgeAPI = {
     return data;
   },
 
-  update: async (id: string, title: string, content: string, storageMode: 'vector' | 'text'): Promise<KnowledgeItem> => {
-    const { data } = await api.put(`/api/knowledge/${id}`, { title, content, storageMode });
+  update: async (
+    id: string,
+    updates: Partial<Pick<KnowledgeItem, 'title' | 'content' | 'storageMode' | 'active'>>,
+  ): Promise<KnowledgeItem> => {
+    const { data } = await api.put(`/api/knowledge/${id}`, updates);
+    return data;
+  },
+
+  setActive: async (id: string, active: boolean): Promise<KnowledgeItem> => {
+    const { data } = await api.put(`/api/knowledge/${id}`, { active });
     return data;
   },
 
@@ -974,17 +1045,74 @@ export const automationAPI = {
     await api.delete(`/api/automations/${id}`);
   },
 
-  createPreviewSession: async (id: string, payload?: { reset?: boolean }): Promise<AutomationPreviewSession> => {
+  createPreviewSession: async (
+    id: string,
+    payload?: { reset?: boolean; sessionId?: string; profileId?: string; persona?: AutomationPreviewPersona },
+  ): Promise<AutomationPreviewSession> => {
     const { data } = await api.post(`/api/automations/${id}/preview-session`, payload);
     return data;
   },
 
   sendPreviewMessage: async (
     id: string,
-    payload: { text: string; sessionId?: string },
-  ): Promise<{ success: boolean; error?: string; sessionId: string; messages: AutomationPreviewMessage[] }> => {
+    payload: { text: string; sessionId?: string; profileId?: string; persona?: AutomationPreviewPersona },
+  ): Promise<AutomationPreviewSendResponse> => {
     const { data } = await api.post(`/api/automations/${id}/preview-session/message`, payload);
     return data;
+  },
+
+  getPreviewSessionStatus: async (
+    id: string,
+    sessionId?: string,
+  ): Promise<AutomationPreviewSessionState> => {
+    const { data } = await api.get(`/api/automations/${id}/preview-session/status`, {
+      params: sessionId ? { sessionId } : undefined,
+    });
+    return data;
+  },
+
+  updatePreviewPersona: async (
+    id: string,
+    payload: { sessionId?: string; profileId?: string; persona?: AutomationPreviewPersona },
+  ): Promise<AutomationPreviewSessionState> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-session/persona`, payload);
+    return data;
+  },
+
+  listPreviewProfiles: async (id: string): Promise<AutomationPreviewProfile[]> => {
+    const { data } = await api.get(`/api/automations/${id}/preview-profiles`);
+    return data.profiles || [];
+  },
+
+  createPreviewProfile: async (
+    id: string,
+    payload: { name: string; handle?: string; userId?: string; avatarUrl?: string; isDefault?: boolean },
+  ): Promise<AutomationPreviewProfile> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-profiles`, payload);
+    return data.profile;
+  },
+
+  updatePreviewProfile: async (
+    id: string,
+    profileId: string,
+    payload: { name?: string; handle?: string; userId?: string; avatarUrl?: string },
+  ): Promise<AutomationPreviewProfile> => {
+    const { data } = await api.put(`/api/automations/${id}/preview-profiles/${profileId}`, payload);
+    return data.profile;
+  },
+
+  duplicatePreviewProfile: async (id: string, profileId: string): Promise<AutomationPreviewProfile> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-profiles/${profileId}/duplicate`);
+    return data.profile;
+  },
+
+  setDefaultPreviewProfile: async (id: string, profileId: string): Promise<AutomationPreviewProfile> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-profiles/${profileId}/default`);
+    return data.profile;
+  },
+
+  deletePreviewProfile: async (id: string, profileId: string): Promise<void> => {
+    await api.delete(`/api/automations/${id}/preview-profiles/${profileId}`);
   },
 
   pausePreviewSession: async (
@@ -1001,24 +1129,6 @@ export const automationAPI = {
   ): Promise<AutomationPreviewSessionResponse> => {
     const { data } = await api.post(`/api/automations/${id}/preview-session/stop`, payload);
     return data;
-  },
-};
-
-export const automationIntentAPI = {
-  list: async (workspaceId: string): Promise<AutomationIntentListResponse> => {
-    const { data } = await api.get('/api/automation-intents', { params: { workspaceId } });
-    return data;
-  },
-  create: async (payload: { workspaceId: string; value: string; description: string }): Promise<AutomationIntent> => {
-    const { data } = await api.post('/api/automation-intents', payload);
-    return data;
-  },
-  update: async (id: string, payload: { value?: string; description?: string }): Promise<AutomationIntent> => {
-    const { data } = await api.put(`/api/automation-intents/${id}`, payload);
-    return data;
-  },
-  delete: async (id: string): Promise<void> => {
-    await api.delete(`/api/automation-intents/${id}`);
   },
 };
 
@@ -1046,7 +1156,7 @@ export const flowTemplateAPI = {
 
 // Instagram Sync API
 export const instagramSyncAPI = {
-  syncMessages: async (workspaceId: string, conversationId?: string): Promise<{
+  syncMessages: async (workspaceId: string, conversationId: string): Promise<{
     success: boolean;
     conversationsSynced: number;
     messagesSynced: number;

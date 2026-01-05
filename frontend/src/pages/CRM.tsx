@@ -188,6 +188,28 @@ const getInitials = (contact: CrmContact) => {
   return cleaned.charAt(0).toUpperCase();
 };
 
+const ContactAvatar = ({
+  contact,
+  sizeClass,
+  textClass,
+}: {
+  contact: CrmContact;
+  sizeClass: string;
+  textClass: string;
+}) => (
+  <div className={`${sizeClass} rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold overflow-hidden`}>
+    {contact.participantProfilePictureUrl ? (
+      <img
+        src={contact.participantProfilePictureUrl}
+        alt={contact.participantName || 'Instagram user'}
+        className="h-full w-full object-cover"
+      />
+    ) : (
+      <span className={textClass}>{getInitials(contact)}</span>
+    )}
+  </div>
+);
+
 const serializeContactForm = (form: ContactForm) => JSON.stringify({
   participantName: form.participantName.trim(),
   participantHandle: form.participantHandle.trim(),
@@ -301,6 +323,8 @@ const CRM: React.FC = () => {
     return map;
   }, [members]);
 
+  const getMessageTime = (value?: string) => (value ? new Date(value).getTime() : 0);
+
   const filteredContacts = useMemo(() => {
     let result = [...contacts];
 
@@ -339,12 +363,12 @@ const CRM: React.FC = () => {
         const stageA = stageOrder[a.stage || 'new'];
         const stageB = stageOrder[b.stage || 'new'];
         if (stageA !== stageB) return stageA - stageB;
-        return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+        return getMessageTime(b.lastMessageAt) - getMessageTime(a.lastMessageAt);
       }
       if (sortBy === 'lead_score') {
         return (b.leadScore || 0) - (a.leadScore || 0);
       }
-      return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+      return getMessageTime(b.lastMessageAt) - getMessageTime(a.lastMessageAt);
     });
 
     return result;
@@ -460,15 +484,15 @@ const CRM: React.FC = () => {
     }
   };
 
-  const loadContactDetail = async (conversationId: string) => {
+  const loadContactDetail = async (contactId: string) => {
     setDetailLoading(true);
     try {
       const [contactPayload, notesPayload, tasksPayload, automationPayload, messagePayload] = await Promise.all([
-        crmAPI.getContact(conversationId),
-        crmAPI.getNotes(conversationId),
-        crmAPI.getTasks(conversationId),
-        crmAPI.getAutomationEvents(conversationId),
-        crmAPI.getMessages(conversationId),
+        crmAPI.getContact(contactId),
+        crmAPI.getNotes(contactId),
+        crmAPI.getTasks(contactId),
+        crmAPI.getAutomationEvents(contactId),
+        crmAPI.getMessages(contactId),
       ]);
 
       setSelectedContact(contactPayload.contact);
@@ -951,9 +975,7 @@ const CRM: React.FC = () => {
         <>
           <div className="flex items-center justify-between gap-3 mb-3">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
-                {getInitials(selectedContact)}
-              </div>
+              <ContactAvatar contact={selectedContact} sizeClass="h-10 w-10" textClass="text-sm" />
               <div>
                 <p className="text-lg font-semibold text-foreground">{selectedContact.participantName || 'Contact'}</p>
                 <p className="text-xs text-muted-foreground">{selectedContact.participantHandle}</p>
@@ -967,7 +989,12 @@ const CRM: React.FC = () => {
               variant="outline"
               leftIcon={<MessageSquare className="w-4 h-4" />}
               type="button"
-              onClick={() => navigate(`/app/inbox?conversationId=${selectedContact._id}`)}
+              onClick={() => {
+                if (selectedContact.primaryConversationId) {
+                  navigate(`/app/inbox?conversationId=${selectedContact.primaryConversationId}`);
+                }
+              }}
+              disabled={!selectedContact.primaryConversationId}
             >
               Open in Inbox
             </Button>
@@ -1236,9 +1263,7 @@ const CRM: React.FC = () => {
         <div className="flex flex-col h-full gap-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center text-base font-semibold">
-                {getInitials(selectedContact)}
-              </div>
+              <ContactAvatar contact={selectedContact} sizeClass="h-12 w-12" textClass="text-base" />
               <div>
                 <p className="text-lg font-semibold text-foreground">
                   {selectedContact.participantName || 'Contact'}
@@ -1255,7 +1280,12 @@ const CRM: React.FC = () => {
                 variant="outline"
                 leftIcon={<MessageSquare className="w-4 h-4" />}
                 type="button"
-                onClick={() => navigate(`/app/inbox?conversationId=${selectedContact._id}`)}
+                onClick={() => {
+                  if (selectedContact.primaryConversationId) {
+                    navigate(`/app/inbox?conversationId=${selectedContact.primaryConversationId}`);
+                  }
+                }}
+                disabled={!selectedContact.primaryConversationId}
               >
                 Open in Inbox
               </Button>
@@ -1894,9 +1924,7 @@ const CRM: React.FC = () => {
                           }`}
                       >
                         <div className="flex items-start gap-3">
-                          <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
-                            {getInitials(contact)}
-                          </div>
+                          <ContactAvatar contact={contact} sizeClass="h-9 w-9" textClass="text-sm" />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
                               <div className="min-w-0">

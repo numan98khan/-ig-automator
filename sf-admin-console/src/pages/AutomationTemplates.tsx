@@ -177,7 +177,12 @@ export default function AutomationTemplates() {
 
   const intentOptions = useMemo(() => {
     const payload = unwrapData<any>(intentData)
-    return Array.isArray(payload) ? payload : []
+    const intents = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.intents)
+        ? payload.intents
+        : []
+    return [...intents].sort((a, b) => String(a.value || '').localeCompare(String(b.value || '')))
   }, [intentData])
 
   const templateMap = useMemo(() => {
@@ -191,6 +196,8 @@ export default function AutomationTemplates() {
     () => flowNodes.find((node) => node.id === selectedNodeId) || null,
     [flowNodes, selectedNodeId],
   )
+  const aiModelValue = selectedNode?.aiSettings?.model || ''
+  const hasCustomAiModel = Boolean(aiModelValue) && !AI_MODEL_SUGGESTIONS.includes(aiModelValue)
   const selectedTriggerConfig: FlowTriggerConfig = selectedNode?.triggerConfig || {}
   const flowStats = useMemo(
     () => ({ nodes: flowNodes.length, edges: flowEdges.length }),
@@ -1093,11 +1100,6 @@ export default function AutomationTemplates() {
                 <option key={key} value={key} />
               ))}
             </datalist>
-            <datalist id="router-var-keys">
-              {MESSAGE_STATE_VARIABLES.map((item) => (
-                <option key={item.key} value={item.key} />
-              ))}
-            </datalist>
             <div className="mt-4 space-y-4">
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Label</label>
@@ -1348,9 +1350,11 @@ export default function AutomationTemplates() {
                                           ? [{ value: 'equals', label: 'Equals' }]
                                           : ROUTER_OPERATOR_OPTIONS
                                       const isKeywordRule = rule.operator === 'keywords'
-                                      const normalizedPath = (rule.path || '').replace(/^vars\./, '')
-                                      const isDetectedIntent = rule.source === 'vars'
-                                        && normalizedPath === 'detectedIntent'
+                                    const normalizedPath = (rule.path || '').replace(/^vars\./, '')
+                                    const isDetectedIntent = rule.source === 'vars'
+                                      && normalizedPath === 'detectedIntent'
+                                    const hasCustomVarPath = normalizedPath
+                                      && !MESSAGE_STATE_VARIABLES.some((item) => item.key === normalizedPath)
                                       return (
                                         <div key={`${edge.id}-rule-${ruleIndex}`} className="space-y-2 rounded-md border border-border/60 bg-muted/30 p-2">
                                           <div className="flex items-center gap-2">
@@ -1401,18 +1405,28 @@ export default function AutomationTemplates() {
                                                 <option value="hasAttachment">Has attachment</option>
                                               </select>
                                             ) : rule.source === 'vars' ? (
-                                              <input
+                                              <select
                                                 className="input h-8 text-xs flex-1"
-                                                list="router-var-keys"
-                                                placeholder="vars path (e.g. detectedIntent)"
-                                                value={rule.path || ''}
+                                                value={normalizedPath}
                                                 onChange={(event) =>
                                                   updateRouterRule(edge.id, ruleIndex, () => ({
                                                     ...rule,
                                                     path: event.target.value,
                                                   }))
                                                 }
-                                              />
+                                              >
+                                                <option value="">Select variable</option>
+                                                {MESSAGE_STATE_VARIABLES.map((item) => (
+                                                  <option key={item.key} value={item.key}>
+                                                    {item.label}
+                                                  </option>
+                                                ))}
+                                                {hasCustomVarPath && (
+                                                  <option value={normalizedPath}>
+                                                    Custom: {normalizedPath}
+                                                  </option>
+                                                )}
+                                              </select>
                                             ) : rule.source === 'config' ? (
                                               <input
                                                 className="input h-8 text-xs flex-1"
@@ -1844,10 +1858,9 @@ export default function AutomationTemplates() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Model</label>
-                  <input
+                  <select
                     className="input w-full"
-                    list="ai-model-options"
-                    value={selectedNode.aiSettings?.model || ''}
+                    value={aiModelValue}
                     onChange={(event) =>
                       updateNode(selectedNode.id, (node) => ({
                         ...node,
@@ -1857,7 +1870,17 @@ export default function AutomationTemplates() {
                         },
                       }))
                     }
-                  />
+                  >
+                    <option value="">Auto (workspace default)</option>
+                    {AI_MODEL_SUGGESTIONS.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                    {hasCustomAiModel && (
+                      <option value={aiModelValue}>Custom: {aiModelValue}</option>
+                    )}
+                  </select>
                   <div className="text-[11px] text-muted-foreground">
                     Leave blank to use the workspace default model.
                   </div>
@@ -2226,10 +2249,9 @@ export default function AutomationTemplates() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Model</label>
-                  <input
+                  <select
                     className="input w-full"
-                    list="ai-model-options"
-                    value={selectedNode.aiSettings?.model || ''}
+                    value={aiModelValue}
                     onChange={(event) =>
                       updateNode(selectedNode.id, (node) => ({
                         ...node,
@@ -2239,7 +2261,17 @@ export default function AutomationTemplates() {
                         },
                       }))
                     }
-                  />
+                  >
+                    <option value="">Auto (workspace default)</option>
+                    {AI_MODEL_SUGGESTIONS.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                    {hasCustomAiModel && (
+                      <option value={aiModelValue}>Custom: {aiModelValue}</option>
+                    )}
+                  </select>
                   <div className="text-[11px] text-muted-foreground">
                     Leave blank to use the workspace default model.
                   </div>

@@ -14,9 +14,11 @@ export interface IInstagramAccount extends Document {
   followsCount?: number;
   mediaCount?: number;
   accountType?: string;
+  facebookPageId?: string;
 
   // Access Token
   accessToken?: string;
+  pageAccessToken?: string;
   tokenExpiresAt?: Date;
   lastSyncedAt?: Date;
 
@@ -70,11 +72,18 @@ const instagramAccountSchema = new Schema<IInstagramAccount>({
   accountType: {
     type: String,
   },
+  facebookPageId: {
+    type: String,
+  },
 
   // Access Token
   accessToken: {
     type: String,
     select: false, // Don't include in queries by default for security
+  },
+  pageAccessToken: {
+    type: String,
+    select: false,
   },
   tokenExpiresAt: {
     type: Date,

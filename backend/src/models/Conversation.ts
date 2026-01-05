@@ -4,6 +4,8 @@ import { GoalType } from '../types/automationGoals';
 export interface IConversation extends Document {
   participantName: string;
   participantHandle: string;
+  participantProfilePictureUrl?: string;
+  contactId?: mongoose.Types.ObjectId;
   contactEmail?: string;
   contactPhone?: string;
   tags?: string[];
@@ -50,6 +52,14 @@ const conversationSchema = new Schema<IConversation>({
   participantHandle: {
     type: String,
     required: true,
+  },
+  participantProfilePictureUrl: {
+    type: String,
+  },
+  contactId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Contact',
+    index: true,
   },
   contactEmail: {
     type: String,
@@ -190,5 +200,6 @@ conversationSchema.index({ workspaceId: 1, updatedAt: -1 });
 conversationSchema.index({ workspaceId: 1, stage: 1 });
 conversationSchema.index({ workspaceId: 1, tags: 1 });
 conversationSchema.index({ workspaceId: 1, ownerId: 1 });
+conversationSchema.index({ contactId: 1, lastMessageAt: -1 });
 
 export default mongoose.model<IConversation>('Conversation', conversationSchema);

@@ -133,9 +133,13 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
   let knowledgeContext = '';
   let vectorContexts: RetrievedContext[] = [];
 
+  const knowledgeBaseQuery = {
+    workspaceId,
+    active: { $ne: false },
+  };
   const knowledgeQuery = Array.isArray(knowledgeItemIds) && knowledgeItemIds.length > 0
-    ? { workspaceId, _id: { $in: knowledgeItemIds } }
-    : { workspaceId };
+    ? { ...knowledgeBaseQuery, _id: { $in: knowledgeItemIds } }
+    : knowledgeBaseQuery;
 
   const knowledgeItems = await KnowledgeItem.find(knowledgeQuery);
 

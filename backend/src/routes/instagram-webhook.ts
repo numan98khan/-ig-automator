@@ -1,8 +1,9 @@
 import express, { Request, Response } from 'express';
 import InstagramAccount from '../models/InstagramAccount';
+import Contact from '../models/Contact';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
-import { fetchUserDetails } from '../utils/instagram-api';
+import { fetchMessagingUserProfile } from '../utils/instagram-api';
 import { webhookLogger } from '../utils/webhook-logger';
 import {
   cancelFollowupOnCustomerReply,
@@ -135,7 +136,7 @@ async function handleMessagingEvent(messaging: any) {
     const igAccount = await InstagramAccount.findOne({
       instagramAccountId: recipientId,
       status: 'connected',
-    }).select('+accessToken');
+    }).select('+accessToken +pageAccessToken');
 
     if (!igAccount) {
       console.log(`⚠️ No Instagram account found for ${recipientId}`);
@@ -143,6 +144,7 @@ async function handleMessagingEvent(messaging: any) {
     }
 
     console.log(`✅ Found Instagram account: @${igAccount.username}`);
+    const profileToken = igAccount.pageAccessToken || igAccount.accessToken;
 
     // Check if message already exists (prevent duplicates)
     if (messageId) {
@@ -160,30 +162,99 @@ async function handleMessagingEvent(messaging: any) {
       platform: 'instagram',
     });
 
+    const fetchSenderDetails = async () => {
+      if (!profileToken) {
+        console.warn('Missing access token; skipping sender profile lookup.');
+        return null;
+      }
+      webhookLogger.logApiCall(`User ${senderId}`, 'GET', { fields: 'id,username,name,profile_pic' });
+      const senderDetails = await fetchMessagingUserProfile(senderId, profileToken);
+      webhookLogger.logApiResponse(`User ${senderId}`, 200, senderDetails);
+      return senderDetails;
+    };
+
+    const formatProfileDetails = (details: any) => {
+      const resolvedName = details?.name || details?.username || 'Instagram User';
+      const resolvedUsername = details?.username || senderId;
+      const resolvedHandle = resolvedUsername.startsWith('@')
+        ? resolvedUsername
+        : `@${resolvedUsername}`;
+      const profilePictureUrl = details?.profile_pic
+        || details?.profile_picture_url
+        || details?.profilePictureUrl;
+      return {
+        name: resolvedName,
+        handle: resolvedHandle,
+        profilePictureUrl,
+      };
+    };
+
     let isNewConversation = false;
     if (!conversation) {
       // Fetch sender details from Instagram API
-      webhookLogger.logApiCall(`User ${senderId}`, 'GET', { fields: 'id,username,name' });
-      const senderDetails = await fetchUserDetails(senderId, igAccount.accessToken!);
-      webhookLogger.logApiResponse(`User ${senderId}`, 200, senderDetails);
-
+      const senderDetails = await fetchSenderDetails();
+      const profile = formatProfileDetails(senderDetails);
+      const contact = await Contact.create({
+        workspaceId: igAccount.workspaceId,
+        participantName: profile.name,
+        participantHandle: profile.handle,
+        profilePictureUrl: profile.profilePictureUrl,
+      });
       conversation = await Conversation.create({
         workspaceId: igAccount.workspaceId,
         instagramAccountId: igAccount._id,
-        participantName: senderDetails.name || senderDetails.username || 'Unknown User',
-        participantHandle: `@${senderDetails.username || 'unknown'}`,
+        participantName: profile.name,
+        participantHandle: profile.handle,
+        participantProfilePictureUrl: profile.profilePictureUrl,
         participantInstagramId: senderId,
         instagramConversationId: `${recipientId}_${senderId}`, // Create unique conversation ID
         platform: 'instagram',
         lastMessageAt: timestamp,
         lastMessage: messageText,
         lastCustomerMessageAt: timestamp, // Track for 24h follow-up
+        contactId: contact._id,
       });
 
       isNewConversation = true;
       console.log(`✨ Created new conversation with ${conversation.participantHandle}`);
     } else {
       // Update existing conversation
+      const shouldRefreshProfile = Boolean(profileToken)
+        && (!conversation.participantName
+          || !conversation.participantHandle
+          || conversation.participantHandle === '@unknown'
+          || conversation.participantName === 'Unknown User'
+          || !conversation.participantProfilePictureUrl);
+      if (shouldRefreshProfile) {
+        const senderDetails = await fetchSenderDetails();
+        const profile = formatProfileDetails(senderDetails);
+        conversation.participantName = profile.name;
+        conversation.participantHandle = profile.handle;
+        conversation.participantProfilePictureUrl = profile.profilePictureUrl;
+        if (conversation.contactId) {
+          await Contact.findByIdAndUpdate(conversation.contactId, {
+            participantName: profile.name,
+            participantHandle: profile.handle,
+            profilePictureUrl: profile.profilePictureUrl,
+          });
+        } else {
+          const contact = await Contact.create({
+            workspaceId: igAccount.workspaceId,
+            participantName: profile.name,
+            participantHandle: profile.handle,
+            profilePictureUrl: profile.profilePictureUrl,
+          });
+          conversation.contactId = contact._id;
+        }
+      } else if (!conversation.contactId) {
+        const contact = await Contact.create({
+          workspaceId: igAccount.workspaceId,
+          participantName: conversation.participantName,
+          participantHandle: conversation.participantHandle,
+          profilePictureUrl: conversation.participantProfilePictureUrl,
+        });
+        conversation.contactId = contact._id;
+      }
       conversation.lastMessageAt = timestamp;
       conversation.lastMessage = messageText;
       conversation.lastCustomerMessageAt = timestamp; // Track for 24h follow-up
@@ -459,7 +530,7 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
     const igAccount = await InstagramAccount.findOne({
       instagramAccountId: instagramAccountId,
       status: 'connected',
-    }).select('+accessToken');
+    }).select('+accessToken +pageAccessToken');
 
     if (!igAccount) {
       console.log(`⚠️ No Instagram account found for ${instagramAccountId}`);
@@ -483,23 +554,50 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
     let isNewConversation = false;
 
     if (!conversation) {
+      let commenterProfileUrl: string | undefined;
+      if (commenterId && igAccount.pageAccessToken) {
+        const commenterDetails = await fetchMessagingUserProfile(commenterId, igAccount.pageAccessToken);
+        commenterProfileUrl = commenterDetails.profile_pic
+          || commenterDetails.profile_picture_url
+          || commenterDetails.profilePictureUrl;
+      } else if (commenterId) {
+        console.warn('Missing page access token; skipping commenter profile lookup.');
+      }
+
+      const contact = await Contact.create({
+        workspaceId: igAccount.workspaceId,
+        participantName: comment.from?.username || 'Unknown User',
+        participantHandle: `@${comment.from?.username || 'unknown'}`,
+        profilePictureUrl: commenterProfileUrl,
+      });
       conversation = await Conversation.create({
         workspaceId: igAccount.workspaceId,
         instagramAccountId: igAccount._id,
         participantName: comment.from?.username || 'Unknown User',
         participantHandle: `@${comment.from?.username || 'unknown'}`,
+        participantProfilePictureUrl: commenterProfileUrl,
         participantInstagramId: commenterId,
         instagramConversationId: `${instagramAccountId}_${commenterId}`,
         platform: 'instagram',
         lastMessageAt: new Date(),
         lastMessage: commentText,
         lastCustomerMessageAt: new Date(), // Track for 24h follow-up
+        contactId: contact._id,
       });
 
       console.log(`✨ Created conversation for commenter ${conversation.participantHandle}`);
       isNewConversation = true;
     } else {
       // Update existing conversation
+      if (!conversation.contactId) {
+        const contact = await Contact.create({
+          workspaceId: igAccount.workspaceId,
+          participantName: conversation.participantName,
+          participantHandle: conversation.participantHandle,
+          profilePictureUrl: conversation.participantProfilePictureUrl,
+        });
+        conversation.contactId = contact._id;
+      }
       conversation.lastMessageAt = new Date();
       conversation.lastMessage = commentText;
       conversation.lastCustomerMessageAt = new Date();

@@ -28,6 +28,8 @@ type AutomationPreviewPhoneProps = {
   inputValue?: string;
   onInputChange?: (value: string) => void;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
+  onInputFocus?: () => void;
+  onInputBlur?: () => void;
   inputDisabled?: boolean;
   sendDisabled?: boolean;
 };
@@ -44,6 +46,8 @@ export const AutomationPreviewPhone: React.FC<AutomationPreviewPhoneProps> = ({
   inputValue = '',
   onInputChange,
   onSubmit,
+  onInputFocus,
+  onInputBlur,
   inputDisabled = false,
   sendDisabled = false,
 }) => (
@@ -118,6 +122,8 @@ export const AutomationPreviewPhone: React.FC<AutomationPreviewPhoneProps> = ({
           <input
             value={inputValue}
             onChange={(event) => onInputChange?.(event.target.value)}
+            onFocus={() => onInputFocus?.()}
+            onBlur={() => onInputBlur?.()}
             placeholder="Message..."
             disabled={inputDisabled}
             className="flex-1 bg-transparent text-sm text-white/90 placeholder:text-white/40 focus:outline-none"

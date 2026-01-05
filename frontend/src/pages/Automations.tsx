@@ -14,10 +14,10 @@ import { AlertTriangle, PlayCircle, Clock } from 'lucide-react';
 import { AutomationsSidebar } from './automations/AutomationsSidebar';
 import { AutomationsListView } from './automations/AutomationsListView';
 import { AutomationsCreateView } from './automations/AutomationsCreateView';
+import { AutomationDetailsView } from './automations/AutomationDetailsView';
 import { AutomationPlaceholderSection } from './automations/AutomationPlaceholderSection';
 import { AutomationsHumanAlerts } from './automations/AutomationsHumanAlerts';
 import Knowledge from './Knowledge';
-import { AutomationsIntentions } from './automations/AutomationsIntentions';
 import { AutomationsIntegrationsView } from './automations/AutomationsIntegrationsView';
 import { FLOW_GOAL_FILTERS } from './automations/constants';
 
@@ -101,14 +101,15 @@ const Automations: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const { activeAccount } = useAccountContext();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeSection, setActiveSection] = useState<'automations' | 'knowledge' | 'intentions' | 'alerts' | 'routing' | 'followups' | 'integrations'>('automations');
-  const [automationView, setAutomationView] = useState<'list' | 'create' | 'edit'>('list');
+  const [activeSection, setActiveSection] = useState<'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'>('automations');
+  const [automationView, setAutomationView] = useState<'list' | 'create' | 'edit' | 'details'>('list');
   const [automations, setAutomations] = useState<AutomationInstance[]>([]);
   const [templates, setTemplates] = useState<FlowTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [editingAutomation, setEditingAutomation] = useState<AutomationInstance | null>(null);
+  const [selectedAutomation, setSelectedAutomation] = useState<AutomationInstance | null>(null);
   const [formData, setFormData] = useState<CreateFormData>({
     name: '',
     description: '',
@@ -131,6 +132,8 @@ const Automations: React.FC = () => {
   const accountInitial = accountDisplayName.charAt(0).toUpperCase();
   const isAutomationsSection = activeSection === 'automations';
   const isCreateView = isAutomationsSection && (automationView === 'create' || automationView === 'edit');
+  const isDetailsView = isAutomationsSection && automationView === 'details';
+  const isAutomationFullHeightView = isCreateView || isDetailsView;
 
   const [creationMode, setCreationMode] = useState<'templates' | 'custom'>('templates');
   const [currentStep, setCurrentStep] = useState<'gallery' | 'setup' | 'review'>('gallery');
@@ -166,7 +169,7 @@ const Automations: React.FC = () => {
 
   useEffect(() => {
     const section = searchParams.get('section');
-    if (section === 'knowledge' || section === 'intentions' || section === 'alerts') {
+    if (section === 'knowledge' || section === 'alerts') {
       setActiveSection(section);
     }
   }, [searchParams]);
@@ -231,6 +234,7 @@ const Automations: React.FC = () => {
 
   const handleOpenCreateModal = () => {
     setEditingAutomation(null);
+    setSelectedAutomation(null);
     setFormData({ name: '', description: '' });
     setConfigValues({});
     setCreationMode('templates');
@@ -242,9 +246,9 @@ const Automations: React.FC = () => {
     setAutomationView('create');
   };
 
-  const handleSectionChange = (section: 'automations' | 'knowledge' | 'intentions' | 'alerts' | 'routing' | 'followups' | 'integrations') => {
+  const handleSectionChange = (section: 'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations') => {
     setActiveSection(section);
-    if (section === 'knowledge' || section === 'intentions' || section === 'alerts') {
+    if (section === 'knowledge' || section === 'alerts') {
       setSearchParams({ section });
     } else if (searchParams.get('section')) {
       setSearchParams({});
@@ -263,6 +267,7 @@ const Automations: React.FC = () => {
 
   const handleOpenEditAutomation = (automation: AutomationInstance) => {
     setEditingAutomation(automation);
+    setSelectedAutomation(null);
     setFormData({
       name: automation.name,
       description: automation.description || '',
@@ -281,9 +286,16 @@ const Automations: React.FC = () => {
     setAutomationView('edit');
   };
 
+  const handleOpenAutomationDetails = (automation: AutomationInstance) => {
+    setSelectedAutomation(automation);
+    setEditingAutomation(null);
+    setAutomationView('details');
+  };
+
   const handleCloseCreateView = () => {
     setAutomationView('list');
     setEditingAutomation(null);
+    setSelectedAutomation(null);
     setCreationMode('templates');
     setCurrentStep('gallery');
     setSelectedTemplate(null);
@@ -353,32 +365,6 @@ const Automations: React.FC = () => {
     } catch (err) {
       console.error('Error deleting automation:', err);
       setError('Failed to delete automation');
-    }
-  };
-
-  const handleDuplicate = async (automation: AutomationInstance) => {
-    if (!currentWorkspace) return;
-    try {
-      const template = resolveTemplateForInstance(automation);
-      const templateVersionId = automation.templateVersionId || template?.currentVersion?._id;
-      if (!templateVersionId || !template?._id) {
-        setError('Unable to duplicate automation. Missing template version.');
-        return;
-      }
-
-      await automationAPI.create({
-        name: `${automation.name} Copy`,
-        description: automation.description || '',
-        workspaceId: currentWorkspace._id,
-        isActive: false,
-        templateId: template._id,
-        templateVersionId,
-        userConfig: automation.userConfig || {},
-      });
-      loadData();
-    } catch (err) {
-      console.error('Error duplicating automation:', err);
-      setError('Failed to duplicate automation');
     }
   };
 
@@ -514,16 +500,18 @@ const Automations: React.FC = () => {
   if (!currentWorkspace) return null;
 
   return (
-    <div className={`h-full flex flex-col ${isCreateSetupView ? 'overflow-hidden' : ''}`}>
-      <div className={`flex flex-col lg:flex-row gap-6 ${isCreateSetupView ? 'flex-1 min-h-0' : ''}`}>
-        <AutomationsSidebar
-          activeSection={activeSection}
-          onChange={handleSectionChange}
-        />
+    <div className={`h-full flex flex-col ${isCreateSetupView || isDetailsView ? 'overflow-hidden' : ''}`}>
+      <div className={`flex flex-col lg:flex-row gap-6 ${isCreateSetupView || isDetailsView ? 'flex-1 min-h-0' : ''}`}>
+        <div className={isDetailsView ? 'hidden lg:block' : ''}>
+          <AutomationsSidebar
+            activeSection={activeSection}
+            onChange={handleSectionChange}
+          />
+        </div>
 
         <div
           className={`flex-1 min-h-0 ${
-            isCreateSetupView ? 'flex flex-col gap-6 overflow-hidden' : 'space-y-6'
+            isCreateSetupView || isDetailsView ? 'flex flex-col gap-6 overflow-hidden' : 'space-y-6'
           }`}
         >
           {error && (
@@ -534,7 +522,11 @@ const Automations: React.FC = () => {
           )}
 
           {activeSection === 'automations' && (
-            <div className={`animate-fade-in ${isCreateView ? 'min-h-0 flex-1 flex flex-col gap-6' : 'space-y-6'}`}>
+            <div
+              className={`animate-fade-in ${
+                isAutomationFullHeightView ? 'min-h-0 flex-1 flex flex-col gap-6 overflow-hidden' : 'space-y-6'
+              }`}
+            >
               {isCreateView ? (
                 <AutomationsCreateView
                   createViewTitle={createViewTitle}
@@ -584,15 +576,28 @@ const Automations: React.FC = () => {
                   onPreviewStop={handlePreviewStop}
                   onPreviewReset={handlePreviewReset}
                 />
+              ) : isDetailsView && selectedAutomation ? (
+                <AutomationDetailsView
+                  automation={selectedAutomation}
+                  accountDisplayName={accountDisplayName}
+                  accountHandle={accountHandle}
+                  accountAvatarUrl={accountAvatarUrl}
+                  accountInitial={accountInitial}
+                  onBack={() => {
+                    setAutomationView('list');
+                    setSelectedAutomation(null);
+                  }}
+                  onEdit={handleOpenEditAutomation}
+                />
               ) : (
                 <AutomationsListView
                   automations={automations}
                   summaryStats={summaryStats}
                   loading={loading}
                   onCreate={handleOpenCreateModal}
-                  onOpen={handleOpenEditAutomation}
+                  onOpen={handleOpenAutomationDetails}
+                  onEdit={handleOpenEditAutomation}
                   onToggle={handleToggle}
-                  onDuplicate={handleDuplicate}
                   onDelete={handleDelete}
                 />
               )}
@@ -601,10 +606,6 @@ const Automations: React.FC = () => {
 
           {activeSection === 'knowledge' && (
             <Knowledge />
-          )}
-
-          {activeSection === 'intentions' && (
-            <AutomationsIntentions />
           )}
 
           {activeSection === 'alerts' && (
