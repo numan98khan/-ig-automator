@@ -516,15 +516,46 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const renderTestConsole = (expanded: boolean) => (
     <Card className={`flex flex-col min-h-0 h-full ${expanded ? 'h-full' : ''}`}>
       
-      <CardHeader className="flex flex-col gap-3 border-b border-border/60 sm:flex-row sm:items-center sm:justify-between">
+      <CardHeader className="grid grid-cols-1 gap-3 border-b border-border/60 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
         {/* <div className="space-y-1">
           <CardTitle>Test Console</CardTitle>
           <p className="hidden text-xs text-muted-foreground sm:block">
             Mock-only DM simulator for this automation.
           </p>
         </div> */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-start">
           <Badge variant="neutral" className="hidden sm:inline-flex">Preview</Badge>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<PauseCircle className="w-4 h-4" />}
+            onClick={handlePreviewPause}
+            disabled={previewLoading || sessionStatus === 'paused'}
+          >
+            {sessionStatus === 'paused' ? 'Paused' : 'Pause'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<StopCircle className="w-4 h-4" />}
+            onClick={handlePreviewStop}
+            disabled={previewLoading || sessionStatus === 'completed'}
+          >
+            {sessionStatus === 'completed' ? 'Stopped' : 'Stop'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<RefreshCcw className="w-4 h-4" />}
+            onClick={handlePreviewReset}
+            disabled={previewLoading}
+          >
+            Reset
+          </Button>
+        </div>
+        <div className="flex items-center justify-end gap-2">
           {!expanded && (
             <Button
               variant="outline"
@@ -564,35 +595,6 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         {previewStatus && (
           <div className="text-xs text-muted-foreground text-center">{previewStatus}</div>
         )}
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={<PauseCircle className="w-4 h-4" />}
-            onClick={handlePreviewPause}
-            disabled={previewLoading || sessionStatus === 'paused'}
-          >
-            {sessionStatus === 'paused' ? 'Paused' : 'Pause'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={<StopCircle className="w-4 h-4" />}
-            onClick={handlePreviewStop}
-            disabled={previewLoading || sessionStatus === 'completed'}
-          >
-            {sessionStatus === 'completed' ? 'Stopped' : 'Stop'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={<RefreshCcw className="w-4 h-4" />}
-            onClick={handlePreviewReset}
-            disabled={previewLoading}
-          >
-            Reset
-          </Button>
-        </div>
       </CardContent>
     </Card>
   );
