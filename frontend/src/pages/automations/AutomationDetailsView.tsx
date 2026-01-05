@@ -181,13 +181,9 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
 
   const refreshPreviewState = useCallback(async () => {
     if (!automation._id) return;
+    if (isTyping || previewSending) return;
     try {
       const response = await automationAPI.getPreviewSessionStatus(automation._id, previewSessionId || undefined);
-      if (isTyping || previewSending) {
-        const { messages, ...rest } = response;
-        applyPreviewPayload(rest);
-        return;
-      }
       applyPreviewPayload(response);
     } catch (err) {
       console.error('Error refreshing preview state:', err);
@@ -270,11 +266,10 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   useEffect(() => {
     if (!previewSessionId) return;
     const interval = window.setInterval(() => {
-      if (isTyping || previewSending) return;
       void refreshPreviewState();
     }, 4000);
     return () => window.clearInterval(interval);
-  }, [isTyping, previewSending, previewSessionId, refreshPreviewState]);
+  }, [previewSessionId, refreshPreviewState]);
 
   const handlePreviewInputChange = (value: string) => {
     setPreviewInputValue(value);
