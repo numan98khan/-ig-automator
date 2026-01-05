@@ -118,7 +118,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state'>('persona');
   const [isTyping, setIsTyping] = useState(false);
 
-  const sessionStatus = previewState.session?.status || previewSessionStatus;
+  const sessionStatus = previewSessionStatus || previewState.session?.status;
   const statusConfig = sessionStatus
     ? {
       active: { label: 'Running', variant: 'success' as const },
