@@ -584,7 +584,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       </CardHeader>
       <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden pt-6">
         <div className="flex-1 min-h-0 flex items-center justify-center">
-          <div className="h-full max-h-full w-full max-w-full sm:aspect-[9/19.5] sm:w-auto sm:max-w-full sm:min-h-0 min-h-0">
+          <div className="h-full max-h-full aspect-[9/19.5] w-auto max-w-full min-h-0">
             <AutomationPreviewPhone
               accountDisplayName={accountDisplayName}
               accountHandle={accountHandle}
@@ -907,28 +907,27 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         ))}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] grid-rows-[minmax(0,1fr)] flex-1 min-h-0 overflow-hidden">
-        <div className={`${mobileView === 'preview' ? 'block' : 'hidden'} sm:block h-full min-h-0`}>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] grid-rows-[minmax(0,1fr)] flex-1 min-h-0 overflow-hidden">
+        <div className={`${mobileView === 'preview' ? 'block' : 'hidden'} sm:block h-full min-h-0 min-w-0`}>
           {renderTestConsole()}
         </div>
-      <div className={`${mobileView === 'details' ? 'flex' : 'hidden'} sm:flex h-full min-h-0 w-full`}>
-        {renderRightPane()}
+        <div className={`${mobileView === 'details' ? 'flex' : 'hidden'} sm:flex h-full min-h-0 min-w-0`}>
+          {renderRightPane()}
+        </div>
       </div>
+      {previewToast && (
+        <div
+          className={`fixed bottom-6 left-6 z-50 rounded-full px-4 py-2 text-xs font-semibold shadow-lg ${
+            previewToast.status === 'success'
+              ? 'bg-primary text-primary-foreground'
+              : previewToast.status === 'error'
+                ? 'bg-red-500 text-white'
+                : 'bg-card/95 border border-border text-foreground'
+          }`}
+        >
+          {previewToast.message}
+        </div>
+      )}
     </div>
-
-    {previewToast && (
-      <div
-        className={`fixed bottom-6 left-6 z-50 rounded-full px-4 py-2 text-xs font-semibold shadow-lg ${
-          previewToast.status === 'success'
-            ? 'bg-primary text-primary-foreground'
-            : previewToast.status === 'error'
-              ? 'bg-red-500 text-white'
-              : 'bg-card/95 border border-border text-foreground'
-        }`}
-      >
-        {previewToast.message}
-      </div>
-    )}
-  </div>
   );
 };
