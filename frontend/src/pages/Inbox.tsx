@@ -20,17 +20,14 @@ import {
   Sparkles,
   Instagram,
   Loader2,
-  RefreshCw,
   Check,
   CheckCheck,
   ArrowLeft,
-  MoreVertical,
   Search,
   MessageSquare,
   PanelRightOpen,
   PanelRightClose,
   Paperclip,
-  AlertTriangle,
   Clock3,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -52,8 +49,6 @@ const Inbox: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [syncingAll, setSyncingAll] = useState(false);
   const [workspaceTier, setWorkspaceTier] = useState<TierSummaryResponse['workspace']>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [previousMessageCount, setPreviousMessageCount] = useState(0);
@@ -66,47 +61,6 @@ const Inbox: React.FC = () => {
   const [automationSession, setAutomationSession] = useState<AutomationSessionSummary | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionAction, setSessionAction] = useState<'pause' | 'stop' | null>(null);
-  const [conversationMenuOpen, setConversationMenuOpen] = useState(false);
-  const conversationMenuRef = useRef<HTMLDivElement | null>(null);
-
-  const handleSyncConversation = async () => {
-    if (!selectedConversation || !selectedConversation.instagramConversationId) return;
-
-    setSyncing(true);
-    try {
-      await instagramSyncAPI.syncMessages(currentWorkspace?._id || '', selectedConversation.instagramConversationId);
-      await loadConversations();
-      const updatedConversations = await conversationAPI.getByWorkspace(currentWorkspace?._id || '');
-      const syncedConv = updatedConversations.find(c => c.instagramConversationId === selectedConversation.instagramConversationId);
-
-      if (syncedConv) {
-        setSelectedConversation(syncedConv);
-        await loadMessages();
-      }
-    } catch (error) {
-      console.error('Error syncing individual conversation:', error);
-      alert('Failed to sync messages. Please try again.');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const handleSyncAll = async () => {
-    if (!currentWorkspace) return;
-
-    setSyncingAll(true);
-    try {
-      await instagramSyncAPI.syncMessages(currentWorkspace._id);
-      await loadConversations();
-      // alert('All conversations synced successfully!'); // Removed alert for cleaner UX
-    } catch (error) {
-      console.error('Error syncing all conversations:', error);
-      alert('Failed to sync all conversations. Please try again.');
-    } finally {
-      setSyncingAll(false);
-    }
-  };
-
 
   const loadAutomationSession = async (options?: { silent?: boolean }) => {
     if (!selectedConversation?._id) {
@@ -163,25 +117,6 @@ const Inbox: React.FC = () => {
   }, [currentWorkspace, selectedConversation, activeAccount]);
 
   useEffect(() => {
-    if (!conversationMenuOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!conversationMenuRef.current) return;
-      if (!conversationMenuRef.current.contains(event.target as Node)) {
-        setConversationMenuOpen(false);
-      }
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setConversationMenuOpen(false);
-    };
-    window.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      window.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [conversationMenuOpen]);
-
-  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('instagram_connected') === 'true') {
       window.history.replaceState({}, '', window.location.pathname);
@@ -214,41 +149,16 @@ const Inbox: React.FC = () => {
         (conv) => conv.instagramAccountId === activeAccount._id,
       );
 
-      const connectedAccount = accountsData?.find((acc) => acc._id === activeAccount._id && acc.status === 'connected');
-      if (connectedAccount && scopedConversations.length === 0) {
-        try {
-          await instagramSyncAPI.syncMessages(currentWorkspace._id);
-          const updatedConversations = await conversationAPI.getByWorkspace(currentWorkspace._id);
-          const filteredUpdated = (updatedConversations || []).filter(
-            (conv) => conv.instagramAccountId === activeAccount._id,
-          );
-          setConversations(filteredUpdated || []);
-          const requested = requestedConversationId
-            ? filteredUpdated.find((conv) => conv._id === requestedConversationId)
-            : null;
-          if (requested) {
-            setSelectedConversation(requested);
-          } else if (filteredUpdated && filteredUpdated.length > 0 && !selectedConversation) {
-            setSelectedConversation(filteredUpdated[0]);
-          } else if (filteredUpdated.length === 0) {
-            setSelectedConversation(null);
-          }
-        } catch (syncError) {
-          console.error('❌ Error syncing Instagram messages:', syncError);
-          setConversations(scopedConversations || []);
-        }
-      } else {
-        setConversations(scopedConversations || []);
-        const requested = requestedConversationId
-          ? scopedConversations.find((conv) => conv._id === requestedConversationId)
-          : null;
-        if (requested) {
-          setSelectedConversation(requested);
-        } else if (scopedConversations && scopedConversations.length > 0 && !selectedConversation) {
-          setSelectedConversation(scopedConversations[0]);
-        } else if (scopedConversations.length === 0) {
-          setSelectedConversation(null);
-        }
+      setConversations(scopedConversations || []);
+      const requested = requestedConversationId
+        ? scopedConversations.find((conv) => conv._id === requestedConversationId)
+        : null;
+      if (requested) {
+        setSelectedConversation(requested);
+      } else if (scopedConversations && scopedConversations.length > 0 && !selectedConversation) {
+        setSelectedConversation(scopedConversations[0]);
+      } else if (scopedConversations.length === 0) {
+        setSelectedConversation(null);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -274,16 +184,10 @@ const Inbox: React.FC = () => {
   };
 
   useEffect(() => {
-    if (selectedConversation) {
-      if (!selectedConversation.isSynced && selectedConversation.instagramConversationId) {
-        handleSyncConversation();
-      } else {
-        loadMessages();
-      }
-      setConversationMenuOpen(false);
-      loadAutomationSession({ silent: true });
-      setShouldAutoScroll(true);
-    }
+    if (!selectedConversation) return;
+    loadMessages();
+    loadAutomationSession({ silent: true });
+    setShouldAutoScroll(true);
   }, [selectedConversation]);
 
   const loadMessages = async () => {
@@ -309,7 +213,7 @@ const Inbox: React.FC = () => {
     if (!newMessage.trim() || !selectedConversation) return;
 
     if (!selectedConversation._id) {
-      alert('Please wait while the conversation syncs...');
+      alert('Please wait while the conversation loads...');
       return;
     }
 
@@ -439,6 +343,11 @@ const Inbox: React.FC = () => {
   const agentMissingSlots = Array.isArray(sessionVars?.agentMissingSlots)
     ? sessionVars.agentMissingSlots.filter((slot) => typeof slot === 'string' && slot.trim())
     : [];
+  const conversationConnectedAt = useMemo(() => {
+    if (!selectedConversation) return null;
+    const account = instagramAccounts.find((acc) => acc._id === selectedConversation.instagramAccountId);
+    return account?.createdAt ? new Date(account.createdAt) : null;
+  }, [instagramAccounts, selectedConversation]);
 
   const handleConnectInstagram = async () => {
     if (!currentWorkspace) return;
@@ -459,8 +368,6 @@ const Inbox: React.FC = () => {
     }
   };
 
-  const hasUnsynced = useMemo(() => conversations.some((conv) => !conv.isSynced), [conversations]);
-
   const filteredConversations = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
 
@@ -472,7 +379,9 @@ const Inbox: React.FC = () => {
         (conv.lastMessage || '').toLowerCase().includes(term);
 
       const isEscalated = Boolean(conv.humanRequired);
-      const isUnreplied = !conv.isSynced || isEscalated;
+      const lastCustomerAt = conv.lastCustomerMessageAt ? new Date(conv.lastCustomerMessageAt).getTime() : 0;
+      const lastBusinessAt = conv.lastBusinessMessageAt ? new Date(conv.lastBusinessMessageAt).getTime() : 0;
+      const isUnreplied = lastCustomerAt > lastBusinessAt || isEscalated;
 
       if (!matchesSearch) return false;
       if (activeFilter === 'escalated') return isEscalated;
@@ -538,19 +447,6 @@ const Inbox: React.FC = () => {
                   <h2 className="text-base font-semibold leading-tight text-foreground">Inbox</h2>
                   <p className="text-xs text-muted-foreground truncate">{instagramAccounts?.[0]?.username}</p>
                 </div>
-                {hasUnsynced && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleSyncAll}
-                    disabled={syncingAll}
-                    isLoading={syncingAll}
-                    className="h-8 border border-border bg-background text-foreground hover:bg-muted/70"
-                    leftIcon={!syncingAll ? <RefreshCw className="w-3.5 h-3.5" /> : undefined}
-                  >
-                    Sync
-                  </Button>
-                )}
               </div>
 
               <div className="flex items-center gap-2 mb-3 overflow-x-auto">
@@ -622,12 +518,6 @@ const Inbox: React.FC = () => {
                           <p className="text-xs text-muted-foreground truncate mt-1">{conv.lastMessage}</p>
                         )}
                         <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                          {!conv.isSynced && (
-                            <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100 inline-flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />
-                              Needs sync
-                            </span>
-                          )}
                           {conv.humanRequired && (
                             <span className="px-2 py-0.5 rounded-full text-[11px] bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-100">
                               Escalated
@@ -683,44 +573,6 @@ const Inbox: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!selectedConversation.isSynced && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={handleSyncConversation}
-                        isLoading={syncing}
-                        className="text-muted-foreground hover:text-foreground"
-                        leftIcon={!syncing ? <RefreshCw className="w-4 h-4" /> : undefined}
-                      >
-                        Sync
-                      </Button>
-                    )}
-                    <div className="relative" ref={conversationMenuRef}>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={() => setConversationMenuOpen((prev) => !prev)}
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                      {conversationMenuOpen && (
-                        <div className="absolute right-0 mt-2 w-44 rounded-lg border border-border bg-background shadow-lg z-20">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setConversationMenuOpen(false);
-                              handleSyncConversation();
-                            }}
-                            disabled={syncing}
-                            className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-muted/70 flex items-center gap-2 disabled:opacity-60"
-                          >
-                            <RefreshCw className="w-4 h-4" />
-                            Sync conversation
-                          </button>
-                        </div>
-                      )}
-                    </div>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -735,70 +587,77 @@ const Inbox: React.FC = () => {
 
                 <div className="flex-1 overflow-y-auto px-4 md:px-5 py-4 custom-scrollbar">
                   <div className="max-w-3xl mx-auto space-y-3">
-                    {messages.map((msg) => (
-                      <div
-                        key={msg._id}
-                        className={`flex ${msg.from === 'customer' ? 'justify-start' : 'justify-end'}`}
-                      >
-                        <div className="relative max-w-[85%] md:max-w-2xl group">
-                          <div
-                            className={`px-3.5 py-3 rounded-xl text-sm leading-relaxed shadow-sm ${msg.from === 'customer'
-                              ? 'bg-secondary text-foreground border border-border'
-                              : msg.from === 'ai'
-                                ? 'bg-primary text-primary-foreground shadow-md' //'bg-muted text-foreground border border-border'
-                                : 'bg-primary text-primary-foreground shadow-md'
-                              }`}
-                          >
-                            {msg.from === 'ai' && (
-                              <div className="flex items-center gap-1.5 mb-1.5 text-muted/80 text-[11px] font-semibold uppercase tracking-wide">
-                                <Sparkles className="w-3 h-3" />
-                                <span>AI Assistant</span>
-                              </div>
-                            )}
-
-                            {msg.attachments && msg.attachments.length > 0 && (
-                              <div className="space-y-2 mb-2">
-                                {msg.attachments.map((attachment, index) => (
-                                  <div key={index}>
-                                    {attachment.type === 'image' && <ImageAttachment attachment={attachment} />}
-                                    {attachment.type === 'video' && <VideoAttachment attachment={attachment} />}
-                                    {(attachment.type === 'audio' || attachment.type === 'voice') && <VoiceAttachment attachment={attachment} />}
-                                    {attachment.type === 'file' && <FileAttachment attachment={attachment} />}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            {msg.linkPreview && (
-                              <div className="mb-2">
-                                <LinkPreviewComponent linkPreview={msg.linkPreview} />
-                              </div>
-                            )}
-
-                            {msg.text && (
-                              <ReactMarkdown
-                                className="prose prose-invert prose-sm max-w-none text-sm leading-relaxed [&>*]:my-2 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
-                              >
-                                {msg.text}
-                              </ReactMarkdown>
-                            )}
-
+                    {messages.map((msg) => {
+                      const isHistorical = Boolean(
+                        conversationConnectedAt &&
+                        msg.createdAt &&
+                        new Date(msg.createdAt).getTime() < conversationConnectedAt.getTime(),
+                      );
+                      return (
+                        <div
+                          key={msg._id}
+                          className={`flex ${msg.from === 'customer' ? 'justify-start' : 'justify-end'}`}
+                        >
+                          <div className={`relative max-w-[85%] md:max-w-2xl group ${isHistorical ? 'opacity-60 grayscale' : ''}`}>
                             <div
-                              className={`flex items-center justify-end gap-1.5 mt-1.5 text-[11px] ${msg.from === 'customer' ? 'text-muted-foreground' : 'text-primary-foreground/80'
+                              className={`px-3.5 py-3 rounded-xl text-sm leading-relaxed shadow-sm ${msg.from === 'customer'
+                                ? 'bg-secondary text-foreground border border-border'
+                                : msg.from === 'ai'
+                                  ? 'bg-primary text-primary-foreground shadow-md'
+                                  : 'bg-primary text-primary-foreground shadow-md'
                                 }`}
                             >
-                              <span>{formatTime(msg.createdAt)}</span>
-                              {msg.from !== 'customer' && (
-                                <span title={msg.seenAt ? 'Seen' : 'Sent'}>
-                                  {msg.seenAt ? <CheckCheck className="w-3 h-3" /> : <Check className="w-3 h-3" />}
-                                </span>
+                              {msg.from === 'ai' && (
+                                <div className="flex items-center gap-1.5 mb-1.5 text-muted/80 text-[11px] font-semibold uppercase tracking-wide">
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>AI Assistant</span>
+                                </div>
                               )}
-                            </div>
-                          </div>
 
+                              {msg.attachments && msg.attachments.length > 0 && (
+                                <div className="space-y-2 mb-2">
+                                  {msg.attachments.map((attachment, index) => (
+                                    <div key={index}>
+                                      {attachment.type === 'image' && <ImageAttachment attachment={attachment} />}
+                                      {attachment.type === 'video' && <VideoAttachment attachment={attachment} />}
+                                      {(attachment.type === 'audio' || attachment.type === 'voice') && <VoiceAttachment attachment={attachment} />}
+                                      {attachment.type === 'file' && <FileAttachment attachment={attachment} />}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {msg.linkPreview && (
+                                <div className="mb-2">
+                                  <LinkPreviewComponent linkPreview={msg.linkPreview} />
+                                </div>
+                              )}
+
+                              {msg.text && (
+                                <ReactMarkdown
+                                  className="prose prose-invert prose-sm max-w-none text-sm leading-relaxed [&>*]:my-2 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                                >
+                                  {msg.text}
+                                </ReactMarkdown>
+                              )}
+
+                              <div
+                                className={`flex items-center justify-end gap-1.5 mt-1.5 text-[11px] ${msg.from === 'customer' ? 'text-muted-foreground' : 'text-primary-foreground/80'
+                                  }`}
+                              >
+                                <span>{formatTime(msg.createdAt)}</span>
+                                {msg.from !== 'customer' && (
+                                  <span title={msg.seenAt ? 'Seen' : 'Sent'}>
+                                    {msg.seenAt ? <CheckCheck className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div ref={messagesEndRef} />
                   </div>
                 </div>

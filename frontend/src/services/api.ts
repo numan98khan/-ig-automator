@@ -1156,7 +1156,7 @@ export const flowTemplateAPI = {
 
 // Instagram Sync API
 export const instagramSyncAPI = {
-  syncMessages: async (workspaceId: string, conversationId?: string): Promise<{
+  syncMessages: async (workspaceId: string, conversationId: string): Promise<{
     success: boolean;
     conversationsSynced: number;
     messagesSynced: number;

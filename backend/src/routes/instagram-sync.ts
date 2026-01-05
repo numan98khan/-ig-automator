@@ -5,6 +5,7 @@ import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import AutomationSession from '../models/AutomationSession';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { requireAdmin } from '../middleware/admin';
 import {
   fetchConversations,
   fetchConversationMessages,
@@ -25,7 +26,7 @@ const router = express.Router();
 /**
  * Get available conversations from Instagram for syncing
  */
-router.get('/available-conversations', authenticate, async (req: AuthRequest, res: Response) => {
+router.get('/available-conversations', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId } = req.query;
 
@@ -105,14 +106,17 @@ router.get('/available-conversations', authenticate, async (req: AuthRequest, re
 });
 
 /**
- * Sync Instagram messages - Fetch all or specific conversation
+ * Sync Instagram messages for a specific conversation
  */
-router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/sync-messages', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const { workspaceId, conversationId: specificConversationId } = req.body;
 
     if (!workspaceId) {
       return res.status(400).json({ error: 'workspaceId is required' });
+    }
+    if (!specificConversationId) {
+      return res.status(400).json({ error: 'conversationId is required' });
     }
 
     console.log('🔄 Starting Instagram message sync for workspace:', workspaceId);
@@ -137,22 +141,19 @@ router.post('/sync-messages', authenticate, async (req: AuthRequest, res: Respon
 
     let conversationsToProcess: any[] = [];
 
-    if (specificConversationId) {
-      // Sync single conversation
-      console.log(`🔄 Syncing specific conversation: ${specificConversationId}`);
-      // We need to fetch just this one or filter from list. 
-      // Graph API: /{conversation_id}
-      // For now, simpler to fetch all and filter, or fetch messages directly if we knew participant.
-      // We need conversation metadata (participants) which comes from conversation endpoint.
-      // Let's fetch all for now to be safe and simple
-      const allConversations = await fetchConversations(igAccount.accessToken);
-      const found = allConversations.find((c: any) => c.id === specificConversationId);
-      if (found) conversationsToProcess = [found];
-    } else {
-      // Sync all
-      console.log('🔄 Fetching all conversations from Instagram...');
-      conversationsToProcess = await fetchConversations(igAccount.accessToken);
+    // Sync single conversation
+    console.log(`🔄 Syncing specific conversation: ${specificConversationId}`);
+    // We need to fetch just this one or filter from list.
+    // Graph API: /{conversation_id}
+    // For now, simpler to fetch all and filter, or fetch messages directly if we knew participant.
+    // We need conversation metadata (participants) which comes from conversation endpoint.
+    // Let's fetch all for now to be safe and simple
+    const allConversations = await fetchConversations(igAccount.accessToken);
+    const found = allConversations.find((c: any) => c.id === specificConversationId);
+    if (!found) {
+      return res.status(404).json({ error: 'Conversation not found on Instagram' });
     }
+    conversationsToProcess = [found];
 
     console.log(`✅ Processing ${conversationsToProcess.length} conversations`);
 

@@ -33,7 +33,7 @@ const SyncConversations: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState<string | null>(null); // ID of conv being synced, or 'all'
+  const [syncing, setSyncing] = useState<string | null>(null); // ID of conv being synced
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,21 +71,6 @@ const SyncConversations: React.FC = () => {
     }
   };
 
-  const handleSyncAll = async () => {
-    if (!window.confirm('This might take a while. Sync all conversations?')) return;
-
-    try {
-      setSyncing('all');
-      await instagramSyncAPI.syncMessages(currentWorkspace!._id);
-      await fetchConversations();
-    } catch (err) {
-      console.error('Sync all failed:', err);
-      alert('Failed to sync all conversations');
-    } finally {
-      setSyncing(null);
-    }
-  };
-
   if (!currentWorkspace) return <div>Please select a workspace</div>;
 
   return (
@@ -94,7 +79,7 @@ const SyncConversations: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sync Conversations</h1>
           <p className="text-gray-500 mt-1">
-            View available conversations on Instagram and sync them to your inbox.
+            View available conversations on Instagram and sync them individually.
           </p>
         </div>
         <div className="flex gap-4">
@@ -105,13 +90,6 @@ const SyncConversations: React.FC = () => {
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
-          </button>
-          <button
-            onClick={handleSyncAll}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-            disabled={loading || !!syncing}
-          >
-            {syncing === 'all' ? 'Syncing...' : 'Sync All'}
           </button>
         </div>
       </div>

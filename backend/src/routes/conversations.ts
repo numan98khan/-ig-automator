@@ -2,14 +2,12 @@ import express, { Response } from 'express';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Escalation from '../models/Escalation';
-import InstagramAccount from '../models/InstagramAccount';
 import AutomationSession from '../models/AutomationSession';
 import AutomationInstance from '../models/AutomationInstance';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
-import { fetchConversations, fetchMessagingUserProfile, fetchUserDetails } from '../utils/instagram-api';
 
 const router = express.Router();
 
@@ -222,83 +220,6 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
         };
       })
     );
-
-    // Try to fetch unsynced conversations from Instagram
-    try {
-      const igAccount = await InstagramAccount.findOne({
-        workspaceId: workspaceId as string,
-        status: 'connected',
-      }).select('+accessToken +pageAccessToken');
-
-      if (igAccount && igAccount.accessToken) {
-        const instagramConversations = await fetchConversations(igAccount.accessToken);
-        const me = await fetchUserDetails('me', igAccount.accessToken);
-        const myId = me.id;
-        const myUsername = me.username;
-
-        const existingConversationIds = new Set(
-          conversations
-            .map(c => c.instagramConversationId)
-            .filter((id): id is string => Boolean(id)),
-        );
-        const existingParticipantIds = new Set(
-          conversations
-            .map(c => c.participantInstagramId)
-            .filter((id): id is string => Boolean(id)),
-        );
-
-        // Find unsynced conversations
-        const unsyncedConversations = (await Promise.all(instagramConversations
-          .map(async (igConv: any) => {
-            const participants = igConv.participants?.data || [];
-            let participant = participants.find((p: any) => {
-              const isMeById = p.id === myId;
-              const isMeByUsername = p.username && myUsername && p.username.toLowerCase() === myUsername.toLowerCase();
-              return !isMeById && !isMeByUsername;
-            });
-
-            if (!participant && participants.length > 0) {
-              participant = participants.find((p: any) => p.username !== myUsername) || participants[0];
-            }
-
-            if (!participant) return null;
-
-            if (existingConversationIds.has(igConv.id) || existingParticipantIds.has(participant.id)) {
-              return null;
-            }
-
-            const participantDetails = igAccount.pageAccessToken
-              ? await fetchMessagingUserProfile(participant.id, igAccount.pageAccessToken)
-              : { id: participant.id, username: participant.username, name: participant.name };
-            const participantProfilePictureUrl = participantDetails.profile_pic
-              || participantDetails.profile_picture_url
-              || participantDetails.profilePictureUrl;
-
-            return {
-              instagramConversationId: igConv.id,
-              participantName: participant.name || participant.username || 'Instagram User',
-              participantHandle: `@${participant.username || 'unknown'}`,
-              participantProfilePictureUrl,
-              participantInstagramId: participant.id,
-              lastMessageAt: new Date(igConv.updated_time),
-              platform: 'instagram',
-              isSynced: false,
-              instagramAccountId: igAccount._id.toString(),
-              workspaceId: workspaceId,
-            };
-          })))
-          .filter((conv): conv is NonNullable<typeof conv> => conv !== null);
-
-        // Merge synced and unsynced conversations
-        const allConversations = [...conversationsWithLastMessage, ...unsyncedConversations];
-        allConversations.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
-
-        return res.json(allConversations);
-      }
-    } catch (igError) {
-      console.error('Error fetching Instagram conversations:', igError);
-      // Continue with just local conversations if Instagram fetch fails
-    }
 
     res.json(conversationsWithLastMessage);
   } catch (error) {
