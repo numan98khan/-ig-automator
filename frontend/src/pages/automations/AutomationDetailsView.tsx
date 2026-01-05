@@ -513,7 +513,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const renderTestConsole = () => (
     <Card className="flex flex-col min-h-0 h-full">
       
-      <CardHeader className="grid grid-cols-1 gap-3 border-b border-border/60 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+      <CardHeader className="grid grid-cols-1 gap-2 border-b border-border/60 px-4 py-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
         {/* <div className="space-y-1">
           <CardTitle>Test Console</CardTitle>
           <p className="hidden text-xs text-muted-foreground sm:block">
@@ -554,7 +554,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         </div>
         <div className="hidden sm:block" />
       </CardHeader>
-      <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
+      <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden pt-6">
         <div className="flex-1 min-h-0 flex items-center justify-center">
           <div className="h-full max-h-full w-full max-w-full sm:aspect-[9/19.5] sm:w-auto sm:max-w-full sm:min-h-0 min-h-0">
             <AutomationPreviewPhone
