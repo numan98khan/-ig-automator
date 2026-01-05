@@ -511,12 +511,12 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
 
   const renderTestConsole = (expanded: boolean) => (
     <Card className={`flex flex-col min-h-0 ${expanded ? 'h-full' : ''}`}>
-      <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border/60">
-        <div>
+      <CardHeader className="flex flex-col gap-3 border-b border-border/60 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
           <CardTitle>Test Console</CardTitle>
           <p className="text-xs text-muted-foreground">Mock-only DM simulator for this automation.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant="neutral">Preview</Badge>
           {!expanded && (
             <Button
@@ -842,8 +842,8 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
 
   return (
     <div className="h-full flex flex-col min-h-0 gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:text-sm">
           <button onClick={onBack} className="hover:text-foreground transition-colors">
             Automations
           </button>
@@ -852,7 +852,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           <ArrowRight className="w-4 h-4" />
           <span className="font-medium text-foreground">Preview</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
           <Button variant="outline" size="sm" onClick={() => onEdit(automation)}>
             Edit Automation
