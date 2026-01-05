@@ -22,7 +22,7 @@ import {
 } from '../../services/api';
 import { AutomationPreviewPhone } from './AutomationPreviewPhone';
 import { Button } from '../../components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
+import { Card, CardContent, CardHeader } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 
@@ -121,7 +121,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [personaDraft, setPersonaDraft] = useState<AutomationPreviewPersona>(DEFAULT_PERSONA);
   const [profileBusy, setProfileBusy] = useState(false);
-  const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state'>('persona');
+  const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state' | 'timeline'>('persona');
   const [isTyping, setIsTyping] = useState(false);
   const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
   const previewSessionIdRef = useRef<string | null>(null);
@@ -538,6 +538,16 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       .filter(([key]) => !key.startsWith('agent'))
       .map(([key, value]) => ({ key, value: formatFieldValue(value) }));
   }, [previewState.session?.state?.vars]);
+  const agentSlotEntries = useMemo(() => {
+    const slots = previewState.session?.state?.vars?.agentSlots;
+    if (!slots || typeof slots !== 'object') return [];
+    return Object.entries(slots).map(([key, value]) => ({ key, value: formatFieldValue(value) }));
+  }, [previewState.session?.state?.vars?.agentSlots]);
+  const agentMissingSlots = useMemo(() => {
+    const missing = previewState.session?.state?.vars?.agentMissingSlots;
+    if (!missing) return [];
+    return Array.isArray(missing) ? missing.filter(Boolean) : [];
+  }, [previewState.session?.state?.vars?.agentMissingSlots]);
   const tags = previewState.conversation?.tags || [];
   const events: AutomationPreviewEvent[] = previewState.events || [];
 
@@ -621,14 +631,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
 
   const renderPersonaCard = () => (
     <Card className="flex flex-col min-h-0 flex-1 w-full">
-      <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
-        <div>
-          <CardTitle>Mock Persona</CardTitle>
-          <p className="text-xs text-muted-foreground">Saved presets keep test sessions consistent.</p>
-        </div>
-        {profilesLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-      </CardHeader>
-      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto">
+      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto pt-6">
         <div className="flex flex-wrap items-center gap-4">
           <div className="h-14 w-14 rounded-full overflow-hidden bg-muted/60 flex items-center justify-center text-sm font-semibold text-muted-foreground">
             {personaDraft.avatarUrl ? (
@@ -678,7 +681,10 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         <div className="rounded-lg border border-border/60 bg-background/60 p-3 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold uppercase text-muted-foreground">Saved profiles</span>
-            {profilesError && <span className="text-xs text-destructive">{profilesError}</span>}
+            <div className="flex items-center gap-2 text-xs">
+              {profilesLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+              {profilesError && <span className="text-destructive">{profilesError}</span>}
+            </div>
           </div>
           <select
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
@@ -749,14 +755,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
 
   const renderStateCard = () => (
     <Card className="flex flex-col min-h-0 flex-1 w-full">
-      <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
-        <div>
-          <CardTitle>Live Automation State</CardTitle>
-          <p className="text-xs text-muted-foreground">Auto-updates every few seconds.</p>
-        </div>
-        <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
-      </CardHeader>
-      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto">
+      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto pt-6">
         <div className="rounded-lg border border-border/60 bg-background/60 p-3">
           <div className="text-xs font-semibold uppercase text-muted-foreground">Current step</div>
           {previewState.currentNode ? (() => {
@@ -779,6 +778,27 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
             );
           })() : (
             <div className="mt-2 text-xs text-muted-foreground">Waiting for the next trigger.</div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+          <div className="text-xs font-semibold uppercase text-muted-foreground">AI slots</div>
+          {agentSlotEntries.length > 0 ? (
+            <div className="mt-2 grid gap-2">
+              {agentSlotEntries.map((slot) => (
+                <div key={slot.key} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{slot.key}</span>
+                  <span className="font-medium text-right">{slot.value}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-2 text-xs text-muted-foreground">No AI slots collected yet.</div>
+          )}
+          {agentMissingSlots.length > 0 && (
+            <div className="mt-3 text-xs text-muted-foreground">
+              Missing slots: <span className="font-medium text-foreground">{agentMissingSlots.join(', ')}</span>
+            </div>
           )}
         </div>
 
@@ -810,30 +830,31 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
             <div className="mt-2 text-xs text-muted-foreground">No tags applied yet.</div>
           )}
         </div>
+      </CardContent>
+    </Card>
+  );
 
-        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase text-muted-foreground">Execution timeline</span>
-          </div>
-          {events.length > 0 ? (
-            <div className="mt-3 max-h-64 overflow-y-auto space-y-3 pr-1">
-              {events.map((event) => {
-                const badge = EVENT_BADGES[event.type] || EVENT_BADGES.info;
-                return (
-                  <div key={event.id} className="flex items-start gap-3">
-                    <Badge variant={badge.variant}>{badge.label}</Badge>
-                    <div className="flex-1">
-                      <div className="text-sm">{event.message}</div>
-                      <div className="text-xs text-muted-foreground">{formatTime(event.createdAt)}</div>
-                    </div>
+  const renderTimelineCard = () => (
+    <Card className="flex flex-col min-h-0 flex-1 w-full">
+      <CardContent className="flex-1 min-h-0 overflow-y-auto pt-6">
+        {events.length > 0 ? (
+          <div className="space-y-3 pr-1">
+            {events.map((event) => {
+              const badge = EVENT_BADGES[event.type] || EVENT_BADGES.info;
+              return (
+                <div key={event.id} className="flex items-start gap-3">
+                  <Badge variant={badge.variant}>{badge.label}</Badge>
+                  <div className="flex-1">
+                    <div className="text-sm">{event.message}</div>
+                    <div className="text-xs text-muted-foreground">{formatTime(event.createdAt)}</div>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="mt-2 text-xs text-muted-foreground">No events yet.</div>
-          )}
-        </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-xs text-muted-foreground">No events yet.</div>
+        )}
       </CardContent>
     </Card>
   );
@@ -844,6 +865,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         {([
           { id: 'persona', label: 'Mock Persona' },
           { id: 'state', label: 'Automation State' },
+          { id: 'timeline', label: 'Execution Timeline' },
         ] as const).map((tab) => (
           <button
             key={tab.id}
@@ -859,7 +881,11 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           </button>
         ))}
       </div>
-      {rightPaneTab === 'persona' ? renderPersonaCard() : renderStateCard()}
+      {rightPaneTab === 'persona'
+        ? renderPersonaCard()
+        : rightPaneTab === 'timeline'
+          ? renderTimelineCard()
+          : renderStateCard()}
     </div>
   );
 
