@@ -117,7 +117,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [consoleExpanded, setConsoleExpanded] = useState(false);
   const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state'>('persona');
   const [isTyping, setIsTyping] = useState(false);
-  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
 
   const sessionStatus = previewSessionStatus || previewState.session?.status;
   const statusConfig = sessionStatus
@@ -532,7 +532,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       </CardHeader>
       <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
         <div className="flex-1 min-h-0 flex items-center justify-center">
-          <div className="h-full max-h-full aspect-[9/19.5] w-auto max-w-full">
+          <div className="h-full max-h-full w-full max-w-full sm:aspect-[9/19.5] sm:w-auto sm:max-w-full sm:min-h-0 min-h-[420px]">
             <AutomationPreviewPhone
               accountDisplayName={accountDisplayName}
               accountHandle={accountHandle}
@@ -856,25 +856,42 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           </Badge>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          <Button variant="outline" size="sm" onClick={() => onEdit(automation)} className="w-full sm:w-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onEdit(automation)}
+            className="w-full sm:w-auto hidden sm:inline-flex"
+          >
             Edit Automation
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] flex-1 min-h-0 overflow-hidden">
-        {renderTestConsole(false)}
-        <div className="sm:hidden">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => setMobileDetailsOpen((prev) => !prev)}
+      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1 sm:hidden">
+        {([
+          { id: 'preview', label: 'Test Preview' },
+          { id: 'details', label: 'Automation State' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setMobileView(tab.id)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+              mobileView === tab.id
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
           >
-            {mobileDetailsOpen ? 'Hide details' : 'Show details'}
-          </Button>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] flex-1 min-h-0 overflow-hidden">
+        <div className={`${mobileView === 'preview' ? 'block' : 'hidden'} sm:block`}>
+          {renderTestConsole(false)}
         </div>
-        <div className={`${mobileDetailsOpen ? 'flex' : 'hidden'} sm:flex`}>
+        <div className={`${mobileView === 'details' ? 'flex' : 'hidden'} sm:flex`}>
           {renderRightPane()}
         </div>
       </div>
