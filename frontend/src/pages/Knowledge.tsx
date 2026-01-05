@@ -39,7 +39,7 @@ const Knowledge: React.FC = () => {
   const [initialLoading, setInitialLoading] = useState(true);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [storageFilter, setStorageFilter] = useState<StorageFilter>('all');
+  const [storageFilter] = useState<StorageFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<KnowledgeCategory>('All');
   const [error, setError] = useState<string | null>(null);
 

@@ -100,6 +100,17 @@ const normalizeConfig = (
 const DEFAULT_AUTOMATION_STATS: AutomationInstance['stats'] = {
   totalTriggered: 0,
   totalRepliesSent: 0,
+  commentDm: {
+    sent: 0,
+    failed: 0,
+  },
+  autoReply: {
+    sent: 0,
+  },
+  followup: {
+    sent: 0,
+    pending: 0,
+  },
 };
 
 const automationsCache = new Map<string, { items: AutomationInstance[]; updatedAt: number }>();
