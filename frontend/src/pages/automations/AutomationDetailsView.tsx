@@ -266,10 +266,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
 
   useEffect(() => {
     if (!previewSessionId) return;
-    const interval = window.setInterval(() => {
-      void refreshPreviewState();
-    }, 4000);
-    return () => window.clearInterval(interval);
+    void refreshPreviewState();
   }, [previewSessionId, refreshPreviewState]);
 
   const handlePreviewInputChange = (value: string) => {
