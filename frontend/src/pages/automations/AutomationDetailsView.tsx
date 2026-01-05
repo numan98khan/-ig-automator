@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ArrowLeft,
+  ArrowRight,
   Copy,
   Loader2,
   Maximize2,
@@ -838,21 +838,28 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   );
 
   return (
-    <div className="h-full flex flex-col min-h-0 gap-6">
-      <div className="flex flex-wrap items-center gap-4 flex-shrink-0">
-        <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="w-4 h-4" />} onClick={onBack}>
-          Back
-        </Button>
-        <div className="flex-1 min-w-[200px]">
-          <h2 className="text-2xl font-semibold">{automation.name}</h2>
-          <p className="text-sm text-muted-foreground">
+    <div className="h-full flex flex-col min-h-0 gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <button onClick={onBack} className="hover:text-foreground transition-colors">
+              Automations
+            </button>
+            <ArrowRight className="w-4 h-4" />
+            <span className="font-medium text-foreground">{automation.name}</span>
+            <ArrowRight className="w-4 h-4" />
+            <span className="font-medium text-foreground">Preview</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
             {automation.description || 'Test and monitor your automation flow in real time.'}
           </p>
         </div>
-        <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
-        <Button variant="outline" onClick={() => onEdit(automation)}>
-          Edit Automation
-        </Button>
+        <div className="flex items-center gap-2">
+          <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
+          <Button variant="outline" size="sm" onClick={() => onEdit(automation)}>
+            Edit Automation
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] flex-1 min-h-0 overflow-hidden">
