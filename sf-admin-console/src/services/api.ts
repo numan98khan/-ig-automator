@@ -9,6 +9,13 @@ export const api = axios.create({
   },
 })
 
+export const coreApi = axios.create({
+  baseURL: `${API_URL}/api`,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
 // Unwrap nested Axios responses that may wrap payloads under .data
 export const unwrapData = <T = any>(response: any): T => {
   let payload = response?.data ?? response
@@ -30,6 +37,17 @@ api.interceptors.request.use(
   (error) => {
     return Promise.reject(error)
   }
+)
+
+coreApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('admin_token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
 )
 
 // Admin API endpoints
@@ -147,4 +165,11 @@ export const adminApi = {
   deleteTier: (id: string) => api.delete(`/tiers/${id}`),
   assignTierToUser: (tierId: string, userId: string) =>
     api.post(`/tiers/${tierId}/assign/${userId}`),
+}
+
+export const instagramAdminApi = {
+  getAvailableConversations: (workspaceId: string) =>
+    coreApi.get('/instagram/available-conversations', { params: { workspaceId } }),
+  syncConversation: (workspaceId: string, conversationId: string) =>
+    coreApi.post('/instagram/sync-messages', { workspaceId, conversationId }),
 }

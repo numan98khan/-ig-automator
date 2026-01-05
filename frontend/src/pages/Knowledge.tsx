@@ -208,73 +208,74 @@ const Knowledge: React.FC = () => {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="mb-6 rounded-2xl border border-border/70 bg-card/70 p-5 shadow-sm">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-2">
-              <BookOpen className="w-8 h-8" />
-              Knowledge Base
-            </h1>
-            <p className="text-muted-foreground">
-              Manage the knowledge your AI assistant uses to answer questions.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-            <div className="relative w-full sm:w-64 lg:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search knowledge..."
-                className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-full focus:outline-none focus:ring-2 focus:ring-ring text-sm transition-all"
-              />
+      <div className="mb-6 rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+          
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-semibold tracking-tight">Knowledge Base</h1>
+                  <span className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+                    {summaryStats.total} items
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Manage the knowledge your AI assistant uses to answer questions.
+                </p>
+              </div>
             </div>
-            <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
-              <select
-                value={storageFilter}
-                onChange={(e) => setStorageFilter(e.target.value as StorageFilter)}
-                className="rounded-full border border-border bg-background px-3 py-2 text-sm text-foreground"
+            <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+              <div className="relative w-full sm:w-64 lg:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search knowledge..."
+                  className="w-full pl-9 pr-4 py-2 bg-background border border-input rounded-full focus:outline-none focus:ring-2 focus:ring-ring text-sm transition-all"
+                />
+              </div>
+              <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+              
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value as KnowledgeCategory)}
+                  className="rounded-full border border-border bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  {(['All', 'Pricing', 'Policies', 'FAQ', 'Shipping', 'General'] as KnowledgeCategory[]).map(
+                    (category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </div>
+              <Button
+                onClick={() => handleOpenModal()}
+                leftIcon={<Plus className="w-4 h-4" />}
+                className="rounded-full shadow-md"
               >
-                <option value="all">All sources</option>
-                <option value="vector">RAG (pgvector)</option>
-                <option value="text">Text only</option>
-              </select>
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value as KnowledgeCategory)}
-                className="rounded-full border border-border bg-background px-3 py-2 text-sm text-foreground"
-              >
-                {(['All', 'Pricing', 'Policies', 'FAQ', 'Shipping', 'General'] as KnowledgeCategory[]).map(
-                  (category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ),
-                )}
-              </select>
+                Add Item
+              </Button>
             </div>
-            <Button
-              onClick={() => handleOpenModal()}
-              leftIcon={<Plus className="w-4 h-4" />}
-              className="shadow-md"
-            >
-              Add Item
-            </Button>
           </div>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">Total items</div>
-            <div className="text-2xl font-semibold">{summaryStats.total}</div>
-          </div>
-          <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">RAG indexed</div>
-            <div className="text-2xl font-semibold">{summaryStats.ragCount}</div>
-          </div>
-          <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">Last updated</div>
-            <div className="text-2xl font-semibold">{summaryStats.lastUpdated}</div>
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <span className="uppercase tracking-wide text-[11px]">Items</span>
+              <span className="text-lg font-semibold text-foreground">{summaryStats.total}</span>
+            </div>
+            <span className="hidden h-4 w-px bg-border/70 sm:block" />
+            <div className="flex items-center gap-2">
+              <span className="uppercase tracking-wide text-[11px]">RAG indexed</span>
+              <span className="text-lg font-semibold text-foreground">{summaryStats.ragCount}</span>
+            </div>
+            <span className="hidden h-4 w-px bg-border/70 sm:block" />
+            <div className="flex items-center gap-2">
+              <span className="uppercase tracking-wide text-[11px]">Last updated</span>
+              <span className="text-lg font-semibold text-foreground">{summaryStats.lastUpdated}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -308,12 +309,12 @@ const Knowledge: React.FC = () => {
             </p>
             {!searchQuery && (
               <div className="flex flex-wrap items-center justify-center gap-3">
-              <Button onClick={() => handleOpenModal()} leftIcon={<Plus className="w-4 h-4" />}>
-                Create Item
-              </Button>
-              <Button variant="outline" leftIcon={<Upload className="w-4 h-4" />} disabled>
-                Import from file
-              </Button>
+                <Button onClick={() => handleOpenModal()} leftIcon={<Plus className="w-4 h-4" />}>
+                  Create Item
+                </Button>
+                <Button variant="outline" leftIcon={<Upload className="w-4 h-4" />} disabled>
+                  Import from file
+                </Button>
               </div>
             )}
           </div>
@@ -325,55 +326,52 @@ const Knowledge: React.FC = () => {
               return (
                 <div
                   key={item._id}
-                  className={`group relative glass-panel hover:bg-muted/50 border border-border rounded-xl p-5 transition-all duration-200 cursor-pointer hover:shadow-md ${
+                  className={`group relative overflow-hidden rounded-2xl border border-border/60 bg-background/70 p-5 shadow-sm transition-all duration-200 cursor-pointer hover:shadow-md ${
                     isActive ? '' : 'opacity-70'
                   }`}
                   onClick={() => handlePreview(item)}
                 >
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="p-2 bg-primary/10 text-primary rounded-lg flex-shrink-0">
-                        <FileText className="w-4 h-4" />
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/70 via-primary/20 to-transparent" />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary flex-shrink-0">
+                        <FileText className="w-5 h-5" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="font-semibold text-foreground truncate">
-                          {item.title}
-                        </h3>
-                        <span className="text-xs text-muted-foreground">{getCategory(item)}</span>
+                        <h3 className="font-semibold text-foreground truncate">{item.title}</h3>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span className="rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-semibold">
+                            {getCategory(item)}
+                          </span>
+                          {!isActive && (
+                            <span className="rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 font-semibold text-destructive">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold flex-shrink-0 ${
-                          (item.storageMode || 'vector') === 'vector'
-                            ? 'bg-primary/10 text-primary'
-                            : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {(item.storageMode || 'vector') === 'vector' ? (
-                          <Sparkles className="w-3 h-3" />
-                        ) : (
-                          <Database className="w-3 h-3" />
-                        )}
-                        {(item.storageMode || 'vector') === 'vector' ? 'RAG (pgvector)' : 'Text only'}
-                      </span>
-                      {!isActive && (
-                        <span className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-[11px] font-semibold text-destructive">
-                          Inactive
-                        </span>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold flex-shrink-0 ${
+                        (item.storageMode || 'vector') === 'vector'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {(item.storageMode || 'vector') === 'vector' ? (
+                        <Sparkles className="w-3 h-3" />
+                      ) : (
+                        <Database className="w-3 h-3" />
                       )}
-                    </div>
+                      {(item.storageMode || 'vector') === 'vector' ? 'RAG (pgvector)' : 'Text only'}
+                    </span>
                   </div>
 
-                  <div className="mb-4 rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Knowledge snippet
-                  </div>
-
-                  <p className="text-muted-foreground text-sm line-clamp-3 mb-4 h-[60px]">
+                  <p className="mt-4 text-sm text-muted-foreground line-clamp-3 min-h-[60px]">
                     {item.content}
                   </p>
 
-                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/50">
+                  <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
                     <div className="flex items-center gap-1.5">
                       <Calendar className="w-3 h-3" />
                       {new Date(item.createdAt).toLocaleDateString()}
@@ -388,7 +386,7 @@ const Knowledge: React.FC = () => {
                     <button
                       onClick={(e) => handleToggleActive(item, e)}
                       disabled={isUpdating}
-                      className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-60"
+                      className="flex items-center gap-2 rounded-full border border-border/60 bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground disabled:opacity-60"
                     >
                       {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
                       {isActive ? 'Deactivate' : 'Activate'}
@@ -398,14 +396,14 @@ const Knowledge: React.FC = () => {
                         e.stopPropagation();
                         handleOpenModal(item);
                       }}
-                      className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                      className="flex items-center gap-2 rounded-full border border-border/60 bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
                     >
                       <Edit2 className="h-4 w-4" />
                       Edit
                     </button>
                     <button
                       onClick={(e) => handleDelete(item._id, e)}
-                      className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-destructive hover:border-destructive/40"
+                      className="flex items-center gap-2 rounded-full border border-border/60 bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-destructive hover:border-destructive/40"
                     >
                       <Trash2 className="h-4 w-4" />
                       Delete

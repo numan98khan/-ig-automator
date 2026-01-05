@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Copy, Eye, Pencil, Plus, Loader2, Target, Trash2, Power, PowerOff } from 'lucide-react';
+import { Pencil, Plus, Loader2, Target, Trash2, Power, PowerOff } from 'lucide-react';
 import { AutomationInstance } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { TRIGGER_METADATA } from './constants';
@@ -19,7 +19,6 @@ type AutomationsListViewProps = {
   onOpen?: (automation: AutomationInstance) => void;
   onEdit?: (automation: AutomationInstance) => void;
   onToggle: (automation: AutomationInstance) => void;
-  onDuplicate: (automation: AutomationInstance) => void;
   onDelete: (automation: AutomationInstance) => void;
 };
 
@@ -31,7 +30,6 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
   onOpen,
   onEdit,
   onToggle,
-  onDuplicate,
   onDelete,
 }) => {
   const isOpenEnabled = typeof onOpen === 'function';
@@ -52,16 +50,21 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
 
   return (
     <>
-    <div className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-card/70 p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-card/60 p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold">Automations</h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-2xl font-semibold">Automations</h2>
+            <span className="rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs font-semibold text-muted-foreground">
+              {summaryStats.activeCount} active / {summaryStats.totalCount} total
+            </span>
+          </div>
           <p className="text-sm text-muted-foreground">
             Design, activate, and monitor your automated Instagram journeys.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-1 rounded-full border border-border/70 bg-background/80 px-1 py-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="hidden sm:flex items-center gap-1 rounded-full border border-border/60 bg-background/80 px-1 py-1">
             {(['all', 'active', 'inactive'] as const).map((filter) => (
               <button
                 key={filter}
@@ -90,22 +93,15 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
           </Button>
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Active</div>
-          <div className="text-2xl font-semibold">{summaryStats.activeCount}</div>
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Triggers</span>
+          <span className="text-base font-semibold text-foreground">{summaryStats.totalTriggered}</span>
         </div>
-        <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Total</div>
-          <div className="text-2xl font-semibold">{summaryStats.totalCount}</div>
-        </div>
-        <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Triggers</div>
-          <div className="text-2xl font-semibold">{summaryStats.totalTriggered}</div>
-        </div>
-        <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Replies</div>
-          <div className="text-2xl font-semibold">{summaryStats.totalRepliesSent}</div>
+        <span className="h-4 w-px bg-border/70" />
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Replies</span>
+          <span className="text-base font-semibold text-foreground">{summaryStats.totalRepliesSent}</span>
         </div>
       </div>
     </div>
@@ -152,11 +148,11 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
               } : undefined}
               role={isOpenEnabled ? 'button' : undefined}
               tabIndex={isOpenEnabled ? 0 : undefined}
-              className={`group relative glass-panel border border-border rounded-xl p-5 transition-all duration-200 ${
-                // isOpenEnabled ? 'hover:bg-muted/50 hover:shadow-md cursor-pointer' : ''
-                    isOpenEnabled ? 'hover:bg-muted/50 hover:shadow-md cursor-pointer' : ''
+              className={`group relative overflow-hidden rounded-2xl border border-border/60 bg-background/70 p-5 shadow-sm transition-all duration-200 ${
+                isOpenEnabled ? 'hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/30 cursor-pointer' : ''
               }`}
             >
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/60 via-primary/20 to-transparent" />
               {badge && (
                 <div className="absolute top-4 right-4">
                   <span className={`px-2 py-1 rounded-md text-xs font-bold ${
@@ -167,109 +163,82 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                 </div>
               )}
 
-              <div className="flex items-start gap-3 mb-4">
-                <div className="p-2 bg-primary/10 text-primary rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
                   {trigger?.icon || <Target className="w-5 h-5" />}
                 </div>
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-lg">{automation.name}</h3>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg font-semibold truncate">{automation.name}</h3>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
                       automation.isActive
-                        ? 'bg-emerald-500/15 text-emerald-600'
+                        ? 'bg-emerald-500/15 text-emerald-500'
                         : 'bg-slate-500/10 text-slate-500'
                     }`}>
                       {statusLabel}
                     </span>
                   </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
+                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
                     {automation.description || template?.description || triggerDescription}
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
-                  <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
-                    Trigger
-                  </span>
-                  <div className="mt-2 text-sm font-medium">{triggerLabel}</div>
-                </div>
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
-                  <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                    Reply
-                  </span>
-                  <div className="mt-2 text-sm font-medium">
-                    <span>Template - {template?.name || 'Template'}</span>
-                  </div>
-                </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/80 px-2.5 py-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                  {triggerLabel}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/80 px-2.5 py-1">
+                  Template - {template?.name || 'Template'}
+                </span>
               </div>
 
-              <div className="my-4 border-t border-border/60 pt-4 grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <div className="text-muted-foreground text-xs">Triggered</div>
-                  <div className="font-semibold">{automation.stats.totalTriggered}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Replies Sent</div>
-                  <div className="font-semibold">{automation.stats.totalRepliesSent}</div>
-                </div>
+              <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
+                <span>
+                  <span className="text-foreground font-semibold">{automation.stats.totalTriggered}</span> Triggered
+                </span>
+                <span>
+                  <span className="text-foreground font-semibold">{automation.stats.totalRepliesSent}</span> Replies
+                </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
                 <Button
                   onClick={(event) => {
                     event.stopPropagation();
                     onToggle(automation);
                   }}
                   variant={automation.isActive ? 'primary' : 'outline'}
-                  className="flex-1"
+                  className="rounded-full px-4"
                   size="sm"
                   leftIcon={automation.isActive ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
                 >
                   {automation.isActive ? 'Active' : 'Inactive'}
                 </Button>
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onOpen?.(automation);
-                  }}
-                  className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  <Eye className="h-4 w-4" />
-                  View
-                </button>
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onEdit?.(automation);
-                  }}
-                  disabled={!isEditEnabled}
-                  className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  <Pencil className="h-4 w-4" />
-                  Edit
-                </button>
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onDuplicate(automation);
-                  }}
-                  className="flex items-center gap-1 rounded-md border border-border bg-background/60 px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  <Copy className="h-4 w-4" />
-                  Duplicate
-                </button>
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onDelete(automation);
-                  }}
-                  className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                  title="Delete"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEdit?.(automation);
+                    }}
+                    disabled={!isEditEnabled}
+                    className="flex items-center gap-1 rounded-full border border-border bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDelete(automation);
+                    }}
+                    className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           );

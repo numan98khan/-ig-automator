@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  ArrowRight,
   Copy,
   Loader2,
-  Maximize2,
   PauseCircle,
   RefreshCcw,
   Save,
@@ -23,10 +23,9 @@ import {
 } from '../../services/api';
 import { AutomationPreviewPhone } from './AutomationPreviewPhone';
 import { Button } from '../../components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
+import { Card, CardContent, CardHeader } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
-import { Modal } from '../../components/ui/Modal';
 
 type AutomationDetailsViewProps = {
   automation: AutomationInstance;
@@ -81,6 +80,15 @@ const EVENT_BADGES: Record<string, { label: string; variant: 'primary' | 'second
   info: { label: 'Info', variant: 'neutral' },
 };
 
+const NODE_TYPE_BADGES: Record<string, { label: string; badgeClass: string; dotClass: string }> = {
+  send_message: { label: 'Send Message', badgeClass: 'bg-sky-500/10 text-sky-600', dotClass: 'bg-sky-500' },
+  ai_reply: { label: 'AI Reply', badgeClass: 'bg-indigo-500/10 text-indigo-600', dotClass: 'bg-indigo-500' },
+  ai_agent: { label: 'AI Agent', badgeClass: 'bg-violet-500/10 text-violet-600', dotClass: 'bg-violet-500' },
+  detect_intent: { label: 'Detect Intent', badgeClass: 'bg-emerald-500/10 text-emerald-600', dotClass: 'bg-emerald-500' },
+  handoff: { label: 'Handoff', badgeClass: 'bg-amber-500/10 text-amber-600', dotClass: 'bg-amber-500' },
+  router: { label: 'Router', badgeClass: 'bg-cyan-500/10 text-cyan-600', dotClass: 'bg-cyan-500' },
+};
+
 export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   automation,
   accountDisplayName,
@@ -93,7 +101,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [previewSessionId, setPreviewSessionId] = useState<string | null>(null);
   const [previewMessages, setPreviewMessages] = useState<AutomationPreviewMessage[]>([]);
   const [previewInputValue, setPreviewInputValue] = useState('');
-  const [previewStatus, setPreviewStatus] = useState<string | null>(null);
+  const [previewToast, setPreviewToast] = useState<{ status: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [previewSessionStatus, setPreviewSessionStatus] = useState<
     'active' | 'paused' | 'completed' | 'handoff' | null
   >(null);
@@ -114,10 +122,32 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [personaDraft, setPersonaDraft] = useState<AutomationPreviewPersona>(DEFAULT_PERSONA);
   const [profileBusy, setProfileBusy] = useState(false);
-  const [consoleExpanded, setConsoleExpanded] = useState(false);
-  const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state'>('persona');
+  const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state' | 'timeline'>('persona');
+  const [isTyping, setIsTyping] = useState(false);
+  const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
+  const previewSessionIdRef = useRef<string | null>(null);
+  const previewToastTimerRef = useRef<number | null>(null);
 
-  const sessionStatus = previewState.session?.status || previewSessionStatus;
+  const clearPreviewToast = useCallback(() => {
+    if (previewToastTimerRef.current) {
+      window.clearTimeout(previewToastTimerRef.current);
+      previewToastTimerRef.current = null;
+    }
+    setPreviewToast(null);
+  }, []);
+
+  const pushPreviewToast = useCallback((status: 'success' | 'error' | 'info', message: string) => {
+    setPreviewToast({ status, message });
+    if (previewToastTimerRef.current) {
+      window.clearTimeout(previewToastTimerRef.current);
+    }
+    previewToastTimerRef.current = window.setTimeout(() => {
+      setPreviewToast(null);
+      previewToastTimerRef.current = null;
+    }, 2200);
+  }, []);
+
+  const sessionStatus = previewSessionStatus || previewState.session?.status;
   const statusConfig = sessionStatus
     ? {
       active: { label: 'Running', variant: 'success' as const },
@@ -158,35 +188,37 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     reset?: boolean;
     profileId?: string;
     persona?: AutomationPreviewPersona;
+    sessionId?: string | null;
   }) => {
     setPreviewLoading(true);
-    setPreviewStatus(null);
+    clearPreviewToast();
     try {
       const response = await automationAPI.createPreviewSession(automation._id, {
         reset: options?.reset,
         profileId: options?.profileId,
         persona: options?.persona,
-        sessionId: previewSessionId || undefined,
+        sessionId: options?.sessionId ?? previewSessionIdRef.current ?? undefined,
       });
       applyPreviewPayload(response);
       setPreviewMessages(response.messages || []);
     } catch (err) {
       console.error('Error starting preview session:', err);
-      setPreviewStatus('Unable to start preview. Please try again.');
+      pushPreviewToast('error', 'Unable to start preview. Please try again.');
     } finally {
       setPreviewLoading(false);
     }
-  }, [automation._id, applyPreviewPayload, previewSessionId]);
+  }, [automation._id, applyPreviewPayload, clearPreviewToast, pushPreviewToast]);
 
   const refreshPreviewState = useCallback(async () => {
     if (!automation._id) return;
+    if (isTyping || previewSending) return;
     try {
       const response = await automationAPI.getPreviewSessionStatus(automation._id, previewSessionId || undefined);
       applyPreviewPayload(response);
     } catch (err) {
       console.error('Error refreshing preview state:', err);
     }
-  }, [automation._id, applyPreviewPayload, previewSessionId]);
+  }, [automation._id, applyPreviewPayload, isTyping, previewSending, previewSessionId]);
 
   const loadProfiles = useCallback(async () => {
     setProfilesLoading(true);
@@ -222,9 +254,20 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       }
     } catch (err) {
       console.error('Error syncing preview persona:', err);
-      setPreviewStatus('Failed to apply mock persona.');
+      pushPreviewToast('error', 'Failed to apply mock persona.');
     }
-  }, [automation._id, previewSessionId, applyPreviewPayload, startPreviewSession]);
+  }, [automation._id, previewSessionId, applyPreviewPayload, pushPreviewToast, startPreviewSession]);
+
+  useEffect(() => {
+    previewSessionIdRef.current = previewSessionId;
+  }, [previewSessionId]);
+
+  useEffect(() => () => {
+    if (previewToastTimerRef.current) {
+      window.clearTimeout(previewToastTimerRef.current);
+      previewToastTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -232,7 +275,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       setPreviewSessionId(null);
       setPreviewMessages([]);
       setPreviewInputValue('');
-      setPreviewStatus(null);
+      clearPreviewToast();
       setPreviewSessionStatus(null);
       setPreviewState({
         session: null,
@@ -259,29 +302,26 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     return () => {
       active = false;
     };
-  }, [automation._id, loadProfiles, startPreviewSession]);
+  }, [automation._id, clearPreviewToast, loadProfiles, startPreviewSession]);
 
   useEffect(() => {
     if (!previewSessionId) return;
-    const interval = window.setInterval(() => {
-      void refreshPreviewState();
-    }, 4000);
-    return () => window.clearInterval(interval);
+    void refreshPreviewState();
   }, [previewSessionId, refreshPreviewState]);
 
   const handlePreviewInputChange = (value: string) => {
     setPreviewInputValue(value);
-    if (previewStatus) setPreviewStatus(null);
+    if (previewToast) clearPreviewToast();
   };
 
   const handlePreviewSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (sessionStatus === 'paused') {
-      setPreviewStatus('Preview is paused. Resume or reset to continue.');
+      pushPreviewToast('info', 'Preview is paused. Resume or reset to continue.');
       return;
     }
     if (sessionStatus === 'completed') {
-      setPreviewStatus('Preview is stopped. Reset to start a new run.');
+      pushPreviewToast('info', 'Preview is stopped. Reset to start a new run.');
       return;
     }
     const trimmed = previewInputValue.trim();
@@ -295,7 +335,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     setPreviewMessages((prev) => [...prev, optimisticMessage]);
     setPreviewInputValue('');
     setPreviewSending(true);
-    setPreviewStatus(null);
+    clearPreviewToast();
 
     try {
       const response = await automationAPI.sendPreviewMessage(automation._id, {
@@ -306,16 +346,17 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       if (response.sessionId && response.sessionId !== previewSessionId) {
         setPreviewSessionId(response.sessionId);
       }
-      if (response.messages && response.messages.length > 0) {
-        setPreviewMessages((prev) => [...prev, ...response.messages]);
+      const { messages, ...rest } = response;
+      applyPreviewPayload(rest);
+      if (messages && messages.length > 0) {
+        setPreviewMessages((prev) => [...prev, ...messages]);
       }
-      applyPreviewPayload(response);
       if (!response.success) {
-        setPreviewStatus(response.error || 'No automated response was generated.');
+        pushPreviewToast('error', response.error || 'No automated response was generated.');
       }
     } catch (err) {
       console.error('Error sending preview message:', err);
-      setPreviewStatus('Failed to send preview message.');
+      pushPreviewToast('error', 'Failed to send preview message.');
     } finally {
       setPreviewSending(false);
     }
@@ -332,10 +373,10 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       if (response.session) {
         applyPreviewPayload({ session: response.session, status: response.session.status });
       }
-      setPreviewStatus('Preview paused.');
+      pushPreviewToast('info', 'Preview paused.');
     } catch (err) {
       console.error('Error pausing preview session:', err);
-      setPreviewStatus('Failed to pause preview session.');
+      pushPreviewToast('error', 'Failed to pause preview session.');
     } finally {
       setPreviewLoading(false);
     }
@@ -352,10 +393,10 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       if (response.session) {
         applyPreviewPayload({ session: response.session, status: response.session.status });
       }
-      setPreviewStatus('Preview stopped.');
+      pushPreviewToast('success', 'Preview stopped.');
     } catch (err) {
       console.error('Error stopping preview session:', err);
-      setPreviewStatus('Failed to stop preview session.');
+      pushPreviewToast('error', 'Failed to stop preview session.');
     } finally {
       setPreviewLoading(false);
     }
@@ -367,7 +408,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       profileId: selectedProfileId || undefined,
       persona: selectedProfileId ? undefined : personaDraft,
     });
-    setPreviewStatus('Preview reset.');
+    pushPreviewToast('success', 'Preview reset.');
   };
 
   const handleSelectProfile = async (value: string) => {
@@ -498,6 +539,16 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       .filter(([key]) => !key.startsWith('agent'))
       .map(([key, value]) => ({ key, value: formatFieldValue(value) }));
   }, [previewState.session?.state?.vars]);
+  const agentSlotEntries = useMemo(() => {
+    const slots = previewState.session?.state?.vars?.agentSlots;
+    if (!slots || typeof slots !== 'object') return [];
+    return Object.entries(slots).map(([key, value]) => ({ key, value: formatFieldValue(value) }));
+  }, [previewState.session?.state?.vars?.agentSlots]);
+  const agentMissingSlots = useMemo(() => {
+    const missing = previewState.session?.state?.vars?.agentMissingSlots;
+    if (!missing) return [];
+    return Array.isArray(missing) ? missing.filter(Boolean) : [];
+  }, [previewState.session?.state?.vars?.agentMissingSlots]);
   const tags = previewState.conversation?.tags || [];
   const events: AutomationPreviewEvent[] = previewState.events || [];
 
@@ -505,55 +556,21 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     previewSending ||
     previewLoading ||
     previewInputValue.trim().length === 0 ||
-    sessionStatus === 'paused' ||
     sessionStatus === 'completed';
 
-  const renderTestConsole = (expanded: boolean) => (
-    <Card className={`flex flex-col min-h-0 ${expanded ? 'h-full' : ''}`}>
-      <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border/60">
-        <div>
+  const renderTestConsole = () => (
+    <Card className="flex flex-col min-h-0 h-full">
+      
+      <CardHeader className="grid grid-cols-1 gap-2 border-b border-border/60 px-4 py-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+        {/* <div className="space-y-1">
           <CardTitle>Test Console</CardTitle>
-          <p className="text-xs text-muted-foreground">Mock-only DM simulator for this automation.</p>
+          <p className="hidden text-xs text-muted-foreground sm:block">
+            Mock-only DM simulator for this automation.
+          </p>
+        </div> */}
+        <div className="flex flex-wrap items-center gap-2 sm:justify-start">
+          <Badge variant="neutral" className="hidden sm:inline-flex">Preview</Badge>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="neutral">Preview</Badge>
-          {!expanded && (
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Maximize2 className="w-4 h-4" />}
-              onClick={() => setConsoleExpanded(true)}
-            >
-              Expand
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
-        <div className="flex-1 min-h-0 flex items-center justify-center">
-          <div className="h-full max-h-full aspect-[9/19.5] w-auto max-w-full">
-            <AutomationPreviewPhone
-              accountDisplayName={accountDisplayName}
-              accountHandle={accountHandle}
-              accountAvatarUrl={accountAvatarUrl}
-              accountInitial={accountInitial}
-              messages={previewMessages}
-              showSeen={
-                previewMessages.length > 0 &&
-                previewMessages[previewMessages.length - 1].from === 'ai'
-              }
-              mode="interactive"
-              inputValue={previewInputValue}
-              onInputChange={handlePreviewInputChange}
-              onSubmit={handlePreviewSubmit}
-              inputDisabled={Boolean(previewLoading) || sessionStatus === 'paused' || sessionStatus === 'completed'}
-              sendDisabled={sendDisabled}
-            />
-          </div>
-        </div>
-        {previewStatus && (
-          <div className="text-xs text-muted-foreground text-center">{previewStatus}</div>
-        )}
         <div className="flex flex-wrap items-center justify-center gap-2">
           <Button
             variant="outline"
@@ -583,20 +600,39 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
             Reset
           </Button>
         </div>
+        <div className="hidden sm:block" />
+      </CardHeader>
+      <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden pt-6">
+        <div className="flex-1 min-h-0 flex items-center justify-center">
+          <div className="h-full max-h-full aspect-[9/19.5] w-auto max-w-full min-h-0">
+            <AutomationPreviewPhone
+              accountDisplayName={accountDisplayName}
+              accountHandle={accountHandle}
+              accountAvatarUrl={accountAvatarUrl}
+              accountInitial={accountInitial}
+              messages={previewMessages}
+              showSeen={
+                previewMessages.length > 0 &&
+                previewMessages[previewMessages.length - 1].from === 'ai'
+              }
+              mode="interactive"
+              inputValue={previewInputValue}
+              onInputChange={handlePreviewInputChange}
+              onSubmit={handlePreviewSubmit}
+              onInputFocus={() => setIsTyping(true)}
+              onInputBlur={() => setIsTyping(false)}
+              inputDisabled={Boolean(previewLoading) || sessionStatus === 'completed'}
+              sendDisabled={sendDisabled}
+            />
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
 
   const renderPersonaCard = () => (
-    <Card className="flex flex-col min-h-0 flex-1">
-      <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
-        <div>
-          <CardTitle>Mock Persona</CardTitle>
-          <p className="text-xs text-muted-foreground">Saved presets keep test sessions consistent.</p>
-        </div>
-        {profilesLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-      </CardHeader>
-      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto">
+    <Card className="flex flex-col min-h-0 flex-1 w-full">
+      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto pt-6">
         <div className="flex flex-wrap items-center gap-4">
           <div className="h-14 w-14 rounded-full overflow-hidden bg-muted/60 flex items-center justify-center text-sm font-semibold text-muted-foreground">
             {personaDraft.avatarUrl ? (
@@ -646,7 +682,10 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         <div className="rounded-lg border border-border/60 bg-background/60 p-3 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold uppercase text-muted-foreground">Saved profiles</span>
-            {profilesError && <span className="text-xs text-destructive">{profilesError}</span>}
+            <div className="flex items-center gap-2 text-xs">
+              {profilesLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+              {profilesError && <span className="text-destructive">{profilesError}</span>}
+            </div>
           </div>
           <select
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
@@ -716,43 +755,51 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   );
 
   const renderStateCard = () => (
-    <Card className="flex flex-col min-h-0 flex-1">
-      <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
-        <div>
-          <CardTitle>Live Automation State</CardTitle>
-          <p className="text-xs text-muted-foreground">Auto-updates every few seconds.</p>
-        </div>
-        <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
-      </CardHeader>
-      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto">
+    <Card className="flex flex-col min-h-0 flex-1 w-full">
+      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto pt-6">
         <div className="rounded-lg border border-border/60 bg-background/60 p-3">
           <div className="text-xs font-semibold uppercase text-muted-foreground">Current step</div>
-          {previewState.currentNode ? (
-            <div className="mt-2 space-y-2">
-              <div>
-                <div className="text-sm font-semibold">
-                  {previewState.currentNode.label || previewState.currentNode.id || 'Active node'}
+          {previewState.currentNode ? (() => {
+            const nodeTypeKey = previewState.currentNode.type?.toLowerCase() || '';
+            const nodeMeta = NODE_TYPE_BADGES[nodeTypeKey];
+            const nodeLabel = previewState.currentNode.label || previewState.currentNode.id || 'Active node';
+            const nodeTypeLabel = nodeMeta?.label || previewState.currentNode.type?.replace(/_/g, ' ') || 'Step';
+            const badgeClass = nodeMeta?.badgeClass || 'bg-muted/60 text-muted-foreground';
+            const dotClass = nodeMeta?.dotClass || 'bg-muted-foreground';
+            return (
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`h-2.5 w-2.5 rounded-full ${dotClass}`} />
+                  <div className="text-sm font-semibold truncate">{nodeLabel}</div>
                 </div>
-                <div className="text-xs text-muted-foreground capitalize">
-                  {previewState.currentNode.type.replace(/_/g, ' ')}
-                </div>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${badgeClass}`}>
+                  {nodeTypeLabel}
+                </span>
               </div>
-              {previewState.currentNode.preview && (
-                <div className="text-xs text-muted-foreground">"{previewState.currentNode.preview}"</div>
-              )}
-              {previewState.currentNode.summary && previewState.currentNode.summary.length > 0 && (
-                <div className="grid gap-1">
-                  {previewState.currentNode.summary.map((item) => (
-                    <div key={`${item.label}-${item.value}`} className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">{item.label}</span>
-                      <span className="font-medium">{item.value}</span>
-                    </div>
-                  ))}
+            );
+          })() : (
+            <div className="mt-2 text-xs text-muted-foreground">Waiting for the next trigger.</div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+          <div className="text-xs font-semibold uppercase text-muted-foreground">AI slots</div>
+          {agentSlotEntries.length > 0 ? (
+            <div className="mt-2 grid gap-2">
+              {agentSlotEntries.map((slot) => (
+                <div key={slot.key} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{slot.key}</span>
+                  <span className="font-medium text-right">{slot.value}</span>
                 </div>
-              )}
+              ))}
             </div>
           ) : (
-            <div className="mt-2 text-xs text-muted-foreground">Waiting for the next trigger.</div>
+            <div className="mt-2 text-xs text-muted-foreground">No AI slots collected yet.</div>
+          )}
+          {agentMissingSlots.length > 0 && (
+            <div className="mt-3 text-xs text-muted-foreground">
+              Missing slots: <span className="font-medium text-foreground">{agentMissingSlots.join(', ')}</span>
+            </div>
           )}
         </div>
 
@@ -784,40 +831,42 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
             <div className="mt-2 text-xs text-muted-foreground">No tags applied yet.</div>
           )}
         </div>
+      </CardContent>
+    </Card>
+  );
 
-        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase text-muted-foreground">Execution timeline</span>
-          </div>
-          {events.length > 0 ? (
-            <div className="mt-3 max-h-64 overflow-y-auto space-y-3 pr-1">
-              {events.map((event) => {
-                const badge = EVENT_BADGES[event.type] || EVENT_BADGES.info;
-                return (
-                  <div key={event.id} className="flex items-start gap-3">
-                    <Badge variant={badge.variant}>{badge.label}</Badge>
-                    <div className="flex-1">
-                      <div className="text-sm">{event.message}</div>
-                      <div className="text-xs text-muted-foreground">{formatTime(event.createdAt)}</div>
-                    </div>
+  const renderTimelineCard = () => (
+    <Card className="flex flex-col min-h-0 flex-1 w-full">
+      <CardContent className="flex-1 min-h-0 overflow-y-auto pt-6">
+        {events.length > 0 ? (
+          <div className="space-y-3 pr-1">
+            {events.map((event) => {
+              const badge = EVENT_BADGES[event.type] || EVENT_BADGES.info;
+              return (
+                <div key={event.id} className="flex items-start gap-3">
+                  <Badge variant={badge.variant}>{badge.label}</Badge>
+                  <div className="flex-1">
+                    <div className="text-sm">{event.message}</div>
+                    <div className="text-xs text-muted-foreground">{formatTime(event.createdAt)}</div>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="mt-2 text-xs text-muted-foreground">No events yet.</div>
-          )}
-        </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-xs text-muted-foreground">No events yet.</div>
+        )}
       </CardContent>
     </Card>
   );
 
   const renderRightPane = () => (
-    <div className="flex flex-col gap-4 min-h-0">
-      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1">
+    <div className="flex flex-col gap-4 min-h-0 h-full w-full">
+      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1 w-full">
         {([
           { id: 'persona', label: 'Mock Persona' },
           { id: 'state', label: 'Automation State' },
+          { id: 'timeline', label: 'Execution Timeline' },
         ] as const).map((tab) => (
           <button
             key={tab.id}
@@ -833,45 +882,91 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           </button>
         ))}
       </div>
-      {rightPaneTab === 'persona' ? renderPersonaCard() : renderStateCard()}
+      {rightPaneTab === 'persona'
+        ? renderPersonaCard()
+        : rightPaneTab === 'timeline'
+          ? renderTimelineCard()
+          : renderStateCard()}
     </div>
   );
 
   return (
-    <div className="h-full flex flex-col min-h-0 gap-6">
-      <div className="flex flex-wrap items-center gap-4 flex-shrink-0">
-        <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="w-4 h-4" />} onClick={onBack}>
-          Back
-        </Button>
-        <div className="flex-1 min-w-[200px]">
-          <h2 className="text-2xl font-semibold">{automation.name}</h2>
-          <p className="text-sm text-muted-foreground">
-            {automation.description || 'Test and monitor your automation flow in real time.'}
-          </p>
+    <div className="h-full flex flex-col min-h-0 gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:text-sm">
+          <button onClick={onBack} className="hover:text-foreground transition-colors">
+            Automations
+          </button>
+          <ArrowRight className="w-4 h-4" />
+          <span className="font-medium text-foreground">{automation.name}</span>
+          <ArrowRight className="w-4 h-4" />
+          <span className="font-medium text-foreground">Preview</span>
+          <Badge variant={statusConfig.variant} className="ml-1">
+            {statusConfig.label}
+          </Badge>
         </div>
-        <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
-        <Button variant="outline" onClick={() => onEdit(automation)}>
-          Edit Automation
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onBack}
+            className="w-full sm:w-auto hidden sm:inline-flex"
+            leftIcon={<ArrowLeft className="w-4 h-4" />}
+          >
+            Back
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onEdit(automation)}
+            className="w-full sm:w-auto hidden sm:inline-flex"
+          >
+            Edit Automation
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] flex-1 min-h-0 overflow-hidden">
-        {renderTestConsole(false)}
-        {renderRightPane()}
+      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1 sm:hidden">
+        {([
+          { id: 'preview', label: 'Test Preview' },
+          { id: 'details', label: 'Automation State' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setMobileView(tab.id)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+              mobileView === tab.id
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      <Modal
-        isOpen={consoleExpanded}
-        onClose={() => setConsoleExpanded(false)}
-        title="Expanded Test Console"
-        size="full"
-        className="h-[85vh]"
-      >
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] h-full min-h-0 overflow-hidden">
-          {renderTestConsole(true)}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] grid-rows-[minmax(0,1fr)] flex-1 min-h-0 overflow-hidden">
+        <div className={`${mobileView === 'preview' ? 'block' : 'hidden'} sm:block h-full min-h-0 min-w-0`}>
+          {renderTestConsole()}
+        </div>
+        <div className={`${mobileView === 'details' ? 'flex' : 'hidden'} sm:flex h-full min-h-0 min-w-0`}>
           {renderRightPane()}
         </div>
-      </Modal>
+      </div>
+      {previewToast && (
+        <div
+          className={`fixed bottom-6 left-6 z-50 rounded-full px-4 py-2 text-xs font-semibold shadow-lg ${
+            previewToast.status === 'success'
+              ? 'bg-primary text-primary-foreground'
+              : previewToast.status === 'error'
+                ? 'bg-red-500 text-white'
+                : 'bg-card/95 border border-border text-foreground'
+          }`}
+        >
+          {previewToast.message}
+        </div>
+      )}
     </div>
   );
 };

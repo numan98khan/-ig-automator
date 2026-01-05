@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { adminApi, unwrapData } from '../services/api'
+import { adminApi, instagramAdminApi, unwrapData } from '../services/api'
 import { useState } from 'react'
 import {
   ArrowLeft,
@@ -11,6 +11,7 @@ import {
   Calendar,
   TrendingUp,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react'
 
 type TabType = 'overview' | 'conversations' | 'members'
@@ -23,38 +24,72 @@ export default function WorkspaceDetail() {
   const { data: workspaceData, isLoading: loadingWorkspace } = useQuery({
     queryKey: ['workspace', id],
     queryFn: () => adminApi.getWorkspaceById(id!),
+    enabled: Boolean(id),
   })
 
-  const { data: conversationsData, isLoading: loadingConversations } = useQuery({
+  const { data: conversationsData, isLoading: loadingConversations, refetch: refetchConversations } = useQuery({
     queryKey: ['workspace-conversations', id],
     queryFn: () =>
       adminApi.getAllConversations({ workspaceId: id, limit: 100 }),
+    enabled: Boolean(id),
   })
 
   const { data: membersData, isLoading: loadingMembers } = useQuery({
     queryKey: ['workspace-members', id],
     queryFn: () => adminApi.getWorkspaceMembers(id!),
+    enabled: Boolean(id),
   })
 
   const { data: usageData } = useQuery({
     queryKey: ['workspace-usage', id],
     queryFn: () => adminApi.getWorkspaceUsage(id!),
+    enabled: Boolean(id),
+  })
+
+  const {
+    data: availableConversationsData,
+    isLoading: loadingAvailableConversations,
+    error: availableConversationsError,
+    refetch: refetchAvailableConversations,
+  } = useQuery({
+    queryKey: ['workspace-available-conversations', id],
+    queryFn: () => instagramAdminApi.getAvailableConversations(id!),
+    enabled: Boolean(id),
   })
 
   const workspacePayload = unwrapData<any>(workspaceData)
   const conversationsPayload = unwrapData<any>(conversationsData)
   const membersPayload = unwrapData<any>(membersData)
   const usagePayload = unwrapData<any>(usageData)
+  const availableConversationsPayload = unwrapData<any[]>(availableConversationsData)
 
   const workspace = workspacePayload
   const conversations = conversationsPayload?.conversations || []
   const members = membersPayload?.members || []
   const usage = usagePayload || {}
+  const availableConversations = availableConversationsPayload || []
+  const [syncingConversationId, setSyncingConversationId] = useState<string | null>(null)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   const formatNumber = (value?: number) =>
     new Intl.NumberFormat('en-US').format(value || 0)
   const formatCost = (cents?: number) =>
     `$${((cents || 0) / 100).toFixed(2)}`
+
+  const handleSyncConversation = async (conversationId: string) => {
+    if (!id) return
+    setSyncError(null)
+    setSyncingConversationId(conversationId)
+    try {
+      await instagramAdminApi.syncConversation(id, conversationId)
+      await Promise.all([refetchAvailableConversations(), refetchConversations()])
+    } catch (error) {
+      console.error('Admin sync conversation error:', error)
+      setSyncError('Failed to sync conversation. Please try again.')
+    } finally {
+      setSyncingConversationId(null)
+    }
+  }
 
   if (loadingWorkspace) {
     return (
@@ -317,7 +352,73 @@ export default function WorkspaceDetail() {
         )}
 
         {activeTab === 'conversations' && (
-          <div className="space-y-4">
+          <div className="space-y-6">
+            <div className="card">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">
+                    Instagram Conversations
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Sync individual conversations from Instagram.
+                  </p>
+                </div>
+                <button
+                  onClick={() => refetchAvailableConversations()}
+                  disabled={loadingAvailableConversations || Boolean(syncingConversationId)}
+                  className="flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/60 transition disabled:opacity-60"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingAvailableConversations ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </div>
+
+              {syncError && (
+                <div className="mb-3 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                  {syncError}
+                </div>
+              )}
+
+              {availableConversationsError ? (
+                <div className="text-sm text-muted-foreground">
+                  Unable to load Instagram conversations.
+                </div>
+              ) : loadingAvailableConversations ? (
+                <div className="text-sm text-muted-foreground">Loading Instagram conversations...</div>
+              ) : availableConversations.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No Instagram conversations available.</div>
+              ) : (
+                <div className="divide-y divide-border/60">
+                  {availableConversations.map((conv: any) => (
+                    <div key={conv.instagramConversationId} className="py-3 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground truncate">
+                          {conv.participantName || 'Instagram User'}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Updated {conv.updatedAt ? new Date(conv.updatedAt).toLocaleString() : '—'}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`badge ${conv.isSynced ? 'badge-success' : 'badge-warning'}`}>
+                          {conv.isSynced ? 'Synced' : 'Not synced'}
+                        </span>
+                        <button
+                          onClick={() => handleSyncConversation(conv.instagramConversationId)}
+                          disabled={Boolean(syncingConversationId)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:border-primary/60 transition disabled:opacity-60"
+                        >
+                          {syncingConversationId === conv.instagramConversationId
+                            ? 'Syncing...'
+                            : conv.isSynced ? 'Re-sync' : 'Sync'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-foreground">
                 All Conversations ({conversations.length})

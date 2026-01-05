@@ -368,32 +368,6 @@ const Automations: React.FC = () => {
     }
   };
 
-  const handleDuplicate = async (automation: AutomationInstance) => {
-    if (!currentWorkspace) return;
-    try {
-      const template = resolveTemplateForInstance(automation);
-      const templateVersionId = automation.templateVersionId || template?.currentVersion?._id;
-      if (!templateVersionId || !template?._id) {
-        setError('Unable to duplicate automation. Missing template version.');
-        return;
-      }
-
-      await automationAPI.create({
-        name: `${automation.name} Copy`,
-        description: automation.description || '',
-        workspaceId: currentWorkspace._id,
-        isActive: false,
-        templateId: template._id,
-        templateVersionId,
-        userConfig: automation.userConfig || {},
-      });
-      loadData();
-    } catch (err) {
-      console.error('Error duplicating automation:', err);
-      setError('Failed to duplicate automation');
-    }
-  };
-
   const handleSelectTemplate = (template: FlowTemplate) => {
     if (!template.currentVersion) {
       setError('Template is not yet published.');
@@ -528,10 +502,12 @@ const Automations: React.FC = () => {
   return (
     <div className={`h-full flex flex-col ${isCreateSetupView || isDetailsView ? 'overflow-hidden' : ''}`}>
       <div className={`flex flex-col lg:flex-row gap-6 ${isCreateSetupView || isDetailsView ? 'flex-1 min-h-0' : ''}`}>
-        <AutomationsSidebar
-          activeSection={activeSection}
-          onChange={handleSectionChange}
-        />
+        <div className={isDetailsView ? 'hidden lg:block' : ''}>
+          <AutomationsSidebar
+            activeSection={activeSection}
+            onChange={handleSectionChange}
+          />
+        </div>
 
         <div
           className={`flex-1 min-h-0 ${
@@ -622,7 +598,6 @@ const Automations: React.FC = () => {
                   onOpen={handleOpenAutomationDetails}
                   onEdit={handleOpenEditAutomation}
                   onToggle={handleToggle}
-                  onDuplicate={handleDuplicate}
                   onDelete={handleDelete}
                 />
               )}
