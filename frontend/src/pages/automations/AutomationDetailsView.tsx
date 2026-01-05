@@ -116,6 +116,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [profileBusy, setProfileBusy] = useState(false);
   const [consoleExpanded, setConsoleExpanded] = useState(false);
   const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state'>('persona');
+  const [isTyping, setIsTyping] = useState(false);
 
   const sessionStatus = previewState.session?.status || previewSessionStatus;
   const statusConfig = sessionStatus
@@ -182,11 +183,16 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     if (!automation._id) return;
     try {
       const response = await automationAPI.getPreviewSessionStatus(automation._id, previewSessionId || undefined);
+      if (isTyping || previewSending) {
+        const { messages, ...rest } = response;
+        applyPreviewPayload(rest);
+        return;
+      }
       applyPreviewPayload(response);
     } catch (err) {
       console.error('Error refreshing preview state:', err);
     }
-  }, [automation._id, applyPreviewPayload, previewSessionId]);
+  }, [automation._id, applyPreviewPayload, isTyping, previewSending, previewSessionId]);
 
   const loadProfiles = useCallback(async () => {
     setProfilesLoading(true);
@@ -264,10 +270,11 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   useEffect(() => {
     if (!previewSessionId) return;
     const interval = window.setInterval(() => {
+      if (isTyping || previewSending) return;
       void refreshPreviewState();
     }, 4000);
     return () => window.clearInterval(interval);
-  }, [previewSessionId, refreshPreviewState]);
+  }, [isTyping, previewSending, previewSessionId, refreshPreviewState]);
 
   const handlePreviewInputChange = (value: string) => {
     setPreviewInputValue(value);
@@ -505,7 +512,6 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     previewSending ||
     previewLoading ||
     previewInputValue.trim().length === 0 ||
-    sessionStatus === 'paused' ||
     sessionStatus === 'completed';
 
   const renderTestConsole = (expanded: boolean) => (
@@ -546,7 +552,9 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
               inputValue={previewInputValue}
               onInputChange={handlePreviewInputChange}
               onSubmit={handlePreviewSubmit}
-              inputDisabled={Boolean(previewLoading) || sessionStatus === 'paused' || sessionStatus === 'completed'}
+              onInputFocus={() => setIsTyping(true)}
+              onInputBlur={() => setIsTyping(false)}
+              inputDisabled={Boolean(previewLoading) || sessionStatus === 'completed'}
               sendDisabled={sendDisabled}
             />
           </div>
