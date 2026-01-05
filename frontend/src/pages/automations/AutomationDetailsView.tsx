@@ -91,7 +91,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [previewSessionId, setPreviewSessionId] = useState<string | null>(null);
   const [previewMessages, setPreviewMessages] = useState<AutomationPreviewMessage[]>([]);
   const [previewInputValue, setPreviewInputValue] = useState('');
-  const [previewStatus, setPreviewStatus] = useState<string | null>(null);
+  const [previewToast, setPreviewToast] = useState<{ status: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [previewSessionStatus, setPreviewSessionStatus] = useState<
     'active' | 'paused' | 'completed' | 'handoff' | null
   >(null);
@@ -116,6 +116,26 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [isTyping, setIsTyping] = useState(false);
   const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
   const previewSessionIdRef = useRef<string | null>(null);
+  const previewToastTimerRef = useRef<number | null>(null);
+
+  const clearPreviewToast = useCallback(() => {
+    if (previewToastTimerRef.current) {
+      window.clearTimeout(previewToastTimerRef.current);
+      previewToastTimerRef.current = null;
+    }
+    setPreviewToast(null);
+  }, []);
+
+  const pushPreviewToast = useCallback((status: 'success' | 'error' | 'info', message: string) => {
+    setPreviewToast({ status, message });
+    if (previewToastTimerRef.current) {
+      window.clearTimeout(previewToastTimerRef.current);
+    }
+    previewToastTimerRef.current = window.setTimeout(() => {
+      setPreviewToast(null);
+      previewToastTimerRef.current = null;
+    }, 2200);
+  }, []);
 
   const sessionStatus = previewSessionStatus || previewState.session?.status;
   const statusConfig = sessionStatus
@@ -161,7 +181,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     sessionId?: string | null;
   }) => {
     setPreviewLoading(true);
-    setPreviewStatus(null);
+    clearPreviewToast();
     try {
       const response = await automationAPI.createPreviewSession(automation._id, {
         reset: options?.reset,
@@ -173,11 +193,11 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       setPreviewMessages(response.messages || []);
     } catch (err) {
       console.error('Error starting preview session:', err);
-      setPreviewStatus('Unable to start preview. Please try again.');
+      pushPreviewToast('error', 'Unable to start preview. Please try again.');
     } finally {
       setPreviewLoading(false);
     }
-  }, [automation._id, applyPreviewPayload]);
+  }, [automation._id, applyPreviewPayload, clearPreviewToast, pushPreviewToast]);
 
   const refreshPreviewState = useCallback(async () => {
     if (!automation._id) return;
@@ -224,13 +244,20 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       }
     } catch (err) {
       console.error('Error syncing preview persona:', err);
-      setPreviewStatus('Failed to apply mock persona.');
+      pushPreviewToast('error', 'Failed to apply mock persona.');
     }
-  }, [automation._id, previewSessionId, applyPreviewPayload, startPreviewSession]);
+  }, [automation._id, previewSessionId, applyPreviewPayload, pushPreviewToast, startPreviewSession]);
 
   useEffect(() => {
     previewSessionIdRef.current = previewSessionId;
   }, [previewSessionId]);
+
+  useEffect(() => () => {
+    if (previewToastTimerRef.current) {
+      window.clearTimeout(previewToastTimerRef.current);
+      previewToastTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -238,7 +265,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       setPreviewSessionId(null);
       setPreviewMessages([]);
       setPreviewInputValue('');
-      setPreviewStatus(null);
+      clearPreviewToast();
       setPreviewSessionStatus(null);
       setPreviewState({
         session: null,
@@ -265,7 +292,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     return () => {
       active = false;
     };
-  }, [automation._id, loadProfiles, startPreviewSession]);
+  }, [automation._id, clearPreviewToast, loadProfiles, startPreviewSession]);
 
   useEffect(() => {
     if (!previewSessionId) return;
@@ -274,17 +301,17 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
 
   const handlePreviewInputChange = (value: string) => {
     setPreviewInputValue(value);
-    if (previewStatus) setPreviewStatus(null);
+    if (previewToast) clearPreviewToast();
   };
 
   const handlePreviewSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (sessionStatus === 'paused') {
-      setPreviewStatus('Preview is paused. Resume or reset to continue.');
+      pushPreviewToast('info', 'Preview is paused. Resume or reset to continue.');
       return;
     }
     if (sessionStatus === 'completed') {
-      setPreviewStatus('Preview is stopped. Reset to start a new run.');
+      pushPreviewToast('info', 'Preview is stopped. Reset to start a new run.');
       return;
     }
     const trimmed = previewInputValue.trim();
@@ -298,7 +325,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     setPreviewMessages((prev) => [...prev, optimisticMessage]);
     setPreviewInputValue('');
     setPreviewSending(true);
-    setPreviewStatus(null);
+    clearPreviewToast();
 
     try {
       const response = await automationAPI.sendPreviewMessage(automation._id, {
@@ -309,16 +336,17 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       if (response.sessionId && response.sessionId !== previewSessionId) {
         setPreviewSessionId(response.sessionId);
       }
-      if (response.messages && response.messages.length > 0) {
-        setPreviewMessages((prev) => [...prev, ...response.messages]);
+      const { messages, ...rest } = response;
+      applyPreviewPayload(rest);
+      if (messages && messages.length > 0) {
+        setPreviewMessages((prev) => [...prev, ...messages]);
       }
-      applyPreviewPayload(response);
       if (!response.success) {
-        setPreviewStatus(response.error || 'No automated response was generated.');
+        pushPreviewToast('error', response.error || 'No automated response was generated.');
       }
     } catch (err) {
       console.error('Error sending preview message:', err);
-      setPreviewStatus('Failed to send preview message.');
+      pushPreviewToast('error', 'Failed to send preview message.');
     } finally {
       setPreviewSending(false);
     }
@@ -335,10 +363,10 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       if (response.session) {
         applyPreviewPayload({ session: response.session, status: response.session.status });
       }
-      setPreviewStatus('Preview paused.');
+      pushPreviewToast('info', 'Preview paused.');
     } catch (err) {
       console.error('Error pausing preview session:', err);
-      setPreviewStatus('Failed to pause preview session.');
+      pushPreviewToast('error', 'Failed to pause preview session.');
     } finally {
       setPreviewLoading(false);
     }
@@ -355,10 +383,10 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       if (response.session) {
         applyPreviewPayload({ session: response.session, status: response.session.status });
       }
-      setPreviewStatus('Preview stopped.');
+      pushPreviewToast('success', 'Preview stopped.');
     } catch (err) {
       console.error('Error stopping preview session:', err);
-      setPreviewStatus('Failed to stop preview session.');
+      pushPreviewToast('error', 'Failed to stop preview session.');
     } finally {
       setPreviewLoading(false);
     }
@@ -370,7 +398,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       profileId: selectedProfileId || undefined,
       persona: selectedProfileId ? undefined : personaDraft,
     });
-    setPreviewStatus('Preview reset.');
+    pushPreviewToast('success', 'Preview reset.');
   };
 
   const handleSelectProfile = async (value: string) => {
@@ -578,9 +606,6 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
             />
           </div>
         </div>
-        {previewStatus && (
-          <div className="text-xs text-muted-foreground text-center">{previewStatus}</div>
-        )}
       </CardContent>
     </Card>
   );
@@ -886,11 +911,24 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         <div className={`${mobileView === 'preview' ? 'block' : 'hidden'} sm:block h-full min-h-0`}>
           {renderTestConsole()}
         </div>
-        <div className={`${mobileView === 'details' ? 'flex' : 'hidden'} sm:flex h-full min-h-0 w-full`}>
-          {renderRightPane()}
-        </div>
+      <div className={`${mobileView === 'details' ? 'flex' : 'hidden'} sm:flex h-full min-h-0 w-full`}>
+        {renderRightPane()}
       </div>
-
     </div>
+
+    {previewToast && (
+      <div
+        className={`fixed bottom-6 left-6 z-50 rounded-full px-4 py-2 text-xs font-semibold shadow-lg ${
+          previewToast.status === 'success'
+            ? 'bg-primary text-primary-foreground'
+            : previewToast.status === 'error'
+              ? 'bg-red-500 text-white'
+              : 'bg-card/95 border border-border text-foreground'
+        }`}
+      >
+        {previewToast.message}
+      </div>
+    )}
+  </div>
   );
 };
