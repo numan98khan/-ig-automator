@@ -79,6 +79,15 @@ const EVENT_BADGES: Record<string, { label: string; variant: 'primary' | 'second
   info: { label: 'Info', variant: 'neutral' },
 };
 
+const NODE_TYPE_BADGES: Record<string, { label: string; badgeClass: string; dotClass: string }> = {
+  send_message: { label: 'Send Message', badgeClass: 'bg-sky-500/10 text-sky-600', dotClass: 'bg-sky-500' },
+  ai_reply: { label: 'AI Reply', badgeClass: 'bg-indigo-500/10 text-indigo-600', dotClass: 'bg-indigo-500' },
+  ai_agent: { label: 'AI Agent', badgeClass: 'bg-violet-500/10 text-violet-600', dotClass: 'bg-violet-500' },
+  detect_intent: { label: 'Detect Intent', badgeClass: 'bg-emerald-500/10 text-emerald-600', dotClass: 'bg-emerald-500' },
+  handoff: { label: 'Handoff', badgeClass: 'bg-amber-500/10 text-amber-600', dotClass: 'bg-amber-500' },
+  router: { label: 'Router', badgeClass: 'bg-cyan-500/10 text-cyan-600', dotClass: 'bg-cyan-500' },
+};
+
 export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   automation,
   accountDisplayName,
@@ -750,31 +759,25 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto">
         <div className="rounded-lg border border-border/60 bg-background/60 p-3">
           <div className="text-xs font-semibold uppercase text-muted-foreground">Current step</div>
-          {previewState.currentNode ? (
-            <div className="mt-2 space-y-2">
-              <div>
-                <div className="text-sm font-semibold">
-                  {previewState.currentNode.label || previewState.currentNode.id || 'Active node'}
+          {previewState.currentNode ? (() => {
+            const nodeTypeKey = previewState.currentNode.type?.toLowerCase() || '';
+            const nodeMeta = NODE_TYPE_BADGES[nodeTypeKey];
+            const nodeLabel = previewState.currentNode.label || previewState.currentNode.id || 'Active node';
+            const nodeTypeLabel = nodeMeta?.label || previewState.currentNode.type?.replace(/_/g, ' ') || 'Step';
+            const badgeClass = nodeMeta?.badgeClass || 'bg-muted/60 text-muted-foreground';
+            const dotClass = nodeMeta?.dotClass || 'bg-muted-foreground';
+            return (
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`h-2.5 w-2.5 rounded-full ${dotClass}`} />
+                  <div className="text-sm font-semibold truncate">{nodeLabel}</div>
                 </div>
-                <div className="text-xs text-muted-foreground capitalize">
-                  {previewState.currentNode.type.replace(/_/g, ' ')}
-                </div>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${badgeClass}`}>
+                  {nodeTypeLabel}
+                </span>
               </div>
-              {previewState.currentNode.preview && (
-                <div className="text-xs text-muted-foreground">"{previewState.currentNode.preview}"</div>
-              )}
-              {previewState.currentNode.summary && previewState.currentNode.summary.length > 0 && (
-                <div className="grid gap-1">
-                  {previewState.currentNode.summary.map((item) => (
-                    <div key={`${item.label}-${item.value}`} className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">{item.label}</span>
-                      <span className="font-medium">{item.value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
+            );
+          })() : (
             <div className="mt-2 text-xs text-muted-foreground">Waiting for the next trigger.</div>
           )}
         </div>
