@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Copy,
   Loader2,
-  Maximize2,
   PauseCircle,
   RefreshCcw,
   Save,
@@ -26,7 +25,6 @@ import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
-import { Modal } from '../../components/ui/Modal';
 
 type AutomationDetailsViewProps = {
   automation: AutomationInstance;
@@ -114,7 +112,6 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [personaDraft, setPersonaDraft] = useState<AutomationPreviewPersona>(DEFAULT_PERSONA);
   const [profileBusy, setProfileBusy] = useState(false);
-  const [consoleExpanded, setConsoleExpanded] = useState(false);
   const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state'>('persona');
   const [isTyping, setIsTyping] = useState(false);
   const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
@@ -513,8 +510,8 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     previewInputValue.trim().length === 0 ||
     sessionStatus === 'completed';
 
-  const renderTestConsole = (expanded: boolean) => (
-    <Card className={`flex flex-col min-h-0 h-full ${expanded ? 'h-full' : ''}`}>
+  const renderTestConsole = () => (
+    <Card className="flex flex-col min-h-0 h-full">
       
       <CardHeader className="grid grid-cols-1 gap-3 border-b border-border/60 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
         {/* <div className="space-y-1">
@@ -555,18 +552,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
             Reset
           </Button>
         </div>
-        <div className="flex items-center justify-end gap-2">
-          {!expanded && (
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Maximize2 className="w-4 h-4" />}
-              onClick={() => setConsoleExpanded(true)}
-            >
-              Expand
-            </Button>
-          )}
-        </div>
+        <div className="hidden sm:block" />
       </CardHeader>
       <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
         <div className="flex-1 min-h-0 flex items-center justify-center">
@@ -898,25 +884,13 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] grid-rows-[minmax(0,1fr)] flex-1 min-h-0 overflow-hidden">
         <div className={`${mobileView === 'preview' ? 'block' : 'hidden'} sm:block h-full min-h-0`}>
-          {renderTestConsole(false)}
+          {renderTestConsole()}
         </div>
         <div className={`${mobileView === 'details' ? 'flex' : 'hidden'} sm:flex h-full min-h-0`}>
           {renderRightPane()}
         </div>
       </div>
 
-      <Modal
-        isOpen={consoleExpanded}
-        onClose={() => setConsoleExpanded(false)}
-        title="Expanded Test Console"
-        size="full"
-        className="h-[85vh]"
-      >
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] grid-rows-[minmax(0,1fr)] h-full min-h-0 overflow-hidden">
-          {renderTestConsole(true)}
-          {renderRightPane()}
-        </div>
-      </Modal>
     </div>
   );
 };
