@@ -586,7 +586,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   );
 
   const renderPersonaCard = () => (
-    <Card className="flex flex-col min-h-0 flex-1">
+    <Card className="flex flex-col min-h-0 flex-1 w-full">
       <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
         <div>
           <CardTitle>Mock Persona</CardTitle>
@@ -714,7 +714,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   );
 
   const renderStateCard = () => (
-    <Card className="flex flex-col min-h-0 flex-1">
+    <Card className="flex flex-col min-h-0 flex-1 w-full">
       <CardHeader className="flex flex-row items-center justify-between border-b border-border/60">
         <div>
           <CardTitle>Live Automation State</CardTitle>
@@ -811,8 +811,8 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   );
 
   const renderRightPane = () => (
-    <div className="flex flex-col gap-4 min-h-0 h-full">
-      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1">
+    <div className="flex flex-col gap-4 min-h-0 h-full w-full">
+      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1 w-full">
         {([
           { id: 'persona', label: 'Mock Persona' },
           { id: 'state', label: 'Automation State' },
@@ -886,7 +886,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         <div className={`${mobileView === 'preview' ? 'block' : 'hidden'} sm:block h-full min-h-0`}>
           {renderTestConsole()}
         </div>
-        <div className={`${mobileView === 'details' ? 'flex' : 'hidden'} sm:flex h-full min-h-0`}>
+        <div className={`${mobileView === 'details' ? 'flex' : 'hidden'} sm:flex h-full min-h-0 w-full`}>
           {renderRightPane()}
         </div>
       </div>
