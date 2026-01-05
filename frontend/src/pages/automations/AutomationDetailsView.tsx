@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeft,
   ArrowRight,
   Copy,
   Loader2,
@@ -905,6 +906,15 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           </Badge>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onBack}
+            className="w-full sm:w-auto hidden sm:inline-flex"
+            leftIcon={<ArrowLeft className="w-4 h-4" />}
+          >
+            Back
+          </Button>
           <Button
             variant="outline"
             size="sm"
