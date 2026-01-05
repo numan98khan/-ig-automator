@@ -528,10 +528,12 @@ const Automations: React.FC = () => {
   return (
     <div className={`h-full flex flex-col ${isCreateSetupView || isDetailsView ? 'overflow-hidden' : ''}`}>
       <div className={`flex flex-col lg:flex-row gap-6 ${isCreateSetupView || isDetailsView ? 'flex-1 min-h-0' : ''}`}>
-        <AutomationsSidebar
-          activeSection={activeSection}
-          onChange={handleSectionChange}
-        />
+        <div className={isDetailsView ? 'hidden lg:block' : ''}>
+          <AutomationsSidebar
+            activeSection={activeSection}
+            onChange={handleSectionChange}
+          />
+        </div>
 
         <div
           className={`flex-1 min-h-0 ${
