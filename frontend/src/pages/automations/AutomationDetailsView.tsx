@@ -117,6 +117,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [consoleExpanded, setConsoleExpanded] = useState(false);
   const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state'>('persona');
   const [isTyping, setIsTyping] = useState(false);
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
 
   const sessionStatus = previewSessionStatus || previewState.session?.status;
   const statusConfig = sessionStatus
@@ -514,10 +515,12 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       <CardHeader className="flex flex-col gap-3 border-b border-border/60 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <CardTitle>Test Console</CardTitle>
-          <p className="text-xs text-muted-foreground">Mock-only DM simulator for this automation.</p>
+          <p className="hidden text-xs text-muted-foreground sm:block">
+            Mock-only DM simulator for this automation.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="neutral">Preview</Badge>
+          <Badge variant="neutral" className="hidden sm:inline-flex">Preview</Badge>
           {!expanded && (
             <Button
               variant="outline"
@@ -851,10 +854,12 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           <span className="font-medium text-foreground">{automation.name}</span>
           <ArrowRight className="w-4 h-4" />
           <span className="font-medium text-foreground">Preview</span>
+          <Badge variant={statusConfig.variant} className="ml-1">
+            {statusConfig.label}
+          </Badge>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
-          <Button variant="outline" size="sm" onClick={() => onEdit(automation)}>
+          <Button variant="outline" size="sm" onClick={() => onEdit(automation)} className="w-full sm:w-auto">
             Edit Automation
           </Button>
         </div>
@@ -862,7 +867,19 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr] flex-1 min-h-0 overflow-hidden">
         {renderTestConsole(false)}
-        {renderRightPane()}
+        <div className="sm:hidden">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => setMobileDetailsOpen((prev) => !prev)}
+          >
+            {mobileDetailsOpen ? 'Hide details' : 'Show details'}
+          </Button>
+        </div>
+        <div className={`${mobileDetailsOpen ? 'flex' : 'hidden'} sm:flex`}>
+          {renderRightPane()}
+        </div>
       </div>
 
       <Modal
