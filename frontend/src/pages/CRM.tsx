@@ -68,6 +68,12 @@ const stageVariant: Record<CrmStage, 'secondary' | 'primary' | 'warning' | 'succ
   lost: 'danger',
 };
 
+const normalizeStageValue = (value?: string): CrmStage => {
+  if (!value) return 'new';
+  const normalized = value.trim().toLowerCase();
+  return normalized in stageOrder ? (normalized as CrmStage) : 'new';
+};
+
 const quickReplies = [
   {
     label: 'Send catalog',
@@ -360,8 +366,8 @@ const CRM: React.FC = () => {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       }
       if (sortBy === 'stage') {
-        const stageA = stageOrder[a.stage || 'new'];
-        const stageB = stageOrder[b.stage || 'new'];
+        const stageA = stageOrder[normalizeStageValue(a.stage)];
+        const stageB = stageOrder[normalizeStageValue(b.stage)];
         if (stageA !== stageB) return stageA - stageB;
         return getMessageTime(b.lastMessageAt) - getMessageTime(a.lastMessageAt);
       }
@@ -1734,7 +1740,7 @@ const CRM: React.FC = () => {
                 <div className="absolute inset-y-0 right-0 w-6 pointer-events-none bg-gradient-to-l from-background/80 to-transparent" />
                 <div className="flex gap-3 overflow-x-auto h-full pr-4 pb-2">
                   {(['new', 'engaged', 'qualified', 'won', 'lost'] as CrmStage[]).map((stage) => {
-                    const columnContacts = activeContacts.filter((contact) => (contact.stage || 'new') === stage);
+                    const columnContacts = activeContacts.filter((contact) => normalizeStageValue(contact.stage) === stage);
                     const isCollapsed = collapsedColumns.has(stage);
                     return (
                       <div
