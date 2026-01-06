@@ -47,6 +47,7 @@ type FlowRuntimeEdge = {
   to: string;
   condition?: Record<string, any>;
   order?: number;
+  isDefault?: boolean;
 };
 
 type FlowCompileIssue = {
@@ -319,6 +320,8 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       return;
     }
 
+    const rawCondition = (edge.condition ?? edge.data?.condition) as Record<string, any> | undefined;
+    const isDefault = Boolean(edge.isDefault || edge.default || edge.data?.isDefault || edge.data?.default);
     const order = typeof edge.order === 'number'
       ? edge.order
       : (nodeTypeById.get(from) === 'router' ? nodeYById.get(to) : undefined);
@@ -326,8 +329,9 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     normalizedEdges.push({
       from,
       to,
-      condition: edge.condition,
+      condition: rawCondition,
       order,
+      isDefault: isDefault || undefined,
     });
   });
 

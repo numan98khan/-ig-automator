@@ -54,6 +54,8 @@ type FlowRuntimeEdge = {
   to: string;
   condition?: RouterCondition;
   order?: number;
+  isDefault?: boolean;
+  default?: boolean;
 };
 
 type FlowRuntimeStep = {
@@ -120,9 +122,11 @@ type RouterRule = {
 };
 
 type RouterCondition = {
-  type?: 'rules' | 'else';
+  type?: 'rules' | 'else' | 'default';
   op?: 'all' | 'any';
   rules?: RouterRule[];
+  default?: boolean;
+  isDefault?: boolean;
 };
 
 type RouterRouting = {
@@ -931,7 +935,9 @@ async function handleAiReplyStep(params: {
 
 const normalizeRouterCondition = (condition?: RouterCondition): RouterCondition => {
   if (!condition) return { type: 'rules', op: 'all', rules: [] };
-  if (condition.type === 'else') return { type: 'else' };
+  if (condition.type === 'else' || condition.type === 'default' || condition.default || condition.isDefault) {
+    return { type: 'else' };
+  }
   return {
     type: 'rules',
     op: condition.op === 'any' ? 'any' : 'all',
@@ -1066,9 +1072,14 @@ const resolveRouterTargets = (
   const sorted = sortRouterEdges(edges);
   const matchMode: RouterMatchMode = step.routing?.matchMode === 'all' ? 'all' : 'first';
 
-  const defaultEdge = sorted.find((edge) => normalizeRouterCondition(edge.condition).type === 'else');
+  const isDefaultEdge = (edge: FlowRuntimeEdge) => {
+    if (normalizeRouterCondition(edge.condition).type === 'else') return true;
+    const rawEdge = edge as { default?: boolean; isDefault?: boolean };
+    return Boolean(rawEdge.default || rawEdge.isDefault);
+  };
+  const defaultEdge = sorted.find((edge) => isDefaultEdge(edge));
   const matched = sorted.filter((edge) =>
-    evaluateRouterCondition(normalizeRouterCondition(edge.condition), context),
+    !isDefaultEdge(edge) && evaluateRouterCondition(normalizeRouterCondition(edge.condition), context),
   );
 
   if (matched.length > 0) {
@@ -1083,6 +1094,17 @@ const resolveRouterTargets = (
 
   if (defaultEdge?.to) {
     return { nextNodeId: defaultEdge.to };
+  }
+
+  const fallbackTarget = step.routing?.defaultTarget;
+  if (fallbackTarget) {
+    const edgeMatch = sorted.find((edge) => edge.to === fallbackTarget);
+    if (edgeMatch?.to) {
+      return { nextNodeId: edgeMatch.to };
+    }
+    if (plan.nodeMap?.has(fallbackTarget)) {
+      return { nextNodeId: fallbackTarget };
+    }
   }
 
   return {};
