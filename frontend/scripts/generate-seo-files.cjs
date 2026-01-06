@@ -6,7 +6,8 @@ const publicDir = path.join(rootDir, 'public');
 
 const rawSiteUrl = process.env.SITE_URL || process.env.VITE_SITE_URL;
 if (!rawSiteUrl) {
-  throw new Error('Missing required environment variable: SITE_URL or VITE_SITE_URL');
+  console.warn('Warning: SITE_URL or VITE_SITE_URL not set. Skipping sitemap/robots generation.');
+  process.exit(0);
 }
 const baseUrl = rawSiteUrl.replace(/\/$/, '');
 
