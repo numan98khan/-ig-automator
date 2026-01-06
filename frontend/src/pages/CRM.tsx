@@ -424,14 +424,14 @@ const CRM: React.FC = () => {
     setCollapsedColumns((prev) => {
       const next = new Set(prev);
       (['won', 'lost'] as CrmStage[]).forEach((stage) => {
-        const hasContacts = activeContacts.some((contact) => normalizeStageValue(contact.stage) === stage);
+        const hasContacts = filteredContacts.some((contact) => normalizeStageValue(contact.stage) === stage);
         if (hasContacts) {
           next.delete(stage);
         }
       });
       return next;
     });
-  }, [viewMode, activeContacts]);
+  }, [viewMode, filteredContacts]);
 
   useEffect(() => {
     if (!selectedContactId) {
