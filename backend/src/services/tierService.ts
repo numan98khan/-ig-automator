@@ -14,8 +14,6 @@ import { getWorkspaceById } from '../repositories/core/workspaceRepository';
 import { getUsageCounter, upsertUsageCounter } from '../repositories/core/usageCounterRepository';
 import { requireEnv } from '../utils/requireEnv';
 
-const DEFAULT_PERIOD_DAYS = parseInt(requireEnv('TIER_USAGE_PERIOD_DAYS'), 10);
-
 export interface TierSummary {
   tier: CoreTier | null;
   limits: TierLimits;
@@ -28,13 +26,14 @@ const isFeatureEnabled = (limits: TierLimits | undefined, feature: TierFeature) 
 };
 
 export const getUsageWindow = () => {
+  const periodDays = parseInt(requireEnv('TIER_USAGE_PERIOD_DAYS'), 10);
   const now = new Date();
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - DEFAULT_PERIOD_DAYS + 1);
+  start.setDate(start.getDate() - periodDays + 1);
 
   const end = new Date(start);
-  end.setDate(start.getDate() + DEFAULT_PERIOD_DAYS);
+  end.setDate(start.getDate() + periodDays);
   return { periodStart: start, periodEnd: end };
 };
 
