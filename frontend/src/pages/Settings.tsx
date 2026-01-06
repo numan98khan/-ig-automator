@@ -137,14 +137,23 @@ export default function Settings() {
     }
   };
 
-  const handleReconnectInstagram = async () => {
+  const handleInstagramAuth = async (options?: { reconnect?: boolean }) => {
     if (!currentWorkspace?._id) return;
+    const isReconnect = options?.reconnect === true;
 
     setReconnecting(true);
     setError(null);
 
     try {
-      const { authUrl } = await instagramAPI.getAuthUrl(currentWorkspace._id);
+      const igLimit = combinedLimits.instagramAccounts;
+      const igUsed = workspaceUsage.instagramAccounts ?? 0;
+      if (!isReconnect && typeof igLimit === 'number' && igUsed >= igLimit) {
+        setError(`Instagram account limit reached (${igUsed}/${igLimit}). Upgrade the owner's tier to connect another account.`);
+        setReconnecting(false);
+        return;
+      }
+
+      const { authUrl } = await instagramAPI.getAuthUrl(currentWorkspace._id, { reconnect: isReconnect });
       window.location.href = authUrl;
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to initiate Instagram reconnection');
@@ -367,7 +376,7 @@ export default function Settings() {
                       <Instagram className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
                       <p className="text-sm text-muted-foreground mb-4">No Instagram accounts connected</p>
                       <Button
-                        onClick={handleReconnectInstagram}
+                        onClick={() => handleInstagramAuth()}
                         isLoading={reconnecting}
                         variant="secondary"
                         size="sm"
@@ -421,7 +430,7 @@ export default function Settings() {
                           </div>
                           {account.status === 'connected' && (isExpired || (expiresIn !== null && expiresIn < 7)) && (
                             <Button
-                              onClick={handleReconnectInstagram}
+                              onClick={() => handleInstagramAuth({ reconnect: true })}
                               isLoading={reconnecting}
                               variant={isExpired ? 'primary' : 'secondary'}
                               size="sm"
@@ -436,7 +445,7 @@ export default function Settings() {
                   {instagramAccounts.length > 0 && (
                     <div className="pt-2 border-t border-border/50">
                       <Button
-                        onClick={handleReconnectInstagram}
+                        onClick={() => handleInstagramAuth()}
                         isLoading={reconnecting}
                         variant="outline"
                         size="sm"

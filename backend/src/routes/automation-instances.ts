@@ -12,6 +12,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { getAdminLogEvents } from '../services/adminLogEventService';
 import { executePreviewFlowForInstance, resolveLatestTemplateVersion } from '../services/automationService';
+import { assertWorkspaceLimit } from '../services/tierService';
 
 const router = express.Router();
 
@@ -623,6 +624,14 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     }
     if (!isOwner && role !== 'admin') {
       return res.status(403).json({ error: 'Only workspace owners and admins can create automations' });
+    }
+
+    const currentCount = await AutomationInstance.countDocuments({ workspaceId });
+    const limitCheck = await assertWorkspaceLimit(workspaceId, 'automations', currentCount + 1);
+    if (!limitCheck.allowed) {
+      return res.status(403).json({
+        error: `Automation limit reached for this workspace (limit: ${limitCheck.limit})`,
+      });
     }
 
     const resolved = await resolveTemplateVersion({ templateId, templateVersionId });

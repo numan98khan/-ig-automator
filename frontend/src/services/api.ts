@@ -799,8 +799,15 @@ export const workspaceAPI = {
 // Instagram API
 export const instagramAPI = {
   // OAuth flow - Get authorization URL
-  getAuthUrl: async (workspaceId: string): Promise<{ authUrl: string }> => {
-    const { data } = await api.get(`/api/instagram/auth?workspaceId=${workspaceId}`);
+  getAuthUrl: async (
+    workspaceId: string,
+    options?: { reconnect?: boolean },
+  ): Promise<{ authUrl: string }> => {
+    const params = new URLSearchParams({ workspaceId });
+    if (options?.reconnect) {
+      params.set('reconnect', 'true');
+    }
+    const { data } = await api.get(`/api/instagram/auth?${params.toString()}`);
     return data;
   },
 

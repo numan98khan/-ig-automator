@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
 import {
@@ -12,7 +12,7 @@ import {
   tierAPI,
   WorkspaceTierResponse,
 } from '../services/api';
-import { AlertTriangle, PlayCircle, Clock } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, PlayCircle, X } from 'lucide-react';
 import { AutomationsSidebar } from './automations/AutomationsSidebar';
 import { AutomationsListView } from './automations/AutomationsListView';
 import { AutomationsCreateView } from './automations/AutomationsCreateView';
@@ -22,6 +22,9 @@ import { AutomationsHumanAlerts } from './automations/AutomationsHumanAlerts';
 import Knowledge from './Knowledge';
 import { AutomationsIntegrationsView } from './automations/AutomationsIntegrationsView';
 import { FLOW_GOAL_FILTERS } from './automations/constants';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { useTheme } from '../context/ThemeContext';
 
 type CreateFormData = {
   name: string;
@@ -145,6 +148,8 @@ const hydrateAutomation = (
 
 const Automations: React.FC = () => {
   const { currentWorkspace } = useAuth();
+  const { theme } = useTheme();
+  const navigate = useNavigate();
   const { activeAccount } = useAccountContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeSection, setActiveSection] = useState<'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'>('automations');
@@ -172,6 +177,7 @@ const Automations: React.FC = () => {
   >(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewSending, setPreviewSending] = useState(false);
+  const [showAutomationUpgrade, setShowAutomationUpgrade] = useState(false);
 
   const accountDisplayName = activeAccount?.name || activeAccount?.username || 'Connected account';
   const accountHandle = activeAccount?.username || 'connected_account';
@@ -182,6 +188,15 @@ const Automations: React.FC = () => {
   const isDetailsView = isAutomationsSection && automationView === 'details';
   const isAutomationFullHeightView = isCreateView || isDetailsView;
   const isCustomAutomationEnabled = workspaceTier?.limits?.flowBuilder !== false;
+  const automationLimit = workspaceTier?.limits?.automations;
+  const automationCount = automations.length;
+  const isAutomationLimitReached = typeof automationLimit === 'number' && automationCount >= automationLimit;
+  const isLightTheme = useMemo(() => {
+    if (theme === 'light') return true;
+    if (theme === 'dark') return false;
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-color-scheme: light)').matches;
+  }, [theme]);
 
   const [creationMode, setCreationMode] = useState<'templates' | 'custom'>('templates');
   const [currentStep, setCurrentStep] = useState<'gallery' | 'setup' | 'review'>('gallery');
@@ -263,6 +278,12 @@ const Automations: React.FC = () => {
       setCreationMode('templates');
     }
   }, [creationMode, isCustomAutomationEnabled]);
+
+  useEffect(() => {
+    if (!isAutomationLimitReached) {
+      setShowAutomationUpgrade(false);
+    }
+  }, [isAutomationLimitReached]);
 
   const loadData = async (options?: { silent?: boolean }) => {
     if (!currentWorkspace) return;
@@ -399,6 +420,10 @@ const Automations: React.FC = () => {
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!currentWorkspace || !selectedTemplate?.currentVersion) return;
+    if (!editingAutomation && isAutomationLimitReached) {
+      setShowAutomationUpgrade(true);
+      return;
+    }
 
     setError(null);
     const { config, error: configError } = normalizeConfig(exposedFields, configValues);
@@ -452,7 +477,13 @@ const Automations: React.FC = () => {
       });
 
       handleCloseCreateView();
-    } catch (err) {
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const message = err?.response?.data?.error;
+      if (!editingAutomation && status === 403 && typeof message === 'string' && message.toLowerCase().includes('automation limit')) {
+        setShowAutomationUpgrade(true);
+        return;
+      }
       console.error('Error saving automation:', err);
       setError('Failed to save automation');
     } finally {
@@ -635,7 +666,56 @@ const Automations: React.FC = () => {
   if (!currentWorkspace) return null;
 
   return (
-    <div className={`h-full flex flex-col ${isCreateSetupView || isDetailsView ? 'overflow-hidden' : ''}`}>
+    <div className={`relative h-full flex flex-col ${isCreateSetupView || isDetailsView ? 'overflow-hidden' : ''}`}>
+      {showAutomationUpgrade && (
+        <div
+          className={`absolute inset-0 z-40 flex items-center justify-center rounded-2xl p-6 ${isLightTheme ? 'bg-slate-200/70' : 'bg-black/60'} backdrop-blur-sm`}
+        >
+          <div className="relative max-w-xl w-full rounded-2xl border border-border bg-card p-6 shadow-xl text-center space-y-4">
+            <button
+              type="button"
+              onClick={() => setShowAutomationUpgrade(false)}
+              className="absolute top-3 right-3 rounded-full border border-border/60 p-2 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <Badge variant="secondary" className="uppercase tracking-[0.3em] text-[10px]">
+              Upgrade required
+            </Badge>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-foreground">Unlock more automations</h2>
+              <p className="text-sm text-muted-foreground">
+                You&apos;ve reached your automation limit{typeof automationLimit === 'number' ? ` (${automationCount}/${automationLimit})` : ''}. Upgrade your plan to create more automations.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+              {[
+                'Higher automation limits per workspace',
+                'Advanced templates and routing',
+                'Deeper automation performance insights',
+                'Priority support and onboarding',
+              ].map((item) => (
+                <div key={item} className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/30 p-3">
+                  <CheckCircle2 className="w-4 h-4 text-primary mt-0.5" />
+                  <span className="text-sm text-foreground">{item}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col md:flex-row items-center justify-center gap-3">
+              <Button
+                onClick={() => navigate('/app/settings?tab=plan')}
+                className="w-full md:w-auto"
+              >
+                View upgrade options
+              </Button>
+              {workspaceTier?.tier?.name && (
+                <span className="text-xs text-muted-foreground">Current plan: {workspaceTier.tier.name}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <div className={`flex flex-col lg:flex-row gap-6 ${isCreateSetupView || isDetailsView ? 'flex-1 min-h-0' : ''}`}>
         <div className={isDetailsView ? 'hidden lg:block' : ''}>
           <AutomationsSidebar

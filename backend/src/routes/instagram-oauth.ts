@@ -10,6 +10,7 @@ import {
 } from '../repositories/core/userRepository';
 import { createWorkspace, getWorkspaceById } from '../repositories/core/workspaceRepository';
 import { createWorkspaceMember, getWorkspaceMember } from '../repositories/core/workspaceMemberRepository';
+import { assertWorkspaceLimit } from '../services/tierService';
 import { requireEnv } from '../utils/requireEnv';
 
 const router = express.Router();
@@ -18,6 +19,11 @@ const JWT_SECRET = requireEnv('JWT_SECRET');
 const INSTAGRAM_CLIENT_ID = requireEnv('INSTAGRAM_CLIENT_ID');
 const INSTAGRAM_CLIENT_SECRET = requireEnv('INSTAGRAM_CLIENT_SECRET');
 const INSTAGRAM_REDIRECT_URI = requireEnv('INSTAGRAM_REDIRECT_URI');
+
+const assertInstagramAccountLimit = async (workspaceId: string) => {
+  const currentCount = await InstagramAccount.countDocuments({ workspaceId });
+  return assertWorkspaceLimit(workspaceId, 'instagramAccounts', currentCount + 1);
+};
 
 router.get('/auth-login', async (req: Request, res: Response) => {
   try {
@@ -42,7 +48,7 @@ router.get('/auth-login', async (req: Request, res: Response) => {
 
 router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { workspaceId } = req.query;
+    const { workspaceId, reconnect } = req.query;
 
     if (!workspaceId) {
       return res.status(400).json({ error: 'workspaceId is required' });
@@ -52,6 +58,15 @@ router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
 
     if (!workspace || workspace.userId !== req.userId) {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    if (reconnect !== 'true') {
+      const limitCheck = await assertInstagramAccountLimit(workspaceId as string);
+      if (!limitCheck.allowed) {
+        return res.status(403).json({
+          error: `Instagram account limit reached for this workspace (limit: ${limitCheck.limit})`,
+        });
+      }
     }
 
     const state = Buffer.from(JSON.stringify({
@@ -252,6 +267,12 @@ router.get('/callback', async (req: Request, res: Response) => {
         await instagramAccount.save();
         console.log('✅ Updated existing Instagram account:', instagramAccount._id);
       } else {
+        const limitCheck = await assertInstagramAccountLimit(workspace._id.toString());
+        if (!limitCheck.allowed) {
+          return res.redirect(`${FRONTEND_URL}/landing?error=instagram_limit_reached&message=${encodeURIComponent(
+            `Instagram account limit reached (limit: ${limitCheck.limit})`,
+          )}`);
+        }
         console.log('🔄 Instagram account not found, creating new one...');
         instagramAccount = await InstagramAccount.create({
           workspaceId: workspace._id,
@@ -324,6 +345,12 @@ router.get('/callback', async (req: Request, res: Response) => {
 
       await existingAccount.save();
     } else {
+      const limitCheck = await assertInstagramAccountLimit(workspaceId);
+      if (!limitCheck.allowed) {
+        return res.redirect(`${FRONTEND_URL}/landing?error=instagram_limit_reached&message=${encodeURIComponent(
+          `Instagram account limit reached (limit: ${limitCheck.limit})`,
+        )}`);
+      }
       await InstagramAccount.create({
         workspaceId,
         username: accountData.username,
