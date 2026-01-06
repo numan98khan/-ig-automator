@@ -71,7 +71,7 @@ const formatContact = (contact: any, summary?: any) => ({
   ...contact,
   workspaceId: contact.workspaceId?.toString ? contact.workspaceId.toString() : contact.workspaceId,
   ownerId: contact.ownerId?.toString ? contact.ownerId.toString() : contact.ownerId,
-  stage: contact.stage || 'new',
+  stage: normalizeStage(contact.stage) ?? 'new',
   tags: formatContactTags(contact.tags),
   primaryConversationId: summary?._id?.toString?.() || summary?._id,
   lastMessageAt: summary?.lastMessageAt,
