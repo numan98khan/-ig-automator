@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Pencil, Plus, Loader2, Target, Trash2, Power, PowerOff } from 'lucide-react';
-import { AutomationInstance } from '../../services/api';
+import { Loader2, Pencil, Plus, Power, PowerOff, Sparkles, Target, Trash2 } from 'lucide-react';
+import { AutomationInstance, ResourceUsage } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { TRIGGER_METADATA } from './constants';
 
@@ -15,6 +15,7 @@ type AutomationsListViewProps = {
   automations: AutomationInstance[];
   summaryStats: SummaryStats;
   loading: boolean;
+  aiUsage?: ResourceUsage | null;
   onCreate: () => void;
   onOpen?: (automation: AutomationInstance) => void;
   onEdit?: (automation: AutomationInstance) => void;
@@ -26,6 +27,7 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
   automations,
   summaryStats,
   loading,
+  aiUsage,
   onCreate,
   onOpen,
   onEdit,
@@ -47,6 +49,49 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
       return nameMatch || descriptionMatch;
     });
   }, [automations, searchQuery, statusFilter]);
+
+  const aiUsed = aiUsage?.used ?? 0;
+  const aiLimit = aiUsage?.limit;
+  const hasAiLimit = typeof aiLimit === 'number';
+  const aiRatio = hasAiLimit && aiLimit > 0 ? aiUsed / aiLimit : 0;
+  const aiPercent = hasAiLimit && aiLimit > 0 ? Math.min(100, Math.round(aiRatio * 100)) : 0;
+  const aiRemaining = hasAiLimit ? Math.max(aiLimit - aiUsed, 0) : null;
+  const showAiUsage = hasAiLimit;
+  const aiTone = !hasAiLimit
+    ? 'info'
+    : aiUsed >= (aiLimit || 0)
+      ? 'critical'
+      : aiRatio >= 0.8
+        ? 'warning'
+        : 'info';
+  const aiContainerClass = aiTone === 'critical'
+    ? 'border-red-500/30 bg-red-500/10'
+    : aiTone === 'warning'
+      ? 'border-amber-400/40 bg-amber-500/10'
+      : 'border-border/60 bg-background/70';
+  const aiAccentClass = aiTone === 'critical'
+    ? 'text-red-500'
+    : aiTone === 'warning'
+      ? 'text-amber-500'
+      : 'text-primary';
+  const aiMessageClass = aiTone === 'critical'
+    ? 'text-red-400'
+    : aiTone === 'warning'
+      ? 'text-amber-600'
+      : 'text-muted-foreground';
+  const aiBarClass = aiTone === 'critical'
+    ? 'bg-red-500'
+    : aiTone === 'warning'
+      ? 'bg-amber-500'
+      : 'bg-primary';
+  const aiUsageLabel = hasAiLimit ? `${aiUsed} / ${aiLimit}` : `${aiUsed}`;
+  const aiMessage = hasAiLimit
+    ? aiUsed >= (aiLimit || 0)
+      ? 'AI message limit reached. Upgrade to keep automations sending.'
+      : aiRatio >= 0.8
+        ? `${aiRemaining} AI messages left in this billing period.`
+        : `${aiRemaining} AI messages remaining this period.`
+    : 'Unlimited AI messages for this plan.';
 
   return (
     <>
@@ -93,6 +138,21 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
           </Button>
         </div>
       </div>
+      {showAiUsage && (
+        <div className={`rounded-xl border p-3 ${aiContainerClass}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wide ${aiAccentClass}`}>
+              <Sparkles className="w-4 h-4" />
+              AI messages
+            </div>
+            <div className="text-sm font-semibold text-foreground">{aiUsageLabel}</div>
+          </div>
+          <div className="mt-2 h-2 w-full rounded-full bg-background/50 overflow-hidden">
+            <div className={`h-full ${aiBarClass}`} style={{ width: `${aiPercent}%` }} />
+          </div>
+          <div className={`mt-2 text-xs ${aiMessageClass}`}>{aiMessage}</div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">Triggers</span>

@@ -15,6 +15,7 @@ import {
 } from '../utils/instagram-api';
 import { addTicketUpdate, createTicket, getActiveTicket } from './escalationService';
 import { addCountIncrement, trackDailyMetric } from './reportingService';
+import { assertUsageLimit } from './tierService';
 import {
   detectAutomationIntent,
   detectGoalIntent,
@@ -36,6 +37,7 @@ import {
 } from '../types/automation';
 import { FlowExposedField, FlowTriggerDefinition } from '../types/flow';
 import { AutomationTestContext } from './automation/types';
+import { getWorkspaceById } from '../repositories/core/workspaceRepository';
 
 type AutomationDeliveryMode = 'instagram' | 'preview';
 
@@ -155,6 +157,20 @@ const resolveWorkspaceId = (details?: Record<string, any>) => {
     return candidate.toString();
   }
   return undefined;
+};
+
+const getWorkspaceOwnerId = async (workspaceId: string) => {
+  const workspace = await getWorkspaceById(workspaceId);
+  return workspace?.userId || null;
+};
+
+const checkAiMessageAllowance = async (workspaceId: string) => {
+  const ownerId = await getWorkspaceOwnerId(workspaceId);
+  if (!ownerId) {
+    return { allowed: true, ownerId: null, limit: undefined, used: undefined };
+  }
+  const usageCheck = await assertUsageLimit(ownerId, 'aiMessages', 1, workspaceId, { increment: false });
+  return { allowed: usageCheck.allowed, ownerId, limit: usageCheck.limit, used: usageCheck.current };
 };
 
 const logAutomation = (message: string, details?: Record<string, any>) => {
@@ -816,6 +832,20 @@ async function handleAiReplyStep(params: {
     trackStats = true,
     logContext,
   } = params;
+  const workspaceId = conversation.workspaceId?.toString?.() || conversation.workspaceId;
+  let usageOwnerId: string | null = null;
+  if (deliveryMode !== 'preview' && workspaceId) {
+    const usageCheck = await checkAiMessageAllowance(workspaceId);
+    if (!usageCheck.allowed) {
+      logAutomation('⚠️  [AUTOMATION] AI message limit reached', {
+        workspaceId,
+        limit: usageCheck.limit,
+        used: usageCheck.used,
+      });
+      return { success: false, error: 'AI message limit reached for this workspace' };
+    }
+    usageOwnerId = usageCheck.ownerId;
+  }
   const settings = await getWorkspaceSettings(conversation.workspaceId);
   const aiSettings = {
     ...(graph.aiSettings || {}),
@@ -888,6 +918,9 @@ async function handleAiReplyStep(params: {
     });
   }
   logAutomationStep('flow_ai_reply_send', sendStart);
+  if (deliveryMode !== 'preview' && usageOwnerId && workspaceId) {
+    await assertUsageLimit(usageOwnerId, 'aiMessages', 1, workspaceId);
+  }
 
   let ticketId = activeTicket?._id;
   if (aiResponse.shouldEscalate && !ticketId && deliveryMode !== 'preview') {
@@ -1317,6 +1350,20 @@ async function executeFlowPlan(params: {
         ...(plan.graph.aiSettings || {}),
         ...(step.aiSettings || {}),
       };
+      const workspaceId = conversation.workspaceId?.toString?.() || conversation.workspaceId;
+      let usageOwnerId: string | null = null;
+      if (deliveryMode !== 'preview' && workspaceId) {
+        const usageCheck = await checkAiMessageAllowance(workspaceId);
+        if (!usageCheck.allowed) {
+          logAutomation('⚠️  [AUTOMATION] AI message limit reached', {
+            workspaceId,
+            limit: usageCheck.limit,
+            used: usageCheck.used,
+          });
+          return { success: false, error: 'AI message limit reached for this workspace', sentCount, executedSteps };
+        }
+        usageOwnerId = usageCheck.ownerId;
+      }
       const agentSteps = Array.isArray(step.agentSteps)
         ? step.agentSteps.map((agentStep) => String(agentStep || '').trim()).filter(Boolean)
         : [];
@@ -1405,6 +1452,9 @@ async function executeFlowPlan(params: {
         });
       }
       sentCount += 1;
+      if (deliveryMode !== 'preview' && usageOwnerId && workspaceId) {
+        await assertUsageLimit(usageOwnerId, 'aiMessages', 1, workspaceId);
+      }
 
       const collectedFields = agentResult.collectedFields || {};
       Object.entries(collectedFields).forEach(([key, value]) => {

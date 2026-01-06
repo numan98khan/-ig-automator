@@ -9,6 +9,7 @@ import {
   AutomationInstance,
   FlowExposedField,
   FlowTemplate,
+  ResourceUsage,
   tierAPI,
   WorkspaceTierResponse,
 } from '../services/api';
@@ -178,6 +179,7 @@ const Automations: React.FC = () => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewSending, setPreviewSending] = useState(false);
   const [showAutomationUpgrade, setShowAutomationUpgrade] = useState(false);
+  const [aiUsage, setAiUsage] = useState<ResourceUsage | null>(null);
 
   const accountDisplayName = activeAccount?.name || activeAccount?.username || 'Connected account';
   const accountHandle = activeAccount?.username || 'connected_account';
@@ -270,6 +272,33 @@ const Automations: React.FC = () => {
     loadTier();
     return () => {
       cancelled = true;
+    };
+  }, [currentWorkspace]);
+
+  useEffect(() => {
+    if (!currentWorkspace) return;
+    let cancelled = false;
+    let pollTimer: number | undefined;
+    const loadUsage = async () => {
+      try {
+        const data = await tierAPI.getMine(currentWorkspace._id);
+        if (!cancelled) {
+          setAiUsage(data?.usage?.aiMessages || null);
+        }
+      } catch (err) {
+        console.error('Error loading AI usage:', err);
+        if (!cancelled) {
+          setAiUsage(null);
+        }
+      }
+    };
+    loadUsage();
+    pollTimer = window.setInterval(loadUsage, 20000);
+    return () => {
+      cancelled = true;
+      if (pollTimer) {
+        window.clearInterval(pollTimer);
+      }
     };
   }, [currentWorkspace]);
 
@@ -810,6 +839,7 @@ const Automations: React.FC = () => {
                   automations={automations}
                   summaryStats={summaryStats}
                   loading={loading}
+                  aiUsage={aiUsage}
                   onCreate={handleOpenCreateModal}
                   onOpen={handleOpenAutomationDetails}
                   onEdit={handleOpenEditAutomation}
