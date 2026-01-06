@@ -25,6 +25,7 @@ import { Badge } from '../components/ui/Badge';
 import AssistantWidget from '../components/AssistantWidget';
 import Seo from '../components/Seo';
 import { getApiBaseUrl } from '../utils/apiBaseUrl';
+import { requireEnv } from '../utils/env';
 
 const Landing: React.FC = () => {
   const [loading, setLoading] = useState(false);
