@@ -200,7 +200,6 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         sessionId: options?.sessionId ?? previewSessionIdRef.current ?? undefined,
       });
       applyPreviewPayload(response);
-      setPreviewMessages(response.messages || []);
     } catch (err) {
       console.error('Error starting preview session:', err);
       pushPreviewToast('error', 'Unable to start preview. Please try again.');
@@ -304,10 +303,13 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     };
   }, [automation._id, clearPreviewToast, loadProfiles, startPreviewSession]);
 
+  const previewStateSessionId = previewState.session?._id;
+
   useEffect(() => {
     if (!previewSessionId) return;
+    if (previewStateSessionId === previewSessionId) return;
     void refreshPreviewState();
-  }, [previewSessionId, refreshPreviewState]);
+  }, [previewSessionId, previewStateSessionId, refreshPreviewState]);
 
   const handlePreviewInputChange = (value: string) => {
     setPreviewInputValue(value);

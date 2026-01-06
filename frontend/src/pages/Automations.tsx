@@ -97,6 +97,50 @@ const normalizeConfig = (
   return { config };
 };
 
+const DEFAULT_AUTOMATION_STATS: AutomationInstance['stats'] = {
+  totalTriggered: 0,
+  totalRepliesSent: 0,
+  commentDm: {
+    sent: 0,
+    failed: 0,
+  },
+  autoReply: {
+    sent: 0,
+  },
+  followup: {
+    sent: 0,
+    pending: 0,
+  },
+};
+
+const automationsCache = new Map<string, { items: AutomationInstance[]; updatedAt: number }>();
+const templatesCache: { items: FlowTemplate[] | null; updatedAt: number | null } = {
+  items: null,
+  updatedAt: null,
+};
+
+const hydrateAutomation = (
+  automation: AutomationInstance,
+  fallback?: AutomationInstance | null,
+  templateFallback?: FlowTemplate | null,
+  templateVersionFallback?: FlowTemplate['currentVersion'] | null,
+): AutomationInstance => {
+  const template = automation.template ?? fallback?.template ?? templateFallback ?? null;
+  const templateVersion = automation.templateVersion
+    ?? fallback?.templateVersion
+    ?? templateVersionFallback
+    ?? template?.currentVersion
+    ?? null;
+
+  return {
+    ...fallback,
+    ...automation,
+    stats: automation.stats || fallback?.stats || DEFAULT_AUTOMATION_STATS,
+    template,
+    templateVersion,
+  };
+};
+
 const Automations: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const { activeAccount } = useAccountContext();
@@ -176,15 +220,25 @@ const Automations: React.FC = () => {
 
   useEffect(() => {
     if (currentWorkspace) {
-      loadData();
+      const cachedAutomations = automationsCache.get(currentWorkspace._id);
+      if (cachedAutomations) {
+        setAutomations(cachedAutomations.items);
+        setLoading(false);
+      }
+      if (templatesCache.items) {
+        setTemplates(templatesCache.items);
+      }
+      loadData({ silent: Boolean(cachedAutomations) });
     }
   }, [currentWorkspace]);
 
-  const loadData = async () => {
+  const loadData = async (options?: { silent?: boolean }) => {
     if (!currentWorkspace) return;
 
     try {
-      setLoading(true);
+      if (!options?.silent) {
+        setLoading(true);
+      }
       setError(null);
       const [automationsData, templatesData] = await Promise.all([
         automationAPI.getByWorkspace(currentWorkspace._id),
@@ -192,11 +246,16 @@ const Automations: React.FC = () => {
       ]);
       setAutomations(automationsData);
       setTemplates(templatesData);
+      automationsCache.set(currentWorkspace._id, { items: automationsData, updatedAt: Date.now() });
+      templatesCache.items = templatesData;
+      templatesCache.updatedAt = Date.now();
     } catch (err) {
       console.error('Error loading data:', err);
       setError('Failed to load automations');
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -316,6 +375,10 @@ const Automations: React.FC = () => {
       return;
     }
 
+    const templateSnapshot = selectedTemplate;
+    const versionSnapshot = selectedTemplate.currentVersion;
+    const editingSnapshot = editingAutomation;
+
     setSaving(true);
     try {
       const payload = {
@@ -325,10 +388,11 @@ const Automations: React.FC = () => {
         templateVersionId: selectedTemplate.currentVersion._id,
       };
 
+      let savedAutomation: AutomationInstance;
       if (editingAutomation) {
-        await automationAPI.update(editingAutomation._id, payload);
+        savedAutomation = await automationAPI.update(editingAutomation._id, payload);
       } else {
-        await automationAPI.create({
+        savedAutomation = await automationAPI.create({
           ...payload,
           workspaceId: currentWorkspace._id,
           isActive: true,
@@ -336,8 +400,26 @@ const Automations: React.FC = () => {
         });
       }
 
+      const hydrated = hydrateAutomation(savedAutomation, editingSnapshot, templateSnapshot, versionSnapshot);
+      setAutomations((prev) => {
+        const existingIndex = prev.findIndex((item) => item._id === hydrated._id);
+        let next: AutomationInstance[];
+        if (existingIndex >= 0) {
+          next = prev.map((item) => (
+            item._id === hydrated._id
+              ? hydrateAutomation(hydrated, item, templateSnapshot, versionSnapshot)
+              : item
+          ));
+        } else {
+          next = [hydrated, ...prev];
+        }
+        if (currentWorkspace) {
+          automationsCache.set(currentWorkspace._id, { items: next, updatedAt: Date.now() });
+        }
+        return next;
+      });
+
       handleCloseCreateView();
-      loadData();
     } catch (err) {
       console.error('Error saving automation:', err);
       setError('Failed to save automation');
@@ -348,8 +430,19 @@ const Automations: React.FC = () => {
 
   const handleToggle = async (automation: AutomationInstance) => {
     try {
-      await automationAPI.toggle(automation._id);
-      loadData();
+      const updated = await automationAPI.toggle(automation._id);
+      setAutomations((prev) => {
+        const next = prev.map((item) => (
+          item._id === updated._id ? hydrateAutomation(updated, item) : item
+        ));
+        if (currentWorkspace) {
+          automationsCache.set(currentWorkspace._id, { items: next, updatedAt: Date.now() });
+        }
+        return next;
+      });
+      if (selectedAutomation?._id === updated._id) {
+        setSelectedAutomation((prev) => (prev ? hydrateAutomation(updated, prev) : prev));
+      }
     } catch (err) {
       console.error('Error toggling automation:', err);
       setError('Failed to toggle automation');
@@ -361,7 +454,17 @@ const Automations: React.FC = () => {
 
     try {
       await automationAPI.delete(automation._id);
-      loadData();
+      setAutomations((prev) => {
+        const next = prev.filter((item) => item._id !== automation._id);
+        if (currentWorkspace) {
+          automationsCache.set(currentWorkspace._id, { items: next, updatedAt: Date.now() });
+        }
+        return next;
+      });
+      if (selectedAutomation?._id === automation._id) {
+        setSelectedAutomation(null);
+        setAutomationView('list');
+      }
     } catch (err) {
       console.error('Error deleting automation:', err);
       setError('Failed to delete automation');

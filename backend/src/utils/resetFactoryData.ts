@@ -33,7 +33,7 @@ const resetPostgres = async () => {
     await postgresQuery('DELETE FROM core.usage_counters');
     await postgresQuery('DELETE FROM core.openai_usage');
     await postgresQuery('DELETE FROM core.billing_accounts');
-    await postgresQuery('DELETE FROM core.tiers');
+    // Preserve admin-configured tiers.
     await postgresQuery('DELETE FROM core.users WHERE id <> $1', [adminId]);
     await postgresQuery('COMMIT');
   } catch (error) {
@@ -49,13 +49,17 @@ const resetMongo = async () => {
   }
 
   const collections = await db.listCollections().toArray();
+  const adminCollections = new Set([
+    'adminlogsettings',
+    'adminlogevents',
+    'flowdrafts',
+    'globalassistantconfigs',
+    'globaluisettings',
+    'automationintents',
+  ]);
   for (const collection of collections) {
     const name = collection.name;
-    if (name === 'adminlogsettings') {
-      continue;
-    }
-    
-    if (name === 'adminlogsettings') {
+    if (adminCollections.has(name)) {
       continue;
     }
 

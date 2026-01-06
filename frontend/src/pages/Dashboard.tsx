@@ -35,6 +35,11 @@ const badgeVariantMap = {
   followup: { label: 'Follow-up due', variant: 'secondary' as const },
 };
 
+const dashboardCache = new Map<string, {
+  summary: DashboardSummaryResponse;
+  insights: DashboardInsightsResponse;
+}>();
+
 const Dashboard: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const [range, setRange] = useState<TimeRange>('7d');
@@ -46,21 +51,37 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     if (!currentWorkspace) return;
+    let isActive = true;
+
+    const insightRange = range === 'today' ? '7d' : range;
+    const cacheKey = `${currentWorkspace._id}:${range}:${insightRange}`;
+    const cached = dashboardCache.get(cacheKey);
+    if (cached) {
+      setSummary(cached.summary);
+      setInsights(cached.insights);
+    }
 
     const summaryPromise = dashboardAPI.getSummary(currentWorkspace._id, range);
-    const insightRange = range === 'today' ? '7d' : range;
     const insightsPromise = dashboardAPI.getInsights(currentWorkspace._id, insightRange as '7d' | '30d');
 
     Promise.all([summaryPromise, insightsPromise])
       .then(([summaryData, insightsData]) => {
+        if (!isActive) return;
+        dashboardCache.set(cacheKey, { summary: summaryData, insights: insightsData });
         setSummary(summaryData);
         setInsights(insightsData);
       })
       .catch((error) => {
         console.error('Failed to load dashboard summary', error);
-        setSummary(null);
-        setInsights(null);
+        if (!cached && isActive) {
+          setSummary(null);
+          setInsights(null);
+        }
       });
+
+    return () => {
+      isActive = false;
+    };
   }, [currentWorkspace, range]);
 
   useEffect(() => {
