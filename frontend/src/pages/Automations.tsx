@@ -9,6 +9,8 @@ import {
   AutomationInstance,
   FlowExposedField,
   FlowTemplate,
+  tierAPI,
+  WorkspaceTierResponse,
 } from '../services/api';
 import { AlertTriangle, PlayCircle, Clock } from 'lucide-react';
 import { AutomationsSidebar } from './automations/AutomationsSidebar';
@@ -151,6 +153,7 @@ const Automations: React.FC = () => {
   const [templates, setTemplates] = useState<FlowTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [workspaceTier, setWorkspaceTier] = useState<WorkspaceTierResponse | null>(null);
 
   const [editingAutomation, setEditingAutomation] = useState<AutomationInstance | null>(null);
   const [selectedAutomation, setSelectedAutomation] = useState<AutomationInstance | null>(null);
@@ -178,6 +181,7 @@ const Automations: React.FC = () => {
   const isCreateView = isAutomationsSection && (automationView === 'create' || automationView === 'edit');
   const isDetailsView = isAutomationsSection && automationView === 'details';
   const isAutomationFullHeightView = isCreateView || isDetailsView;
+  const isCustomAutomationEnabled = workspaceTier?.limits?.flowBuilder !== false;
 
   const [creationMode, setCreationMode] = useState<'templates' | 'custom'>('templates');
   const [currentStep, setCurrentStep] = useState<'gallery' | 'setup' | 'review'>('gallery');
@@ -231,6 +235,34 @@ const Automations: React.FC = () => {
       loadData({ silent: Boolean(cachedAutomations) });
     }
   }, [currentWorkspace]);
+
+  useEffect(() => {
+    if (!currentWorkspace) return;
+    let cancelled = false;
+    const loadTier = async () => {
+      try {
+        const data = await tierAPI.getWorkspace(currentWorkspace._id);
+        if (!cancelled) {
+          setWorkspaceTier(data);
+        }
+      } catch (err) {
+        console.error('Error loading workspace tier:', err);
+        if (!cancelled) {
+          setWorkspaceTier(null);
+        }
+      }
+    };
+    loadTier();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWorkspace]);
+
+  useEffect(() => {
+    if (!isCustomAutomationEnabled && creationMode === 'custom') {
+      setCreationMode('templates');
+    }
+  }, [creationMode, isCustomAutomationEnabled]);
 
   const loadData = async (options?: { silent?: boolean }) => {
     if (!currentWorkspace) return;
@@ -635,6 +667,7 @@ const Automations: React.FC = () => {
                   createViewTitle={createViewTitle}
                   isCreateSetupView={isCreateSetupView}
                   editingAutomation={editingAutomation}
+                  allowCustomCreation={isCustomAutomationEnabled}
                   creationMode={creationMode}
                   currentStep={currentStep}
                   selectedTemplate={selectedTemplate}

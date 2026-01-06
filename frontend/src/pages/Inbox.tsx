@@ -76,9 +76,12 @@ const Inbox: React.FC = () => {
   const [automationSession, setAutomationSession] = useState<AutomationSessionSummary | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionAction, setSessionAction] = useState<'pause' | 'stop' | null>(null);
+  const workspaceId = currentWorkspace?._id ?? null;
+  const activeAccountId = activeAccount?._id ?? null;
+  const selectedConversationId = selectedConversation?._id ?? null;
 
   const getCurrentCacheKey = () => (
-    currentWorkspace ? getInboxCacheKey(currentWorkspace._id, activeAccount?._id) : null
+    workspaceId ? getInboxCacheKey(workspaceId, activeAccountId) : null
   );
 
   const updateInboxCache = (updates: Partial<InboxCacheEntry>) => {
@@ -134,8 +137,8 @@ const Inbox: React.FC = () => {
   }, [messages]);
 
   useEffect(() => {
-    if (currentWorkspace) {
-      const cacheKey = getInboxCacheKey(currentWorkspace._id, activeAccount?._id);
+    if (workspaceId) {
+      const cacheKey = getInboxCacheKey(workspaceId, activeAccountId);
       const cached = inboxCache.get(cacheKey);
       if (cached) {
         setInstagramAccounts(cached.instagramAccounts);
@@ -158,40 +161,40 @@ const Inbox: React.FC = () => {
       }
       loadData({ silent: Boolean(cached) });
     }
-  }, [currentWorkspace, activeAccount, requestedConversationId]);
+  }, [workspaceId, activeAccountId, requestedConversationId]);
 
   useEffect(() => {
-    if (!currentWorkspace) return;
+    if (!workspaceId) return;
     const interval = setInterval(() => {
       loadConversations();
-      if (selectedConversation) {
+      if (selectedConversationId) {
         loadMessages();
         loadAutomationSession({ silent: true });
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [currentWorkspace, selectedConversation, activeAccount]);
+  }, [workspaceId, selectedConversationId, activeAccountId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('instagram_connected') === 'true') {
       window.history.replaceState({}, '', window.location.pathname);
-      if (currentWorkspace) {
+      if (workspaceId) {
         loadData();
       }
     }
-  }, [currentWorkspace, activeAccount]);
+  }, [workspaceId, activeAccountId]);
 
   const loadData = async (options?: { silent?: boolean }) => {
-    if (!currentWorkspace) return;
+    if (!workspaceId) return;
     try {
       if (!options?.silent) {
         setLoading(true);
       }
       const [accountsData, conversationsData, tierData] = await Promise.all([
-        instagramAPI.getByWorkspace(currentWorkspace._id),
-        conversationAPI.getByWorkspace(currentWorkspace._id),
-        tierAPI.getWorkspace(currentWorkspace._id),
+        instagramAPI.getByWorkspace(workspaceId),
+        conversationAPI.getByWorkspace(workspaceId),
+        tierAPI.getWorkspace(workspaceId),
       ]);
 
       setInstagramAccounts(accountsData || accountContextList || []);
@@ -201,7 +204,7 @@ const Inbox: React.FC = () => {
         workspaceTier: tierData,
       });
 
-      if (!activeAccount) {
+      if (!activeAccountId) {
         setConversations([]);
         setSelectedConversation(null);
         setMessages([]);
@@ -214,7 +217,7 @@ const Inbox: React.FC = () => {
       }
 
       const scopedConversations = (conversationsData || []).filter(
-        (conv) => conv.instagramAccountId === activeAccount._id,
+        (conv) => conv.instagramAccountId === activeAccountId,
       );
 
       setConversations(scopedConversations || []);
@@ -240,15 +243,15 @@ const Inbox: React.FC = () => {
   };
 
   const loadConversations = async () => {
-    if (!currentWorkspace || !activeAccount) return;
+    if (!workspaceId || !activeAccountId) return;
     try {
-      const conversationsData = await conversationAPI.getByWorkspace(currentWorkspace._id);
+      const conversationsData = await conversationAPI.getByWorkspace(workspaceId);
       const scopedConversations = (conversationsData || []).filter(
-        (conv) => conv.instagramAccountId === activeAccount._id,
+        (conv) => conv.instagramAccountId === activeAccountId,
       );
       setConversations(scopedConversations || []);
       updateInboxCache({ conversations: scopedConversations || [] });
-      if (selectedConversation && selectedConversation.instagramAccountId !== activeAccount._id) {
+      if (selectedConversation && selectedConversation.instagramAccountId !== activeAccountId) {
         setSelectedConversation(null);
         updateInboxCache({ selectedConversationId: null });
       }
@@ -258,16 +261,17 @@ const Inbox: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!selectedConversation) return;
+    if (!selectedConversationId) return;
     loadMessages();
     loadAutomationSession({ silent: true });
     setShouldAutoScroll(true);
-  }, [selectedConversation]);
+  }, [selectedConversationId]);
 
   const loadMessages = async () => {
-    if (!selectedConversation || !selectedConversation._id) return;
+    if (!selectedConversationId) return;
+    const conversationId = selectedConversationId;
     try {
-      const data = await messageAPI.getByConversation(selectedConversation._id);
+      const data = await messageAPI.getByConversation(conversationId);
       setMessages((prevMessages) => {
         const cacheKey = getCurrentCacheKey();
         const previousMessageCache = cacheKey
@@ -280,18 +284,16 @@ const Inbox: React.FC = () => {
             if (prevMsg && prevMsg._id === newMsg._id) return newMsg;
             return newMsg;
           });
-        if (selectedConversation) {
-          updateInboxCache({
-            messagesByConversation: {
-              ...(previousMessageCache || {}),
-              [selectedConversation._id]: nextMessages,
-            },
-            selectedConversationId: selectedConversation._id,
-          });
-        }
+        updateInboxCache({
+          messagesByConversation: {
+            ...(previousMessageCache || {}),
+            [conversationId]: nextMessages,
+          },
+          selectedConversationId: conversationId,
+        });
         return nextMessages;
       });
-      await messageAPI.markSeen(selectedConversation._id);
+      await messageAPI.markSeen(conversationId);
     } catch (error) {
       console.error('Error loading messages:', error);
     }

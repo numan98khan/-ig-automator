@@ -34,7 +34,7 @@ const Layout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, currentWorkspace, logout } = useAuth();
-  const { accounts, activeAccount, setActiveAccount, refreshAccounts } = useAccountContext();
+  const { accounts, activeAccount, setActiveAccount } = useAccountContext();
   const { theme, setTheme } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -81,10 +81,6 @@ const Layout: React.FC = () => {
     logout();
     window.location.href = '/';
   };
-
-  useEffect(() => {
-    refreshAccounts();
-  }, [refreshAccounts]);
 
   useEffect(() => {
     recordBreadcrumb({ type: 'route', label: location.pathname, meta: { path: location.pathname } });

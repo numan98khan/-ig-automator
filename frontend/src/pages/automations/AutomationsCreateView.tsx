@@ -26,6 +26,7 @@ type AutomationsCreateViewProps = {
   createViewTitle: string;
   isCreateSetupView: boolean;
   editingAutomation: AutomationInstance | null;
+  allowCustomCreation: boolean;
   creationMode: 'templates' | 'custom';
   currentStep: 'gallery' | 'setup' | 'review';
   selectedTemplate: FlowTemplate | null;
@@ -114,6 +115,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   createViewTitle,
   isCreateSetupView,
   editingAutomation,
+  allowCustomCreation,
   creationMode,
   currentStep,
   selectedTemplate,
@@ -539,12 +541,18 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                     Templates <span className="text-xs text-primary">(Recommended)</span>
                   </button>
                   <button
-                    onClick={() => onChangeCreationMode('custom')}
+                    onClick={() => {
+                      if (allowCustomCreation) {
+                        onChangeCreationMode('custom');
+                      }
+                    }}
+                    disabled={!allowCustomCreation}
+                    title={!allowCustomCreation ? 'Custom automations are disabled for this tier.' : undefined}
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                       creationMode === 'custom'
                         ? 'bg-background text-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    } ${!allowCustomCreation ? 'cursor-not-allowed opacity-50' : ''}`}
                   >
                     Custom
                   </button>
