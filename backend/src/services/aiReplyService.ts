@@ -695,7 +695,7 @@ Generate a response following all rules above. Return JSON with:
 
   // Final safeguard: never send empty text
   if (!reply.replyText.trim()) {
-    reply.replyText = 'Thanks for reaching out! A teammate will follow up shortly.';
+    reply.replyText = 'Thanks for reaching out! We\'ll be with you shortly';
   }
 
   reply.knowledgeItemsUsed = knowledgeItemsUsed;
