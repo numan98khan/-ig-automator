@@ -80,13 +80,11 @@ const embedText = async (text: string): Promise<number[]> => {
   let requestStart: bigint | null = null;
   try {
     if (!process.env.OPENAI_API_KEY) return [];
-    const model = process.env.OPENAI_EMBEDDINGS_MODEL || DEFAULT_EMBEDDINGS_MODEL;
-    if (!model) {
-      if (!loggedMissingEmbeddingsModel) {
-        console.warn('OPENAI_EMBEDDINGS_MODEL not set; using default embeddings model.');
-        loggedMissingEmbeddingsModel = true;
-      }
-      return [];
+    const envModel = process.env.OPENAI_EMBEDDINGS_MODEL;
+    const model = envModel || DEFAULT_EMBEDDINGS_MODEL;
+    if (!envModel && !loggedMissingEmbeddingsModel) {
+      console.warn('OPENAI_EMBEDDINGS_MODEL not set; using default embeddings model.');
+      loggedMissingEmbeddingsModel = true;
     }
     requestStart = process.hrtime.bigint();
     const response = await openai.embeddings.create({

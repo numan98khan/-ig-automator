@@ -363,6 +363,23 @@ Return JSON with:
       }
     }
 
+    if (!finalReply) {
+      logAiDebug('agent_empty_reply', {
+        model,
+        responsePreview: responseContent ? responseContent.slice(0, 200) : undefined,
+      });
+      return {
+        replyText: 'Thanks for your message! A teammate will follow up shortly.',
+        advanceStep,
+        endConversation,
+        stepSummary,
+        collectedFields,
+        missingFields,
+        askedQuestion,
+        shouldStop,
+      };
+    }
+
     return {
       replyText: finalReply,
       advanceStep,
