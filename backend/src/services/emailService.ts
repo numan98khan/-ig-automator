@@ -1,13 +1,10 @@
 import { Resend } from 'resend';
 import { CoreUser } from '../repositories/core/userRepository';
+import { requireEnv, requireOneOf } from '../utils/requireEnv';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const EMAIL_FROM = process.env.EMAIL_FROM || 'no-reply@yourdomain.com';
-const APP_BASE_URL = (
-  process.env.APP_BASE_URL ||
-  process.env.FRONTEND_URL ||
-  'https://sendfx.ai'
-).replace(/\/$/, '');
+const EMAIL_FROM = requireEnv('EMAIL_FROM');
+const APP_BASE_URL = requireOneOf(['APP_BASE_URL', 'FRONTEND_URL']).replace(/\/$/, '');
 
 if (!RESEND_API_KEY) {
   console.warn('⚠️ RESEND_API_KEY not set. Email sending will fail.');

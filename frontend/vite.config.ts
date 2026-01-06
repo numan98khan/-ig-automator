@@ -4,6 +4,14 @@ import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
+const requireEnv = (name: string) => {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+  return value
+}
+
 // Get git commit hash
 const getGitCommitSha = () => {
   try {
@@ -46,7 +54,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:5000',
+        target: requireEnv('VITE_API_URL'),
         changeOrigin: true,
       }
     }

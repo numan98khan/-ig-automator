@@ -12,8 +12,9 @@ import {
 } from '../repositories/core/tierRepository';
 import { getWorkspaceById } from '../repositories/core/workspaceRepository';
 import { getUsageCounter, upsertUsageCounter } from '../repositories/core/usageCounterRepository';
+import { requireEnv } from '../utils/requireEnv';
 
-const DEFAULT_PERIOD_DAYS = parseInt(process.env.TIER_USAGE_PERIOD_DAYS || '30', 10);
+const DEFAULT_PERIOD_DAYS = parseInt(requireEnv('TIER_USAGE_PERIOD_DAYS'), 10);
 
 export interface TierSummary {
   tier: CoreTier | null;

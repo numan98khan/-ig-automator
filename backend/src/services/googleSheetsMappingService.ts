@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
+import { requireEnv } from '../utils/requireEnv';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -118,7 +119,7 @@ export async function analyzeInventoryMapping(
     required: ['fields', 'summary'],
   };
 
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const model = requireEnv('OPENAI_MODEL');
   const requestStart = process.hrtime.bigint();
   let response;
   try {

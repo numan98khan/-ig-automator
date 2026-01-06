@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { requireEnv } from '../utils/env';
 
 type SeoProps = {
   title: string;
@@ -17,8 +18,7 @@ const DEFAULT_IMAGE = '/sendfx.png';
 const SITE_NAME = 'SendFx';
 
 const getBaseUrl = () => {
-  const envUrl = import.meta.env.VITE_SITE_URL as string | undefined;
-  const baseUrl = envUrl || window.location.origin;
+  const baseUrl = requireEnv('VITE_SITE_URL');
   return baseUrl.replace(/\/$/, '');
 };
 

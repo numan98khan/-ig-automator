@@ -24,6 +24,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import AssistantWidget from '../components/AssistantWidget';
 import Seo from '../components/Seo';
+import { requireEnv } from '../utils/env';
 
 const Landing: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -39,7 +40,7 @@ const Landing: React.FC = () => {
   const navigate = useNavigate();
   const seoDescription =
     'SendFx is Instagram DM automation and a lightweight CRM for SMBs. Route and qualify DMs, reply with guardrails and approvals, and sync leads to Google Sheets.';
-  const siteUrl = (import.meta.env.VITE_SITE_URL || window.location.origin).replace(/\/$/, '');
+  const siteUrl = requireEnv('VITE_SITE_URL').replace(/\/$/, '');
   const demoVideoUrl = (import.meta.env.VITE_DEMO_VIDEO_URL as string | undefined)?.trim();
   const hasDemoVideo = Boolean(demoVideoUrl);
   const structuredData = {
@@ -158,7 +159,7 @@ const Landing: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const apiUrl = requireEnv('VITE_API_URL');
       const response = await fetch(`${apiUrl}/api/instagram/auth-login`);
 
       if (!response.ok) {

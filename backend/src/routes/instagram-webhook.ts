@@ -12,6 +12,7 @@ import {
 import { transcribeAudioFromUrl } from '../services/transcriptionService';
 import { trackDailyMetric } from '../services/reportingService';
 import { getLogSettingsSnapshot } from '../services/adminLogSettingsService';
+import { requireEnv } from '../utils/requireEnv';
 
 const router = express.Router();
 
@@ -24,7 +25,7 @@ const logAutomation = (message: string, details?: Record<string, unknown>) => {
   console.log(message);
 };
 
-const WEBHOOK_VERIFY_TOKEN = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN || 'your-verify-token';
+const WEBHOOK_VERIFY_TOKEN = requireEnv('INSTAGRAM_WEBHOOK_VERIFY_TOKEN');
 
 /**
  * Webhook verification endpoint (GET)

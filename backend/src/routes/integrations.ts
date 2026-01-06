@@ -12,18 +12,16 @@ import {
 import { analyzeInventoryMapping } from '../services/googleSheetsMappingService';
 import { getWorkspaceById } from '../repositories/core/workspaceRepository';
 import { assertWorkspaceFeatureAccess } from '../services/tierService';
+import { requireEnv } from '../utils/requireEnv';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-const GOOGLE_REDIRECT_URI =
-  process.env.GOOGLE_REDIRECT_URI || 'https://cowlike-silvia-criterional.ngrok-free.dev/api/integrations/google-sheets/oauth/callback';
+const JWT_SECRET = requireEnv('JWT_SECRET');
+const FRONTEND_URL = requireEnv('FRONTEND_URL');
+const GOOGLE_REDIRECT_URI = requireEnv('GOOGLE_REDIRECT_URI');
+const GOOGLE_CLIENT_ID = requireEnv('GOOGLE_CLIENT_ID');
+const GOOGLE_CLIENT_SECRET = requireEnv('GOOGLE_CLIENT_SECRET');
 
 function buildGoogleAuthUrl(state: string) {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  if (!clientId) {
-    throw new Error('GOOGLE_CLIENT_ID is missing');
-  }
   const scope = [
     'https://www.googleapis.com/auth/spreadsheets.readonly',
     'https://www.googleapis.com/auth/drive.metadata.readonly',
@@ -31,7 +29,7 @@ function buildGoogleAuthUrl(state: string) {
     'email',
   ].join(' ');
   const params = new URLSearchParams({
-    client_id: clientId,
+    client_id: GOOGLE_CLIENT_ID,
     redirect_uri: GOOGLE_REDIRECT_URI,
     response_type: 'code',
     access_type: 'offline',
@@ -117,18 +115,12 @@ router.get('/google-sheets/oauth/callback', async (req: AuthRequest, res: Respon
       return res.redirect(`${FRONTEND_URL}/automations?section=integrations&googleSheets=error`);
     }
 
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    if (!clientId || !clientSecret) {
-      return res.redirect(`${FRONTEND_URL}/automations?section=integrations&googleSheets=error`);
-    }
-
     const tokenResponse = await axios.post(
       'https://oauth2.googleapis.com/token',
       new URLSearchParams({
         code,
-        client_id: clientId,
-        client_secret: clientSecret,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
         redirect_uri: GOOGLE_REDIRECT_URI,
         grant_type: 'authorization_code',
       }),

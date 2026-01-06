@@ -2,9 +2,10 @@ import { Pool } from 'pg';
 import OpenAI from 'openai';
 import KnowledgeItem from '../models/KnowledgeItem';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
+import { requireEnv } from '../utils/requireEnv';
 
 const connectionString = process.env.PGVECTOR_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL;
-const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDINGS_MODEL || 'text-embedding-3-small';
+const EMBEDDING_MODEL = requireEnv('OPENAI_EMBEDDINGS_MODEL');
 const EMBEDDING_DIMENSION = 1536;
 export const GLOBAL_WORKSPACE_KEY = 'global';
 

@@ -4,8 +4,11 @@ const path = require('path');
 const rootDir = path.resolve(__dirname, '..');
 const publicDir = path.join(rootDir, 'public');
 
-const rawSiteUrl = process.env.SITE_URL || process.env.VITE_SITE_URL || '';
-const baseUrl = (rawSiteUrl || 'http://localhost:3000').replace(/\/$/, '');
+const rawSiteUrl = process.env.SITE_URL || process.env.VITE_SITE_URL;
+if (!rawSiteUrl) {
+  throw new Error('Missing required environment variable: SITE_URL or VITE_SITE_URL');
+}
+const baseUrl = rawSiteUrl.replace(/\/$/, '');
 
 const indexablePages = [
   { path: '/', changefreq: 'weekly', priority: 1.0 },
@@ -45,7 +48,3 @@ const robotsTxt = `${robotsLines.join('\n')}\n`;
 fs.mkdirSync(publicDir, { recursive: true });
 fs.writeFileSync(path.join(publicDir, 'sitemap.xml'), sitemapXml);
 fs.writeFileSync(path.join(publicDir, 'robots.txt'), robotsTxt);
-
-if (!rawSiteUrl) {
-  console.warn('Warning: SITE_URL not set. Using http://localhost:3000 for sitemap/robots generation.');
-}

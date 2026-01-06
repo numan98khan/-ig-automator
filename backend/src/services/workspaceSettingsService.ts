@@ -8,6 +8,7 @@ import {
   DEFAULT_AUTOMATION_INTENTS,
   listAutomationIntentLabels,
 } from './automationIntentService';
+import { requireEnv } from '../utils/requireEnv';
 
 const DEFAULT_GOAL_CONFIGS: GoalConfigurations = {
   leadCapture: {
@@ -52,7 +53,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const INTENT_MODEL = process.env.OPENAI_INTENT_MODEL || 'gpt-4o-mini';
+const INTENT_MODEL = requireEnv('OPENAI_INTENT_MODEL');
 const INTENT_TEMPERATURE = 0;
 const INTENT_REASONING_EFFORT: AutomationIntentSettings['reasoningEffort'] = 'none';
 

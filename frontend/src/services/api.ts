@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { generateRequestId, recordRequestId } from './diagnostics';
+import { requireEnv } from '../utils/env';
 
 // API Base URL configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = requireEnv('VITE_API_URL');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
