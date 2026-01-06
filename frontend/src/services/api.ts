@@ -373,6 +373,7 @@ export interface KnowledgeItem {
 export type TriggerType =
   | 'post_comment'      // Post or Reel Comments
   | 'story_reply'       // Story Reply
+  | 'story_mention'     // Story Mention
   | 'dm_message'        // Instagram Message
   | 'story_share'       // User shares your Post or Reel as a Story (NEW)
   | 'instagram_ads'     // Instagram Ads (PRO)

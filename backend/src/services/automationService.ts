@@ -1754,12 +1754,13 @@ export async function executePreviewFlowForInstance(params: {
 
   if (!hasActiveState) {
     const triggers = runtime.triggers || [];
-    const dmTriggers = triggers.filter((trigger) => trigger.type === 'dm_message');
-    if (dmTriggers.length === 0) {
+    const previewTriggerTypes: TriggerType[] = ['dm_message', 'post_comment', 'story_reply', 'story_mention'];
+    const previewTriggers = triggers.filter((trigger) => previewTriggerTypes.includes(trigger.type));
+    if (previewTriggers.length === 0) {
       return { success: false, error: 'No triggers configured for preview', messages: [] };
     }
     let matched = false;
-    for (const trigger of dmTriggers) {
+    for (const trigger of previewTriggers) {
       if (await matchesTriggerConfig(messageText || '', trigger.config, messageContext)) {
         matched = true;
         break;

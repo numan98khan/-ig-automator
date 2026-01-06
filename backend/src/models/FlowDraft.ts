@@ -60,7 +60,7 @@ const flowFieldSchema = new Schema({
 const triggerDefinitionSchema = new Schema({
   type: {
     type: String,
-    enum: ['post_comment', 'story_reply', 'dm_message', 'story_share', 'instagram_ads', 'live_comment', 'ref_url'],
+    enum: ['post_comment', 'story_reply', 'story_mention', 'dm_message', 'story_share', 'instagram_ads', 'live_comment', 'ref_url'],
     required: true,
   },
   config: { type: Schema.Types.Mixed },

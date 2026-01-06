@@ -8,6 +8,7 @@ import {
   Megaphone,
   Video,
   ExternalLink,
+  AtSign,
 } from 'lucide-react';
 
 export const TRIGGER_METADATA: Record<TriggerType, { icon: React.ReactNode; label: string; description: string; badge?: string }> = {
@@ -20,6 +21,11 @@ export const TRIGGER_METADATA: Record<TriggerType, { icon: React.ReactNode; labe
     icon: <MessageCircle className="w-5 h-5" />,
     label: 'Story Reply',
     description: 'User replies to your Story',
+  },
+  story_mention: {
+    icon: <AtSign className="w-5 h-5" />,
+    label: 'Story Mention',
+    description: 'User mentions you in their Story',
   },
   dm_message: {
     icon: <Send className="w-5 h-5" />,
