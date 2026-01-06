@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { requireEnv } from '../utils/env';
+import { getApiBaseUrl } from '../utils/apiBaseUrl';
 
 type Theme = 'dark' | 'light' | 'system';
 type UiTheme = 'legacy' | 'comic';
@@ -67,7 +67,7 @@ export function ThemeProvider({
 
     const loadUiTheme = async () => {
       try {
-        const apiUrl = requireEnv('VITE_API_URL');
+        const apiUrl = getApiBaseUrl();
         const response = await fetch(`${apiUrl}/api/ui-settings`, { signal: controller.signal });
         if (!response.ok) return;
         const payload = await response.json();

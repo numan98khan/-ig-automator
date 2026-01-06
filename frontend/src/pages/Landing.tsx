@@ -24,7 +24,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import AssistantWidget from '../components/AssistantWidget';
 import Seo from '../components/Seo';
-import { requireEnv } from '../utils/env';
+import { getApiBaseUrl } from '../utils/apiBaseUrl';
 
 const Landing: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -159,7 +159,7 @@ const Landing: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const apiUrl = requireEnv('VITE_API_URL');
+      const apiUrl = getApiBaseUrl();
       const response = await fetch(`${apiUrl}/api/instagram/auth-login`);
 
       if (!response.ok) {
