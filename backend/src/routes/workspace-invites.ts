@@ -14,9 +14,10 @@ import {
   getUserById,
   updateUser,
 } from '../repositories/core/userRepository';
+import { requireEnv } from '../utils/requireEnv';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = requireEnv('JWT_SECRET');
 
 router.post('/send', authenticate, async (req: AuthRequest, res: Response) => {
   try {

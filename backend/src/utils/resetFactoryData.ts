@@ -1,8 +1,9 @@
 import mongoose from 'mongoose';
 import { connectDB } from '../config/database';
 import { closePostgresPool, postgresQuery } from '../db/postgres';
+import { requireEnv } from './requireEnv';
 
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? 'admin@sendfx.ai').toLowerCase();
+const ADMIN_EMAIL = requireEnv('ADMIN_EMAIL').toLowerCase();
 
 const resetPostgres = async () => {
   const adminUser = await postgresQuery<{ id: string }>(

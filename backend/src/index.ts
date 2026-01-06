@@ -36,13 +36,14 @@ import crmRoutes from './routes/crm';
 import uiSettingsRoutes from './routes/ui-settings';
 import { ensureDefaultAdmin } from './utils/defaultAdmin';
 import { initConsoleLogCapture } from './services/consoleLogCapture';
+import { requireEnv } from './utils/requireEnv';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
 initConsoleLogCapture();
-const PORT = process.env.PORT || 5000;
+const PORT = Number(requireEnv('PORT'));
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Middleware
@@ -139,7 +140,7 @@ startServer()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`Environment: ${process.env.NODE_ENV}`);
       if (isProduction) {
         console.log('Serving frontend from ../frontend/dist');
       }

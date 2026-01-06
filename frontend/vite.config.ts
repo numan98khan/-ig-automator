@@ -4,6 +4,14 @@ import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
+const requireEnv = (name: string) => {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+  return value
+}
+
 // Get git commit hash
 const getGitCommitSha = () => {
   try {
@@ -36,33 +44,39 @@ const getAppVersion = () => {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  define: {
-    'import.meta.env.VITE_GIT_COMMIT_SHA': JSON.stringify(getGitCommitSha()),
-    'import.meta.env.VITE_APP_VERSION': JSON.stringify(getAppVersion())
-  },
-  server: {
-    port: 3000,
-    proxy: {
-      '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:5000',
-        changeOrigin: true,
+export default defineConfig(({ command }) => {
+  const isServe = command === 'serve'
+
+  return {
+    plugins: [react()],
+    define: {
+      'import.meta.env.VITE_GIT_COMMIT_SHA': JSON.stringify(getGitCommitSha()),
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(getAppVersion())
+    },
+    server: isServe
+      ? {
+        port: 3000,
+        proxy: {
+          '/api': {
+            target: requireEnv('VITE_API_URL'),
+            changeOrigin: true,
+          }
+        }
       }
+      : undefined,
+    preview: {
+      host: "0.0.0.0",
+      port: 5173, // local default, overridden by $PORT on Railway
+      // ✅ Allow Railway domains + localhost for local testing
+      allowedHosts: [
+        // TODO: Add your Railway production domain here (e.g., "your-app.up.railway.app")
+        "localhost",
+        "127.0.0.1"
+      ],
+    },
+    build: {
+      outDir: 'dist',
+      sourcemap: false,
     }
-  },
-  preview: {
-    host: "0.0.0.0",
-    port: 5173, // local default, overridden by $PORT on Railway
-    // ✅ Allow Railway domains + localhost for local testing
-    allowedHosts: [
-      // TODO: Add your Railway production domain here (e.g., "your-app.up.railway.app")
-      "localhost",
-      "127.0.0.1"
-    ],
-  },
-  build: {
-    outDir: 'dist',
-    sourcemap: false,
   }
 })

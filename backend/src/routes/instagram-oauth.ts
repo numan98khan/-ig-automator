@@ -10,20 +10,17 @@ import {
 } from '../repositories/core/userRepository';
 import { createWorkspace, getWorkspaceById } from '../repositories/core/workspaceRepository';
 import { createWorkspaceMember, getWorkspaceMember } from '../repositories/core/workspaceMemberRepository';
+import { requireEnv } from '../utils/requireEnv';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = requireEnv('JWT_SECRET');
 
-const INSTAGRAM_CLIENT_ID = process.env.INSTAGRAM_CLIENT_ID;
-const INSTAGRAM_CLIENT_SECRET = process.env.INSTAGRAM_CLIENT_SECRET;
-const INSTAGRAM_REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI || 'http://localhost:5000/api/instagram/callback';
+const INSTAGRAM_CLIENT_ID = requireEnv('INSTAGRAM_CLIENT_ID');
+const INSTAGRAM_CLIENT_SECRET = requireEnv('INSTAGRAM_CLIENT_SECRET');
+const INSTAGRAM_REDIRECT_URI = requireEnv('INSTAGRAM_REDIRECT_URI');
 
 router.get('/auth-login', async (req: Request, res: Response) => {
   try {
-    if (!INSTAGRAM_CLIENT_ID) {
-      return res.status(500).json({ error: 'Instagram OAuth not configured' });
-    }
-
     const state = Buffer.from(JSON.stringify({
       isLogin: true,
       timestamp: Date.now(),
@@ -57,10 +54,6 @@ router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Workspace not found' });
     }
 
-    if (!INSTAGRAM_CLIENT_ID) {
-      return res.status(500).json({ error: 'Instagram OAuth not configured' });
-    }
-
     const state = Buffer.from(JSON.stringify({
       workspaceId,
       userId: req.userId,
@@ -82,7 +75,7 @@ router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
 });
 
 router.get('/callback', async (req: Request, res: Response) => {
-  const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const FRONTEND_URL = requireEnv('FRONTEND_URL');
 
   console.log('=== Instagram OAuth Callback Started ===');
   console.log('Query params:', req.query);

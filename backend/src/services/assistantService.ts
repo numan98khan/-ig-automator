@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logOpenAiUsage } from './openAiUsageService';
+import { requireEnv } from '../utils/requireEnv';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -67,7 +68,7 @@ export async function askAssistant(request: AssistantRequest): Promise<Assistant
       .join('\n')}`
     : 'No workspace knowledge available.';
 
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const model = requireEnv('OPENAI_MODEL');
   const requestPayload: any = {
     model,
     messages: [

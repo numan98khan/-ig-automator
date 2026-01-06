@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { requireEnv } from '../utils/requireEnv';
 
-const EMAIL_TOKEN_SECRET = process.env.EMAIL_TOKEN_SECRET || 'your-email-token-secret';
+const EMAIL_TOKEN_SECRET = requireEnv('EMAIL_TOKEN_SECRET');
 const TOKEN_EXPIRY = '24h'; // 24 hours for verification tokens
 
 export type TokenType = 'verify_email' | 'password_reset' | 'workspace_invite';
