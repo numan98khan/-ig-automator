@@ -9,6 +9,7 @@ import {
   listAutomationIntentLabels,
 } from './automationIntentService';
 import { requireEnv } from '../utils/requireEnv';
+import { normalizeReasoningEffort } from '../utils/aiReasoning';
 
 const DEFAULT_GOAL_CONFIGS: GoalConfigurations = {
   leadCapture: {
@@ -125,7 +126,10 @@ const detectIntentFromLabels = async (
     const temperature = typeof settings?.temperature === 'number'
       ? settings?.temperature
       : INTENT_TEMPERATURE;
-    const reasoningEffort = settings?.reasoningEffort || INTENT_REASONING_EFFORT;
+    const reasoningEffort = normalizeReasoningEffort(
+      model,
+      settings?.reasoningEffort || INTENT_REASONING_EFFORT,
+    );
 
     const requestPayload: any = {
       model,

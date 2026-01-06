@@ -7,6 +7,7 @@ import { AutomationAiSettings } from '../types/automation';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logOpenAiUsage } from './openAiUsageService';
+import { normalizeReasoningEffort } from '../utils/aiReasoning';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -86,7 +87,7 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
   const maxOutputTokens = typeof aiSettings?.maxOutputTokens === 'number'
     ? aiSettings?.maxOutputTokens
     : 420;
-  const reasoningEffort = aiSettings?.reasoningEffort;
+  const reasoningEffort = normalizeReasoningEffort(model, aiSettings?.reasoningEffort);
   const maxReplySentences = aiSettings?.maxReplySentences;
 
   const trimmedSteps = Array.isArray(steps)

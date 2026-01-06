@@ -2,7 +2,6 @@ import { Pool } from 'pg';
 import OpenAI from 'openai';
 import KnowledgeItem from '../models/KnowledgeItem';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
-import { requireEnv } from '../utils/requireEnv';
 
 const connectionString = process.env.PGVECTOR_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL;
 const EMBEDDING_DIMENSION = 1536;
@@ -22,6 +21,8 @@ const logAiTiming = (label: string, model: string | undefined, startNs: bigint, 
 let pool: Pool | null = null;
 let initialized = false;
 let loggedMissingPg = false;
+let loggedMissingEmbeddingsModel = false;
+const DEFAULT_EMBEDDINGS_MODEL = 'text-embedding-3-small';
 
 const getPool = (): Pool | null => {
   if (!connectionString) {
@@ -79,8 +80,15 @@ const embedText = async (text: string): Promise<number[]> => {
   let requestStart: bigint | null = null;
   try {
     if (!process.env.OPENAI_API_KEY) return [];
+    const model = process.env.OPENAI_EMBEDDINGS_MODEL || DEFAULT_EMBEDDINGS_MODEL;
+    if (!model) {
+      if (!loggedMissingEmbeddingsModel) {
+        console.warn('OPENAI_EMBEDDINGS_MODEL not set; using default embeddings model.');
+        loggedMissingEmbeddingsModel = true;
+      }
+      return [];
+    }
     requestStart = process.hrtime.bigint();
-    const model = requireEnv('OPENAI_EMBEDDINGS_MODEL');
     const response = await openai.embeddings.create({
       model,
       input: text,
@@ -89,7 +97,7 @@ const embedText = async (text: string): Promise<number[]> => {
     return response.data[0]?.embedding || [];
   } catch (error) {
     if (requestStart) {
-      logAiTiming('embeddings', requireEnv('OPENAI_EMBEDDINGS_MODEL'), requestStart, false);
+      logAiTiming('embeddings', process.env.OPENAI_EMBEDDINGS_MODEL, requestStart, false);
     }
     console.error('Embedding generation failed:', error);
     return [];
