@@ -10,7 +10,6 @@ import {
   Menu,
   X as CloseIcon,
   LayoutDashboard,
-  Search,
   Plus,
   Check,
   Moon,
@@ -222,23 +221,6 @@ const Layout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 justify-end min-w-0">
-            <div className="hidden md:flex items-center gap-1.5">
-              <button
-                onClick={() => setSearchOpen(true)}
-                className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-border bg-card hover:border-primary/60 transition text-muted-foreground"
-              >
-                <Search className="w-4 h-4" />
-                <span className="sr-only">Open search</span>
-              </button>
-              <button
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-border bg-card hover:border-primary/60 transition text-muted-foreground"
-                aria-label="Toggle dark mode"
-              >
-                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              </button>
-            </div>
-
             <Button
               variant="outline"
               size="sm"
@@ -299,6 +281,17 @@ const Layout: React.FC = () => {
                   </Button>
                   <Button
                     variant="ghost"
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setTheme(theme === 'dark' ? 'light' : 'dark');
+                    }}
+                    className="w-full justify-start px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-muted text-sm font-normal h-auto rounded-none"
+                    leftIcon={theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                  >
+                    {theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                  </Button>
+                  <Button
+                    variant="ghost"
                     onClick={handleLogout}
                     className="w-full justify-start px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-muted text-sm font-normal h-auto rounded-none"
                     leftIcon={<LogOut className="w-4 h-4" />}
@@ -311,12 +304,6 @@ const Layout: React.FC = () => {
 
             {/* Mobile toggles */}
             <div className="flex md:hidden items-center gap-2">
-              <button
-                onClick={() => setSearchOpen(true)}
-                className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition"
-              >
-                <Search className="w-5 h-5" />
-              </button>
               <button
                 onClick={() => setShowMobileMenu(!showMobileMenu)}
                 className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition"
