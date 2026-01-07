@@ -854,6 +854,12 @@ router.put('/flow-drafts/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const draft = await FlowDraft.findByIdAndUpdate(req.params.id, req.body || {}, { new: true });
     if (!draft) return res.status(404).json({ error: 'Draft not found' });
+
+    if (draft.templateId) {
+      const templateStatus = draft.status === 'published' ? 'active' : 'archived';
+      await FlowTemplate.findByIdAndUpdate(draft.templateId, { status: templateStatus });
+    }
+
     res.json({ data: draft });
   } catch (error) {
     console.error('Admin update flow draft error:', error);
@@ -877,6 +883,11 @@ router.post('/flow-drafts/:id/publish', authenticate, requireAdmin, async (req, 
       });
       draft.templateId = template._id;
       await draft.save();
+    } else {
+      template.name = draft.name;
+      template.description = draft.description;
+      template.status = 'active';
+      await template.save();
     }
 
     const versionCount = await FlowTemplateVersion.countDocuments({ templateId: template._id });
@@ -897,12 +908,29 @@ router.post('/flow-drafts/:id/publish', authenticate, requireAdmin, async (req, 
     template.status = 'active';
     await template.save();
 
-    draft.status = 'archived';
+    draft.status = 'published';
     await draft.save();
 
     res.json({ data: newVersion });
   } catch (error) {
     console.error('Admin publish flow draft error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.delete('/flow-drafts/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const draft = await FlowDraft.findByIdAndDelete(req.params.id);
+    if (!draft) return res.status(404).json({ error: 'Draft not found' });
+    if (draft.templateId) {
+      const remainingDrafts = await FlowDraft.countDocuments({ templateId: draft.templateId });
+      if (remainingDrafts === 0) {
+        await FlowTemplate.findByIdAndUpdate(draft.templateId, { status: 'archived' });
+      }
+    }
+    res.json({ data: draft });
+  } catch (error) {
+    console.error('Admin delete flow draft error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

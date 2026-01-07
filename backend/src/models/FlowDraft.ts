@@ -76,7 +76,7 @@ const previewMessageSchema = new Schema({
 const flowDraftSchema = new Schema<IFlowDraft>({
   name: { type: String, required: true, trim: true },
   description: { type: String, trim: true },
-  status: { type: String, enum: ['draft', 'archived'], default: 'draft' },
+  status: { type: String, enum: ['draft', 'published', 'archived'], default: 'draft' },
   templateId: { type: Schema.Types.ObjectId, ref: 'FlowTemplate' },
   dsl: { type: Schema.Types.Mixed, required: true },
   triggers: { type: [triggerDefinitionSchema], default: [] },
