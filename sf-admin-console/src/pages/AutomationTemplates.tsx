@@ -2841,7 +2841,11 @@ export default function AutomationTemplates() {
   )
 
   const flowTitle = draftForm.name.trim() || selectedDraft?.name || 'Untitled flow'
-  const statusLabel = draftForm.status === 'archived' ? 'Archived' : 'Draft'
+  const statusLabel = draftForm.status === 'published'
+    ? 'Published'
+    : draftForm.status === 'archived'
+      ? 'Archived'
+      : 'Draft'
   const canEditFlow = Boolean(selectedDraftId)
 
   return (
@@ -3011,6 +3015,7 @@ export default function AutomationTemplates() {
                     }
                   >
                     <option value="draft">Draft</option>
+                    <option value="published">Published</option>
                     <option value="archived">Archived</option>
                   </select>
                 </div>

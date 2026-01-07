@@ -3,7 +3,7 @@ import { TriggerConfig, TriggerType } from './automation';
 export type FlowDsl = Record<string, any>;
 export type CompiledFlow = Record<string, any>;
 
-export type FlowDraftStatus = 'draft' | 'archived';
+export type FlowDraftStatus = 'draft' | 'published' | 'archived';
 export type FlowTemplateStatus = 'active' | 'archived';
 export type FlowTemplateVersionStatus = 'published' | 'archived';
 

@@ -55,7 +55,7 @@ export type FlowDraft = {
   _id: string
   name: string
   description?: string
-  status: 'draft' | 'archived'
+  status: 'draft' | 'published' | 'archived'
   templateId?: string
   dsl: Record<string, any>
   triggers?: FlowTrigger[]
@@ -211,7 +211,7 @@ export type FieldForm = {
 export type DraftForm = {
   name: string
   description: string
-  status: 'draft' | 'archived'
+  status: 'draft' | 'published' | 'archived'
   templateId: string
   dslText: string
   triggers: TriggerForm[]

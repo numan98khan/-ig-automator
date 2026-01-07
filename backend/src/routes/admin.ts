@@ -897,7 +897,7 @@ router.post('/flow-drafts/:id/publish', authenticate, requireAdmin, async (req, 
     template.status = 'active';
     await template.save();
 
-    draft.status = 'archived';
+    draft.status = 'published';
     await draft.save();
 
     res.json({ data: newVersion });
