@@ -2975,7 +2975,7 @@ export default function AutomationTemplates() {
                     </button>
                     <button
                       className="btn btn-secondary flex items-center gap-2"
-                      onClick={handleSaveDraft}
+                      onClick={() => handleSaveDraft()}
                       disabled={updateMutation.isPending}
                     >
                     <Save className="w-4 h-4" />
@@ -3609,7 +3609,7 @@ export default function AutomationTemplates() {
                 </button>
                 <button
                   className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={handleSaveDraft}
+                  onClick={() => handleSaveDraft()}
                   disabled={!canEditFlow || updateMutation.isPending}
                 >
                   <Save className="w-4 h-4" />
