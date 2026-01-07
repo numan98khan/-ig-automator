@@ -187,8 +187,28 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   const visibleGroupedFields = groupedFieldEntries.filter(
     ([group]) => showAdvanced || !advancedGroups.has(group),
   );
+  const triggerModeField = exposedFields.find((field) =>
+    field.source?.path?.includes('triggers') && field.source?.path?.includes('config.triggerMode'),
+  );
+  const triggerModeValue = triggerModeField ? configValues[triggerModeField.key] : undefined;
+  const isTriggerModeKeywords = triggerModeValue === 'keywords';
+  const isTriggerModeIntent = triggerModeValue === 'intent';
 
   const renderField = (field: FlowExposedField) => {
+    if (field.ui?.group === 'Triggers' && field.source?.path) {
+      if (field.source.path.includes('config.keywords') && !isTriggerModeKeywords) {
+        return null;
+      }
+      if (field.source.path.includes('config.excludeKeywords') && !isTriggerModeKeywords) {
+        return null;
+      }
+      if (field.source.path.includes('config.keywordMatch') && !isTriggerModeKeywords) {
+        return null;
+      }
+      if (field.source.path.includes('config.intentText') && !isTriggerModeIntent) {
+        return null;
+      }
+    }
     const value = configValues[field.key];
     const description = field.description || field.ui?.helpText;
 
