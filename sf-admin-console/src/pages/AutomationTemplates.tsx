@@ -476,15 +476,6 @@ export default function AutomationTemplates() {
     },
   })
 
-  const publishMutation = useMutation({
-    mutationFn: (payload: any) => adminApi.publishFlowDraft(selectedDraftId as string, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['flow-drafts'] })
-      queryClient.invalidateQueries({ queryKey: ['flow-templates'] })
-      setVersionLabel('')
-    },
-  })
-
   const handleCreateDraft = () => {
     if (!newDraftName.trim()) {
       setError('Draft name is required.')
@@ -654,15 +645,6 @@ export default function AutomationTemplates() {
     }
     setError(null)
     const targetStatus = nextStatus ?? draftForm.status
-    if (targetStatus === 'published') {
-      publishMutation.mutate({
-        ...result.payload,
-        status: targetStatus,
-        dslSnapshot: result.payload.dsl,
-        versionLabel: versionLabel.trim() || undefined,
-      })
-      return
-    }
     updateMutation.mutate({
       ...result.payload,
       status: targetStatus,
@@ -3004,7 +2986,7 @@ export default function AutomationTemplates() {
                           key={mode}
                           type="button"
                           onClick={() => {
-                            const nextStatus = mode === 'live' ? 'published' : 'archived'
+                            const nextStatus = mode === 'live' ? 'published' : 'draft'
                             setDraftForm((prev) => ({
                               ...prev,
                               status: nextStatus,
@@ -3021,7 +3003,7 @@ export default function AutomationTemplates() {
                     })}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    Drafts appear as archived to end users and will not run.
+                    Drafts are hidden from end users and will not run.
                   </div>
                 </div>
                 <div className="space-y-2 md:col-span-2">
@@ -3569,7 +3551,7 @@ export default function AutomationTemplates() {
                       key={mode}
                       type="button"
                       onClick={() => {
-                        const nextStatus = mode === 'live' ? 'published' : 'archived'
+                        const nextStatus = mode === 'live' ? 'published' : 'draft'
                         setDraftForm((prev) => ({
                           ...prev,
                           status: nextStatus,
