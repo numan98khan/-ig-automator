@@ -7,6 +7,7 @@ import { AutomationAiSettings } from '../types/automation';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logOpenAiUsage } from './openAiUsageService';
+import { normalizeReasoningEffort } from '../utils/aiReasoning';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -86,7 +87,7 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
   const maxOutputTokens = typeof aiSettings?.maxOutputTokens === 'number'
     ? aiSettings?.maxOutputTokens
     : 420;
-  const reasoningEffort = aiSettings?.reasoningEffort;
+  const reasoningEffort = normalizeReasoningEffort(model, aiSettings?.reasoningEffort);
   const maxReplySentences = aiSettings?.maxReplySentences;
 
   const trimmedSteps = Array.isArray(steps)
@@ -360,6 +361,23 @@ Return JSON with:
       if (sentences.length > maxReplySentences) {
         finalReply = sentences.slice(0, maxReplySentences).join(' ').trim();
       }
+    }
+
+    if (!finalReply) {
+      logAiDebug('agent_empty_reply', {
+        model,
+        responsePreview: responseContent ? responseContent.slice(0, 200) : undefined,
+      });
+      return {
+        replyText: 'Thanks for your message! A teammate will follow up shortly.',
+        advanceStep,
+        endConversation,
+        stepSummary,
+        collectedFields,
+        missingFields,
+        askedQuestion,
+        shouldStop,
+      };
     }
 
     return {

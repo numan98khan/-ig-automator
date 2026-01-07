@@ -102,6 +102,10 @@ else
     echo "BACKEND_URL=$BACKEND_URL" >> backend/.env
 fi
 
+
+echo "VITE_SITE_URL=https://sendfx.ai" >> backend/.env
+echo "ALLOWED_ORIGINS=http://localhost:3000,https://sf-admin-console-dev.up.railway.app,https://frontend-dev-e92a.up.railway.app" >> backend/.env
+
 # Update/Add INSTAGRAM_REDIRECT_URI (Critical for OAuth)
 export INSTAGRAM_REDIRECT_URI="$NGROK_URL/api/instagram/callback"
 redirect_uri_val="$INSTAGRAM_REDIRECT_URI" # safe variable for sed if needed
@@ -128,6 +132,14 @@ echo -e "${GREEN}✅ Updated .env variables & exported to shell${NC}"
 # Start Backend on 5001 (Env vars are exported above)
 (cd backend && PORT=5001 npm run dev) &
 BACKEND_PID=$!
+
+
+
+echo "VITE_SITE_URL=https://sendfx.ai" >> backend/.env
+echo "ALLOWED_ORIGINS=http://localhost:3000,https://sf-admin-console-dev.up.railway.app,https://frontend-dev-e92a.up.railway.app" >> backend/.env
+echo "VITE_API_URL=$NGROK_URL" >> backend/.env
+echo "POSTGRES_URL=postgres://postgres:8TazTljrKS3kZiK9Kyffq4E5Kr-RDMVR@nozomi.proxy.rlwy.net:13594/railway" >> backend/.env
+echo "MONGODB_URI=mongodb://mongo:XykBhRsSuvQBxvmekdnCkLdjpaWdZJRj@shuttle.proxy.rlwy.net:31562" >> backend/.env
 
 # Start Frontend (telling it API is on Ngrok URL)
 (cd frontend && VITE_API_URL=$NGROK_URL npm run dev) &

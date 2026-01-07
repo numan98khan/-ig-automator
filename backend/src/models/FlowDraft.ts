@@ -60,7 +60,7 @@ const flowFieldSchema = new Schema({
 const triggerDefinitionSchema = new Schema({
   type: {
     type: String,
-    enum: ['post_comment', 'story_reply', 'dm_message', 'story_share', 'instagram_ads', 'live_comment', 'ref_url'],
+    enum: ['post_comment', 'story_reply', 'story_mention', 'dm_message', 'story_share', 'instagram_ads', 'live_comment', 'ref_url'],
     required: true,
   },
   config: { type: Schema.Types.Mixed },
@@ -76,7 +76,7 @@ const previewMessageSchema = new Schema({
 const flowDraftSchema = new Schema<IFlowDraft>({
   name: { type: String, required: true, trim: true },
   description: { type: String, trim: true },
-  status: { type: String, enum: ['draft', 'archived'], default: 'draft' },
+  status: { type: String, enum: ['draft', 'published', 'archived'], default: 'draft' },
   templateId: { type: Schema.Types.ObjectId, ref: 'FlowTemplate' },
   dsl: { type: Schema.Types.Mixed, required: true },
   triggers: { type: [triggerDefinitionSchema], default: [] },

@@ -55,7 +55,7 @@ export type FlowDraft = {
   _id: string
   name: string
   description?: string
-  status: 'draft' | 'archived'
+  status: 'draft' | 'published' | 'archived'
   templateId?: string
   dsl: Record<string, any>
   triggers?: FlowTrigger[]
@@ -108,6 +108,7 @@ export type FlowAiSettings = {
   maxReplySentences?: number
   historyLimit?: number
   ragEnabled?: boolean
+  systemPrompt?: string
   model?: string
   temperature?: number
   maxOutputTokens?: number
@@ -211,7 +212,7 @@ export type FieldForm = {
 export type DraftForm = {
   name: string
   description: string
-  status: 'draft' | 'archived'
+  status: 'draft' | 'published' | 'archived'
   templateId: string
   dslText: string
   triggers: TriggerForm[]

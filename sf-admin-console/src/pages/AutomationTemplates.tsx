@@ -34,7 +34,6 @@ import '@xyflow/react/dist/style.css'
 import {
   AI_MODEL_SUGGESTIONS,
   DEFAULT_TRIGGER_TYPE,
-  FIELD_TYPES,
   FLOW_NODE_LABELS,
   FLOW_NODE_LIBRARY,
   FLOW_NODE_STYLES,
@@ -48,7 +47,6 @@ import {
 import { buildFlowNodeTypes } from './automation-templates/components/FlowNodes'
 import type {
   DraftForm,
-  FieldForm,
   FlowAiSettings,
   FlowDisplay,
   FlowDraft,
@@ -199,10 +197,43 @@ export default function AutomationTemplates() {
   const aiModelValue = selectedNode?.aiSettings?.model || ''
   const hasCustomAiModel = Boolean(aiModelValue) && !AI_MODEL_SUGGESTIONS.includes(aiModelValue)
   const selectedTriggerConfig: FlowTriggerConfig = selectedNode?.triggerConfig || {}
+  const reasoningEffortOptions = REASONING_EFFORT_OPTIONS
+    .filter((option): option is NonNullable<typeof option> => option !== undefined)
+    .map((option) => ({
+      label: option,
+      value: option,
+    }))
+  const sanitizeExposedKey = (value: string) => value.replace(/[^a-zA-Z0-9_]+/g, '_')
+  const buildExposedKey = (nodeId: string | undefined, path: string) =>
+    sanitizeExposedKey(`${nodeId || 'trigger'}_${path}`)
+  const isFieldExposed = (sourceNodeId: string | undefined, sourcePath: string) =>
+    draftForm.fields.some((field) =>
+      field.sourceNodeId === (sourceNodeId || '') && field.sourcePath === sourcePath,
+    )
+  const toggleExposedField = (field: FlowField) => {
+    const sourceNodeId = field.source?.nodeId || ''
+    const sourcePath = field.source?.path || ''
+    setDraftForm((prev) => {
+      const existingIndex = prev.fields.findIndex(
+        (item) => item.sourceNodeId === sourceNodeId && item.sourcePath === sourcePath,
+      )
+      if (existingIndex >= 0) {
+        return {
+          ...prev,
+          fields: prev.fields.filter((_, index) => index !== existingIndex),
+        }
+      }
+      return {
+        ...prev,
+        fields: [...prev.fields, buildFieldForm(field)],
+      }
+    })
+  }
   const flowStats = useMemo(
     () => ({ nodes: flowNodes.length, edges: flowEdges.length }),
     [flowNodes.length, flowEdges.length],
   )
+  const flowNodeIds = useMemo(() => new Set(flowNodes.map((node) => node.id)), [flowNodes])
   const routerEdges = useMemo(() => {
     if (!selectedNode || selectedNode.type !== 'router') return []
     const getOrder = (edge: FlowEdge) => {
@@ -219,6 +250,22 @@ export default function AutomationTemplates() {
     () => draftForm.fields.map((field) => field.key).filter(Boolean),
     [draftForm.fields],
   )
+
+  useEffect(() => {
+    if (draftForm.fields.length === 0) return
+    setDraftForm((prev) => {
+      const nextFields = prev.fields.filter(
+        (field) => !field.sourceNodeId || flowNodeIds.has(field.sourceNodeId),
+      )
+      if (nextFields.length === prev.fields.length) {
+        return prev
+      }
+      return {
+        ...prev,
+        fields: nextFields,
+      }
+    })
+  }, [draftForm.fields.length, flowNodeIds, setDraftForm])
 
   useEffect(() => {
     if (flowNodes.length === 0) return
@@ -453,6 +500,23 @@ export default function AutomationTemplates() {
     },
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: (draftId: string) => adminApi.deleteFlowDraft(draftId),
+    onSuccess: (_response, draftId) => {
+      queryClient.invalidateQueries({ queryKey: ['flow-drafts'] })
+      if (draftId === selectedDraftId) {
+        setSelectedDraftId(null)
+      }
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.error ||
+        error?.message ||
+        'Failed to delete draft.'
+      setError(message)
+    },
+  })
+
   const handleCreateDraft = () => {
     if (!newDraftName.trim()) {
       setError('Draft name is required.')
@@ -465,6 +529,13 @@ export default function AutomationTemplates() {
       templateId: newDraftTemplateId || undefined,
       dsl: { nodes: [], edges: [] },
     })
+  }
+
+  const handleDeleteDraft = () => {
+    if (!selectedDraftId) return
+    if (!window.confirm('Delete this draft? This cannot be undone.')) return
+    setError(null)
+    deleteMutation.mutate(selectedDraftId)
   }
 
   const buildPayload = () => {
@@ -613,7 +684,7 @@ export default function AutomationTemplates() {
     }
   }
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = (nextStatus?: DraftForm['status']) => {
     if (!selectedDraftId) return
     const result = buildPayload()
     if (result.error || !result.payload) {
@@ -621,21 +692,19 @@ export default function AutomationTemplates() {
       return
     }
     setError(null)
-    updateMutation.mutate(result.payload)
-  }
-
-  const handlePublish = () => {
-    if (!selectedDraftId) return
-    const result = buildPayload()
-    if (result.error || !result.payload) {
-      setError(result.error)
+    const targetStatus = nextStatus ?? draftForm.status
+    if (targetStatus === 'published') {
+      publishMutation.mutate({
+        ...result.payload,
+        status: targetStatus,
+        dslSnapshot: result.payload.dsl,
+        versionLabel: versionLabel.trim() || undefined,
+      })
       return
     }
-    setError(null)
-    publishMutation.mutate({
+    updateMutation.mutate({
       ...result.payload,
-      dslSnapshot: result.payload.dsl,
-      versionLabel: versionLabel.trim() || undefined,
+      status: targetStatus,
     })
   }
 
@@ -855,12 +924,16 @@ export default function AutomationTemplates() {
     const nodeId = selectedNode.id
     setFlowNodes((nodes) => nodes.filter((node) => node.id !== nodeId))
     setFlowEdges((edges) => edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId))
+    setDraftForm((prev) => ({
+      ...prev,
+      fields: prev.fields.filter((field) => field.sourceNodeId !== nodeId),
+    }))
     if (startNodeId === nodeId) {
       const nextNode = flowNodes.find((node) => node.id !== nodeId)
       setStartNodeId(nextNode?.id || '')
     }
     setSelectedNodeId(null)
-  }, [flowNodes, selectedNode, setFlowEdges, setFlowNodes, startNodeId])
+  }, [flowNodes, selectedNode, setFlowEdges, setFlowNodes, setDraftForm, startNodeId])
 
   const handleSelectionChange = useCallback(
     ({ nodes }: { nodes: FlowNode[] }) => {
@@ -1009,9 +1082,9 @@ export default function AutomationTemplates() {
         <ReactFlow
           nodes={flowNodes}
           edges={flowEdges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={handleConnect}
+          onNodesChange={isLive ? undefined : onNodesChange}
+          onEdgesChange={isLive ? undefined : onEdgesChange}
+          onConnect={isLive ? undefined : handleConnect}
           onSelectionChange={handleSelectionChange}
           onInit={setFlowInstance}
           nodeTypes={nodeTypes}
@@ -1019,6 +1092,9 @@ export default function AutomationTemplates() {
           defaultEdgeOptions={{ type: 'smoothstep' }}
           minZoom={0.2}
           maxZoom={1.5}
+          nodesDraggable={!isLive}
+          nodesConnectable={!isLive}
+          elementsSelectable
           className="h-full w-full touch-none"
         >
           <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="rgb(var(--muted-foreground) / 0.25)" />
@@ -1047,9 +1123,11 @@ export default function AutomationTemplates() {
 
       <div className="absolute right-6 top-6 z-30 flex flex-col items-end gap-3">
         <button
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition hover:bg-primary/90"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           onClick={() => setPaletteOpen((prev) => !prev)}
           aria-label="Open node palette"
+          disabled={isLive}
+          title={isLive ? 'Switch to Draft to edit nodes.' : undefined}
         >
           <Plus className="h-5 w-5" />
         </button>
@@ -1064,11 +1142,13 @@ export default function AutomationTemplates() {
                 return (
                   <button
                     key={item.type}
-                    className="w-full rounded-lg border border-border/60 bg-background/80 px-3 py-2 text-left transition hover:border-primary/50 hover:bg-muted/40"
+                    className="w-full rounded-lg border border-border/60 bg-background/80 px-3 py-2 text-left transition hover:border-primary/50 hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => {
+                      if (isLive) return
                       handleAddNode(item.type)
                       setPaletteOpen(false)
                     }}
+                    disabled={isLive}
                   >
                     <div className="flex items-start gap-2">
                       <span className={`mt-1 h-2.5 w-2.5 rounded-full ${style.dot}`} aria-hidden />
@@ -1090,6 +1170,11 @@ export default function AutomationTemplates() {
         {selectedNode && (
           <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
             <div className="text-sm font-semibold text-foreground">Inspector</div>
+            {isLive && (
+              <div className="mt-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                Live flows are read-only. Switch to Draft to edit node settings.
+              </div>
+            )}
             <datalist id="ai-model-options">
               {AI_MODEL_SUGGESTIONS.map((model) => (
                 <option key={model} value={model} />
@@ -1100,7 +1185,7 @@ export default function AutomationTemplates() {
                 <option key={key} value={key} />
               ))}
             </datalist>
-            <div className="mt-4 space-y-4">
+            <fieldset className={`mt-4 space-y-4 ${isLive ? 'opacity-60' : ''}`} disabled={isLive}>
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Label</label>
               <input
@@ -1116,6 +1201,98 @@ export default function AutomationTemplates() {
             </div>
             {selectedNode.type === 'trigger' && (
               <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Expose to users</label>
+                  <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {[
+                      {
+                        label: 'Trigger type',
+                        type: 'select' as const,
+                        options: TRIGGER_LIBRARY.map((trigger) => ({
+                          label: trigger.label,
+                          value: trigger.type,
+                        })),
+                        defaultValue: selectedNode.triggerType || DEFAULT_TRIGGER_TYPE,
+                        sourcePath: 'triggers[0].type',
+                      },
+                      {
+                        label: 'Trigger mode',
+                        type: 'select' as const,
+                        options: [
+                          { label: 'Any', value: 'any' },
+                          { label: 'Keywords', value: 'keywords' },
+                          { label: 'AI intent', value: 'intent' },
+                        ],
+                        defaultValue: selectedTriggerConfig.triggerMode || 'any',
+                        sourcePath: 'triggers[0].config.triggerMode',
+                      },
+                      {
+                        label: 'Keyword match',
+                        type: 'select' as const,
+                        options: [
+                          { label: 'Any keyword', value: 'any' },
+                          { label: 'All keywords', value: 'all' },
+                        ],
+                        defaultValue: selectedTriggerConfig.keywordMatch || 'any',
+                        sourcePath: 'triggers[0].config.keywordMatch',
+                      },
+                      {
+                        label: 'Keywords (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedTriggerConfig.keywords || [],
+                        helpText: 'Example: ["price","quote"]',
+                        sourcePath: 'triggers[0].config.keywords',
+                      },
+                      {
+                        label: 'Exclude keywords (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedTriggerConfig.excludeKeywords || [],
+                        helpText: 'Example: ["free","coupon"]',
+                        sourcePath: 'triggers[0].config.excludeKeywords',
+                      },
+                      {
+                        label: 'Intent description',
+                        type: 'text' as const,
+                        defaultValue: selectedTriggerConfig.intentText || '',
+                        sourcePath: 'triggers[0].config.intentText',
+                      },
+                    ].map((option) => {
+                      const sourceNodeId = undefined
+                      const sourcePath = option.sourcePath
+                      const isExposed = isFieldExposed(sourceNodeId, sourcePath)
+                      return (
+                        <label key={option.sourcePath} className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-3.5 w-3.5"
+                            checked={isExposed}
+                            onChange={() =>
+                              toggleExposedField({
+                                key: buildExposedKey(sourceNodeId, option.sourcePath),
+                                label: option.label,
+                                type: option.type,
+                                defaultValue: option.defaultValue,
+                                options: option.options,
+                                ui: {
+                                  group: 'Triggers',
+                                  helpText: option.helpText,
+                                },
+                                source: {
+                                  nodeId: sourceNodeId,
+                                  path: option.sourcePath,
+                                },
+                              })
+                            }
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      )
+                    })}
+                    <div className="text-[11px] text-muted-foreground">
+                      Exposed fields appear in the user automation setup and can be edited later.
+                    </div>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Trigger type</label>
                   <select
@@ -1711,6 +1888,51 @@ export default function AutomationTemplates() {
             {selectedNode.type === 'send_message' && (
               <>
                 <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Expose to users</label>
+                  <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {[
+                      {
+                        label: 'Reply message',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.text || '',
+                        sourcePath: 'text',
+                      },
+                    ].map((option) => {
+                      const sourceNodeId = selectedNode.id
+                      const sourcePath = option.sourcePath
+                      const isExposed = isFieldExposed(sourceNodeId, sourcePath)
+                      return (
+                        <label key={option.sourcePath} className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-3.5 w-3.5"
+                            checked={isExposed}
+                            onChange={() =>
+                              toggleExposedField({
+                                key: buildExposedKey(sourceNodeId, option.sourcePath),
+                                label: option.label,
+                                type: option.type,
+                                defaultValue: option.defaultValue,
+                                ui: {
+                                  group: 'Message',
+                                },
+                                source: {
+                                  nodeId: sourceNodeId,
+                                  path: option.sourcePath,
+                                },
+                              })
+                            }
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      )
+                    })}
+                    <div className="text-[11px] text-muted-foreground">
+                      Exposed fields appear in the user automation setup and can be edited later.
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Message text</label>
                   <textarea
                     className="input w-full h-24 text-sm"
@@ -1778,6 +2000,68 @@ export default function AutomationTemplates() {
 
             {selectedNode.type === 'ai_reply' && (
               <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Expose to users</label>
+                  <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {(
+                      [
+                        {
+                          label: 'RAG enabled',
+                          type: 'boolean' as const,
+                          defaultValue: selectedNode.aiSettings?.ragEnabled ?? true,
+                          sourcePath: 'aiSettings.ragEnabled',
+                        },
+                        {
+                          label: 'System instructions',
+                          type: 'text' as const,
+                          defaultValue: selectedNode.aiSettings?.systemPrompt || '',
+                          sourcePath: 'aiSettings.systemPrompt',
+                        },
+                      ] as Array<{
+                        label: string;
+                        type: 'boolean' | 'text';
+                        defaultValue: boolean | string;
+                        sourcePath: string;
+                        options?: Array<{ label: string; value: string }>;
+                        helpText?: string;
+                      }>
+                    ).map((option) => {
+                      const sourceNodeId = selectedNode.id
+                      const sourcePath = option.sourcePath
+                      const isExposed = isFieldExposed(sourceNodeId, sourcePath)
+                      return (
+                        <label key={option.sourcePath} className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-3.5 w-3.5"
+                            checked={isExposed}
+                            onChange={() =>
+                              toggleExposedField({
+                                key: buildExposedKey(sourceNodeId, option.sourcePath),
+                                label: option.label,
+                                type: option.type,
+                                defaultValue: option.defaultValue,
+                                options: option.options,
+                                ui: {
+                                  group: 'AI Reply',
+                                  helpText: option.helpText,
+                                },
+                                source: {
+                                  nodeId: sourceNodeId,
+                                  path: option.sourcePath,
+                                },
+                              })
+                            }
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      )
+                    })}
+                    <div className="text-[11px] text-muted-foreground">
+                      Toggle what the end user can adjust in the automation setup.
+                    </div>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Tone</label>
                   <input
@@ -1968,6 +2252,141 @@ export default function AutomationTemplates() {
 
             {selectedNode.type === 'ai_agent' && (
               <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Expose to users</label>
+                  <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {[
+                      {
+                        label: 'System prompt',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.agentSystemPrompt || '',
+                        sourcePath: 'agentSystemPrompt',
+                      },
+                      {
+                        label: 'Agent steps (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedNode.agentSteps || [],
+                        helpText: 'Example: ["Ask for details","Confirm next step"]',
+                        sourcePath: 'agentSteps',
+                      },
+                      {
+                        label: 'End condition',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.agentEndCondition || '',
+                        sourcePath: 'agentEndCondition',
+                      },
+                      {
+                        label: 'Stop condition',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.agentStopCondition || '',
+                        sourcePath: 'agentStopCondition',
+                      },
+                      {
+                        label: 'Max questions',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.agentMaxQuestions ?? '',
+                        sourcePath: 'agentMaxQuestions',
+                      },
+                      {
+                        label: 'Agent slots (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedNode.agentSlots || [],
+                        helpText: 'Example: [{"key":"email","question":"What is your email?"}]',
+                        sourcePath: 'agentSlots',
+                      },
+                      {
+                        label: 'Tone',
+                        type: 'string' as const,
+                        defaultValue: selectedNode.aiSettings?.tone || '',
+                        sourcePath: 'aiSettings.tone',
+                      },
+                      {
+                        label: 'Model',
+                        type: 'string' as const,
+                        defaultValue: selectedNode.aiSettings?.model || '',
+                        sourcePath: 'aiSettings.model',
+                      },
+                      {
+                        label: 'Temperature',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.temperature ?? '',
+                        sourcePath: 'aiSettings.temperature',
+                      },
+                      {
+                        label: 'Reasoning effort',
+                        type: 'select' as const,
+                        options: reasoningEffortOptions,
+                        defaultValue: selectedNode.aiSettings?.reasoningEffort || '',
+                        sourcePath: 'aiSettings.reasoningEffort',
+                      },
+                      {
+                        label: 'Max reply sentences',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.maxReplySentences ?? '',
+                        sourcePath: 'aiSettings.maxReplySentences',
+                      },
+                      {
+                        label: 'History limit',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.historyLimit ?? '',
+                        sourcePath: 'aiSettings.historyLimit',
+                      },
+                      {
+                        label: 'RAG enabled',
+                        type: 'boolean' as const,
+                        defaultValue: selectedNode.aiSettings?.ragEnabled ?? true,
+                        sourcePath: 'aiSettings.ragEnabled',
+                      },
+                      {
+                        label: 'Max output tokens',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.maxOutputTokens ?? '',
+                        sourcePath: 'aiSettings.maxOutputTokens',
+                      },
+                      {
+                        label: 'Knowledge item IDs (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedNode.knowledgeItemIds || [],
+                        helpText: 'Example: ["64f...","65a..."]',
+                        sourcePath: 'knowledgeItemIds',
+                      },
+                    ].map((option) => {
+                      const sourceNodeId = selectedNode.id
+                      const sourcePath = option.sourcePath
+                      const isExposed = isFieldExposed(sourceNodeId, sourcePath)
+                      return (
+                        <label key={option.sourcePath} className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-3.5 w-3.5"
+                            checked={isExposed}
+                            onChange={() =>
+                              toggleExposedField({
+                                key: buildExposedKey(sourceNodeId, option.sourcePath),
+                                label: option.label,
+                                type: option.type,
+                                defaultValue: option.defaultValue,
+                                options: option.options,
+                                ui: {
+                                  group: 'AI Agent',
+                                  helpText: option.helpText,
+                                },
+                                source: {
+                                  nodeId: sourceNodeId,
+                                  path: option.sourcePath,
+                                },
+                              })
+                            }
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      )
+                    })}
+                    <div className="text-[11px] text-muted-foreground">
+                      These options appear in the end-user template setup when enabled.
+                    </div>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">System prompt</label>
                   <textarea
@@ -2305,6 +2724,25 @@ export default function AutomationTemplates() {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">System instructions</label>
+                  <textarea
+                    className="input w-full h-24 text-sm"
+                    value={selectedNode.aiSettings?.systemPrompt || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          systemPrompt: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Provide guidance for how the AI should respond to messages.
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Temperature</label>
                   <input
                     className="input w-full"
@@ -2426,7 +2864,7 @@ export default function AutomationTemplates() {
                   Delete node
                 </button>
               </div>
-            </div>
+            </fieldset>
           </div>
         )}
 
@@ -2485,8 +2923,11 @@ export default function AutomationTemplates() {
   )
 
   const flowTitle = draftForm.name.trim() || selectedDraft?.name || 'Untitled flow'
-  const statusLabel = draftForm.status === 'archived' ? 'Archived' : 'Draft'
-  const canEditFlow = Boolean(selectedDraftId)
+  const isLive = draftForm.status === 'published'
+  const statusLabel = isLive
+    ? 'Live'
+    : 'Draft'
+  const canEditFlow = Boolean(selectedDraftId) && !isLive
 
   return (
     <>
@@ -2605,7 +3046,7 @@ export default function AutomationTemplates() {
                   <div>
                     <h2 className="text-lg font-semibold text-foreground">Draft settings</h2>
                     <p className="text-sm text-muted-foreground">
-                      Update metadata, configurable fields, and publish versions.
+                      Update metadata, configurable fields, and set flows live.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2613,25 +3054,26 @@ export default function AutomationTemplates() {
                       className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={handleOpenBuilder}
                       disabled={!canEditFlow}
+                      title={isLive ? 'Switch to Draft to edit this flow.' : undefined}
                     >
                       <Maximize2 className="w-4 h-4" />
                       Edit flow
                     </button>
                     <button
+                      className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={handleDeleteDraft}
+                      disabled={!selectedDraftId || deleteMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      {deleteMutation.isPending ? 'Deleting...' : 'Delete draft'}
+                    </button>
+                    <button
                       className="btn btn-secondary flex items-center gap-2"
-                      onClick={handleSaveDraft}
-                      disabled={updateMutation.isPending}
+                      onClick={() => handleSaveDraft()}
+                      disabled={!canEditFlow || updateMutation.isPending}
                     >
                     <Save className="w-4 h-4" />
                     {updateMutation.isPending ? 'Saving...' : 'Save draft'}
-                  </button>
-                  <button
-                    className="btn btn-primary flex items-center gap-2"
-                    onClick={handlePublish}
-                    disabled={publishMutation.isPending}
-                  >
-                    <UploadCloud className="w-4 h-4" />
-                    {publishMutation.isPending ? 'Publishing...' : 'Publish'}
                   </button>
                 </div>
               </div>
@@ -2643,20 +3085,39 @@ export default function AutomationTemplates() {
                     className="input w-full"
                     value={draftForm.name}
                     onChange={(event) => setDraftForm((prev) => ({ ...prev, name: event.target.value }))}
+                    disabled={isLive}
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Status</label>
-                  <select
-                    className="input w-full"
-                    value={draftForm.status}
-                    onChange={(event) =>
-                      setDraftForm((prev) => ({ ...prev, status: event.target.value as DraftForm['status'] }))
-                    }
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="archived">Archived</option>
-                  </select>
+                  <div className="inline-flex rounded-full border border-border/60 bg-background/70 p-1 text-xs font-semibold">
+                    {(['draft', 'live'] as const).map((mode) => {
+                      const isLive = draftForm.status === 'published';
+                      const isActive = (mode === 'live' && isLive) || (mode === 'draft' && !isLive);
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => {
+                            const nextStatus = mode === 'live' ? 'published' : 'draft'
+                            setDraftForm((prev) => ({
+                              ...prev,
+                              status: nextStatus,
+                            }))
+                            handleSaveDraft(nextStatus)
+                          }}
+                          className={`px-4 py-2 rounded-full transition ${
+                            isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {mode === 'live' ? 'Live' : 'Draft'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Drafts are hidden from end users and will not run.
+                  </div>
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <label className="text-sm text-muted-foreground">Description</label>
@@ -2666,6 +3127,7 @@ export default function AutomationTemplates() {
                     onChange={(event) =>
                       setDraftForm((prev) => ({ ...prev, description: event.target.value }))
                     }
+                    disabled={isLive}
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
@@ -2676,6 +3138,7 @@ export default function AutomationTemplates() {
                     onChange={(event) =>
                       setDraftForm((prev) => ({ ...prev, templateId: event.target.value }))
                     }
+                    disabled={isLive}
                   >
                     <option value="">Create new template on publish</option>
                     {templates.map((template) => (
@@ -2708,6 +3171,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, outcome: event.target.value },
                         }))
                       }
+                      disabled={isLive}
                     />
                   </div>
                   <div className="space-y-2">
@@ -2722,6 +3186,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, setupTime: event.target.value },
                         }))
                       }
+                      disabled={isLive}
                     />
                   </div>
                   <div className="space-y-2">
@@ -2735,6 +3200,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, goal: event.target.value as DraftForm['display']['goal'] },
                         }))
                       }
+                      disabled={isLive}
                     >
                       <option value="">Select goal</option>
                       {GOAL_OPTIONS.map((option) => (
@@ -2755,6 +3221,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, industry: event.target.value as DraftForm['display']['industry'] },
                         }))
                       }
+                      disabled={isLive}
                     >
                       <option value="">Select industry</option>
                       {INDUSTRY_OPTIONS.map((option) => (
@@ -2775,6 +3242,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, collectsText: event.target.value },
                         }))
                       }
+                      disabled={isLive}
                     />
                   </div>
                   <div className="space-y-2">
@@ -2788,6 +3256,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, icon: event.target.value },
                         }))
                       }
+                      disabled={isLive}
                     />
                   </div>
                   <div className="space-y-2 md:col-span-2">
@@ -2801,358 +3270,10 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, previewText: event.target.value },
                         }))
                       }
+                      disabled={isLive}
                     />
                   </div>
                 </div>
-              </div>
-
-              <div className="border-t border-border pt-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-semibold text-foreground">Exposed fields</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Choose which inputs are configurable on the customer automations page.
-                    </p>
-                  </div>
-                  <button
-                    className="btn btn-secondary flex items-center gap-2"
-                    onClick={() =>
-                      setDraftForm((prev) => ({
-                        ...prev,
-                        fields: [...prev.fields, buildFieldForm()],
-                      }))
-                    }
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add field
-                  </button>
-                </div>
-                {draftForm.fields.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No exposed fields yet.</div>
-                ) : (
-                  <div className="space-y-4">
-                    {draftForm.fields.map((field, index) => (
-                      <div key={field.id} className="rounded-lg border border-border p-4 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-medium">Field {index + 1}</div>
-                          <button
-                            className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
-                            onClick={() =>
-                              setDraftForm((prev) => ({
-                                ...prev,
-                                fields: prev.fields.filter((item) => item.id !== field.id),
-                              }))
-                            }
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            Remove
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Key</label>
-                            <input
-                              className="input w-full"
-                              value={field.key}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id ? { ...item, key: event.target.value } : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Label</label>
-                            <input
-                              className="input w-full"
-                              value={field.label}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id ? { ...item, label: event.target.value } : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Type</label>
-                            <select
-                              className="input w-full"
-                              value={field.type}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, type: event.target.value as FieldForm['type'] }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            >
-                              {FIELD_TYPES.map((option) => (
-                                <option key={option} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="space-y-2 md:col-span-2">
-                            <label className="text-sm text-muted-foreground">Description</label>
-                            <input
-                              className="input w-full"
-                              value={field.description}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, description: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Required</label>
-                            <select
-                              className="input w-full"
-                              value={field.required ? 'yes' : 'no'}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, required: event.target.value === 'yes' }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            >
-                              <option value="no">Optional</option>
-                              <option value="yes">Required</option>
-                            </select>
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Default value</label>
-                            {field.type === 'boolean' ? (
-                              <select
-                                className="input w-full"
-                                value={field.defaultValue ? 'true' : 'false'}
-                                onChange={(event) =>
-                                  setDraftForm((prev) => ({
-                                    ...prev,
-                                    fields: prev.fields.map((item) =>
-                                      item.id === field.id
-                                        ? { ...item, defaultValue: event.target.value === 'true' }
-                                        : item,
-                                    ),
-                                  }))
-                                }
-                              >
-                                <option value="false">False</option>
-                                <option value="true">True</option>
-                              </select>
-                            ) : (
-                              <input
-                                className="input w-full"
-                                value={field.defaultValue as string}
-                                onChange={(event) =>
-                                  setDraftForm((prev) => ({
-                                    ...prev,
-                                    fields: prev.fields.map((item) =>
-                                      item.id === field.id
-                                        ? { ...item, defaultValue: event.target.value }
-                                        : item,
-                                    ),
-                                  }))
-                                }
-                              />
-                            )}
-                          </div>
-                          <div className="space-y-2 md:col-span-3">
-                            <label className="text-sm text-muted-foreground">
-                              Options (one per line: label|value)
-                            </label>
-                            <textarea
-                              className="input w-full h-24 font-mono text-xs"
-                              value={field.optionsText}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, optionsText: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Group</label>
-                            <input
-                              className="input w-full"
-                              value={field.uiGroup}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, uiGroup: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">UI order</label>
-                            <input
-                              className="input w-full"
-                              value={field.uiOrder}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, uiOrder: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Placeholder</label>
-                            <input
-                              className="input w-full"
-                              value={field.uiPlaceholder}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, uiPlaceholder: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2 md:col-span-3">
-                            <label className="text-sm text-muted-foreground">Help text</label>
-                            <input
-                              className="input w-full"
-                              value={field.uiHelpText}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, uiHelpText: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Validation min</label>
-                            <input
-                              className="input w-full"
-                              value={field.validationMin}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, validationMin: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Validation max</label>
-                            <input
-                              className="input w-full"
-                              value={field.validationMax}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, validationMax: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2 md:col-span-3">
-                            <label className="text-sm text-muted-foreground">Validation pattern</label>
-                            <input
-                              className="input w-full"
-                              value={field.validationPattern}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, validationPattern: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Source node</label>
-                            <input
-                              className="input w-full"
-                              value={field.sourceNodeId}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, sourceNodeId: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm text-muted-foreground">Source path</label>
-                            <input
-                              className="input w-full"
-                              value={field.sourcePath}
-                              onChange={(event) =>
-                                setDraftForm((prev) => ({
-                                  ...prev,
-                                  fields: prev.fields.map((item) =>
-                                    item.id === field.id
-                                      ? { ...item, sourcePath: event.target.value }
-                                      : item,
-                                  ),
-                                }))
-                              }
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div className="border-t border-border pt-6 space-y-3">
@@ -3164,17 +3285,8 @@ export default function AutomationTemplates() {
                       value={versionLabel}
                       onChange={(event) => setVersionLabel(event.target.value)}
                       placeholder="e.g. v2.0"
+                      disabled={isLive}
                     />
-                  </div>
-                  <div className="flex items-end">
-                    <button
-                      className="btn btn-primary w-full flex items-center gap-2 justify-center"
-                      onClick={handlePublish}
-                      disabled={publishMutation.isPending}
-                    >
-                      <UploadCloud className="w-4 h-4" />
-                      {publishMutation.isPending ? 'Publishing...' : 'Publish draft'}
-                    </button>
                   </div>
                 </div>
               </div>
@@ -3204,6 +3316,31 @@ export default function AutomationTemplates() {
                   {statusLabel}
                 </span>
               </div>
+              <div className="inline-flex rounded-full border border-border/60 bg-background/70 p-1 text-xs font-semibold">
+                {(['draft', 'live'] as const).map((mode) => {
+                  const isLive = draftForm.status === 'published';
+                  const isActive = (mode === 'live' && isLive) || (mode === 'draft' && !isLive);
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        const nextStatus = mode === 'live' ? 'published' : 'draft'
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          status: nextStatus,
+                        }))
+                        handleSaveDraft(nextStatus)
+                      }}
+                      className={`px-4 py-2 rounded-full transition ${
+                        isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {mode === 'live' ? 'Live' : 'Draft'}
+                    </button>
+                  );
+                })}
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   className="btn btn-secondary flex items-center gap-2"
@@ -3213,34 +3350,28 @@ export default function AutomationTemplates() {
                   Fit view
                 </button>
                 <button
-                  className="btn btn-secondary flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={handleArrangeFlow}
+                  disabled={isLive}
                 >
                   <LayoutGrid className="w-4 h-4" />
                   Arrange
                 </button>
                 <button
-                  className="btn btn-secondary flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={handleClearFlow}
+                  disabled={isLive}
                 >
                   <Eraser className="w-4 h-4" />
                   Clear
                 </button>
                 <button
                   className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={handleSaveDraft}
+                  onClick={() => handleSaveDraft()}
                   disabled={!canEditFlow || updateMutation.isPending}
                 >
                   <Save className="w-4 h-4" />
                   {updateMutation.isPending ? 'Saving...' : 'Save draft'}
-                </button>
-                <button
-                  className="btn btn-primary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={handlePublish}
-                  disabled={!canEditFlow || publishMutation.isPending}
-                >
-                  <UploadCloud className="w-4 h-4" />
-                  {publishMutation.isPending ? 'Publishing...' : 'Publish'}
                 </button>
               </div>
             </div>

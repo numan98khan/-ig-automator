@@ -13,6 +13,7 @@ import { transcribeAudioFromUrl } from '../services/transcriptionService';
 import { trackDailyMetric } from '../services/reportingService';
 import { getLogSettingsSnapshot } from '../services/adminLogSettingsService';
 import { requireEnv } from '../utils/requireEnv';
+import type { TriggerType } from '../types/automation';
 
 const router = express.Router();
 
@@ -23,6 +24,49 @@ const logAutomation = (message: string, details?: Record<string, unknown>) => {
     return;
   }
   console.log(message);
+};
+
+type StoryTriggerInfo = {
+  triggerType: TriggerType;
+  payload?: any;
+};
+
+const extractStoryTriggerInfo = (messaging: any): StoryTriggerInfo | null => {
+  const message = messaging?.message;
+  if (!message) return null;
+
+  const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+  const attachmentPayloads = attachments.map((attachment: any) => attachment?.payload).filter(Boolean);
+  const findPayload = (predicate: (payload: any) => boolean) =>
+    attachmentPayloads.find((payload: any) => predicate(payload));
+
+  const storyMentionPayload = message.story_mention
+    || message.mention
+    || message.story?.mention
+    || findPayload((payload) => payload?.story_mention || payload?.mention)?.story_mention
+    || findPayload((payload) => payload?.mention)?.mention;
+
+  if (storyMentionPayload) {
+    return { triggerType: 'story_mention', payload: storyMentionPayload };
+  }
+
+  const storyReplyPayload = message.reply_to?.story
+    || message.story_reply
+    || message.story
+    || findPayload((payload) => payload?.story_reply || payload?.story)?.story_reply
+    || findPayload((payload) => payload?.story)?.story;
+
+  if (storyReplyPayload || message.reply_to?.story || message.story) {
+    return { triggerType: 'story_reply', payload: storyReplyPayload || message.reply_to?.story || message.story };
+  }
+
+  return null;
+};
+
+const resolveMessagingTriggerTypes = (storyTrigger: StoryTriggerInfo | null): TriggerType[] => {
+  if (!storyTrigger) return ['dm_message'];
+  if (storyTrigger.triggerType === 'story_mention') return ['story_mention', 'dm_message'];
+  return ['story_reply', 'dm_message'];
 };
 
 const WEBHOOK_VERIFY_TOKEN = requireEnv('INSTAGRAM_WEBHOOK_VERIFY_TOKEN');
@@ -130,6 +174,7 @@ async function handleMessagingEvent(messaging: any) {
       || '[Postback]';
     const messageId = messaging.message?.mid || messaging.postback?.mid;
     const timestamp = new Date(messaging.timestamp);
+    const storyTrigger = extractStoryTriggerInfo(messaging);
 
     console.log(`📨 Processing message from ${senderId} to ${recipientId}`);
 
@@ -320,6 +365,19 @@ async function handleMessagingEvent(messaging: any) {
       }
     }
 
+    const messageMetadata: Record<string, any> = {};
+    if (messaging.postback) {
+      messageMetadata.type = 'postback';
+      messageMetadata.title = messaging.postback.title;
+      messageMetadata.payload = messaging.postback.payload;
+    }
+    if (storyTrigger) {
+      messageMetadata.story = {
+        type: storyTrigger.triggerType,
+        payload: storyTrigger.payload,
+      };
+    }
+
     // Create message (we'll update with categorization data)
     const savedMessage = await Message.create({
       conversationId: conversation._id,
@@ -329,13 +387,7 @@ async function handleMessagingEvent(messaging: any) {
       instagramMessageId: messageId,
       platform: 'instagram',
       attachments: attachments.length > 0 ? attachments : undefined,
-      metadata: messaging.postback
-        ? {
-            type: 'postback',
-            title: messaging.postback.title,
-            payload: messaging.postback.payload,
-          }
-        : undefined,
+      metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : undefined,
       createdAt: timestamp,
     });
 
@@ -395,11 +447,13 @@ async function handleMessagingEvent(messaging: any) {
     // === PHASE 2: AUTOMATION PROCESSING ===
     // Process automations asynchronously to not block webhook response
     // Use finalMessageText which includes transcription if it was a voice note
+    const triggerTypes = resolveMessagingTriggerTypes(storyTrigger);
     processMessageAutomations(
       conversation,
       savedMessage,
       finalMessageText,
       igAccount.workspaceId.toString(),
+      triggerTypes,
     ).catch(error => {
       console.error('❌ Error processing message automations:', error);
       webhookLogger.logWebhookError(error, { eventType: 'automation', conversationId: conversation._id });
@@ -475,6 +529,7 @@ async function processMessageAutomations(
   savedMessage: any,
   messageText: string,
   workspaceId: string,
+  triggerTypes: TriggerType[] = ['dm_message'],
 ) {
   try {
     logAutomation(`🤖 Processing automations for conversation ${conversation._id}`);
@@ -488,25 +543,40 @@ async function processMessageAutomations(
         : undefined,
     };
 
-    // Check for active automations
-    const automationResult = await checkAndExecuteAutomations({
-      workspaceId,
-      triggerType: 'dm_message',
-      conversationId: conversation._id.toString(),
-      messageText,
-      instagramAccountId: conversation.instagramAccountId.toString(),
-      platform: conversation.platform || 'instagram',
-      messageContext,
-    });
+    const fallbackErrors = new Set([
+      'No active automations found for this trigger',
+      'No automations matched trigger filters',
+    ]);
+    let lastError: string | undefined;
 
-    if (automationResult.executed) {
-      logAutomation(`✅ Automation executed: ${automationResult.automationName}`);
-    } else {
-      if (automationResult.error) {
-        logAutomation('⚠️  [AUTOMATION] Execution failed', { error: automationResult.error });
-      } else {
-        logAutomation('ℹ️ No automations matched trigger filters');
+    for (const triggerType of triggerTypes) {
+      const automationResult = await checkAndExecuteAutomations({
+        workspaceId,
+        triggerType,
+        conversationId: conversation._id.toString(),
+        messageText,
+        instagramAccountId: conversation.instagramAccountId.toString(),
+        platform: conversation.platform || 'instagram',
+        messageContext,
+      });
+
+      if (automationResult.executed) {
+        logAutomation(`✅ Automation executed: ${automationResult.automationName}`);
+        return;
       }
+
+      if (automationResult.error && !fallbackErrors.has(automationResult.error)) {
+        logAutomation('⚠️  [AUTOMATION] Execution failed', { error: automationResult.error, triggerType });
+        return;
+      }
+
+      lastError = automationResult.error;
+    }
+
+    if (lastError && !fallbackErrors.has(lastError)) {
+      logAutomation('⚠️  [AUTOMATION] Execution failed', { error: lastError });
+    } else {
+      logAutomation('ℹ️ No automations matched trigger filters');
     }
 
   } catch (error) {
@@ -633,6 +703,17 @@ async function handleCommentEvent(comment: any, instagramAccountId: string) {
     await trackDailyMetric(conversation.workspaceId, commentDate, {
       inboundMessages: 1,
       ...(isNewConversation ? { newConversations: 1 } : {}),
+    });
+
+    processMessageAutomations(
+      conversation,
+      savedMessage,
+      commentText || '',
+      igAccount.workspaceId.toString(),
+      ['post_comment'],
+    ).catch(error => {
+      console.error('❌ Error processing comment automations:', error);
+      webhookLogger.logWebhookError(error, { eventType: 'automation', conversationId: conversation._id });
     });
 
   } catch (error) {

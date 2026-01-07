@@ -12,7 +12,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { getAdminLogEvents } from '../services/adminLogEventService';
 import { executePreviewFlowForInstance, resolveLatestTemplateVersion } from '../services/automationService';
-import { assertWorkspaceFeatureAccess } from '../services/tierService';
+import { assertWorkspaceLimit } from '../services/tierService';
 
 const router = express.Router();
 
@@ -216,15 +216,6 @@ const buildNodeSummary = (node: any, options: {
     preview,
     summary: summary.length > 0 ? summary : undefined,
   };
-};
-
-const ensureFlowBuilderAccess = async (workspaceId: string, res: Response) => {
-  const featureCheck = await assertWorkspaceFeatureAccess(workspaceId, 'flowBuilder');
-  if (!featureCheck.allowed) {
-    res.status(403).json({ error: 'Flow builder feature not available for this tier', tier: featureCheck.tier });
-    return false;
-  }
-  return true;
 };
 
 const resolveTemplateVersion = async (params: {
@@ -551,10 +542,6 @@ const loadInstanceWithAccess = async (id: string, userId: string, res: Response)
     res.status(403).json({ error: 'Access denied' });
     return null;
   }
-  const flowBuilderAllowed = await ensureFlowBuilderAccess(instance.workspaceId.toString(), res);
-  if (!flowBuilderAllowed) {
-    return null;
-  }
   return instance;
 };
 
@@ -588,10 +575,6 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied to this workspace' });
     }
-    const flowBuilderAllowed = await ensureFlowBuilderAccess(workspaceId, res);
-    if (!flowBuilderAllowed) {
-      return;
-    }
 
     const instances = await AutomationInstance.find({ workspaceId })
       .sort({ createdAt: -1 })
@@ -616,10 +599,6 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    const flowBuilderAllowed = await ensureFlowBuilderAccess(instance.workspaceId.toString(), res);
-    if (!flowBuilderAllowed) {
-      return;
-    }
 
     const [hydrated] = await hydrateInstances([instance]);
     res.json(hydrated);
@@ -643,12 +622,16 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied to this workspace' });
     }
-    const flowBuilderAllowed = await ensureFlowBuilderAccess(workspaceId, res);
-    if (!flowBuilderAllowed) {
-      return;
-    }
     if (!isOwner && role !== 'admin') {
       return res.status(403).json({ error: 'Only workspace owners and admins can create automations' });
+    }
+
+    const currentCount = await AutomationInstance.countDocuments({ workspaceId });
+    const limitCheck = await assertWorkspaceLimit(workspaceId, 'automations', currentCount + 1);
+    if (!limitCheck.allowed) {
+      return res.status(403).json({
+        error: `Automation limit reached for this workspace (limit: ${limitCheck.limit})`,
+      });
     }
 
     const resolved = await resolveTemplateVersion({ templateId, templateVersionId });
@@ -687,10 +670,6 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     const { hasAccess, isOwner, role } = await checkWorkspaceAccess(instance.workspaceId.toString(), req.userId!);
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied' });
-    }
-    const flowBuilderAllowed = await ensureFlowBuilderAccess(instance.workspaceId.toString(), res);
-    if (!flowBuilderAllowed) {
-      return;
     }
     if (!isOwner && role !== 'admin') {
       return res.status(403).json({ error: 'Only workspace owners and admins can update automations' });
@@ -731,10 +710,6 @@ router.patch('/:id/toggle', authenticate, async (req: AuthRequest, res: Response
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    const flowBuilderAllowed = await ensureFlowBuilderAccess(instance.workspaceId.toString(), res);
-    if (!flowBuilderAllowed) {
-      return;
-    }
 
     instance.isActive = !instance.isActive;
     await instance.save();
@@ -760,10 +735,6 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     );
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied' });
-    }
-    const flowBuilderAllowed = await ensureFlowBuilderAccess(instance.workspaceId.toString(), res);
-    if (!flowBuilderAllowed) {
-      return;
     }
     if (!isOwner && role !== 'admin') {
       return res.status(403).json({ error: 'Only workspace owners and admins can delete automations' });
@@ -1015,10 +986,6 @@ router.post('/:id/preview-session', authenticate, async (req: AuthRequest, res: 
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    const flowBuilderAllowed = await ensureFlowBuilderAccess(instance.workspaceId.toString(), res);
-    if (!flowBuilderAllowed) {
-      return;
-    }
 
     const version = await resolveLatestTemplateVersion({
       templateId: instance.templateId,
@@ -1104,10 +1071,6 @@ router.post('/:id/preview-session/pause', authenticate, async (req: AuthRequest,
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied' });
     }
-    const flowBuilderAllowed = await ensureFlowBuilderAccess(instance.workspaceId.toString(), res);
-    if (!flowBuilderAllowed) {
-      return;
-    }
 
     const session = await AutomationSession.findOne({
       _id: sessionId,
@@ -1146,10 +1109,6 @@ router.post('/:id/preview-session/stop', authenticate, async (req: AuthRequest, 
     const { hasAccess } = await checkWorkspaceAccess(instance.workspaceId.toString(), req.userId!);
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied' });
-    }
-    const flowBuilderAllowed = await ensureFlowBuilderAccess(instance.workspaceId.toString(), res);
-    if (!flowBuilderAllowed) {
-      return;
     }
 
     const session = await AutomationSession.findOne({

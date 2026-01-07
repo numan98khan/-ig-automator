@@ -17,15 +17,11 @@ import { Input } from '../../components/ui/Input';
 import { AutomationPreviewPhone, PreviewMessage } from './AutomationPreviewPhone';
 import { FLOW_GOAL_FILTERS, TRIGGER_METADATA } from './constants';
 
-type CreateFormData = {
-  name: string;
-  description: string;
-};
-
 type AutomationsCreateViewProps = {
   createViewTitle: string;
   isCreateSetupView: boolean;
   editingAutomation: AutomationInstance | null;
+  allowCustomCreation: boolean;
   creationMode: 'templates' | 'custom';
   currentStep: 'gallery' | 'setup' | 'review';
   selectedTemplate: FlowTemplate | null;
@@ -33,7 +29,6 @@ type AutomationsCreateViewProps = {
   templateSearch: string;
   goalFilter: 'all' | (typeof FLOW_GOAL_FILTERS)[number];
   industryFilter: 'all' | 'Clinics' | 'Salons' | 'Retail' | 'Restaurants' | 'Real Estate' | 'General';
-  formData: CreateFormData;
   exposedFields: FlowExposedField[];
   configValues: Record<string, any>;
   saving: boolean;
@@ -50,7 +45,6 @@ type AutomationsCreateViewProps = {
   onBackToGallery: () => void;
   onBackToSetup: () => void;
   onContinueToReview: () => void;
-  onUpdateFormData: React.Dispatch<React.SetStateAction<CreateFormData>>;
   onUpdateConfigValues: React.Dispatch<React.SetStateAction<Record<string, any>>>;
   previewMessages: PreviewMessage[];
   previewInputValue: string;
@@ -114,6 +108,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   createViewTitle,
   isCreateSetupView,
   editingAutomation,
+  allowCustomCreation,
   creationMode,
   currentStep,
   selectedTemplate,
@@ -121,7 +116,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   templateSearch,
   goalFilter,
   industryFilter,
-  formData,
   exposedFields,
   configValues,
   saving,
@@ -138,7 +132,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   onBackToGallery,
   onBackToSetup,
   onContinueToReview,
-  onUpdateFormData,
   onUpdateConfigValues,
   previewMessages,
   previewInputValue,
@@ -152,9 +145,14 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   onPreviewStop,
   onPreviewReset,
 }) => {
-  const updateFormData = (updates: Partial<CreateFormData>) => {
-    onUpdateFormData((prev) => ({ ...prev, ...updates }));
-  };
+  const [showAdvanced, setShowAdvanced] = React.useState(Boolean(editingAutomation));
+  const automationName = editingAutomation?.name
+    || selectedTemplate?.name
+    || 'Automation';
+  const automationDescription = editingAutomation?.description
+    || selectedTemplate?.currentVersion?.display?.outcome
+    || selectedTemplate?.description
+    || 'Automation template';
 
   const updateConfigValues = (updates: Record<string, any>) => {
     onUpdateConfigValues((prev) => ({ ...prev, ...updates }));
@@ -165,21 +163,42 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   const templatePreviewMessages = display?.previewConversation || [];
   const triggers = version?.triggers || [];
 
-  const sortedFields = [...exposedFields].sort((a, b) => {
-    const orderA = a.ui?.order ?? 999;
-    const orderB = b.ui?.order ?? 999;
-    if (orderA !== orderB) return orderA - orderB;
-    return a.label.localeCompare(b.label);
-  });
+  const orderedFields = [...exposedFields];
 
-  const groupedFields = sortedFields.reduce((acc, field) => {
+  const groupedFields = orderedFields.reduce((acc, field) => {
     const group = field.ui?.group || 'Configuration';
     if (!acc[group]) acc[group] = [];
     acc[group].push(field);
     return acc;
   }, {} as Record<string, FlowExposedField[]>);
+  const advancedGroups = new Set(['Triggers', 'AI Reply', 'AI Agent']);
+  const groupedFieldEntries = Object.entries(groupedFields);
+  const hasAdvancedFields = groupedFieldEntries.some(([group]) => advancedGroups.has(group));
+  const visibleGroupedFields = groupedFieldEntries.filter(
+    ([group]) => showAdvanced || !advancedGroups.has(group),
+  );
+  const triggerModeField = exposedFields.find((field) =>
+    field.source?.path?.includes('triggers') && field.source?.path?.includes('config.triggerMode'),
+  );
+  const triggerModeValue = triggerModeField ? configValues[triggerModeField.key] : undefined;
+  const isTriggerModeKeywords = triggerModeValue === 'keywords';
+  const isTriggerModeIntent = triggerModeValue === 'intent';
 
   const renderField = (field: FlowExposedField) => {
+    if (field.ui?.group === 'Triggers' && field.source?.path) {
+      if (field.source.path.includes('config.keywords') && !isTriggerModeKeywords) {
+        return null;
+      }
+      if (field.source.path.includes('config.excludeKeywords') && !isTriggerModeKeywords) {
+        return null;
+      }
+      if (field.source.path.includes('config.keywordMatch') && !isTriggerModeKeywords) {
+        return null;
+      }
+      if (field.source.path.includes('config.intentText') && !isTriggerModeIntent) {
+        return null;
+      }
+    }
     const value = configValues[field.key];
     const description = field.description || field.ui?.helpText;
 
@@ -371,23 +390,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                   {editingAutomation ? 'Update your automation settings and save changes.' : 'Configure the template details before activation.'}
                 </p>
               </div>
-              <Input
-                label="Name"
-                value={formData.name}
-                onChange={(event) => updateFormData({ name: event.target.value })}
-                placeholder="e.g., Sales Concierge"
-              />
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(event) => updateFormData({ description: event.target.value })}
-                  placeholder="What does this automation do?"
-                  rows={2}
-                  className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                />
-              </div>
-
               <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Triggers
@@ -429,7 +431,26 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 )}
               </div>
 
-              {Object.entries(groupedFields).map(([group, fields]) => (
+              {hasAdvancedFields && (
+                <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background/60 px-3 py-2">
+                  <div>
+                    <div className="text-sm font-medium text-foreground">Advanced options</div>
+                    <div className="text-xs text-muted-foreground">
+                      Configure trigger routing and AI behavior.
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAdvanced((prev) => !prev)}
+                  >
+                    {showAdvanced ? 'Hide options' : 'Configure options'}
+                  </Button>
+                </div>
+              )}
+
+              {visibleGroupedFields.map(([group, fields]) => (
                 <div key={group} className="space-y-3">
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group}</div>
                   {fields.map(renderField)}
@@ -539,12 +560,18 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                     Templates <span className="text-xs text-primary">(Recommended)</span>
                   </button>
                   <button
-                    onClick={() => onChangeCreationMode('custom')}
+                    onClick={() => {
+                      if (allowCustomCreation) {
+                        onChangeCreationMode('custom');
+                      }
+                    }}
+                    disabled={!allowCustomCreation}
+                    title={!allowCustomCreation ? 'Custom automations are disabled for this tier.' : undefined}
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                       creationMode === 'custom'
                         ? 'bg-background text-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    } ${!allowCustomCreation ? 'cursor-not-allowed opacity-50' : ''}`}
                   >
                     Custom
                   </button>
@@ -656,8 +683,8 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                   <div className="space-y-4">
                     <div>
                       <label className="text-xs font-medium text-muted-foreground uppercase">Automation</label>
-                      <p className="font-semibold">{formData.name}</p>
-                      <p className="text-sm text-muted-foreground">{formData.description}</p>
+                      <p className="font-semibold">{automationName}</p>
+                      <p className="text-sm text-muted-foreground">{automationDescription}</p>
                     </div>
 
                     <div>

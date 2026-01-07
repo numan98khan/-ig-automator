@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Pencil, Plus, Loader2, Target, Trash2, Power, PowerOff } from 'lucide-react';
-import { AutomationInstance } from '../../services/api';
+import { Loader2, Pencil, Plus, Power, PowerOff, Sparkles, Target, Trash2 } from 'lucide-react';
+import { AutomationInstance, ResourceUsage } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { TRIGGER_METADATA } from './constants';
 
@@ -15,6 +15,7 @@ type AutomationsListViewProps = {
   automations: AutomationInstance[];
   summaryStats: SummaryStats;
   loading: boolean;
+  aiUsage?: ResourceUsage | null;
   onCreate: () => void;
   onOpen?: (automation: AutomationInstance) => void;
   onEdit?: (automation: AutomationInstance) => void;
@@ -26,6 +27,7 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
   automations,
   summaryStats,
   loading,
+  aiUsage,
   onCreate,
   onOpen,
   onEdit,
@@ -39,14 +41,59 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
   const filteredAutomations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return automations.filter((automation) => {
-      if (statusFilter === 'active' && !automation.isActive) return false;
-      if (statusFilter === 'inactive' && automation.isActive) return false;
+      const isArchived = automation.template?.status === 'archived';
+      const isEffectivelyActive = automation.isActive && !isArchived;
+      if (statusFilter === 'active' && !isEffectivelyActive) return false;
+      if (statusFilter === 'inactive' && isEffectivelyActive) return false;
       if (!query) return true;
       const nameMatch = automation.name.toLowerCase().includes(query);
       const descriptionMatch = (automation.description || '').toLowerCase().includes(query);
       return nameMatch || descriptionMatch;
     });
   }, [automations, searchQuery, statusFilter]);
+
+  const aiUsed = aiUsage?.used ?? 0;
+  const aiLimit = aiUsage?.limit;
+  const hasAiLimit = typeof aiLimit === 'number';
+  const aiRatio = hasAiLimit && aiLimit > 0 ? aiUsed / aiLimit : 0;
+  const aiPercent = hasAiLimit && aiLimit > 0 ? Math.min(100, Math.round(aiRatio * 100)) : 0;
+  const aiRemaining = hasAiLimit ? Math.max(aiLimit - aiUsed, 0) : null;
+  const showAiUsage = hasAiLimit;
+  const aiTone = !hasAiLimit
+    ? 'info'
+    : aiUsed >= (aiLimit || 0)
+      ? 'critical'
+      : aiRatio >= 0.8
+        ? 'warning'
+        : 'info';
+  const aiContainerClass = aiTone === 'critical'
+    ? 'border-red-500/30 bg-red-500/10'
+    : aiTone === 'warning'
+      ? 'border-amber-400/40 bg-amber-500/10'
+      : 'border-border/60 bg-background/70';
+  const aiAccentClass = aiTone === 'critical'
+    ? 'text-red-500'
+    : aiTone === 'warning'
+      ? 'text-amber-500'
+      : 'text-primary';
+  const aiMessageClass = aiTone === 'critical'
+    ? 'text-red-400'
+    : aiTone === 'warning'
+      ? 'text-amber-600'
+      : 'text-muted-foreground';
+  const aiBarClass = aiTone === 'critical'
+    ? 'bg-red-500'
+    : aiTone === 'warning'
+      ? 'bg-amber-500'
+      : 'bg-primary';
+  const aiUsageLabel = hasAiLimit ? `${aiUsed} / ${aiLimit}` : `${aiUsed}`;
+  const aiMessage = hasAiLimit
+    ? aiUsed >= (aiLimit || 0)
+      ? 'AI message limit reached. Upgrade to keep automations sending.'
+      : aiRatio >= 0.8
+        ? `${aiRemaining} AI messages left in this billing period.`
+        : `${aiRemaining} AI messages remaining this period.`
+    : 'Unlimited AI messages for this plan.';
 
   return (
     <>
@@ -93,6 +140,21 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
           </Button>
         </div>
       </div>
+      {showAiUsage && (
+        <div className={`rounded-xl border p-3 ${aiContainerClass}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wide ${aiAccentClass}`}>
+              <Sparkles className="w-4 h-4" />
+              AI messages
+            </div>
+            <div className="text-sm font-semibold text-foreground">{aiUsageLabel}</div>
+          </div>
+          <div className="mt-2 h-2 w-full rounded-full bg-background/50 overflow-hidden">
+            <div className={`h-full ${aiBarClass}`} style={{ width: `${aiPercent}%` }} />
+          </div>
+          <div className={`mt-2 text-xs ${aiMessageClass}`}>{aiMessage}</div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">Triggers</span>
@@ -134,23 +196,30 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
             : trigger?.label || 'Trigger';
           const triggerDescription = trigger?.description || 'Trigger configured in the template.';
           const badge = triggers.length > 1 ? null : trigger?.badge;
-          const statusLabel = automation.isActive ? 'Active' : 'Inactive';
+          const isArchived = template?.status === 'archived';
+          const isEffectivelyActive = automation.isActive && !isArchived;
+          const statusLabel = isArchived ? 'Archived' : isEffectivelyActive ? 'Active' : 'Inactive';
+          const statusClass = isArchived
+            ? 'bg-amber-500/15 text-amber-500'
+            : isEffectivelyActive
+              ? 'bg-emerald-500/15 text-emerald-500'
+              : 'bg-slate-500/10 text-slate-500';
 
           return (
             <div
               key={automation._id}
-              onClick={isOpenEnabled ? () => onOpen?.(automation) : undefined}
-              onKeyDown={isOpenEnabled ? (event) => {
+              onClick={!isArchived && isOpenEnabled ? () => onOpen?.(automation) : undefined}
+              onKeyDown={!isArchived && isOpenEnabled ? (event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
                   onOpen?.(automation);
                 }
               } : undefined}
-              role={isOpenEnabled ? 'button' : undefined}
-              tabIndex={isOpenEnabled ? 0 : undefined}
+              role={!isArchived && isOpenEnabled ? 'button' : undefined}
+              tabIndex={!isArchived && isOpenEnabled ? 0 : undefined}
               className={`group relative overflow-hidden rounded-2xl border border-border/60 bg-background/70 p-5 shadow-sm transition-all duration-200 ${
-                isOpenEnabled ? 'hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/30 cursor-pointer' : ''
-              }`}
+                !isArchived && isOpenEnabled ? 'hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/30 cursor-pointer' : ''
+              } ${isArchived ? 'opacity-55 grayscale' : ''}`}
             >
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/60 via-primary/20 to-transparent" />
               {badge && (
@@ -171,9 +240,7 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-lg font-semibold truncate">{automation.name}</h3>
                     <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-                      automation.isActive
-                        ? 'bg-emerald-500/15 text-emerald-500'
-                        : 'bg-slate-500/10 text-slate-500'
+                      statusClass
                     }`}>
                       {statusLabel}
                     </span>
@@ -207,14 +274,17 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                 <Button
                   onClick={(event) => {
                     event.stopPropagation();
-                    onToggle(automation);
+                    if (!isArchived) {
+                      onToggle(automation);
+                    }
                   }}
-                  variant={automation.isActive ? 'primary' : 'outline'}
+                  variant={isEffectivelyActive ? 'primary' : 'outline'}
                   className="rounded-full px-4"
                   size="sm"
-                  leftIcon={automation.isActive ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
+                  disabled={isArchived}
+                  leftIcon={isEffectivelyActive ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
                 >
-                  {automation.isActive ? 'Active' : 'Inactive'}
+                  {statusLabel}
                 </Button>
                 <div className="flex items-center gap-2">
                   <button
@@ -222,7 +292,7 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                       event.stopPropagation();
                       onEdit?.(automation);
                     }}
-                    disabled={!isEditEnabled}
+                    disabled={!isEditEnabled || isArchived}
                     className="flex items-center gap-1 rounded-full border border-border bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
                   >
                     <Pencil className="h-4 w-4" />

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
 import {
@@ -9,8 +9,11 @@ import {
   AutomationInstance,
   FlowExposedField,
   FlowTemplate,
+  ResourceUsage,
+  tierAPI,
+  WorkspaceTierResponse,
 } from '../services/api';
-import { AlertTriangle, PlayCircle, Clock } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, PlayCircle, X } from 'lucide-react';
 import { AutomationsSidebar } from './automations/AutomationsSidebar';
 import { AutomationsListView } from './automations/AutomationsListView';
 import { AutomationsCreateView } from './automations/AutomationsCreateView';
@@ -20,11 +23,9 @@ import { AutomationsHumanAlerts } from './automations/AutomationsHumanAlerts';
 import Knowledge from './Knowledge';
 import { AutomationsIntegrationsView } from './automations/AutomationsIntegrationsView';
 import { FLOW_GOAL_FILTERS } from './automations/constants';
-
-type CreateFormData = {
-  name: string;
-  description: string;
-};
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { useTheme } from '../context/ThemeContext';
 
 const buildDefaultConfig = (fields: FlowExposedField[]) => {
   const defaults: Record<string, any> = {};
@@ -42,6 +43,12 @@ const buildDefaultConfig = (fields: FlowExposedField[]) => {
   });
   return defaults;
 };
+
+const isKeywordListField = (field: FlowExposedField) =>
+  Boolean(
+    field.source?.path &&
+    (field.source.path.includes('keywords') || field.source.path.includes('excludeKeywords')),
+  );
 
 const normalizeConfig = (
   fields: FlowExposedField[],
@@ -73,6 +80,13 @@ const normalizeConfig = (
         try {
           config[field.key] = JSON.parse(raw);
         } catch {
+          if (isKeywordListField(field)) {
+            config[field.key] = raw
+              .split(',')
+              .map((item) => item.trim())
+              .filter(Boolean);
+            continue;
+          }
           return { error: `${field.label} must be valid JSON` };
         }
       } else {
@@ -143,6 +157,8 @@ const hydrateAutomation = (
 
 const Automations: React.FC = () => {
   const { currentWorkspace } = useAuth();
+  const { theme } = useTheme();
+  const navigate = useNavigate();
   const { activeAccount } = useAccountContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeSection, setActiveSection] = useState<'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'>('automations');
@@ -151,13 +167,10 @@ const Automations: React.FC = () => {
   const [templates, setTemplates] = useState<FlowTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [workspaceTier, setWorkspaceTier] = useState<WorkspaceTierResponse | null>(null);
 
   const [editingAutomation, setEditingAutomation] = useState<AutomationInstance | null>(null);
   const [selectedAutomation, setSelectedAutomation] = useState<AutomationInstance | null>(null);
-  const [formData, setFormData] = useState<CreateFormData>({
-    name: '',
-    description: '',
-  });
   const [configValues, setConfigValues] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [previewSessionId, setPreviewSessionId] = useState<string | null>(null);
@@ -169,6 +182,8 @@ const Automations: React.FC = () => {
   >(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewSending, setPreviewSending] = useState(false);
+  const [showAutomationUpgrade, setShowAutomationUpgrade] = useState(false);
+  const [aiUsage, setAiUsage] = useState<ResourceUsage | null>(null);
 
   const accountDisplayName = activeAccount?.name || activeAccount?.username || 'Connected account';
   const accountHandle = activeAccount?.username || 'connected_account';
@@ -178,6 +193,16 @@ const Automations: React.FC = () => {
   const isCreateView = isAutomationsSection && (automationView === 'create' || automationView === 'edit');
   const isDetailsView = isAutomationsSection && automationView === 'details';
   const isAutomationFullHeightView = isCreateView || isDetailsView;
+  const isCustomAutomationEnabled = workspaceTier?.limits?.flowBuilder !== false;
+  const automationLimit = workspaceTier?.limits?.automations;
+  const automationCount = automations.length;
+  const isAutomationLimitReached = typeof automationLimit === 'number' && automationCount >= automationLimit;
+  const isLightTheme = useMemo(() => {
+    if (theme === 'light') return true;
+    if (theme === 'dark') return false;
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-color-scheme: light)').matches;
+  }, [theme]);
 
   const [creationMode, setCreationMode] = useState<'templates' | 'custom'>('templates');
   const [currentStep, setCurrentStep] = useState<'gallery' | 'setup' | 'review'>('gallery');
@@ -202,7 +227,9 @@ const Automations: React.FC = () => {
   const summaryStats = useMemo(() => {
     const totalTriggered = automations.reduce((sum, automation) => sum + (automation.stats?.totalTriggered || 0), 0);
     const totalRepliesSent = automations.reduce((sum, automation) => sum + (automation.stats?.totalRepliesSent || 0), 0);
-    const activeCount = automations.filter((automation) => automation.isActive).length;
+    const activeCount = automations.filter((automation) => (
+      automation.isActive && automation.template?.status !== 'archived'
+    )).length;
     return {
       activeCount,
       totalCount: automations.length,
@@ -231,6 +258,67 @@ const Automations: React.FC = () => {
       loadData({ silent: Boolean(cachedAutomations) });
     }
   }, [currentWorkspace]);
+
+  useEffect(() => {
+    if (!currentWorkspace) return;
+    let cancelled = false;
+    const loadTier = async () => {
+      try {
+        const data = await tierAPI.getWorkspace(currentWorkspace._id);
+        if (!cancelled) {
+          setWorkspaceTier(data);
+        }
+      } catch (err) {
+        console.error('Error loading workspace tier:', err);
+        if (!cancelled) {
+          setWorkspaceTier(null);
+        }
+      }
+    };
+    loadTier();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWorkspace]);
+
+  useEffect(() => {
+    if (!currentWorkspace) return;
+    let cancelled = false;
+    let pollTimer: number | undefined;
+    const loadUsage = async () => {
+      try {
+        const data = await tierAPI.getMine(currentWorkspace._id);
+        if (!cancelled) {
+          setAiUsage(data?.usage?.aiMessages || null);
+        }
+      } catch (err) {
+        console.error('Error loading AI usage:', err);
+        if (!cancelled) {
+          setAiUsage(null);
+        }
+      }
+    };
+    loadUsage();
+    pollTimer = window.setInterval(loadUsage, 20000);
+    return () => {
+      cancelled = true;
+      if (pollTimer) {
+        window.clearInterval(pollTimer);
+      }
+    };
+  }, [currentWorkspace]);
+
+  useEffect(() => {
+    if (!isCustomAutomationEnabled && creationMode === 'custom') {
+      setCreationMode('templates');
+    }
+  }, [creationMode, isCustomAutomationEnabled]);
+
+  useEffect(() => {
+    if (!isAutomationLimitReached) {
+      setShowAutomationUpgrade(false);
+    }
+  }, [isAutomationLimitReached]);
 
   const loadData = async (options?: { silent?: boolean }) => {
     if (!currentWorkspace) return;
@@ -294,7 +382,6 @@ const Automations: React.FC = () => {
   const handleOpenCreateModal = () => {
     setEditingAutomation(null);
     setSelectedAutomation(null);
-    setFormData({ name: '', description: '' });
     setConfigValues({});
     setCreationMode('templates');
     setCurrentStep('gallery');
@@ -327,10 +414,6 @@ const Automations: React.FC = () => {
   const handleOpenEditAutomation = (automation: AutomationInstance) => {
     setEditingAutomation(automation);
     setSelectedAutomation(null);
-    setFormData({
-      name: automation.name,
-      description: automation.description || '',
-    });
 
     const template = resolveTemplateForInstance(automation);
     setSelectedTemplate(template);
@@ -367,6 +450,10 @@ const Automations: React.FC = () => {
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!currentWorkspace || !selectedTemplate?.currentVersion) return;
+    if (!editingAutomation && isAutomationLimitReached) {
+      setShowAutomationUpgrade(true);
+      return;
+    }
 
     setError(null);
     const { config, error: configError } = normalizeConfig(exposedFields, configValues);
@@ -381,16 +468,23 @@ const Automations: React.FC = () => {
 
     setSaving(true);
     try {
+      const templateName = selectedTemplate.name || 'Automation';
+      const templateDescription = selectedTemplate.currentVersion?.display?.outcome
+        || selectedTemplate.description
+        || 'Automation template';
       const payload = {
-        name: formData.name.trim(),
-        description: formData.description.trim(),
+        name: templateName,
+        description: templateDescription,
         userConfig: config || {},
         templateVersionId: selectedTemplate.currentVersion._id,
       };
 
       let savedAutomation: AutomationInstance;
       if (editingAutomation) {
-        savedAutomation = await automationAPI.update(editingAutomation._id, payload);
+        savedAutomation = await automationAPI.update(editingAutomation._id, {
+          userConfig: payload.userConfig,
+          templateVersionId: payload.templateVersionId,
+        });
       } else {
         savedAutomation = await automationAPI.create({
           ...payload,
@@ -420,7 +514,13 @@ const Automations: React.FC = () => {
       });
 
       handleCloseCreateView();
-    } catch (err) {
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const message = err?.response?.data?.error;
+      if (!editingAutomation && status === 403 && typeof message === 'string' && message.toLowerCase().includes('automation limit')) {
+        setShowAutomationUpgrade(true);
+        return;
+      }
       console.error('Error saving automation:', err);
       setError('Failed to save automation');
     } finally {
@@ -478,11 +578,6 @@ const Automations: React.FC = () => {
     }
     setSelectedTemplate(template);
     setCurrentStep('setup');
-    const display = template.currentVersion?.display;
-    setFormData({
-      name: template.name,
-      description: display?.outcome || template.description || '',
-    });
     setConfigValues(buildDefaultConfig(template.currentVersion?.exposedFields || []));
   };
 
@@ -603,7 +698,56 @@ const Automations: React.FC = () => {
   if (!currentWorkspace) return null;
 
   return (
-    <div className={`h-full flex flex-col ${isCreateSetupView || isDetailsView ? 'overflow-hidden' : ''}`}>
+    <div className={`relative h-full flex flex-col ${isCreateSetupView || isDetailsView ? 'overflow-hidden' : ''}`}>
+      {showAutomationUpgrade && (
+        <div
+          className={`absolute inset-0 z-40 flex items-center justify-center rounded-2xl p-6 ${isLightTheme ? 'bg-slate-200/70' : 'bg-black/60'} backdrop-blur-sm`}
+        >
+          <div className="relative max-w-xl w-full rounded-2xl border border-border bg-card p-6 shadow-xl text-center space-y-4">
+            <button
+              type="button"
+              onClick={() => setShowAutomationUpgrade(false)}
+              className="absolute top-3 right-3 rounded-full border border-border/60 p-2 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <Badge variant="secondary" className="uppercase tracking-[0.3em] text-[10px]">
+              Upgrade required
+            </Badge>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-foreground">Unlock more automations</h2>
+              <p className="text-sm text-muted-foreground">
+                You&apos;ve reached your automation limit{typeof automationLimit === 'number' ? ` (${automationCount}/${automationLimit})` : ''}. Upgrade your plan to create more automations.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+              {[
+                'Higher automation limits per workspace',
+                'Advanced templates and routing',
+                'Deeper automation performance insights',
+                'Priority support and onboarding',
+              ].map((item) => (
+                <div key={item} className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/30 p-3">
+                  <CheckCircle2 className="w-4 h-4 text-primary mt-0.5" />
+                  <span className="text-sm text-foreground">{item}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col md:flex-row items-center justify-center gap-3">
+              <Button
+                onClick={() => navigate('/app/settings?tab=plan')}
+                className="w-full md:w-auto"
+              >
+                View upgrade options
+              </Button>
+              {workspaceTier?.tier?.name && (
+                <span className="text-xs text-muted-foreground">Current plan: {workspaceTier.tier.name}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <div className={`flex flex-col lg:flex-row gap-6 ${isCreateSetupView || isDetailsView ? 'flex-1 min-h-0' : ''}`}>
         <div className={isDetailsView ? 'hidden lg:block' : ''}>
           <AutomationsSidebar
@@ -635,6 +779,7 @@ const Automations: React.FC = () => {
                   createViewTitle={createViewTitle}
                   isCreateSetupView={isCreateSetupView}
                   editingAutomation={editingAutomation}
+                  allowCustomCreation={isCustomAutomationEnabled}
                   creationMode={creationMode}
                   currentStep={currentStep}
                   selectedTemplate={selectedTemplate}
@@ -642,7 +787,6 @@ const Automations: React.FC = () => {
                   templateSearch={templateSearch}
                   goalFilter={goalFilter}
                   industryFilter={industryFilter}
-                  formData={formData}
                   exposedFields={exposedFields}
                   configValues={configValues}
                   saving={saving}
@@ -659,7 +803,6 @@ const Automations: React.FC = () => {
                   onBackToGallery={handleBackToGallery}
                   onBackToSetup={handleBackToSetup}
                   onContinueToReview={handleContinueToReview}
-                  onUpdateFormData={setFormData}
                   onUpdateConfigValues={setConfigValues}
                   previewMessages={previewMessages}
                   previewInputValue={previewInputValue}
@@ -697,6 +840,7 @@ const Automations: React.FC = () => {
                   automations={automations}
                   summaryStats={summaryStats}
                   loading={loading}
+                  aiUsage={aiUsage}
                   onCreate={handleOpenCreateModal}
                   onOpen={handleOpenAutomationDetails}
                   onEdit={handleOpenEditAutomation}

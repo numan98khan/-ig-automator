@@ -15,6 +15,7 @@ import {
 } from '../utils/instagram-api';
 import { addTicketUpdate, createTicket, getActiveTicket } from './escalationService';
 import { addCountIncrement, trackDailyMetric } from './reportingService';
+import { assertUsageLimit } from './tierService';
 import {
   detectAutomationIntent,
   detectGoalIntent,
@@ -36,6 +37,7 @@ import {
 } from '../types/automation';
 import { FlowExposedField, FlowTriggerDefinition } from '../types/flow';
 import { AutomationTestContext } from './automation/types';
+import { getWorkspaceById } from '../repositories/core/workspaceRepository';
 
 type AutomationDeliveryMode = 'instagram' | 'preview';
 
@@ -54,6 +56,8 @@ type FlowRuntimeEdge = {
   to: string;
   condition?: RouterCondition;
   order?: number;
+  isDefault?: boolean;
+  default?: boolean;
 };
 
 type FlowRuntimeStep = {
@@ -120,9 +124,11 @@ type RouterRule = {
 };
 
 type RouterCondition = {
-  type?: 'rules' | 'else';
+  type?: 'rules' | 'else' | 'default';
   op?: 'all' | 'any';
   rules?: RouterRule[];
+  default?: boolean;
+  isDefault?: boolean;
 };
 
 type RouterRouting = {
@@ -151,6 +157,20 @@ const resolveWorkspaceId = (details?: Record<string, any>) => {
     return candidate.toString();
   }
   return undefined;
+};
+
+const getWorkspaceOwnerId = async (workspaceId: string) => {
+  const workspace = await getWorkspaceById(workspaceId);
+  return workspace?.userId || null;
+};
+
+const checkAiMessageAllowance = async (workspaceId: string) => {
+  const ownerId = await getWorkspaceOwnerId(workspaceId);
+  if (!ownerId) {
+    return { allowed: true, ownerId: null, limit: undefined, used: undefined };
+  }
+  const usageCheck = await assertUsageLimit(ownerId, 'aiMessages', 1, workspaceId, { increment: false });
+  return { allowed: usageCheck.allowed, ownerId, limit: usageCheck.limit, used: usageCheck.current };
 };
 
 const logAutomation = (message: string, details?: Record<string, any>) => {
@@ -237,7 +257,10 @@ export const resolveLatestTemplateVersion = async (params: {
 }) => {
   const { templateId, fallbackVersionId } = params;
   if (templateId) {
-    const template = await FlowTemplate.findById(templateId).select('currentVersionId').lean();
+    const template = await FlowTemplate.findById(templateId).select('currentVersionId status').lean();
+    if (template?.status === 'archived') {
+      return null;
+    }
     if (template?.currentVersionId) {
       const version = await FlowTemplateVersion.findOne({
         _id: template.currentVersionId,
@@ -812,6 +835,20 @@ async function handleAiReplyStep(params: {
     trackStats = true,
     logContext,
   } = params;
+  const workspaceId = conversation.workspaceId?.toString?.() || conversation.workspaceId;
+  let usageOwnerId: string | null = null;
+  if (deliveryMode !== 'preview' && workspaceId) {
+    const usageCheck = await checkAiMessageAllowance(workspaceId);
+    if (!usageCheck.allowed) {
+      logAutomation('⚠️  [AUTOMATION] AI message limit reached', {
+        workspaceId,
+        limit: usageCheck.limit,
+        used: usageCheck.used,
+      });
+      return { success: false, error: 'AI message limit reached for this workspace' };
+    }
+    usageOwnerId = usageCheck.ownerId;
+  }
   const settings = await getWorkspaceSettings(conversation.workspaceId);
   const aiSettings = {
     ...(graph.aiSettings || {}),
@@ -884,6 +921,9 @@ async function handleAiReplyStep(params: {
     });
   }
   logAutomationStep('flow_ai_reply_send', sendStart);
+  if (deliveryMode !== 'preview' && usageOwnerId && workspaceId) {
+    await assertUsageLimit(usageOwnerId, 'aiMessages', 1, workspaceId);
+  }
 
   let ticketId = activeTicket?._id;
   if (aiResponse.shouldEscalate && !ticketId && deliveryMode !== 'preview') {
@@ -931,7 +971,9 @@ async function handleAiReplyStep(params: {
 
 const normalizeRouterCondition = (condition?: RouterCondition): RouterCondition => {
   if (!condition) return { type: 'rules', op: 'all', rules: [] };
-  if (condition.type === 'else') return { type: 'else' };
+  if (condition.type === 'else' || condition.type === 'default' || condition.default || condition.isDefault) {
+    return { type: 'else' };
+  }
   return {
     type: 'rules',
     op: condition.op === 'any' ? 'any' : 'all',
@@ -1066,9 +1108,14 @@ const resolveRouterTargets = (
   const sorted = sortRouterEdges(edges);
   const matchMode: RouterMatchMode = step.routing?.matchMode === 'all' ? 'all' : 'first';
 
-  const defaultEdge = sorted.find((edge) => normalizeRouterCondition(edge.condition).type === 'else');
+  const isDefaultEdge = (edge: FlowRuntimeEdge) => {
+    if (normalizeRouterCondition(edge.condition).type === 'else') return true;
+    const rawEdge = edge as { default?: boolean; isDefault?: boolean };
+    return Boolean(rawEdge.default || rawEdge.isDefault);
+  };
+  const defaultEdge = sorted.find((edge) => isDefaultEdge(edge));
   const matched = sorted.filter((edge) =>
-    evaluateRouterCondition(normalizeRouterCondition(edge.condition), context),
+    !isDefaultEdge(edge) && evaluateRouterCondition(normalizeRouterCondition(edge.condition), context),
   );
 
   if (matched.length > 0) {
@@ -1083,6 +1130,17 @@ const resolveRouterTargets = (
 
   if (defaultEdge?.to) {
     return { nextNodeId: defaultEdge.to };
+  }
+
+  const fallbackTarget = step.routing?.defaultTarget;
+  if (fallbackTarget) {
+    const edgeMatch = sorted.find((edge) => edge.to === fallbackTarget);
+    if (edgeMatch?.to) {
+      return { nextNodeId: edgeMatch.to };
+    }
+    if (plan.nodeMap?.has(fallbackTarget)) {
+      return { nextNodeId: fallbackTarget };
+    }
   }
 
   return {};
@@ -1295,6 +1353,20 @@ async function executeFlowPlan(params: {
         ...(plan.graph.aiSettings || {}),
         ...(step.aiSettings || {}),
       };
+      const workspaceId = conversation.workspaceId?.toString?.() || conversation.workspaceId;
+      let usageOwnerId: string | null = null;
+      if (deliveryMode !== 'preview' && workspaceId) {
+        const usageCheck = await checkAiMessageAllowance(workspaceId);
+        if (!usageCheck.allowed) {
+          logAutomation('⚠️  [AUTOMATION] AI message limit reached', {
+            workspaceId,
+            limit: usageCheck.limit,
+            used: usageCheck.used,
+          });
+          return { success: false, error: 'AI message limit reached for this workspace', sentCount, executedSteps };
+        }
+        usageOwnerId = usageCheck.ownerId;
+      }
       const agentSteps = Array.isArray(step.agentSteps)
         ? step.agentSteps.map((agentStep) => String(agentStep || '').trim()).filter(Boolean)
         : [];
@@ -1383,6 +1455,9 @@ async function executeFlowPlan(params: {
         });
       }
       sentCount += 1;
+      if (deliveryMode !== 'preview' && usageOwnerId && workspaceId) {
+        await assertUsageLimit(usageOwnerId, 'aiMessages', 1, workspaceId);
+      }
 
       const collectedFields = agentResult.collectedFields || {};
       Object.entries(collectedFields).forEach(([key, value]) => {
@@ -1732,12 +1807,13 @@ export async function executePreviewFlowForInstance(params: {
 
   if (!hasActiveState) {
     const triggers = runtime.triggers || [];
-    const dmTriggers = triggers.filter((trigger) => trigger.type === 'dm_message');
-    if (dmTriggers.length === 0) {
+    const previewTriggerTypes: TriggerType[] = ['dm_message', 'post_comment', 'story_reply', 'story_mention'];
+    const previewTriggers = triggers.filter((trigger) => previewTriggerTypes.includes(trigger.type));
+    if (previewTriggers.length === 0) {
       return { success: false, error: 'No triggers configured for preview', messages: [] };
     }
     let matched = false;
-    for (const trigger of dmTriggers) {
+    for (const trigger of previewTriggers) {
       if (await matchesTriggerConfig(messageText || '', trigger.config, messageContext)) {
         matched = true;
         break;
@@ -1900,7 +1976,7 @@ export async function executeAutomation(params: {
 
     const templateIds = Array.from(new Set(instances.map(instance => instance.templateId?.toString()).filter(Boolean)));
     const templates = templateIds.length
-      ? await FlowTemplate.find({ _id: { $in: templateIds } }).select('currentVersionId').lean()
+      ? await FlowTemplate.find({ _id: { $in: templateIds } }).select('currentVersionId status').lean()
       : [];
     const templateMap = new Map(templates.map((template: any) => [template._id.toString(), template]));
 
@@ -1931,6 +2007,12 @@ export async function executeAutomation(params: {
       const template = instance.templateId
         ? templateMap.get(instance.templateId.toString())
         : null;
+      if (template?.status === 'archived') {
+        diagnostic.reason = 'template_archived';
+        diagnostic.templateStatus = template.status;
+        matchDiagnostics.push(diagnostic);
+        continue;
+      }
       const latestVersionId = template?.currentVersionId?.toString();
       const latestVersion = latestVersionId ? versionMap.get(latestVersionId) || null : null;
       const storedVersion = instance.templateVersionId

@@ -8,6 +8,7 @@ import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automa
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logOpenAiUsage } from './openAiUsageService';
+import { normalizeReasoningEffort } from '../utils/aiReasoning';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -183,7 +184,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
   const maxOutputTokens = typeof options.maxOutputTokens === 'number'
     ? options.maxOutputTokens
     : 420;
-  const reasoningEffort = options.reasoningEffort;
+  const reasoningEffort = normalizeReasoningEffort(model, options.reasoningEffort);
   const ragEnabled = options.ragEnabled !== false;
   const messages: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = messageHistory
     ? [...messageHistory].slice(-historyLimit)
@@ -694,7 +695,7 @@ Generate a response following all rules above. Return JSON with:
 
   // Final safeguard: never send empty text
   if (!reply.replyText.trim()) {
-    reply.replyText = 'Thanks for reaching out! A teammate will follow up shortly.';
+    reply.replyText = 'Thanks for reaching out! We\'ll be with you shortly';
   }
 
   reply.knowledgeItemsUsed = knowledgeItemsUsed;

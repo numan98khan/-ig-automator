@@ -56,7 +56,13 @@ export function addCountIncrement(
   amount = 1
 ) {
   if (!key) return;
-  increments[`${path}.${key}`] = (increments[`${path}.${key}`] || 0) + amount;
+  const normalizedKey = key
+    .trim()
+    .replace(/\.+/g, '_')
+    .replace(/\$/g, '_');
+  if (!normalizedKey) return;
+  const metricKey = `${path}.${normalizedKey}`;
+  increments[metricKey] = (increments[metricKey] || 0) + amount;
 }
 
 export async function rebuildWorkspaceReportForDate(workspaceId: string, date: Date) {
