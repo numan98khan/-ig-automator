@@ -857,7 +857,7 @@ router.put('/flow-drafts/:id', authenticate, requireAdmin, async (req, res) => {
 
     const nextStatus = req.body?.status as string | undefined;
     if (draft.templateId && nextStatus) {
-      const templateStatus = nextStatus === 'archived' ? 'archived' : 'active';
+      const templateStatus = nextStatus === 'published' ? 'active' : 'archived';
       await FlowTemplate.findByIdAndUpdate(draft.templateId, { status: templateStatus });
     }
 

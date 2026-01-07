@@ -2842,10 +2842,8 @@ export default function AutomationTemplates() {
 
   const flowTitle = draftForm.name.trim() || selectedDraft?.name || 'Untitled flow'
   const statusLabel = draftForm.status === 'published'
-    ? 'Published'
-    : draftForm.status === 'archived'
-      ? 'Archived'
-      : 'Draft'
+    ? 'Live'
+    : 'Draft'
   const canEditFlow = Boolean(selectedDraftId)
 
   return (
@@ -3007,17 +3005,32 @@ export default function AutomationTemplates() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Status</label>
-                  <select
-                    className="input w-full"
-                    value={draftForm.status}
-                    onChange={(event) =>
-                      setDraftForm((prev) => ({ ...prev, status: event.target.value as DraftForm['status'] }))
-                    }
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="published">Published</option>
-                    <option value="archived">Archived</option>
-                  </select>
+                  <div className="inline-flex rounded-full border border-border/60 bg-background/70 p-1 text-xs font-semibold">
+                    {(['draft', 'live'] as const).map((mode) => {
+                      const isLive = draftForm.status === 'published';
+                      const isActive = (mode === 'live' && isLive) || (mode === 'draft' && !isLive);
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() =>
+                            setDraftForm((prev) => ({
+                              ...prev,
+                              status: mode === 'live' ? 'published' : 'archived',
+                            }))
+                          }
+                          className={`px-4 py-2 rounded-full transition ${
+                            isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {mode === 'live' ? 'Live' : 'Draft'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Drafts appear as archived to end users and will not run.
+                  </div>
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <label className="text-sm text-muted-foreground">Description</label>
