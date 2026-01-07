@@ -34,7 +34,6 @@ import '@xyflow/react/dist/style.css'
 import {
   AI_MODEL_SUGGESTIONS,
   DEFAULT_TRIGGER_TYPE,
-  FIELD_TYPES,
   FLOW_NODE_LABELS,
   FLOW_NODE_LIBRARY,
   FLOW_NODE_STYLES,
@@ -48,7 +47,6 @@ import {
 import { buildFlowNodeTypes } from './automation-templates/components/FlowNodes'
 import type {
   DraftForm,
-  FieldForm,
   FlowAiSettings,
   FlowDisplay,
   FlowDraft,
