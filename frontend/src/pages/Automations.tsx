@@ -49,6 +49,12 @@ const buildDefaultConfig = (fields: FlowExposedField[]) => {
   return defaults;
 };
 
+const isKeywordListField = (field: FlowExposedField) =>
+  Boolean(
+    field.source?.path &&
+    (field.source.path.includes('keywords') || field.source.path.includes('excludeKeywords')),
+  );
+
 const normalizeConfig = (
   fields: FlowExposedField[],
   values: Record<string, any>,
@@ -79,6 +85,13 @@ const normalizeConfig = (
         try {
           config[field.key] = JSON.parse(raw);
         } catch {
+          if (isKeywordListField(field)) {
+            config[field.key] = raw
+              .split(',')
+              .map((item) => item.trim())
+              .filter(Boolean);
+            continue;
+          }
           return { error: `${field.label} must be valid JSON` };
         }
       } else {
