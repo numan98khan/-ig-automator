@@ -854,6 +854,13 @@ router.put('/flow-drafts/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const draft = await FlowDraft.findByIdAndUpdate(req.params.id, req.body || {}, { new: true });
     if (!draft) return res.status(404).json({ error: 'Draft not found' });
+
+    const nextStatus = req.body?.status as string | undefined;
+    if (draft.templateId && nextStatus) {
+      const templateStatus = nextStatus === 'archived' ? 'archived' : 'active';
+      await FlowTemplate.findByIdAndUpdate(draft.templateId, { status: templateStatus });
+    }
+
     res.json({ data: draft });
   } catch (error) {
     console.error('Admin update flow draft error:', error);
