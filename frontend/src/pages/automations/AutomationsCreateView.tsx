@@ -154,6 +154,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   onPreviewStop,
   onPreviewReset,
 }) => {
+  const [showAdvanced, setShowAdvanced] = React.useState(Boolean(editingAutomation));
   const updateFormData = (updates: Partial<CreateFormData>) => {
     onUpdateFormData((prev) => ({ ...prev, ...updates }));
   };
@@ -180,6 +181,12 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
     acc[group].push(field);
     return acc;
   }, {} as Record<string, FlowExposedField[]>);
+  const advancedGroups = new Set(['Triggers', 'AI Reply', 'AI Agent']);
+  const groupedFieldEntries = Object.entries(groupedFields);
+  const hasAdvancedFields = groupedFieldEntries.some(([group]) => advancedGroups.has(group));
+  const visibleGroupedFields = groupedFieldEntries.filter(
+    ([group]) => showAdvanced || !advancedGroups.has(group),
+  );
 
   const renderField = (field: FlowExposedField) => {
     const value = configValues[field.key];
@@ -431,7 +438,26 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 )}
               </div>
 
-              {Object.entries(groupedFields).map(([group, fields]) => (
+              {hasAdvancedFields && (
+                <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background/60 px-3 py-2">
+                  <div>
+                    <div className="text-sm font-medium text-foreground">Advanced options</div>
+                    <div className="text-xs text-muted-foreground">
+                      Configure trigger routing and AI behavior.
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAdvanced((prev) => !prev)}
+                  >
+                    {showAdvanced ? 'Hide options' : 'Configure options'}
+                  </Button>
+                </div>
+              )}
+
+              {visibleGroupedFields.map(([group, fields]) => (
                 <div key={group} className="space-y-3">
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group}</div>
                   {fields.map(renderField)}
