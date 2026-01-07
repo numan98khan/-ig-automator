@@ -208,18 +208,18 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
           return (
             <div
               key={automation._id}
-              onClick={isOpenEnabled ? () => onOpen?.(automation) : undefined}
-              onKeyDown={isOpenEnabled ? (event) => {
+              onClick={!isArchived && isOpenEnabled ? () => onOpen?.(automation) : undefined}
+              onKeyDown={!isArchived && isOpenEnabled ? (event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
                   onOpen?.(automation);
                 }
               } : undefined}
-              role={isOpenEnabled ? 'button' : undefined}
-              tabIndex={isOpenEnabled ? 0 : undefined}
+              role={!isArchived && isOpenEnabled ? 'button' : undefined}
+              tabIndex={!isArchived && isOpenEnabled ? 0 : undefined}
               className={`group relative overflow-hidden rounded-2xl border border-border/60 bg-background/70 p-5 shadow-sm transition-all duration-200 ${
-                isOpenEnabled ? 'hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/30 cursor-pointer' : ''
-              }`}
+                !isArchived && isOpenEnabled ? 'hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/30 cursor-pointer' : ''
+              } ${isArchived ? 'opacity-55 grayscale' : ''}`}
             >
               <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/60 via-primary/20 to-transparent" />
               {badge && (
