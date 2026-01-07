@@ -922,6 +922,12 @@ router.delete('/flow-drafts/:id', authenticate, requireAdmin, async (req, res) =
   try {
     const draft = await FlowDraft.findByIdAndDelete(req.params.id);
     if (!draft) return res.status(404).json({ error: 'Draft not found' });
+    if (draft.templateId) {
+      const remainingDrafts = await FlowDraft.countDocuments({ templateId: draft.templateId });
+      if (remainingDrafts === 0) {
+        await FlowTemplate.findByIdAndUpdate(draft.templateId, { status: 'archived' });
+      }
+    }
     res.json({ data: draft });
   } catch (error) {
     console.error('Admin delete flow draft error:', error);
