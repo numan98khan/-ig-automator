@@ -883,12 +883,16 @@ export default function AutomationTemplates() {
     const nodeId = selectedNode.id
     setFlowNodes((nodes) => nodes.filter((node) => node.id !== nodeId))
     setFlowEdges((edges) => edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId))
+    setDraftForm((prev) => ({
+      ...prev,
+      fields: prev.fields.filter((field) => field.sourceNodeId !== nodeId),
+    }))
     if (startNodeId === nodeId) {
       const nextNode = flowNodes.find((node) => node.id !== nodeId)
       setStartNodeId(nextNode?.id || '')
     }
     setSelectedNodeId(null)
-  }, [flowNodes, selectedNode, setFlowEdges, setFlowNodes, startNodeId])
+  }, [flowNodes, selectedNode, setFlowEdges, setFlowNodes, setDraftForm, startNodeId])
 
   const handleSelectionChange = useCallback(
     ({ nodes }: { nodes: FlowNode[] }) => {
