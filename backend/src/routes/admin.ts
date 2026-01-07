@@ -883,6 +883,11 @@ router.post('/flow-drafts/:id/publish', authenticate, requireAdmin, async (req, 
       });
       draft.templateId = template._id;
       await draft.save();
+    } else {
+      template.name = draft.name;
+      template.description = draft.description;
+      template.status = 'active';
+      await template.save();
     }
 
     const versionCount = await FlowTemplateVersion.countDocuments({ templateId: template._id });
