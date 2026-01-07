@@ -3553,6 +3553,29 @@ export default function AutomationTemplates() {
                   {statusLabel}
                 </span>
               </div>
+              <div className="inline-flex rounded-full border border-border/60 bg-background/70 p-1 text-xs font-semibold">
+                {(['draft', 'live'] as const).map((mode) => {
+                  const isLive = draftForm.status === 'published';
+                  const isActive = (mode === 'live' && isLive) || (mode === 'draft' && !isLive);
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          status: mode === 'live' ? 'published' : 'archived',
+                        }))
+                      }
+                      className={`px-4 py-2 rounded-full transition ${
+                        isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {mode === 'live' ? 'Live' : 'Draft'}
+                    </button>
+                  );
+                })}
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   className="btn btn-secondary flex items-center gap-2"
