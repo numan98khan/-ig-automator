@@ -17,11 +17,6 @@ import { Input } from '../../components/ui/Input';
 import { AutomationPreviewPhone, PreviewMessage } from './AutomationPreviewPhone';
 import { FLOW_GOAL_FILTERS, TRIGGER_METADATA } from './constants';
 
-type CreateFormData = {
-  name: string;
-  description: string;
-};
-
 type AutomationsCreateViewProps = {
   createViewTitle: string;
   isCreateSetupView: boolean;
@@ -34,7 +29,6 @@ type AutomationsCreateViewProps = {
   templateSearch: string;
   goalFilter: 'all' | (typeof FLOW_GOAL_FILTERS)[number];
   industryFilter: 'all' | 'Clinics' | 'Salons' | 'Retail' | 'Restaurants' | 'Real Estate' | 'General';
-  formData: CreateFormData;
   exposedFields: FlowExposedField[];
   configValues: Record<string, any>;
   saving: boolean;
@@ -51,7 +45,6 @@ type AutomationsCreateViewProps = {
   onBackToGallery: () => void;
   onBackToSetup: () => void;
   onContinueToReview: () => void;
-  onUpdateFormData: React.Dispatch<React.SetStateAction<CreateFormData>>;
   onUpdateConfigValues: React.Dispatch<React.SetStateAction<Record<string, any>>>;
   previewMessages: PreviewMessage[];
   previewInputValue: string;
@@ -123,7 +116,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   templateSearch,
   goalFilter,
   industryFilter,
-  formData,
   exposedFields,
   configValues,
   saving,
@@ -140,7 +132,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   onBackToGallery,
   onBackToSetup,
   onContinueToReview,
-  onUpdateFormData,
   onUpdateConfigValues,
   previewMessages,
   previewInputValue,
@@ -155,9 +146,13 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   onPreviewReset,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(Boolean(editingAutomation));
-  const updateFormData = (updates: Partial<CreateFormData>) => {
-    onUpdateFormData((prev) => ({ ...prev, ...updates }));
-  };
+  const automationName = editingAutomation?.name
+    || selectedTemplate?.name
+    || 'Automation';
+  const automationDescription = editingAutomation?.description
+    || selectedTemplate?.currentVersion?.display?.outcome
+    || selectedTemplate?.description
+    || 'Automation template';
 
   const updateConfigValues = (updates: Record<string, any>) => {
     onUpdateConfigValues((prev) => ({ ...prev, ...updates }));
@@ -395,23 +390,6 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                   {editingAutomation ? 'Update your automation settings and save changes.' : 'Configure the template details before activation.'}
                 </p>
               </div>
-              <Input
-                label="Name"
-                value={formData.name}
-                onChange={(event) => updateFormData({ name: event.target.value })}
-                placeholder="e.g., Sales Concierge"
-              />
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(event) => updateFormData({ description: event.target.value })}
-                  placeholder="What does this automation do?"
-                  rows={2}
-                  className="w-full px-3 py-2 bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                />
-              </div>
-
               <div className="rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3">
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Triggers
@@ -705,8 +683,8 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                   <div className="space-y-4">
                     <div>
                       <label className="text-xs font-medium text-muted-foreground uppercase">Automation</label>
-                      <p className="font-semibold">{formData.name}</p>
-                      <p className="text-sm text-muted-foreground">{formData.description}</p>
+                      <p className="font-semibold">{automationName}</p>
+                      <p className="text-sm text-muted-foreground">{automationDescription}</p>
                     </div>
 
                     <div>

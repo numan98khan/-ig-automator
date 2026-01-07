@@ -27,11 +27,6 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { useTheme } from '../context/ThemeContext';
 
-type CreateFormData = {
-  name: string;
-  description: string;
-};
-
 const buildDefaultConfig = (fields: FlowExposedField[]) => {
   const defaults: Record<string, any> = {};
   fields.forEach((field) => {
@@ -176,10 +171,6 @@ const Automations: React.FC = () => {
 
   const [editingAutomation, setEditingAutomation] = useState<AutomationInstance | null>(null);
   const [selectedAutomation, setSelectedAutomation] = useState<AutomationInstance | null>(null);
-  const [formData, setFormData] = useState<CreateFormData>({
-    name: '',
-    description: '',
-  });
   const [configValues, setConfigValues] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [previewSessionId, setPreviewSessionId] = useState<string | null>(null);
@@ -391,7 +382,6 @@ const Automations: React.FC = () => {
   const handleOpenCreateModal = () => {
     setEditingAutomation(null);
     setSelectedAutomation(null);
-    setFormData({ name: '', description: '' });
     setConfigValues({});
     setCreationMode('templates');
     setCurrentStep('gallery');
@@ -424,10 +414,6 @@ const Automations: React.FC = () => {
   const handleOpenEditAutomation = (automation: AutomationInstance) => {
     setEditingAutomation(automation);
     setSelectedAutomation(null);
-    setFormData({
-      name: automation.name,
-      description: automation.description || '',
-    });
 
     const template = resolveTemplateForInstance(automation);
     setSelectedTemplate(template);
@@ -482,16 +468,23 @@ const Automations: React.FC = () => {
 
     setSaving(true);
     try {
+      const templateName = selectedTemplate.name || 'Automation';
+      const templateDescription = selectedTemplate.currentVersion?.display?.outcome
+        || selectedTemplate.description
+        || 'Automation template';
       const payload = {
-        name: formData.name.trim(),
-        description: formData.description.trim(),
+        name: templateName,
+        description: templateDescription,
         userConfig: config || {},
         templateVersionId: selectedTemplate.currentVersion._id,
       };
 
       let savedAutomation: AutomationInstance;
       if (editingAutomation) {
-        savedAutomation = await automationAPI.update(editingAutomation._id, payload);
+        savedAutomation = await automationAPI.update(editingAutomation._id, {
+          userConfig: payload.userConfig,
+          templateVersionId: payload.templateVersionId,
+        });
       } else {
         savedAutomation = await automationAPI.create({
           ...payload,
@@ -585,11 +578,6 @@ const Automations: React.FC = () => {
     }
     setSelectedTemplate(template);
     setCurrentStep('setup');
-    const display = template.currentVersion?.display;
-    setFormData({
-      name: template.name,
-      description: display?.outcome || template.description || '',
-    });
     setConfigValues(buildDefaultConfig(template.currentVersion?.exposedFields || []));
   };
 
@@ -799,7 +787,6 @@ const Automations: React.FC = () => {
                   templateSearch={templateSearch}
                   goalFilter={goalFilter}
                   industryFilter={industryFilter}
-                  formData={formData}
                   exposedFields={exposedFields}
                   configValues={configValues}
                   saving={saving}
@@ -816,7 +803,6 @@ const Automations: React.FC = () => {
                   onBackToGallery={handleBackToGallery}
                   onBackToSetup={handleBackToSetup}
                   onContinueToReview={handleContinueToReview}
-                  onUpdateFormData={setFormData}
                   onUpdateConfigValues={setConfigValues}
                   previewMessages={previewMessages}
                   previewInputValue={previewInputValue}
