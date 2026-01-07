@@ -223,7 +223,9 @@ const Automations: React.FC = () => {
   const summaryStats = useMemo(() => {
     const totalTriggered = automations.reduce((sum, automation) => sum + (automation.stats?.totalTriggered || 0), 0);
     const totalRepliesSent = automations.reduce((sum, automation) => sum + (automation.stats?.totalRepliesSent || 0), 0);
-    const activeCount = automations.filter((automation) => automation.isActive).length;
+    const activeCount = automations.filter((automation) => (
+      automation.isActive && automation.template?.status !== 'archived'
+    )).length;
     return {
       activeCount,
       totalCount: automations.length,

@@ -41,8 +41,10 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
   const filteredAutomations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return automations.filter((automation) => {
-      if (statusFilter === 'active' && !automation.isActive) return false;
-      if (statusFilter === 'inactive' && automation.isActive) return false;
+      const isArchived = automation.template?.status === 'archived';
+      const isEffectivelyActive = automation.isActive && !isArchived;
+      if (statusFilter === 'active' && !isEffectivelyActive) return false;
+      if (statusFilter === 'inactive' && isEffectivelyActive) return false;
       if (!query) return true;
       const nameMatch = automation.name.toLowerCase().includes(query);
       const descriptionMatch = (automation.description || '').toLowerCase().includes(query);
@@ -194,7 +196,14 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
             : trigger?.label || 'Trigger';
           const triggerDescription = trigger?.description || 'Trigger configured in the template.';
           const badge = triggers.length > 1 ? null : trigger?.badge;
-          const statusLabel = automation.isActive ? 'Active' : 'Inactive';
+          const isArchived = template?.status === 'archived';
+          const isEffectivelyActive = automation.isActive && !isArchived;
+          const statusLabel = isArchived ? 'Archived' : isEffectivelyActive ? 'Active' : 'Inactive';
+          const statusClass = isArchived
+            ? 'bg-amber-500/15 text-amber-500'
+            : isEffectivelyActive
+              ? 'bg-emerald-500/15 text-emerald-500'
+              : 'bg-slate-500/10 text-slate-500';
 
           return (
             <div
@@ -231,9 +240,7 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-lg font-semibold truncate">{automation.name}</h3>
                     <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-                      automation.isActive
-                        ? 'bg-emerald-500/15 text-emerald-500'
-                        : 'bg-slate-500/10 text-slate-500'
+                      statusClass
                     }`}>
                       {statusLabel}
                     </span>
@@ -267,14 +274,17 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                 <Button
                   onClick={(event) => {
                     event.stopPropagation();
-                    onToggle(automation);
+                    if (!isArchived) {
+                      onToggle(automation);
+                    }
                   }}
-                  variant={automation.isActive ? 'primary' : 'outline'}
+                  variant={isEffectivelyActive ? 'primary' : 'outline'}
                   className="rounded-full px-4"
                   size="sm"
-                  leftIcon={automation.isActive ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
+                  disabled={isArchived}
+                  leftIcon={isEffectivelyActive ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
                 >
-                  {automation.isActive ? 'Active' : 'Inactive'}
+                  {statusLabel}
                 </Button>
                 <div className="flex items-center gap-2">
                   <button
@@ -282,7 +292,7 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
                       event.stopPropagation();
                       onEdit?.(automation);
                     }}
-                    disabled={!isEditEnabled}
+                    disabled={!isEditEnabled || isArchived}
                     className="flex items-center gap-1 rounded-full border border-border bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
                   >
                     <Pencil className="h-4 w-4" />

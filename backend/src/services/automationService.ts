@@ -257,7 +257,10 @@ export const resolveLatestTemplateVersion = async (params: {
 }) => {
   const { templateId, fallbackVersionId } = params;
   if (templateId) {
-    const template = await FlowTemplate.findById(templateId).select('currentVersionId').lean();
+    const template = await FlowTemplate.findById(templateId).select('currentVersionId status').lean();
+    if (template?.status === 'archived') {
+      return null;
+    }
     if (template?.currentVersionId) {
       const version = await FlowTemplateVersion.findOne({
         _id: template.currentVersionId,
@@ -1973,7 +1976,7 @@ export async function executeAutomation(params: {
 
     const templateIds = Array.from(new Set(instances.map(instance => instance.templateId?.toString()).filter(Boolean)));
     const templates = templateIds.length
-      ? await FlowTemplate.find({ _id: { $in: templateIds } }).select('currentVersionId').lean()
+      ? await FlowTemplate.find({ _id: { $in: templateIds } }).select('currentVersionId status').lean()
       : [];
     const templateMap = new Map(templates.map((template: any) => [template._id.toString(), template]));
 
@@ -2004,6 +2007,12 @@ export async function executeAutomation(params: {
       const template = instance.templateId
         ? templateMap.get(instance.templateId.toString())
         : null;
+      if (template?.status === 'archived') {
+        diagnostic.reason = 'template_archived';
+        diagnostic.templateStatus = template.status;
+        matchDiagnostics.push(diagnostic);
+        continue;
+      }
       const latestVersionId = template?.currentVersionId?.toString();
       const latestVersion = latestVersionId ? versionMap.get(latestVersionId) || null : null;
       const storedVersion = instance.templateVersionId
