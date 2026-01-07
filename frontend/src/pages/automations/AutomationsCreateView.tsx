@@ -168,14 +168,9 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
   const templatePreviewMessages = display?.previewConversation || [];
   const triggers = version?.triggers || [];
 
-  const sortedFields = [...exposedFields].sort((a, b) => {
-    const orderA = a.ui?.order ?? 999;
-    const orderB = b.ui?.order ?? 999;
-    if (orderA !== orderB) return orderA - orderB;
-    return a.label.localeCompare(b.label);
-  });
+  const orderedFields = [...exposedFields];
 
-  const groupedFields = sortedFields.reduce((acc, field) => {
+  const groupedFields = orderedFields.reduce((acc, field) => {
     const group = field.ui?.group || 'Configuration';
     if (!acc[group]) acc[group] = [];
     acc[group].push(field);
