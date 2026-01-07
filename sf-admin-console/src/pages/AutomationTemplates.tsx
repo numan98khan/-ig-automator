@@ -1082,9 +1082,9 @@ export default function AutomationTemplates() {
         <ReactFlow
           nodes={flowNodes}
           edges={flowEdges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={handleConnect}
+          onNodesChange={isLive ? undefined : onNodesChange}
+          onEdgesChange={isLive ? undefined : onEdgesChange}
+          onConnect={isLive ? undefined : handleConnect}
           onSelectionChange={handleSelectionChange}
           onInit={setFlowInstance}
           nodeTypes={nodeTypes}
@@ -1092,6 +1092,9 @@ export default function AutomationTemplates() {
           defaultEdgeOptions={{ type: 'smoothstep' }}
           minZoom={0.2}
           maxZoom={1.5}
+          nodesDraggable={!isLive}
+          nodesConnectable={!isLive}
+          elementsSelectable
           className="h-full w-full touch-none"
         >
           <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="rgb(var(--muted-foreground) / 0.25)" />
@@ -1120,9 +1123,11 @@ export default function AutomationTemplates() {
 
       <div className="absolute right-6 top-6 z-30 flex flex-col items-end gap-3">
         <button
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition hover:bg-primary/90"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           onClick={() => setPaletteOpen((prev) => !prev)}
           aria-label="Open node palette"
+          disabled={isLive}
+          title={isLive ? 'Switch to Draft to edit nodes.' : undefined}
         >
           <Plus className="h-5 w-5" />
         </button>
@@ -1137,11 +1142,13 @@ export default function AutomationTemplates() {
                 return (
                   <button
                     key={item.type}
-                    className="w-full rounded-lg border border-border/60 bg-background/80 px-3 py-2 text-left transition hover:border-primary/50 hover:bg-muted/40"
+                    className="w-full rounded-lg border border-border/60 bg-background/80 px-3 py-2 text-left transition hover:border-primary/50 hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => {
+                      if (isLive) return
                       handleAddNode(item.type)
                       setPaletteOpen(false)
                     }}
+                    disabled={isLive}
                   >
                     <div className="flex items-start gap-2">
                       <span className={`mt-1 h-2.5 w-2.5 rounded-full ${style.dot}`} aria-hidden />
@@ -1163,6 +1170,11 @@ export default function AutomationTemplates() {
         {selectedNode && (
           <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
             <div className="text-sm font-semibold text-foreground">Inspector</div>
+            {isLive && (
+              <div className="mt-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                Live flows are read-only. Switch to Draft to edit node settings.
+              </div>
+            )}
             <datalist id="ai-model-options">
               {AI_MODEL_SUGGESTIONS.map((model) => (
                 <option key={model} value={model} />
@@ -1173,7 +1185,7 @@ export default function AutomationTemplates() {
                 <option key={key} value={key} />
               ))}
             </datalist>
-            <div className="mt-4 space-y-4">
+            <fieldset className={`mt-4 space-y-4 ${isLive ? 'opacity-60' : ''}`} disabled={isLive}>
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Label</label>
               <input
@@ -2843,7 +2855,7 @@ export default function AutomationTemplates() {
                   Delete node
                 </button>
               </div>
-            </div>
+            </fieldset>
           </div>
         )}
 
@@ -2902,10 +2914,11 @@ export default function AutomationTemplates() {
   )
 
   const flowTitle = draftForm.name.trim() || selectedDraft?.name || 'Untitled flow'
-  const statusLabel = draftForm.status === 'published'
+  const isLive = draftForm.status === 'published'
+  const statusLabel = isLive
     ? 'Live'
     : 'Draft'
-  const canEditFlow = Boolean(selectedDraftId)
+  const canEditFlow = Boolean(selectedDraftId) && !isLive
 
   return (
     <>
@@ -3032,6 +3045,7 @@ export default function AutomationTemplates() {
                       className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={handleOpenBuilder}
                       disabled={!canEditFlow}
+                      title={isLive ? 'Switch to Draft to edit this flow.' : undefined}
                     >
                       <Maximize2 className="w-4 h-4" />
                       Edit flow
@@ -3039,7 +3053,7 @@ export default function AutomationTemplates() {
                     <button
                       className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={handleDeleteDraft}
-                      disabled={!canEditFlow || deleteMutation.isPending}
+                      disabled={!selectedDraftId || deleteMutation.isPending}
                     >
                       <Trash2 className="w-4 h-4" />
                       {deleteMutation.isPending ? 'Deleting...' : 'Delete draft'}
@@ -3047,7 +3061,7 @@ export default function AutomationTemplates() {
                     <button
                       className="btn btn-secondary flex items-center gap-2"
                       onClick={() => handleSaveDraft()}
-                      disabled={draftForm.status === 'published' || updateMutation.isPending}
+                      disabled={!canEditFlow || updateMutation.isPending}
                     >
                     <Save className="w-4 h-4" />
                     {updateMutation.isPending ? 'Saving...' : 'Save draft'}
@@ -3062,6 +3076,7 @@ export default function AutomationTemplates() {
                     className="input w-full"
                     value={draftForm.name}
                     onChange={(event) => setDraftForm((prev) => ({ ...prev, name: event.target.value }))}
+                    disabled={isLive}
                   />
                 </div>
                 <div className="space-y-2">
@@ -3103,6 +3118,7 @@ export default function AutomationTemplates() {
                     onChange={(event) =>
                       setDraftForm((prev) => ({ ...prev, description: event.target.value }))
                     }
+                    disabled={isLive}
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
@@ -3113,6 +3129,7 @@ export default function AutomationTemplates() {
                     onChange={(event) =>
                       setDraftForm((prev) => ({ ...prev, templateId: event.target.value }))
                     }
+                    disabled={isLive}
                   >
                     <option value="">Create new template on publish</option>
                     {templates.map((template) => (
@@ -3145,6 +3162,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, outcome: event.target.value },
                         }))
                       }
+                      disabled={isLive}
                     />
                   </div>
                   <div className="space-y-2">
@@ -3159,6 +3177,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, setupTime: event.target.value },
                         }))
                       }
+                      disabled={isLive}
                     />
                   </div>
                   <div className="space-y-2">
@@ -3172,6 +3191,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, goal: event.target.value as DraftForm['display']['goal'] },
                         }))
                       }
+                      disabled={isLive}
                     >
                       <option value="">Select goal</option>
                       {GOAL_OPTIONS.map((option) => (
@@ -3192,6 +3212,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, industry: event.target.value as DraftForm['display']['industry'] },
                         }))
                       }
+                      disabled={isLive}
                     >
                       <option value="">Select industry</option>
                       {INDUSTRY_OPTIONS.map((option) => (
@@ -3212,6 +3233,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, collectsText: event.target.value },
                         }))
                       }
+                      disabled={isLive}
                     />
                   </div>
                   <div className="space-y-2">
@@ -3225,6 +3247,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, icon: event.target.value },
                         }))
                       }
+                      disabled={isLive}
                     />
                   </div>
                   <div className="space-y-2 md:col-span-2">
@@ -3238,6 +3261,7 @@ export default function AutomationTemplates() {
                           display: { ...prev.display, previewText: event.target.value },
                         }))
                       }
+                      disabled={isLive}
                     />
                   </div>
                 </div>
@@ -3252,6 +3276,7 @@ export default function AutomationTemplates() {
                       value={versionLabel}
                       onChange={(event) => setVersionLabel(event.target.value)}
                       placeholder="e.g. v2.0"
+                      disabled={isLive}
                     />
                   </div>
                 </div>
@@ -3316,15 +3341,17 @@ export default function AutomationTemplates() {
                   Fit view
                 </button>
                 <button
-                  className="btn btn-secondary flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={handleArrangeFlow}
+                  disabled={isLive}
                 >
                   <LayoutGrid className="w-4 h-4" />
                   Arrange
                 </button>
                 <button
-                  className="btn btn-secondary flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={handleClearFlow}
+                  disabled={isLive}
                 >
                   <Eraser className="w-4 h-4" />
                   Clear
@@ -3332,7 +3359,7 @@ export default function AutomationTemplates() {
                 <button
                   className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={() => handleSaveDraft()}
-                  disabled={!canEditFlow || draftForm.status === 'published' || updateMutation.isPending}
+                  disabled={!canEditFlow || updateMutation.isPending}
                 >
                   <Save className="w-4 h-4" />
                   {updateMutation.isPending ? 'Saving...' : 'Save draft'}
