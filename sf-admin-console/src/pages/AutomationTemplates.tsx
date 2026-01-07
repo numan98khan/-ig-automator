@@ -476,6 +476,15 @@ export default function AutomationTemplates() {
     },
   })
 
+  const publishMutation = useMutation({
+    mutationFn: (payload: any) => adminApi.publishFlowDraft(selectedDraftId as string, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['flow-drafts'] })
+      queryClient.invalidateQueries({ queryKey: ['flow-templates'] })
+      setVersionLabel('')
+    },
+  })
+
   const handleCreateDraft = () => {
     if (!newDraftName.trim()) {
       setError('Draft name is required.')
@@ -645,6 +654,15 @@ export default function AutomationTemplates() {
     }
     setError(null)
     const targetStatus = nextStatus ?? draftForm.status
+    if (targetStatus === 'published') {
+      publishMutation.mutate({
+        ...result.payload,
+        status: targetStatus,
+        dslSnapshot: result.payload.dsl,
+        versionLabel: versionLabel.trim() || undefined,
+      })
+      return
+    }
     updateMutation.mutate({
       ...result.payload,
       status: targetStatus,
