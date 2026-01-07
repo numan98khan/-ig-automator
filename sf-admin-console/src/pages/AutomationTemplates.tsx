@@ -233,6 +233,7 @@ export default function AutomationTemplates() {
     () => ({ nodes: flowNodes.length, edges: flowEdges.length }),
     [flowNodes.length, flowEdges.length],
   )
+  const flowNodeIds = useMemo(() => new Set(flowNodes.map((node) => node.id)), [flowNodes])
   const routerEdges = useMemo(() => {
     if (!selectedNode || selectedNode.type !== 'router') return []
     const getOrder = (edge: FlowEdge) => {
@@ -249,6 +250,22 @@ export default function AutomationTemplates() {
     () => draftForm.fields.map((field) => field.key).filter(Boolean),
     [draftForm.fields],
   )
+
+  useEffect(() => {
+    if (draftForm.fields.length === 0) return
+    setDraftForm((prev) => {
+      const nextFields = prev.fields.filter(
+        (field) => !field.sourceNodeId || flowNodeIds.has(field.sourceNodeId),
+      )
+      if (nextFields.length === prev.fields.length) {
+        return prev
+      }
+      return {
+        ...prev,
+        fields: nextFields,
+      }
+    })
+  }, [draftForm.fields.length, flowNodeIds, setDraftForm])
 
   useEffect(() => {
     if (flowNodes.length === 0) return
