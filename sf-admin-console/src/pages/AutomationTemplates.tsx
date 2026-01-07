@@ -199,6 +199,12 @@ export default function AutomationTemplates() {
   const aiModelValue = selectedNode?.aiSettings?.model || ''
   const hasCustomAiModel = Boolean(aiModelValue) && !AI_MODEL_SUGGESTIONS.includes(aiModelValue)
   const selectedTriggerConfig: FlowTriggerConfig = selectedNode?.triggerConfig || {}
+  const reasoningEffortOptions = REASONING_EFFORT_OPTIONS
+    .filter((option): option is NonNullable<typeof option> => option !== undefined)
+    .map((option) => ({
+      label: option,
+      value: option,
+    }))
   const sanitizeExposedKey = (value: string) => value.replace(/[^a-zA-Z0-9_]+/g, '_')
   const buildExposedKey = (nodeId: string | undefined, path: string) =>
     sanitizeExposedKey(`${nodeId || 'trigger'}_${path}`)
@@ -1921,11 +1927,7 @@ export default function AutomationTemplates() {
                       {
                         label: 'Reasoning effort',
                         type: 'select' as const,
-                        options: REASONING_EFFORT_OPTIONS.filter((option): option is string => Boolean(option))
-                          .map((option) => ({
-                            label: option,
-                            value: option,
-                          })),
+                        options: reasoningEffortOptions,
                         defaultValue: selectedNode.aiSettings?.reasoningEffort || '',
                         sourcePath: 'aiSettings.reasoningEffort',
                       },
@@ -2250,11 +2252,7 @@ export default function AutomationTemplates() {
                       {
                         label: 'Reasoning effort',
                         type: 'select' as const,
-                        options: REASONING_EFFORT_OPTIONS.filter((option): option is string => Boolean(option))
-                          .map((option) => ({
-                            label: option,
-                            value: option,
-                          })),
+                        options: reasoningEffortOptions,
                         defaultValue: selectedNode.aiSettings?.reasoningEffort || '',
                         sourcePath: 'aiSettings.reasoningEffort',
                       },
