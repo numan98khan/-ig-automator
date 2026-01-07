@@ -1831,6 +1831,51 @@ export default function AutomationTemplates() {
             {selectedNode.type === 'send_message' && (
               <>
                 <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Expose to users</label>
+                  <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {[
+                      {
+                        label: 'Reply message',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.text || '',
+                        sourcePath: 'text',
+                      },
+                    ].map((option) => {
+                      const sourceNodeId = selectedNode.id
+                      const sourcePath = option.sourcePath
+                      const isExposed = isFieldExposed(sourceNodeId, sourcePath)
+                      return (
+                        <label key={option.sourcePath} className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-3.5 w-3.5"
+                            checked={isExposed}
+                            onChange={() =>
+                              toggleExposedField({
+                                key: buildExposedKey(sourceNodeId, option.sourcePath),
+                                label: option.label,
+                                type: option.type,
+                                defaultValue: option.defaultValue,
+                                ui: {
+                                  group: 'Message',
+                                },
+                                source: {
+                                  nodeId: sourceNodeId,
+                                  path: option.sourcePath,
+                                },
+                              })
+                            }
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      )
+                    })}
+                    <div className="text-[11px] text-muted-foreground">
+                      Exposed fields appear in the user automation setup and can be edited later.
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Message text</label>
                   <textarea
                     className="input w-full h-24 text-sm"
@@ -1903,60 +1948,16 @@ export default function AutomationTemplates() {
                   <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
                     {[
                       {
-                        label: 'Tone',
-                        type: 'string' as const,
-                        defaultValue: selectedNode.aiSettings?.tone || '',
-                        sourcePath: 'aiSettings.tone',
-                      },
-                      {
-                        label: 'Model',
-                        type: 'string' as const,
-                        defaultValue: selectedNode.aiSettings?.model || '',
-                        sourcePath: 'aiSettings.model',
-                      },
-                      {
-                        label: 'Temperature',
-                        type: 'number' as const,
-                        defaultValue: selectedNode.aiSettings?.temperature ?? '',
-                        sourcePath: 'aiSettings.temperature',
-                      },
-                      {
-                        label: 'Reasoning effort',
-                        type: 'select' as const,
-                        options: reasoningEffortOptions,
-                        defaultValue: selectedNode.aiSettings?.reasoningEffort || '',
-                        sourcePath: 'aiSettings.reasoningEffort',
-                      },
-                      {
-                        label: 'Max reply sentences',
-                        type: 'number' as const,
-                        defaultValue: selectedNode.aiSettings?.maxReplySentences ?? '',
-                        sourcePath: 'aiSettings.maxReplySentences',
-                      },
-                      {
-                        label: 'History limit',
-                        type: 'number' as const,
-                        defaultValue: selectedNode.aiSettings?.historyLimit ?? '',
-                        sourcePath: 'aiSettings.historyLimit',
-                      },
-                      {
                         label: 'RAG enabled',
                         type: 'boolean' as const,
                         defaultValue: selectedNode.aiSettings?.ragEnabled ?? true,
                         sourcePath: 'aiSettings.ragEnabled',
                       },
                       {
-                        label: 'Max output tokens',
-                        type: 'number' as const,
-                        defaultValue: selectedNode.aiSettings?.maxOutputTokens ?? '',
-                        sourcePath: 'aiSettings.maxOutputTokens',
-                      },
-                      {
-                        label: 'Knowledge item IDs (JSON array)',
-                        type: 'json' as const,
-                        defaultValue: selectedNode.knowledgeItemIds || [],
-                        helpText: 'Example: ["64f...","65a..."]',
-                        sourcePath: 'knowledgeItemIds',
+                        label: 'System instructions',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.aiSettings?.systemPrompt || '',
+                        sourcePath: 'aiSettings.systemPrompt',
                       },
                     ].map((option) => {
                       const sourceNodeId = selectedNode.id
@@ -2654,6 +2655,25 @@ export default function AutomationTemplates() {
                   </select>
                   <div className="text-[11px] text-muted-foreground">
                     Applied only for reasoning-capable models (gpt-5, o-series).
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">System instructions</label>
+                  <textarea
+                    className="input w-full h-24 text-sm"
+                    value={selectedNode.aiSettings?.systemPrompt || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          systemPrompt: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Provide guidance for how the AI should respond to messages.
                   </div>
                 </div>
                 <div className="space-y-2">
