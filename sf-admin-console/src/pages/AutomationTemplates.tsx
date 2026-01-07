@@ -483,6 +483,23 @@ export default function AutomationTemplates() {
     },
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: (draftId: string) => adminApi.deleteFlowDraft(draftId),
+    onSuccess: (_response, draftId) => {
+      queryClient.invalidateQueries({ queryKey: ['flow-drafts'] })
+      if (draftId === selectedDraftId) {
+        setSelectedDraftId(null)
+      }
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.error ||
+        error?.message ||
+        'Failed to delete draft.'
+      setError(message)
+    },
+  })
+
   const handleCreateDraft = () => {
     if (!newDraftName.trim()) {
       setError('Draft name is required.')
@@ -495,6 +512,13 @@ export default function AutomationTemplates() {
       templateId: newDraftTemplateId || undefined,
       dsl: { nodes: [], edges: [] },
     })
+  }
+
+  const handleDeleteDraft = () => {
+    if (!selectedDraftId) return
+    if (!window.confirm('Delete this draft? This cannot be undone.')) return
+    setError(null)
+    deleteMutation.mutate(selectedDraftId)
   }
 
   const buildPayload = () => {
@@ -2994,6 +3018,14 @@ export default function AutomationTemplates() {
                     >
                       <Maximize2 className="w-4 h-4" />
                       Edit flow
+                    </button>
+                    <button
+                      className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={handleDeleteDraft}
+                      disabled={!canEditFlow || deleteMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      {deleteMutation.isPending ? 'Deleting...' : 'Delete draft'}
                     </button>
                     <button
                       className="btn btn-secondary flex items-center gap-2"

@@ -918,6 +918,17 @@ router.post('/flow-drafts/:id/publish', authenticate, requireAdmin, async (req, 
   }
 });
 
+router.delete('/flow-drafts/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const draft = await FlowDraft.findByIdAndDelete(req.params.id);
+    if (!draft) return res.status(404).json({ error: 'Draft not found' });
+    res.json({ data: draft });
+  } catch (error) {
+    console.error('Admin delete flow draft error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.get('/flow-templates', authenticate, requireAdmin, async (_req, res) => {
   try {
     const templates = await FlowTemplate.find({}).sort({ updatedAt: -1 }).lean();

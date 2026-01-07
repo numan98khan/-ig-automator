@@ -119,6 +119,7 @@ export const adminApi = {
   getFlowDraft: (draftId: string) => api.get(`/flow-drafts/${draftId}`),
   createFlowDraft: (payload: any) => api.post('/flow-drafts', payload),
   updateFlowDraft: (draftId: string, payload: any) => api.put(`/flow-drafts/${draftId}`, payload),
+  deleteFlowDraft: (draftId: string) => api.delete(`/flow-drafts/${draftId}`),
   publishFlowDraft: (draftId: string, payload: any) =>
     api.post(`/flow-drafts/${draftId}/publish`, payload),
   getFlowTemplates: () => api.get('/flow-templates'),
