@@ -2003,20 +2003,29 @@ export default function AutomationTemplates() {
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Expose to users</label>
                   <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
-                    {[
-                      {
-                        label: 'RAG enabled',
-                        type: 'boolean' as const,
-                        defaultValue: selectedNode.aiSettings?.ragEnabled ?? true,
-                        sourcePath: 'aiSettings.ragEnabled',
-                      },
-                      {
-                        label: 'System instructions',
-                        type: 'text' as const,
-                        defaultValue: selectedNode.aiSettings?.systemPrompt || '',
-                        sourcePath: 'aiSettings.systemPrompt',
-                      },
-                    ].map((option) => {
+                    {(
+                      [
+                        {
+                          label: 'RAG enabled',
+                          type: 'boolean' as const,
+                          defaultValue: selectedNode.aiSettings?.ragEnabled ?? true,
+                          sourcePath: 'aiSettings.ragEnabled',
+                        },
+                        {
+                          label: 'System instructions',
+                          type: 'text' as const,
+                          defaultValue: selectedNode.aiSettings?.systemPrompt || '',
+                          sourcePath: 'aiSettings.systemPrompt',
+                        },
+                      ] as Array<{
+                        label: string;
+                        type: 'boolean' | 'text';
+                        defaultValue: boolean | string;
+                        sourcePath: string;
+                        options?: Array<{ label: string; value: string }>;
+                        helpText?: string;
+                      }>
+                    ).map((option) => {
                       const sourceNodeId = selectedNode.id
                       const sourcePath = option.sourcePath
                       const isExposed = isFieldExposed(sourceNodeId, sourcePath)
