@@ -653,22 +653,15 @@ export default function AutomationTemplates() {
       return
     }
     setError(null)
-    updateMutation.mutate(result.payload)
-  }
-
-  const handlePublish = () => {
-    if (!selectedDraftId) return
-    const result = buildPayload()
-    if (result.error || !result.payload) {
-      setError(result.error)
+    if (draftForm.status === 'published') {
+      publishMutation.mutate({
+        ...result.payload,
+        dslSnapshot: result.payload.dsl,
+        versionLabel: versionLabel.trim() || undefined,
+      })
       return
     }
-    setError(null)
-    publishMutation.mutate({
-      ...result.payload,
-      dslSnapshot: result.payload.dsl,
-      versionLabel: versionLabel.trim() || undefined,
-    })
+    updateMutation.mutate(result.payload)
   }
 
   const handleConnect = useCallback(
@@ -2963,7 +2956,7 @@ export default function AutomationTemplates() {
                   <div>
                     <h2 className="text-lg font-semibold text-foreground">Draft settings</h2>
                     <p className="text-sm text-muted-foreground">
-                      Update metadata, configurable fields, and publish versions.
+                      Update metadata, configurable fields, and set flows live.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2982,14 +2975,6 @@ export default function AutomationTemplates() {
                     >
                     <Save className="w-4 h-4" />
                     {updateMutation.isPending ? 'Saving...' : 'Save draft'}
-                  </button>
-                  <button
-                    className="btn btn-primary flex items-center gap-2"
-                    onClick={handlePublish}
-                    disabled={publishMutation.isPending}
-                  >
-                    <UploadCloud className="w-4 h-4" />
-                    {publishMutation.isPending ? 'Publishing...' : 'Publish'}
                   </button>
                 </div>
               </div>
@@ -3540,16 +3525,6 @@ export default function AutomationTemplates() {
                       placeholder="e.g. v2.0"
                     />
                   </div>
-                  <div className="flex items-end">
-                    <button
-                      className="btn btn-primary w-full flex items-center gap-2 justify-center"
-                      onClick={handlePublish}
-                      disabled={publishMutation.isPending}
-                    >
-                      <UploadCloud className="w-4 h-4" />
-                      {publishMutation.isPending ? 'Publishing...' : 'Publish draft'}
-                    </button>
-                  </div>
                 </div>
               </div>
             </>
@@ -3607,14 +3582,6 @@ export default function AutomationTemplates() {
                 >
                   <Save className="w-4 h-4" />
                   {updateMutation.isPending ? 'Saving...' : 'Save draft'}
-                </button>
-                <button
-                  className="btn btn-primary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={handlePublish}
-                  disabled={!canEditFlow || publishMutation.isPending}
-                >
-                  <UploadCloud className="w-4 h-4" />
-                  {publishMutation.isPending ? 'Publishing...' : 'Publish'}
                 </button>
               </div>
             </div>
