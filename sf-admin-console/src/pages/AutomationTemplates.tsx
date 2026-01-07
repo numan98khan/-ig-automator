@@ -645,7 +645,7 @@ export default function AutomationTemplates() {
     }
   }
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = (nextStatus?: DraftForm['status']) => {
     if (!selectedDraftId) return
     const result = buildPayload()
     if (result.error || !result.payload) {
@@ -653,15 +653,20 @@ export default function AutomationTemplates() {
       return
     }
     setError(null)
-    if (draftForm.status === 'published') {
+    const targetStatus = nextStatus ?? draftForm.status
+    if (targetStatus === 'published') {
       publishMutation.mutate({
         ...result.payload,
+        status: targetStatus,
         dslSnapshot: result.payload.dsl,
         versionLabel: versionLabel.trim() || undefined,
       })
       return
     }
-    updateMutation.mutate(result.payload)
+    updateMutation.mutate({
+      ...result.payload,
+      status: targetStatus,
+    })
   }
 
   const handleConnect = useCallback(
@@ -2998,12 +3003,14 @@ export default function AutomationTemplates() {
                         <button
                           key={mode}
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            const nextStatus = mode === 'live' ? 'published' : 'archived'
                             setDraftForm((prev) => ({
                               ...prev,
-                              status: mode === 'live' ? 'published' : 'archived',
+                              status: nextStatus,
                             }))
-                          }
+                            handleSaveDraft(nextStatus)
+                          }}
                           className={`px-4 py-2 rounded-full transition ${
                             isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
                           }`}
@@ -3561,12 +3568,14 @@ export default function AutomationTemplates() {
                     <button
                       key={mode}
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
+                        const nextStatus = mode === 'live' ? 'published' : 'archived'
                         setDraftForm((prev) => ({
                           ...prev,
-                          status: mode === 'live' ? 'published' : 'archived',
+                          status: nextStatus,
                         }))
-                      }
+                        handleSaveDraft(nextStatus)
+                      }}
                       className={`px-4 py-2 rounded-full transition ${
                         isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'
                       }`}
