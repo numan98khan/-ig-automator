@@ -199,6 +199,32 @@ export default function AutomationTemplates() {
   const aiModelValue = selectedNode?.aiSettings?.model || ''
   const hasCustomAiModel = Boolean(aiModelValue) && !AI_MODEL_SUGGESTIONS.includes(aiModelValue)
   const selectedTriggerConfig: FlowTriggerConfig = selectedNode?.triggerConfig || {}
+  const sanitizeExposedKey = (value: string) => value.replace(/[^a-zA-Z0-9_]+/g, '_')
+  const buildExposedKey = (nodeId: string | undefined, path: string) =>
+    sanitizeExposedKey(`${nodeId || 'trigger'}_${path}`)
+  const isFieldExposed = (sourceNodeId: string | undefined, sourcePath: string) =>
+    draftForm.fields.some((field) =>
+      field.sourceNodeId === (sourceNodeId || '') && field.sourcePath === sourcePath,
+    )
+  const toggleExposedField = (field: FlowField) => {
+    const sourceNodeId = field.source?.nodeId || ''
+    const sourcePath = field.source?.path || ''
+    setDraftForm((prev) => {
+      const existingIndex = prev.fields.findIndex(
+        (item) => item.sourceNodeId === sourceNodeId && item.sourcePath === sourcePath,
+      )
+      if (existingIndex >= 0) {
+        return {
+          ...prev,
+          fields: prev.fields.filter((_, index) => index !== existingIndex),
+        }
+      }
+      return {
+        ...prev,
+        fields: [...prev.fields, buildFieldForm(field)],
+      }
+    })
+  }
   const flowStats = useMemo(
     () => ({ nodes: flowNodes.length, edges: flowEdges.length }),
     [flowNodes.length, flowEdges.length],
@@ -1117,6 +1143,98 @@ export default function AutomationTemplates() {
             {selectedNode.type === 'trigger' && (
               <>
                 <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Expose to users</label>
+                  <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {[
+                      {
+                        label: 'Trigger type',
+                        type: 'select' as const,
+                        options: TRIGGER_LIBRARY.map((trigger) => ({
+                          label: trigger.label,
+                          value: trigger.type,
+                        })),
+                        defaultValue: selectedNode.triggerType || DEFAULT_TRIGGER_TYPE,
+                        sourcePath: 'triggers[0].type',
+                      },
+                      {
+                        label: 'Trigger mode',
+                        type: 'select' as const,
+                        options: [
+                          { label: 'Any', value: 'any' },
+                          { label: 'Keywords', value: 'keywords' },
+                          { label: 'AI intent', value: 'intent' },
+                        ],
+                        defaultValue: selectedTriggerConfig.triggerMode || 'any',
+                        sourcePath: 'triggers[0].config.triggerMode',
+                      },
+                      {
+                        label: 'Keyword match',
+                        type: 'select' as const,
+                        options: [
+                          { label: 'Any keyword', value: 'any' },
+                          { label: 'All keywords', value: 'all' },
+                        ],
+                        defaultValue: selectedTriggerConfig.keywordMatch || 'any',
+                        sourcePath: 'triggers[0].config.keywordMatch',
+                      },
+                      {
+                        label: 'Keywords (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedTriggerConfig.keywords || [],
+                        helpText: 'Example: ["price","quote"]',
+                        sourcePath: 'triggers[0].config.keywords',
+                      },
+                      {
+                        label: 'Exclude keywords (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedTriggerConfig.excludeKeywords || [],
+                        helpText: 'Example: ["free","coupon"]',
+                        sourcePath: 'triggers[0].config.excludeKeywords',
+                      },
+                      {
+                        label: 'Intent description',
+                        type: 'text' as const,
+                        defaultValue: selectedTriggerConfig.intentText || '',
+                        sourcePath: 'triggers[0].config.intentText',
+                      },
+                    ].map((option) => {
+                      const sourceNodeId = undefined
+                      const sourcePath = option.sourcePath
+                      const isExposed = isFieldExposed(sourceNodeId, sourcePath)
+                      return (
+                        <label key={option.sourcePath} className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-3.5 w-3.5"
+                            checked={isExposed}
+                            onChange={() =>
+                              toggleExposedField({
+                                key: buildExposedKey(sourceNodeId, option.sourcePath),
+                                label: option.label,
+                                type: option.type,
+                                defaultValue: option.defaultValue,
+                                options: option.options,
+                                ui: {
+                                  group: 'Triggers',
+                                  helpText: option.helpText,
+                                },
+                                source: {
+                                  nodeId: sourceNodeId,
+                                  path: option.sourcePath,
+                                },
+                              })
+                            }
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      )
+                    })}
+                    <div className="text-[11px] text-muted-foreground">
+                      Exposed fields appear in the user automation setup and can be edited later.
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Trigger type</label>
                   <select
                     className="input w-full"
@@ -1779,6 +1897,106 @@ export default function AutomationTemplates() {
             {selectedNode.type === 'ai_reply' && (
               <>
                 <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Expose to users</label>
+                  <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {[
+                      {
+                        label: 'Tone',
+                        type: 'string' as const,
+                        defaultValue: selectedNode.aiSettings?.tone || '',
+                        sourcePath: 'aiSettings.tone',
+                      },
+                      {
+                        label: 'Model',
+                        type: 'string' as const,
+                        defaultValue: selectedNode.aiSettings?.model || '',
+                        sourcePath: 'aiSettings.model',
+                      },
+                      {
+                        label: 'Temperature',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.temperature ?? '',
+                        sourcePath: 'aiSettings.temperature',
+                      },
+                      {
+                        label: 'Reasoning effort',
+                        type: 'select' as const,
+                        options: REASONING_EFFORT_OPTIONS.map((option) => ({
+                          label: option,
+                          value: option,
+                        })),
+                        defaultValue: selectedNode.aiSettings?.reasoningEffort || '',
+                        sourcePath: 'aiSettings.reasoningEffort',
+                      },
+                      {
+                        label: 'Max reply sentences',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.maxReplySentences ?? '',
+                        sourcePath: 'aiSettings.maxReplySentences',
+                      },
+                      {
+                        label: 'History limit',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.historyLimit ?? '',
+                        sourcePath: 'aiSettings.historyLimit',
+                      },
+                      {
+                        label: 'RAG enabled',
+                        type: 'boolean' as const,
+                        defaultValue: selectedNode.aiSettings?.ragEnabled ?? true,
+                        sourcePath: 'aiSettings.ragEnabled',
+                      },
+                      {
+                        label: 'Max output tokens',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.maxOutputTokens ?? '',
+                        sourcePath: 'aiSettings.maxOutputTokens',
+                      },
+                      {
+                        label: 'Knowledge item IDs (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedNode.knowledgeItemIds || [],
+                        helpText: 'Example: ["64f...","65a..."]',
+                        sourcePath: 'knowledgeItemIds',
+                      },
+                    ].map((option) => {
+                      const sourceNodeId = selectedNode.id
+                      const sourcePath = option.sourcePath
+                      const isExposed = isFieldExposed(sourceNodeId, sourcePath)
+                      return (
+                        <label key={option.sourcePath} className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-3.5 w-3.5"
+                            checked={isExposed}
+                            onChange={() =>
+                              toggleExposedField({
+                                key: buildExposedKey(sourceNodeId, option.sourcePath),
+                                label: option.label,
+                                type: option.type,
+                                defaultValue: option.defaultValue,
+                                options: option.options,
+                                ui: {
+                                  group: 'AI Reply',
+                                  helpText: option.helpText,
+                                },
+                                source: {
+                                  nodeId: sourceNodeId,
+                                  path: option.sourcePath,
+                                },
+                              })
+                            }
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      )
+                    })}
+                    <div className="text-[11px] text-muted-foreground">
+                      Toggle what the end user can adjust in the automation setup.
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Tone</label>
                   <input
                     className="input w-full"
@@ -1968,6 +2186,144 @@ export default function AutomationTemplates() {
 
             {selectedNode.type === 'ai_agent' && (
               <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Expose to users</label>
+                  <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {[
+                      {
+                        label: 'System prompt',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.agentSystemPrompt || '',
+                        sourcePath: 'agentSystemPrompt',
+                      },
+                      {
+                        label: 'Agent steps (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedNode.agentSteps || [],
+                        helpText: 'Example: ["Ask for details","Confirm next step"]',
+                        sourcePath: 'agentSteps',
+                      },
+                      {
+                        label: 'End condition',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.agentEndCondition || '',
+                        sourcePath: 'agentEndCondition',
+                      },
+                      {
+                        label: 'Stop condition',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.agentStopCondition || '',
+                        sourcePath: 'agentStopCondition',
+                      },
+                      {
+                        label: 'Max questions',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.agentMaxQuestions ?? '',
+                        sourcePath: 'agentMaxQuestions',
+                      },
+                      {
+                        label: 'Agent slots (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedNode.agentSlots || [],
+                        helpText: 'Example: [{"key":"email","question":"What is your email?"}]',
+                        sourcePath: 'agentSlots',
+                      },
+                      {
+                        label: 'Tone',
+                        type: 'string' as const,
+                        defaultValue: selectedNode.aiSettings?.tone || '',
+                        sourcePath: 'aiSettings.tone',
+                      },
+                      {
+                        label: 'Model',
+                        type: 'string' as const,
+                        defaultValue: selectedNode.aiSettings?.model || '',
+                        sourcePath: 'aiSettings.model',
+                      },
+                      {
+                        label: 'Temperature',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.temperature ?? '',
+                        sourcePath: 'aiSettings.temperature',
+                      },
+                      {
+                        label: 'Reasoning effort',
+                        type: 'select' as const,
+                        options: REASONING_EFFORT_OPTIONS.map((option) => ({
+                          label: option,
+                          value: option,
+                        })),
+                        defaultValue: selectedNode.aiSettings?.reasoningEffort || '',
+                        sourcePath: 'aiSettings.reasoningEffort',
+                      },
+                      {
+                        label: 'Max reply sentences',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.maxReplySentences ?? '',
+                        sourcePath: 'aiSettings.maxReplySentences',
+                      },
+                      {
+                        label: 'History limit',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.historyLimit ?? '',
+                        sourcePath: 'aiSettings.historyLimit',
+                      },
+                      {
+                        label: 'RAG enabled',
+                        type: 'boolean' as const,
+                        defaultValue: selectedNode.aiSettings?.ragEnabled ?? true,
+                        sourcePath: 'aiSettings.ragEnabled',
+                      },
+                      {
+                        label: 'Max output tokens',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.maxOutputTokens ?? '',
+                        sourcePath: 'aiSettings.maxOutputTokens',
+                      },
+                      {
+                        label: 'Knowledge item IDs (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedNode.knowledgeItemIds || [],
+                        helpText: 'Example: ["64f...","65a..."]',
+                        sourcePath: 'knowledgeItemIds',
+                      },
+                    ].map((option) => {
+                      const sourceNodeId = selectedNode.id
+                      const sourcePath = option.sourcePath
+                      const isExposed = isFieldExposed(sourceNodeId, sourcePath)
+                      return (
+                        <label key={option.sourcePath} className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-3.5 w-3.5"
+                            checked={isExposed}
+                            onChange={() =>
+                              toggleExposedField({
+                                key: buildExposedKey(sourceNodeId, option.sourcePath),
+                                label: option.label,
+                                type: option.type,
+                                defaultValue: option.defaultValue,
+                                options: option.options,
+                                ui: {
+                                  group: 'AI Agent',
+                                  helpText: option.helpText,
+                                },
+                                source: {
+                                  nodeId: sourceNodeId,
+                                  path: option.sourcePath,
+                                },
+                              })
+                            }
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      )
+                    })}
+                    <div className="text-[11px] text-muted-foreground">
+                      These options appear in the end-user template setup when enabled.
+                    </div>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">System prompt</label>
                   <textarea
