@@ -1921,10 +1921,11 @@ export default function AutomationTemplates() {
                       {
                         label: 'Reasoning effort',
                         type: 'select' as const,
-                        options: REASONING_EFFORT_OPTIONS.map((option) => ({
-                          label: option,
-                          value: option,
-                        })),
+                        options: REASONING_EFFORT_OPTIONS.filter((option): option is string => Boolean(option))
+                          .map((option) => ({
+                            label: option,
+                            value: option,
+                          })),
                         defaultValue: selectedNode.aiSettings?.reasoningEffort || '',
                         sourcePath: 'aiSettings.reasoningEffort',
                       },
@@ -2249,10 +2250,11 @@ export default function AutomationTemplates() {
                       {
                         label: 'Reasoning effort',
                         type: 'select' as const,
-                        options: REASONING_EFFORT_OPTIONS.map((option) => ({
-                          label: option,
-                          value: option,
-                        })),
+                        options: REASONING_EFFORT_OPTIONS.filter((option): option is string => Boolean(option))
+                          .map((option) => ({
+                            label: option,
+                            value: option,
+                          })),
                         defaultValue: selectedNode.aiSettings?.reasoningEffort || '',
                         sourcePath: 'aiSettings.reasoningEffort',
                       },
