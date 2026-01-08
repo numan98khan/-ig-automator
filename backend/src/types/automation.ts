@@ -30,6 +30,12 @@ export interface AutomationAiSettings {
   temperature?: number;
   maxOutputTokens?: number;
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  decisionMode?: 'full_auto' | 'assist' | 'info_only';
+  allowHashtags?: boolean;
+  allowEmojis?: boolean;
+  replyLanguage?: string;
+  escalationGuidelines?: string;
+  escalationExamples?: string[];
 }
 
 export interface AutomationIntentSettings {

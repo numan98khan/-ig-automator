@@ -784,6 +784,12 @@ async function buildAutomationAiReply(params: {
     workspaceId: conversation.workspaceId,
     latestCustomerMessage: messageText,
     historyLimit: aiSettings?.historyLimit,
+    decisionMode: aiSettings?.decisionMode,
+    allowHashtags: aiSettings?.allowHashtags,
+    allowEmojis: aiSettings?.allowEmojis,
+    replyLanguage: aiSettings?.replyLanguage,
+    escalationGuidelines: aiSettings?.escalationGuidelines,
+    escalationExamples: aiSettings?.escalationExamples,
     goalContext: {
       workspaceGoals: {
         primaryGoal: settings?.primaryGoal,
@@ -795,7 +801,6 @@ async function buildAutomationAiReply(params: {
       goalState: goalMatched !== 'none' ? 'collecting' : 'idle',
       collectedFields: conversation.goalCollectedFields || {},
     },
-    workspaceSettingsOverride: settings,
     tone: aiSettings?.tone,
     maxReplySentences: aiSettings?.maxReplySentences,
     ragEnabled: aiSettings?.ragEnabled,

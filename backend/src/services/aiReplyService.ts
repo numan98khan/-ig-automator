@@ -3,7 +3,6 @@ import mongoose from 'mongoose';
 import { IConversation } from '../models/Conversation';
 import Message, { IMessage } from '../models/Message';
 import KnowledgeItem from '../models/KnowledgeItem';
-import WorkspaceSettings, { IWorkspaceSettings } from '../models/WorkspaceSettings';
 import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
@@ -46,10 +45,15 @@ export interface AIReplyOptions {
     goalState?: 'idle' | 'collecting' | 'completed';
     collectedFields?: Record<string, any>;
   };
-  workspaceSettingsOverride?: Partial<IWorkspaceSettings>;
   tone?: string;
   maxReplySentences?: number;
   ragEnabled?: boolean;
+  decisionMode?: 'full_auto' | 'assist' | 'info_only';
+  allowHashtags?: boolean;
+  allowEmojis?: boolean;
+  replyLanguage?: string;
+  escalationGuidelines?: string;
+  escalationExamples?: string[];
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
@@ -172,12 +176,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     ? { ...knowledgeBaseQuery, _id: { $in: options.knowledgeItemIds } }
     : knowledgeBaseQuery;
 
-  const [knowledgeItems, baseWorkspaceSettings] = await Promise.all([
-    KnowledgeItem.find(knowledgeQuery),
-    options.workspaceSettingsOverride ? null : WorkspaceSettings.findOne({ workspaceId }),
-  ]);
-
-  const workspaceSettings = options.workspaceSettingsOverride || baseWorkspaceSettings;
+  const knowledgeItems = await KnowledgeItem.find(knowledgeQuery);
 
   const model = options.model || 'gpt-4o-mini';
   const temperature = typeof options.temperature === 'number' ? options.temperature : 0.35;
@@ -197,11 +196,11 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
           return ordered;
         });
 
-  const decisionMode = workspaceSettings?.decisionMode || 'assist';
-  const allowHashtags = workspaceSettings?.allowHashtags ?? false;
-  const allowEmojis = workspaceSettings?.allowEmojis ?? true;
-  const maxReplySentences = (options.maxReplySentences ?? workspaceSettings?.maxReplySentences) || 3;
-  const replyLanguage = workspaceSettings?.defaultReplyLanguage || workspaceSettings?.defaultLanguage || 'en';
+  const decisionMode = options.decisionMode || 'assist';
+  const allowHashtags = options.allowHashtags ?? false;
+  const allowEmojis = options.allowEmojis ?? true;
+  const maxReplySentences = options.maxReplySentences || 3;
+  const replyLanguage = options.replyLanguage || 'en';
   const tone = options.tone?.trim();
   let knowledgeItemsUsed = knowledgeItems.slice(0, 5).map(item => ({
     id: item._id.toString(),
@@ -448,8 +447,8 @@ Workspace rules:
 - Max sentences: ${maxReplySentences}
 - Desired tone: ${tone || 'professional and friendly'}
 - Default reply language: ${getLanguageName(replyLanguage)}
-${workspaceSettings?.escalationGuidelines ? `- Escalation guidelines: ${workspaceSettings.escalationGuidelines}` : ''}
-${workspaceSettings?.escalationExamples?.length ? `- Escalation examples: ${workspaceSettings.escalationExamples.join(' | ')}` : ''}
+${options.escalationGuidelines ? `- Escalation guidelines: ${options.escalationGuidelines}` : ''}
+${options.escalationExamples?.length ? `- Escalation examples: ${options.escalationExamples.join(' | ')}` : ''}
 
 DM goals:
 - Primary goal: ${workspaceGoals?.primaryGoal || 'none'}
