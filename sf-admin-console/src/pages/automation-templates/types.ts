@@ -109,6 +109,12 @@ export type FlowAiSettings = {
   historyLimit?: number
   ragEnabled?: boolean
   systemPrompt?: string
+  decisionMode?: 'full_auto' | 'assist' | 'info_only'
+  allowHashtags?: boolean
+  allowEmojis?: boolean
+  replyLanguage?: string
+  escalationGuidelines?: string
+  escalationExamples?: string[]
   model?: string
   temperature?: number
   maxOutputTokens?: number

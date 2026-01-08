@@ -106,6 +106,12 @@ const ROUTER_MESSAGE_OPERATORS: Array<{ value: RouterRuleOperator; label: string
   { value: 'equals', label: 'Equals' },
 ]
 
+const AI_DECISION_MODE_OPTIONS = [
+  { value: 'assist', label: 'Assist (balanced)' },
+  { value: 'full_auto', label: 'Full auto' },
+  { value: 'info_only', label: 'Info only' },
+]
+
 const ROUTER_DEFAULT_CONDITION: RouterCondition = {
   type: 'rules',
   op: 'all',
@@ -2012,6 +2018,45 @@ export default function AutomationTemplates() {
                           sourcePath: 'aiSettings.ragEnabled',
                         },
                         {
+                          label: 'Decision mode',
+                          type: 'select' as const,
+                          options: AI_DECISION_MODE_OPTIONS,
+                          defaultValue: selectedNode.aiSettings?.decisionMode || 'assist',
+                          sourcePath: 'aiSettings.decisionMode',
+                          helpText: 'assist, full_auto, or info_only.',
+                        },
+                        {
+                          label: 'Allow hashtags',
+                          type: 'boolean' as const,
+                          defaultValue: selectedNode.aiSettings?.allowHashtags ?? false,
+                          sourcePath: 'aiSettings.allowHashtags',
+                        },
+                        {
+                          label: 'Allow emojis',
+                          type: 'boolean' as const,
+                          defaultValue: selectedNode.aiSettings?.allowEmojis ?? true,
+                          sourcePath: 'aiSettings.allowEmojis',
+                        },
+                        {
+                          label: 'Reply language',
+                          type: 'string' as const,
+                          defaultValue: selectedNode.aiSettings?.replyLanguage || '',
+                          sourcePath: 'aiSettings.replyLanguage',
+                          helpText: 'Language code (e.g. en, es, fr).',
+                        },
+                        {
+                          label: 'Escalation guidelines',
+                          type: 'text' as const,
+                          defaultValue: selectedNode.aiSettings?.escalationGuidelines || '',
+                          sourcePath: 'aiSettings.escalationGuidelines',
+                        },
+                        {
+                          label: 'Escalation examples (JSON array)',
+                          type: 'json' as const,
+                          defaultValue: selectedNode.aiSettings?.escalationExamples || [],
+                          sourcePath: 'aiSettings.escalationExamples',
+                        },
+                        {
                           label: 'System instructions',
                           type: 'text' as const,
                           defaultValue: selectedNode.aiSettings?.systemPrompt || '',
@@ -2019,8 +2064,8 @@ export default function AutomationTemplates() {
                         },
                       ] as Array<{
                         label: string;
-                        type: 'boolean' | 'text';
-                        defaultValue: boolean | string;
+                        type: 'boolean' | 'text' | 'select' | 'string' | 'json';
+                        defaultValue: any;
                         sourcePath: string;
                         options?: Array<{ label: string; value: string }>;
                         helpText?: string;
@@ -2079,6 +2124,89 @@ export default function AutomationTemplates() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Decision mode</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.decisionMode || 'assist'}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          decisionMode: event.target.value as FlowAiSettings['decisionMode'],
+                        },
+                      }))
+                    }
+                  >
+                    {AI_DECISION_MODE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-[11px] text-muted-foreground">
+                    Controls how conservative the AI is with replies.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Reply language</label>
+                  <input
+                    className="input w-full"
+                    placeholder="en"
+                    value={selectedNode.aiSettings?.replyLanguage || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          replyLanguage: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Language code for replies (e.g. en, es, fr).
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={selectedNode.aiSettings?.allowHashtags ?? false}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          aiSettings: {
+                            ...(node.aiSettings || {}),
+                            allowHashtags: event.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Allow hashtags
+                  </label>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={selectedNode.aiSettings?.allowEmojis ?? true}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          aiSettings: {
+                            ...(node.aiSettings || {}),
+                            allowEmojis: event.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Allow emojis
+                  </label>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Max reply sentences</label>
                   <input
                     className="input w-full"
@@ -2095,6 +2223,42 @@ export default function AutomationTemplates() {
                       }))
                     }
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Escalation guidelines</label>
+                  <textarea
+                    className="input w-full h-20 text-sm"
+                    value={selectedNode.aiSettings?.escalationGuidelines || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          escalationGuidelines: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Escalation examples</label>
+                  <input
+                    className="input w-full"
+                    placeholder="pricing negotiation, custom contract"
+                    value={formatKeywordList(selectedNode.aiSettings?.escalationExamples)}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          escalationExamples: parseKeywordList(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Comma-separated examples to guide escalation behavior.
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">History limit</label>
