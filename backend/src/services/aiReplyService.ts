@@ -60,12 +60,14 @@ export interface AIReplyOptions {
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 }
 
+// Break reply text into sentences for post-processing limits.
 const splitIntoSentences = (text: string): string[] => {
   const matches = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
   if (!matches) return [];
   return matches.map((sentence) => sentence.trim()).filter(Boolean);
 };
 
+// Model capability checks (newer reasoning models ignore temperature).
 const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
 const supportsReasoningEffort = (model?: string): boolean => /^(gpt-5|o)/i.test(model || '');
 const getDurationMs = (startNs: bigint) => Number(process.hrtime.bigint() - startNs) / 1e6;
@@ -93,6 +95,7 @@ const logOpenAiApi = (message: string, details?: Record<string, any>) => {
   console.log('[OpenAI]', message);
 };
 
+// Defensive truncation for logs and previews.
 const truncateText = (value: any, max = 800): string | undefined => {
   if (value === undefined || value === null) return undefined;
   const text = String(value);
@@ -168,6 +171,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     messageHistory,
   } = options;
 
+  // Fetch knowledge items for the workspace (optionally filtered).
   const knowledgeBaseQuery = {
     workspaceId,
     active: { $ne: false },
@@ -178,6 +182,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
 
   const knowledgeItems = await KnowledgeItem.find(knowledgeQuery);
 
+  // Model/runtime configuration (flow-level overrides only).
   const model = options.model || 'gpt-4o-mini';
   const temperature = typeof options.temperature === 'number' ? options.temperature : 0.35;
   const maxOutputTokens = typeof options.maxOutputTokens === 'number'
@@ -185,6 +190,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     : 420;
   const reasoningEffort = normalizeReasoningEffort(model, options.reasoningEffort);
   const ragEnabled = options.ragEnabled !== false;
+  // Conversation history for context (supports overrides for previews/tests).
   const messages: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = messageHistory
     ? [...messageHistory].slice(-historyLimit)
     : await Message.find({ conversationId: conversation._id })
@@ -196,6 +202,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
           return ordered;
         });
 
+  // Flow-level behavioral options (no workspace-level defaults).
   const decisionMode = options.decisionMode || 'assist';
   const allowHashtags = options.allowHashtags ?? false;
   const allowEmojis = options.allowEmojis ?? true;
@@ -207,7 +214,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     title: item.title,
   }));
 
-
+  // Goal tracking context (used for multi-step lead capture/booking/order).
   const goalContext = options.goalContext || {};
   const workspaceGoals = goalContext.workspaceGoals;
   const detectedGoal = goalContext.detectedGoal || 'none';
@@ -245,7 +252,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     return `Lead capture fields: ${leadFields || 'none'} | Booking link: ${configs.booking.bookingLink || 'n/a'}; fields: ${bookingFields || 'none'} | Order catalog: ${configs.order.catalogUrl || 'n/a'}; fields: ${orderFields || 'none'} | Support asks: ${supportFields || 'none'} | Drive target: ${configs.drive.targetType || 'website'} ${configs.drive.targetLink || ''}`;
   };
 
-  // Build knowledge context (Mongo + optional vector RAG)
+  // Build knowledge context (Mongo + optional vector RAG).
   let knowledgeContext = '';
   let vectorContexts: RetrievedContext[] = [];
 
@@ -255,7 +262,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     recentCustomerMessage?.text ||
     '';
 
-  // Semantic RAG if available
+  // Semantic RAG if available.
   if (recentCustomerText && ragEnabled) {
     try {
       vectorContexts = await searchWorkspaceKnowledge(String(workspaceId), recentCustomerText, 5);
@@ -288,7 +295,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     contentSnippet: truncateText(ctx.content, 240),
   }));
 
-  // Build conversation history with media context and transcriptions
+  // Build conversation history with media context and transcriptions.
   const conversationHistory = messages.map((msg: any) => {
     const role = msg.from === 'customer' ? 'Customer' : msg.from === 'ai' ? 'AI' : 'Business';
     let text = `${role}: ${msg.text}`;
@@ -312,11 +319,12 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     return text;
   }).join('\n');
 
-  // Extract attachments from the latest customer message
+  // Extract attachments from the latest customer message for vision inputs.
   const recentCustomerAttachments = recentCustomerMessage?.attachments || [];
 
   const lastAiMessage = [...messages].reverse().find((msg: any) => msg.from === 'ai')?.text;
 
+  // JSON schema used to enforce structured model output.
   const schema = {
     type: 'object',
     additionalProperties: false,
@@ -401,6 +409,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     required: ['replyText', 'shouldEscalate', 'escalationReason', 'tags', 'goalProgress'],
   };
 
+  // System instructions shared across all requests.
   const systemMessage = `
 You are an AI assistant for a business inbox. You help businesses respond to customer messages on Instagram.
 
@@ -434,6 +443,7 @@ Your response must be valid JSON matching this schema:
   "tags": ["optional", "semantic", "labels"]
 }`;
 
+  // User prompt includes business context, goals, knowledge, and conversation history.
   const userMessage = `
 BUSINESS CONTEXT:
 Workspace decision mode: ${decisionMode}
@@ -479,6 +489,7 @@ Generate a response following all rules above. Return JSON with:
 - tags: semantic labels like ["pricing", "bulk_request", "urgent", "complaint"] to help categorize this interaction
 - goalProgress: when working on a goal, include goalType, status ('collecting' or 'completed'), collectedFields (merge any newly inferred answers), summary, nextStep, and set shouldCreateRecord=true when the flow is complete. Include targetLink if sharing a booking or catalog link.`;
 
+  // Track response parsing and error handling.
   let parsed: AIReplyResult | null = null;
   let responseContent: string | null = null;
   let usedFallback = false;
@@ -486,13 +497,13 @@ Generate a response following all rules above. Return JSON with:
 
   let requestStart: bigint | null = null;
   try {
-    // Build user message content (text + images if present)
+    // Build user message content (text + images if present).
     // Note: Responses API uses 'input_text' and 'input_image' instead of 'text' and 'image_url'
     const userContent: any[] = [
       { type: 'input_text', text: userMessage.trim() },
     ];
 
-    // Add image attachments to the message for vision analysis
+    // Add image attachments to the message for vision analysis.
     if (recentCustomerAttachments.length > 0) {
       for (const attachment of recentCustomerAttachments) {
         // Only add image and video types (GPT-4 Vision supports these)
@@ -514,7 +525,7 @@ Generate a response following all rules above. Return JSON with:
               url: attachment.thumbnailUrl || attachment.previewUrl,
             },
           });
-          // Add context that this is a video thumbnail
+          // Add context that this is a video thumbnail.
           userContent.push({
             type: 'input_text',
             text: `[Note: The above image is a thumbnail from a video. The customer sent a video message.]`,
@@ -677,13 +688,14 @@ Generate a response following all rules above. Return JSON with:
     });
   }
 
-  // Ensure tags include escalation hints
+  // Ensure tags include escalation hints.
   const tagSet = new Set<string>(reply.tags || []);
   if (reply.shouldEscalate) {
     tagSet.add('escalation');
   }
   reply.tags = Array.from(tagSet).slice(0, 10);
 
+  // Apply output hygiene: emoji/hashtag stripping, sentence limit, repetition guard.
   reply.replyText = postProcessReply({
     text: reply.replyText,
     allowHashtags,
@@ -692,7 +704,7 @@ Generate a response following all rules above. Return JSON with:
     lastAiMessage,
   });
 
-  // Final safeguard: never send empty text
+  // Final safeguard: never send empty text.
   if (!reply.replyText.trim()) {
     reply.replyText = 'Thanks for reaching out! We\'ll be with you shortly';
   }
