@@ -41,6 +41,14 @@ const shouldSkip = Boolean(missingEnvReason);
 const maxReplySentences = 2;
 const splitIntoSentences = (text: string) =>
   text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
+const assertPolicyReply = (text: string) => {
+  assert.ok(text?.trim().length > 0, 'Expected a non-empty AI reply');
+  const sentenceCount = splitIntoSentences(text).length;
+  assert.ok(
+    sentenceCount <= maxReplySentences,
+    `Expected <= ${maxReplySentences} sentences, got ${sentenceCount}`,
+  );
+};
 
 let server: http.Server | null = null;
 let baseUrl = '';
@@ -222,13 +230,19 @@ test('preview session replies within configured sentence limits', { skip: missin
 
   const response = await sendPreviewMessage(sessionId, 'Hi! Can you share your store hours and location?');
   const aiMessage = response.messages?.find((message: { from: string }) => message.from === 'ai');
-  assert.ok(aiMessage?.text?.trim().length > 0, 'Expected a non-empty AI reply');
+  assertPolicyReply(aiMessage?.text);
+});
 
-  const sentenceCount = splitIntoSentences(aiMessage.text).length;
-  assert.ok(
-    sentenceCount <= maxReplySentences,
-    `Expected <= ${maxReplySentences} sentences, got ${sentenceCount}`,
-  );
+test('preview session status returns persona and events after update', { skip: missingEnvReason ?? undefined }, async () => {
+  const { sessionId } = await startPreviewSession({ name: 'Status Tester' });
+  await updatePersona(sessionId, { name: 'Status Tester', handle: '@status' });
+
+  const status = await fetchStatus(sessionId);
+  assert.equal(status?.session?._id, sessionId);
+  assert.equal(status?.persona?.handle, '@status');
+  assert.ok(Array.isArray(status?.events), 'Expected events array on status payload');
+  const infoEvent = status.events.find((event: { message?: string }) => event.message?.includes('Mock persona updated'));
+  assert.ok(infoEvent, 'Expected persona update event in preview status');
 });
 
 test('preview session escalates high-risk prompts with escalation tags', { skip: missingEnvReason ?? undefined }, async () => {
@@ -240,13 +254,7 @@ test('preview session escalates high-risk prompts with escalation tags', { skip:
     'Your product injured me and I am contacting a lawyer for damages. I need an immediate refund.',
   );
   const aiMessage = response.messages?.find((message: { from: string }) => message.from === 'ai');
-  assert.ok(aiMessage?.text?.trim().length > 0, 'Expected a non-empty AI reply');
-
-  const sentenceCount = splitIntoSentences(aiMessage.text).length;
-  assert.ok(
-    sentenceCount <= maxReplySentences,
-    `Expected <= ${maxReplySentences} sentences, got ${sentenceCount}`,
-  );
+  assertPolicyReply(aiMessage?.text);
 
   const storedMessage = await Message.findOne({ conversationId, from: 'ai' }).sort({ createdAt: -1 }).lean();
   assert.equal(storedMessage?.aiShouldEscalate, true, 'Expected escalation for high-risk prompt');
