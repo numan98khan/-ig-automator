@@ -22,6 +22,7 @@ export type AIAgentResult = {
   missingFields?: string[];
   askedQuestion?: boolean;
   shouldStop?: boolean;
+  knowledgeItemsUsed?: { id: string; title: string }[];
 };
 
 export type AIAgentOptions = {
@@ -143,6 +144,10 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     : knowledgeBaseQuery;
 
   const knowledgeItems = await KnowledgeItem.find(knowledgeQuery);
+  let knowledgeItemsUsed = knowledgeItems.slice(0, 5).map((item) => ({
+    id: item._id.toString(),
+    title: item.title,
+  }));
 
   if (recentCustomerText && ragEnabled) {
     try {
@@ -162,6 +167,12 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     knowledgeContext += vectorContexts
       .map((ctx) => `- ${ctx.title}: ${ctx.content}`)
       .join('\n');
+
+    const ragUsed = vectorContexts.slice(0, 5).map((ctx) => ({
+      id: ctx.id,
+      title: `${ctx.title} (RAG)`,
+    }));
+    knowledgeItemsUsed = [...ragUsed, ...knowledgeItemsUsed];
   }
 
   const conversationHistory = messages.map((msg: any) => {
@@ -377,6 +388,7 @@ Return JSON with:
         missingFields,
         askedQuestion,
         shouldStop,
+        knowledgeItemsUsed,
       };
     }
 
@@ -389,6 +401,7 @@ Return JSON with:
       missingFields,
       askedQuestion,
       shouldStop,
+      knowledgeItemsUsed,
     };
   } catch (error: any) {
     console.error('AI agent generation failed:', error?.message || error);
@@ -406,6 +419,7 @@ Return JSON with:
     missingFields: [],
     askedQuestion: false,
     shouldStop: false,
+    knowledgeItemsUsed: [],
   };
 }
 

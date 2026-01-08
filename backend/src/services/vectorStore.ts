@@ -2,9 +2,11 @@ import { Pool } from 'pg';
 import OpenAI from 'openai';
 import KnowledgeItem from '../models/KnowledgeItem';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
+import { rerankCandidates } from './reranker';
 
 const connectionString = process.env.PGVECTOR_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL;
 const EMBEDDING_DIMENSION = 1536;
+const RERANK_CANDIDATE_COUNT = 20;
 export const GLOBAL_WORKSPACE_KEY = 'global';
 
 const openai = new OpenAI({
@@ -170,6 +172,8 @@ export const searchWorkspaceKnowledge = async (workspaceId: string, query: strin
     const queryEmbedding = await embedText(query);
     if (!queryEmbedding.length) return [];
 
+    const rerankCandidateCount = Math.max(topK, RERANK_CANDIDATE_COUNT);
+
     const result = await client.query(
       `
         SELECT id, title, content, 1 - (embedding <=> $2::vector) AS score
@@ -178,15 +182,17 @@ export const searchWorkspaceKnowledge = async (workspaceId: string, query: strin
         ORDER BY embedding <=> $2::vector
         LIMIT $3
       `,
-      [workspaceKey, embeddingToSql(queryEmbedding), topK],
+      [workspaceKey, embeddingToSql(queryEmbedding), rerankCandidateCount],
     );
 
-    return result.rows.map((row: any) => ({
+    const candidates = result.rows.map((row: any) => ({
       id: row.id,
       title: row.title,
       content: row.content,
       score: Number(row.score),
     }));
+
+    return await rerankCandidates(query, candidates, topK);
   } catch (error) {
     console.error('Vector search failed:', error);
     return [];
