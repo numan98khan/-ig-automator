@@ -78,6 +78,7 @@ describe('generateAIReply', () => {
     mocks.workspaceSettingsFindOneMock.mockReset();
     mocks.searchWorkspaceKnowledgeMock.mockReset();
     mocks.logOpenAiUsageMock.mockReset();
+    mocks.searchWorkspaceKnowledgeMock.mockResolvedValue([]);
   });
 
   it('builds knowledge context with RAG matches when enabled', async () => {
