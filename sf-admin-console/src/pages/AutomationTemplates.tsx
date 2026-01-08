@@ -112,6 +112,29 @@ const AI_DECISION_MODE_OPTIONS = [
   { value: 'info_only', label: 'Info only' },
 ]
 
+const AI_REPLY_LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English (en)' },
+  { value: 'ar', label: 'Arabic (ar)' },
+  { value: 'es', label: 'Spanish (es)' },
+  { value: 'fr', label: 'French (fr)' },
+  { value: 'de', label: 'German (de)' },
+  { value: 'it', label: 'Italian (it)' },
+  { value: 'pt', label: 'Portuguese (pt)' },
+  { value: 'ru', label: 'Russian (ru)' },
+  { value: 'zh', label: 'Chinese (zh)' },
+  { value: 'ja', label: 'Japanese (ja)' },
+  { value: 'ko', label: 'Korean (ko)' },
+  { value: 'hi', label: 'Hindi (hi)' },
+  { value: 'tr', label: 'Turkish (tr)' },
+  { value: 'nl', label: 'Dutch (nl)' },
+  { value: 'pl', label: 'Polish (pl)' },
+  { value: 'vi', label: 'Vietnamese (vi)' },
+  { value: 'th', label: 'Thai (th)' },
+  { value: 'id', label: 'Indonesian (id)' },
+  { value: 'ms', label: 'Malay (ms)' },
+  { value: 'tl', label: 'Filipino (tl)' },
+]
+
 const ROUTER_DEFAULT_CONDITION: RouterCondition = {
   type: 'rules',
   op: 'all',
@@ -2039,8 +2062,9 @@ export default function AutomationTemplates() {
                         },
                         {
                           label: 'Reply language',
-                          type: 'string' as const,
-                          defaultValue: selectedNode.aiSettings?.replyLanguage || '',
+                          type: 'select' as const,
+                          options: AI_REPLY_LANGUAGE_OPTIONS,
+                          defaultValue: selectedNode.aiSettings?.replyLanguage || 'en',
                           sourcePath: 'aiSettings.replyLanguage',
                           helpText: 'Language code (e.g. en, es, fr).',
                         },
@@ -2150,10 +2174,9 @@ export default function AutomationTemplates() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Reply language</label>
-                  <input
+                  <select
                     className="input w-full"
-                    placeholder="en"
-                    value={selectedNode.aiSettings?.replyLanguage || ''}
+                    value={selectedNode.aiSettings?.replyLanguage || 'en'}
                     onChange={(event) =>
                       updateNode(selectedNode.id, (node) => ({
                         ...node,
@@ -2163,7 +2186,13 @@ export default function AutomationTemplates() {
                         },
                       }))
                     }
-                  />
+                  >
+                    {AI_REPLY_LANGUAGE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                   <div className="text-[11px] text-muted-foreground">
                     Language code for replies (e.g. en, es, fr).
                   </div>
@@ -2210,6 +2239,9 @@ export default function AutomationTemplates() {
                   <label className="text-sm text-muted-foreground">Max reply sentences</label>
                   <input
                     className="input w-full"
+                    type="number"
+                    min="1"
+                    step="1"
                     value={selectedNode.aiSettings?.maxReplySentences ?? ''}
                     onChange={(event) =>
                       updateNode(selectedNode.id, (node) => ({
