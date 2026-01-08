@@ -1,25 +1,27 @@
 import mongoose from 'mongoose';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createResponseMock = vi.fn();
-const knowledgeFindMock = vi.fn();
-const workspaceSettingsFindOneMock = vi.fn();
-const searchWorkspaceKnowledgeMock = vi.fn();
-const logOpenAiUsageMock = vi.fn();
+const mocks = vi.hoisted(() => ({
+  createResponseMock: vi.fn(),
+  knowledgeFindMock: vi.fn(),
+  workspaceSettingsFindOneMock: vi.fn(),
+  searchWorkspaceKnowledgeMock: vi.fn(),
+  logOpenAiUsageMock: vi.fn(),
+}));
 
 vi.mock('openai', () => ({
   default: class OpenAI {
-    responses = { create: createResponseMock };
+    responses = { create: mocks.createResponseMock };
   },
 }));
 
 vi.mock('../../models/KnowledgeItem', () => ({
-  default: { find: knowledgeFindMock },
+  default: { find: mocks.knowledgeFindMock },
 }));
 
 vi.mock('../../models/WorkspaceSettings', () => ({
   __esModule: true,
-  default: { findOne: workspaceSettingsFindOneMock },
+  default: { findOne: mocks.workspaceSettingsFindOneMock },
 }));
 
 vi.mock('../../models/Message', () => ({
@@ -28,7 +30,7 @@ vi.mock('../../models/Message', () => ({
 }));
 
 vi.mock('../vectorStore', () => ({
-  searchWorkspaceKnowledge: searchWorkspaceKnowledgeMock,
+  searchWorkspaceKnowledge: mocks.searchWorkspaceKnowledgeMock,
 }));
 
 vi.mock('../adminLogSettingsService', () => ({
@@ -40,7 +42,7 @@ vi.mock('../adminLogSettingsService', () => ({
 }));
 
 vi.mock('../openAiUsageService', () => ({
-  logOpenAiUsage: logOpenAiUsageMock,
+  logOpenAiUsage: mocks.logOpenAiUsageMock,
 }));
 
 import { generateAIReply } from '../aiReplyService';
@@ -71,11 +73,11 @@ const baseWorkspaceSettings = {
 
 describe('generateAIReply', () => {
   beforeEach(() => {
-    createResponseMock.mockReset();
-    knowledgeFindMock.mockReset();
-    workspaceSettingsFindOneMock.mockReset();
-    searchWorkspaceKnowledgeMock.mockReset();
-    logOpenAiUsageMock.mockReset();
+    mocks.createResponseMock.mockReset();
+    mocks.knowledgeFindMock.mockReset();
+    mocks.workspaceSettingsFindOneMock.mockReset();
+    mocks.searchWorkspaceKnowledgeMock.mockReset();
+    mocks.logOpenAiUsageMock.mockReset();
   });
 
   it('builds knowledge context with RAG matches when enabled', async () => {
@@ -87,8 +89,8 @@ describe('generateAIReply', () => {
       },
     ];
 
-    knowledgeFindMock.mockResolvedValue(knowledgeItems);
-    searchWorkspaceKnowledgeMock.mockResolvedValue([
+    mocks.knowledgeFindMock.mockResolvedValue(knowledgeItems);
+    mocks.searchWorkspaceKnowledgeMock.mockResolvedValue([
       {
         id: 'rag-1',
         title: 'Express Shipping',
@@ -96,7 +98,7 @@ describe('generateAIReply', () => {
       },
     ]);
 
-    createResponseMock.mockResolvedValueOnce(
+    mocks.createResponseMock.mockResolvedValueOnce(
       buildResponse({
         replyText: 'We ship fast.',
         shouldEscalate: false,
@@ -115,10 +117,10 @@ describe('generateAIReply', () => {
       ragEnabled: true,
     });
 
-    expect(searchWorkspaceKnowledgeMock).toHaveBeenCalledWith('workspace-1', 'Tell me about shipping.', 5);
-    expect(createResponseMock).toHaveBeenCalledTimes(1);
+    expect(mocks.searchWorkspaceKnowledgeMock).toHaveBeenCalledWith('workspace-1', 'Tell me about shipping.', 5);
+    expect(mocks.createResponseMock).toHaveBeenCalledTimes(1);
 
-    const requestPayload = createResponseMock.mock.calls[0][0];
+    const requestPayload = mocks.createResponseMock.mock.calls[0][0];
     const userMessage = requestPayload.input[1].content[0].text as string;
 
     expect(userMessage).toContain('General Knowledge Base:');
@@ -133,7 +135,7 @@ describe('generateAIReply', () => {
   });
 
   it('skips vector RAG when disabled', async () => {
-    knowledgeFindMock.mockResolvedValue([
+    mocks.knowledgeFindMock.mockResolvedValue([
       {
         _id: new mongoose.Types.ObjectId('650000000000000000000002'),
         title: 'Returns',
@@ -141,7 +143,7 @@ describe('generateAIReply', () => {
       },
     ]);
 
-    createResponseMock.mockResolvedValueOnce(
+    mocks.createResponseMock.mockResolvedValueOnce(
       buildResponse({
         replyText: 'Returns are accepted.',
         shouldEscalate: false,
@@ -160,15 +162,15 @@ describe('generateAIReply', () => {
       ragEnabled: false,
     });
 
-    expect(searchWorkspaceKnowledgeMock).not.toHaveBeenCalled();
-    const requestPayload = createResponseMock.mock.calls[0][0];
+    expect(mocks.searchWorkspaceKnowledgeMock).not.toHaveBeenCalled();
+    const requestPayload = mocks.createResponseMock.mock.calls[0][0];
     const userMessage = requestPayload.input[1].content[0].text as string;
     expect(userMessage).not.toContain('Vector RAG Matches:');
   });
 
   it('adds escalation tag when model escalates', async () => {
-    knowledgeFindMock.mockResolvedValue([]);
-    createResponseMock.mockResolvedValueOnce(
+    mocks.knowledgeFindMock.mockResolvedValue([]);
+    mocks.createResponseMock.mockResolvedValueOnce(
       buildResponse({
         replyText: 'A specialist will help.',
         shouldEscalate: true,
@@ -191,8 +193,8 @@ describe('generateAIReply', () => {
   });
 
   it('falls back to escalation response when OpenAI fails', async () => {
-    knowledgeFindMock.mockResolvedValue([]);
-    createResponseMock.mockRejectedValueOnce(new Error('timeout'));
+    mocks.knowledgeFindMock.mockResolvedValue([]);
+    mocks.createResponseMock.mockRejectedValueOnce(new Error('timeout'));
 
     const result = await generateAIReply({
       conversation: baseConversation as any,
@@ -208,8 +210,8 @@ describe('generateAIReply', () => {
   });
 
   it('post-processes replies and preserves structured goal output', async () => {
-    knowledgeFindMock.mockResolvedValue([]);
-    createResponseMock.mockResolvedValueOnce(
+    mocks.knowledgeFindMock.mockResolvedValue([]);
+    mocks.createResponseMock.mockResolvedValueOnce(
       buildResponse({
         replyText: 'Great news 😀! Second sentence #tag.',
         shouldEscalate: false,
