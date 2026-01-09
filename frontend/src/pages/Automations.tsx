@@ -20,6 +20,7 @@ import { AutomationsCreateView } from './automations/AutomationsCreateView';
 import { AutomationDetailsView } from './automations/AutomationDetailsView';
 import { AutomationPlaceholderSection } from './automations/AutomationPlaceholderSection';
 import { AutomationsHumanAlerts } from './automations/AutomationsHumanAlerts';
+import { AutomationsSimulateView } from './automations/AutomationsSimulateView';
 import Knowledge from './Knowledge';
 import { AutomationsIntegrationsView } from './automations/AutomationsIntegrationsView';
 import { FLOW_GOAL_FILTERS } from './automations/constants';
@@ -161,7 +162,9 @@ const Automations: React.FC = () => {
   const navigate = useNavigate();
   const { activeAccount } = useAccountContext();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeSection, setActiveSection] = useState<'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'>('automations');
+  const [activeSection, setActiveSection] = useState<
+    'automations' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
+  >('automations');
   const [automationView, setAutomationView] = useState<'list' | 'create' | 'edit' | 'details'>('list');
   const [automations, setAutomations] = useState<AutomationInstance[]>([]);
   const [templates, setTemplates] = useState<FlowTemplate[]>([]);
@@ -192,6 +195,7 @@ const Automations: React.FC = () => {
   const isAutomationsSection = activeSection === 'automations';
   const isCreateView = isAutomationsSection && (automationView === 'create' || automationView === 'edit');
   const isDetailsView = isAutomationsSection && automationView === 'details';
+  const isSimulateView = activeSection === 'simulate';
   const isAutomationFullHeightView = isCreateView || isDetailsView;
   const isCustomAutomationEnabled = workspaceTier?.limits?.flowBuilder !== false;
   const automationLimit = workspaceTier?.limits?.automations;
@@ -240,7 +244,7 @@ const Automations: React.FC = () => {
 
   useEffect(() => {
     const section = searchParams.get('section');
-    if (section === 'knowledge' || section === 'alerts') {
+    if (section === 'knowledge' || section === 'alerts' || section === 'simulate') {
       setActiveSection(section);
     }
   }, [searchParams]);
@@ -392,9 +396,11 @@ const Automations: React.FC = () => {
     setAutomationView('create');
   };
 
-  const handleSectionChange = (section: 'automations' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations') => {
+  const handleSectionChange = (
+    section: 'automations' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
+  ) => {
     setActiveSection(section);
-    if (section === 'knowledge' || section === 'alerts') {
+    if (section === 'knowledge' || section === 'alerts' || section === 'simulate') {
       setSearchParams({ section });
     } else if (searchParams.get('section')) {
       setSearchParams({});
@@ -748,7 +754,7 @@ const Automations: React.FC = () => {
           </div>
         </div>
       )}
-      <div className={`flex flex-col lg:flex-row gap-6 ${isCreateSetupView || isDetailsView ? 'flex-1 min-h-0' : ''}`}>
+      <div className={`flex flex-col lg:flex-row gap-6 ${isCreateSetupView || isDetailsView || isSimulateView ? 'flex-1 min-h-0' : ''}`}>
         <div className={isDetailsView ? 'hidden lg:block' : ''}>
           <AutomationsSidebar
             activeSection={activeSection}
@@ -758,7 +764,7 @@ const Automations: React.FC = () => {
 
         <div
           className={`flex-1 min-h-0 ${
-            isCreateSetupView || isDetailsView ? 'flex flex-col gap-6 overflow-hidden' : 'space-y-6'
+            isCreateSetupView || isDetailsView || isSimulateView ? 'flex flex-col gap-6 overflow-hidden' : 'space-y-6'
           }`}
         >
           {error && (
@@ -853,6 +859,17 @@ const Automations: React.FC = () => {
 
           {activeSection === 'knowledge' && (
             <Knowledge />
+          )}
+
+          {activeSection === 'simulate' && (
+            <AutomationsSimulateView
+              workspaceId={currentWorkspace?._id}
+              accountDisplayName={accountDisplayName}
+              accountHandle={accountHandle}
+              accountAvatarUrl={accountAvatarUrl}
+              accountInitial={accountInitial}
+              automations={automations}
+            />
           )}
 
           {activeSection === 'alerts' && (

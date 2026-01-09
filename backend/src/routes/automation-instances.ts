@@ -11,7 +11,11 @@ import AutomationPreviewProfile from '../models/AutomationPreviewProfile';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { getAdminLogEvents } from '../services/adminLogEventService';
-import { executePreviewFlowForInstance, resolveLatestTemplateVersion } from '../services/automationService';
+import {
+  executePreviewFlowForInstance,
+  resolveLatestTemplateVersion,
+  resolveAutomationSelection,
+} from '../services/automationService';
 import { assertWorkspaceLimit } from '../services/tierService';
 
 const router = express.Router();
@@ -84,6 +88,11 @@ const normalizePersona = (input?: Record<string, any>): PreviewPersona | null =>
     avatarUrl,
   };
 };
+
+const buildMessageContext = (text: string) => ({
+  hasLink: /\bhttps?:\/\/\S+/i.test(text),
+  hasAttachment: false,
+});
 
 const ensurePreviewMeta = (session: any) => {
   if (!session.state || typeof session.state !== 'object') {
@@ -583,6 +592,155 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     res.json(hydrated);
   } catch (error) {
     console.error('Get automation instances error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { workspaceId, text, triggerType, persona, profileId, sessionId, reset } = req.body || {};
+    if (!workspaceId || typeof workspaceId !== 'string') {
+      return res.status(400).json({ error: 'workspaceId is required' });
+    }
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Message text is required' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const trimmedText = text.trim();
+    const resolvedTriggerType = typeof triggerType === 'string' ? triggerType : 'dm_message';
+    const messageContext = buildMessageContext(trimmedText);
+
+    let selectedInstance: any | null = null;
+    let selectedVersion: any | null = null;
+    let matchedTrigger: any | null = null;
+    let diagnostics: Array<Record<string, any>> = [];
+
+    let activePreviewSession: any | null = null;
+    if (sessionId && !reset) {
+      const existingSession = await AutomationSession.findOne({
+        _id: sessionId,
+        channel: 'preview',
+        status: 'active',
+      });
+      if (existingSession) {
+        const instance = await AutomationInstance.findById(existingSession.automationInstanceId);
+        if (instance && instance.isActive) {
+          const version = await resolveLatestTemplateVersion({
+            templateId: instance.templateId,
+            fallbackVersionId: existingSession.templateVersionId || instance.templateVersionId,
+          });
+          if (version) {
+            selectedInstance = instance;
+            selectedVersion = version;
+            activePreviewSession = existingSession;
+          }
+        }
+      }
+    }
+
+    if (!selectedInstance || !selectedVersion) {
+      const selection = await resolveAutomationSelection({
+        workspaceId,
+        triggerType: resolvedTriggerType as any,
+        messageText: trimmedText,
+        messageContext,
+      });
+      diagnostics = selection.diagnostics;
+      if (!selection.match) {
+        return res.json({
+          success: false,
+          error: 'No automations matched trigger filters',
+          diagnostics,
+          session: null,
+          conversation: null,
+          currentNode: null,
+          events: [],
+          profile: null,
+          persona: null,
+        });
+      }
+      selectedInstance = selection.match.instance;
+      selectedVersion = selection.match.version;
+      matchedTrigger = selection.match.matchedTrigger;
+    }
+
+    const instagramAccount = await InstagramAccount.findOne({ workspaceId })
+      .select('_id')
+      .lean();
+    if (!instagramAccount?._id) {
+      return res.status(400).json({ error: 'Instagram account not connected for this workspace' });
+    }
+
+    const resolvedProfile = await resolvePreviewProfile(new mongoose.Types.ObjectId(workspaceId), profileId);
+    const resolvedPersona = normalizePersona(persona) || toPersonaFromProfile(resolvedProfile);
+
+    const { session, conversation } = await ensurePreviewSession({
+      instance: selectedInstance,
+      templateVersionId: selectedVersion._id,
+      instagramAccountId: instagramAccount._id,
+      reset: Boolean(reset),
+      sessionId: activePreviewSession?._id?.toString(),
+      persona: resolvedPersona,
+      profileId: resolvedProfile?._id?.toString(),
+    });
+
+    const customerMessage = await Message.create({
+      conversationId: conversation._id,
+      workspaceId: conversation.workspaceId,
+      text: trimmedText,
+      from: 'customer',
+      platform: 'mock',
+    });
+
+    conversation.lastMessage = customerMessage.text;
+    conversation.lastMessageAt = customerMessage.createdAt;
+    conversation.lastCustomerMessageAt = customerMessage.createdAt;
+    await conversation.save();
+
+    const result = await executePreviewFlowForInstance({
+      instance: selectedInstance,
+      session,
+      conversation,
+      messageText: trimmedText,
+      messageContext,
+    });
+
+    if (!result.success) {
+      appendPreviewEvent(session, {
+        type: 'error',
+        message: result.error || 'Flow execution failed',
+        createdAt: new Date(),
+      });
+    }
+
+    await session.save();
+    const payload = await buildPreviewSessionPayload(session, conversation);
+
+    return res.json({
+      success: result.success,
+      error: result.error,
+      sessionId: session._id,
+      conversationId: conversation._id,
+      status: session.status,
+      messages: result.messages,
+      ...payload,
+      selectedAutomation: {
+        id: selectedInstance._id?.toString(),
+        name: selectedInstance.name,
+        templateId: selectedInstance.templateId?.toString(),
+        trigger: matchedTrigger
+          ? { type: matchedTrigger.type, label: matchedTrigger.label, description: matchedTrigger.description }
+          : undefined,
+      },
+      diagnostics,
+    });
+  } catch (error) {
+    console.error('Simulate automation message error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

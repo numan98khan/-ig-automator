@@ -239,6 +239,163 @@ const summarizeMessageContext = (context?: AutomationTestContext) => ({
   forceOutsideBusinessHours: Boolean(context?.forceOutsideBusinessHours),
 });
 
+type AutomationMatchDiagnostic = {
+  instanceId?: string;
+  name?: string;
+  templateId?: string;
+  templateStatus?: string;
+  templateVersionId?: string;
+  latestVersionId?: string;
+  availableTriggers?: string[];
+  triggers?: Array<Record<string, any>>;
+  messageContext?: Record<string, any>;
+  reason: string;
+};
+
+type AutomationMatchResult = {
+  instance: any;
+  version: any;
+  runtime: ReturnType<typeof resolveFlowRuntime>;
+  matchedTrigger: FlowTriggerDefinition;
+};
+
+export async function resolveAutomationSelection(params: {
+  workspaceId: string;
+  triggerType: TriggerType;
+  messageText?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{
+  match?: AutomationMatchResult;
+  diagnostics: AutomationMatchDiagnostic[];
+  evaluated: number;
+}> {
+  const { workspaceId, triggerType, messageText, messageContext } = params;
+  const normalizedMessage = messageText || '';
+  const contextSummary = summarizeMessageContext(messageContext);
+
+  const instances = await AutomationInstance.find({
+    workspaceId: new mongoose.Types.ObjectId(workspaceId),
+    isActive: true,
+  }).sort({ createdAt: 1 });
+
+  if (instances.length === 0) {
+    return { match: undefined, diagnostics: [], evaluated: 0 };
+  }
+
+  const templateIds = Array.from(new Set(instances.map(instance => instance.templateId?.toString()).filter(Boolean)));
+  const templates = templateIds.length
+    ? await FlowTemplate.find({ _id: { $in: templateIds } }).select('currentVersionId status').lean()
+    : [];
+  const templateMap = new Map(templates.map((template: any) => [template._id.toString(), template]));
+
+  const storedVersionIds = instances
+    .map(instance => instance.templateVersionId?.toString())
+    .filter(Boolean) as string[];
+  const currentVersionIds = templates
+    .map((template: any) => template.currentVersionId?.toString())
+    .filter(Boolean) as string[];
+  const versionIds = Array.from(new Set([...storedVersionIds, ...currentVersionIds]));
+
+  const versions = versionIds.length
+    ? await FlowTemplateVersion.find({
+        _id: { $in: versionIds },
+        status: 'published',
+      }).lean()
+    : [];
+  const versionMap = new Map(versions.map(version => [version._id.toString(), version]));
+
+  const diagnostics: AutomationMatchDiagnostic[] = [];
+
+  for (const instance of instances) {
+    const diagnostic: AutomationMatchDiagnostic = {
+      instanceId: instance._id?.toString(),
+      name: instance.name,
+      templateId: instance.templateId?.toString(),
+      reason: 'unknown',
+    };
+    const template = instance.templateId
+      ? templateMap.get(instance.templateId.toString())
+      : null;
+    if (template?.status === 'archived') {
+      diagnostic.reason = 'template_archived';
+      diagnostic.templateStatus = template.status;
+      diagnostics.push(diagnostic);
+      continue;
+    }
+    const latestVersionId = template?.currentVersionId?.toString();
+    const latestVersion = latestVersionId ? versionMap.get(latestVersionId) || null : null;
+    const storedVersion = instance.templateVersionId
+      ? versionMap.get(instance.templateVersionId.toString()) || null
+      : null;
+    const version = latestVersion || storedVersion;
+    if (!version) {
+      diagnostic.reason = 'missing_published_version';
+      diagnostic.templateVersionId = instance.templateVersionId?.toString();
+      diagnostic.latestVersionId = latestVersionId;
+      diagnostics.push(diagnostic);
+      continue;
+    }
+
+    const runtime = resolveFlowRuntime(version, instance);
+    if (!runtime) {
+      diagnostic.reason = 'runtime_resolution_failed';
+      diagnostic.templateVersionId = version._id?.toString();
+      diagnostics.push(diagnostic);
+      continue;
+    }
+    const triggers = runtime.triggers || [];
+    if (triggers.length === 0) {
+      diagnostic.reason = 'no_triggers_defined';
+      diagnostic.templateVersionId = version._id?.toString();
+      diagnostics.push(diagnostic);
+      continue;
+    }
+
+    const typedTriggers = triggers.filter((trigger) => trigger.type === triggerType);
+    if (typedTriggers.length === 0) {
+      diagnostic.reason = 'trigger_type_mismatch';
+      diagnostic.templateVersionId = version._id?.toString();
+      diagnostic.availableTriggers = triggers.map((trigger) => trigger.type);
+      diagnostics.push(diagnostic);
+      continue;
+    }
+
+    let matchedTrigger: FlowTriggerDefinition | undefined;
+    for (const trigger of typedTriggers) {
+      if (await matchesTriggerConfig(normalizedMessage, trigger.config, messageContext)) {
+        matchedTrigger = trigger;
+        break;
+      }
+    }
+
+    if (!matchedTrigger) {
+      diagnostic.reason = 'trigger_config_mismatch';
+      diagnostic.templateVersionId = version._id?.toString();
+      diagnostic.triggers = summarizeTriggers(typedTriggers);
+      diagnostic.messageContext = contextSummary;
+      diagnostics.push(diagnostic);
+      continue;
+    }
+
+    return {
+      match: {
+        instance,
+        version,
+        runtime,
+        matchedTrigger,
+      },
+      diagnostics,
+      evaluated: instances.length,
+    };
+  }
+
+  return {
+    match: undefined,
+    diagnostics,
+    evaluated: instances.length,
+  };
+}
+
 const deepClone = <T>(value: T): T => {
   if (value === undefined) {
     return value;
@@ -1937,167 +2094,70 @@ export async function executeAutomation(params: {
       }
     }
 
-    const fetchStart = nowMs();
-    const instances = await AutomationInstance.find({
-      workspaceId: new mongoose.Types.ObjectId(workspaceId),
-      isActive: true,
-    }).sort({ createdAt: 1 });
-    logAutomationStep('fetch_instances', fetchStart, { count: instances.length, triggerType });
-
-    if (instances.length === 0) {
-      logAutomation('⚠️  [AUTOMATION] No active automations found');
-      return finish({ success: false, error: 'No active automations found for this trigger' });
-    }
-
-    const templateIds = Array.from(new Set(instances.map(instance => instance.templateId?.toString()).filter(Boolean)));
-    const templates = templateIds.length
-      ? await FlowTemplate.find({ _id: { $in: templateIds } }).select('currentVersionId status').lean()
-      : [];
-    const templateMap = new Map(templates.map((template: any) => [template._id.toString(), template]));
-
-    const storedVersionIds = instances
-      .map(instance => instance.templateVersionId?.toString())
-      .filter(Boolean) as string[];
-    const currentVersionIds = templates
-      .map((template: any) => template.currentVersionId?.toString())
-      .filter(Boolean) as string[];
-    const versionIds = Array.from(new Set([...storedVersionIds, ...currentVersionIds]));
-
-    const versions = versionIds.length
-      ? await FlowTemplateVersion.find({
-          _id: { $in: versionIds },
-          status: 'published',
-        }).lean()
-      : [];
-    const versionMap = new Map(versions.map(version => [version._id.toString(), version]));
-
     const matchStart = nowMs();
-    const matchDiagnostics: Array<Record<string, any>> = [];
-    for (const instance of instances) {
-      const diagnostic: Record<string, any> = {
-        instanceId: instance._id?.toString(),
-        name: instance.name,
-        templateId: instance.templateId?.toString(),
-      };
-      const template = instance.templateId
-        ? templateMap.get(instance.templateId.toString())
-        : null;
-      if (template?.status === 'archived') {
-        diagnostic.reason = 'template_archived';
-        diagnostic.templateStatus = template.status;
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-      const latestVersionId = template?.currentVersionId?.toString();
-      const latestVersion = latestVersionId ? versionMap.get(latestVersionId) || null : null;
-      const storedVersion = instance.templateVersionId
-        ? versionMap.get(instance.templateVersionId.toString()) || null
-        : null;
-      const version = latestVersion || storedVersion;
-      if (!version) {
-        diagnostic.reason = 'missing_published_version';
-        diagnostic.templateVersionId = instance.templateVersionId?.toString();
-        diagnostic.latestVersionId = latestVersionId;
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-
-      const runtime = resolveFlowRuntime(version, instance);
-      if (!runtime) {
-        diagnostic.reason = 'runtime_resolution_failed';
-        diagnostic.templateVersionId = version._id?.toString();
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-      const triggers = runtime.triggers || [];
-      if (triggers.length === 0) {
-        diagnostic.reason = 'no_triggers_defined';
-        diagnostic.templateVersionId = version._id?.toString();
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-
-      const typedTriggers = triggers.filter((trigger) => trigger.type === triggerType);
-      if (typedTriggers.length === 0) {
-        diagnostic.reason = 'trigger_type_mismatch';
-        diagnostic.templateVersionId = version._id?.toString();
-        diagnostic.availableTriggers = triggers.map((trigger) => trigger.type);
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-
-      let matchedTrigger: FlowTriggerDefinition | undefined;
-      for (const trigger of typedTriggers) {
-        if (await matchesTriggerConfig(normalizedMessage, trigger.config, messageContext)) {
-          matchedTrigger = trigger;
-          break;
-        }
-      }
-
-      if (!matchedTrigger) {
-        diagnostic.reason = 'trigger_config_mismatch';
-        diagnostic.templateVersionId = version._id?.toString();
-        diagnostic.triggers = summarizeTriggers(typedTriggers);
-        diagnostic.messageContext = contextSummary;
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-
-      logAutomation('✅ [AUTOMATION] Match', {
-        instanceId: instance._id?.toString(),
-        name: instance.name,
-        triggerType,
-      });
-
-      const result = await executeFlowForInstance({
-        instance,
-        version,
-        runtime,
-        conversationId,
-        workspaceId,
-        instagramAccountId,
-        messageText: normalizedMessage,
-        platform,
-        messageContext,
-      });
-
-      logAutomationStep('execute_flow', matchStart, {
-        success: result.success,
-        templateVersionId: version._id?.toString(),
-      });
-
-      if (!result.success) {
-        logAutomation('⚠️  [AUTOMATION] Match execution failed', {
-          instanceId: instance._id?.toString(),
-          name: instance.name,
-          templateVersionId: version._id?.toString(),
-          error: result.error,
-        });
-      }
-
-      return result.success
-        ? finish({ success: true, automationExecuted: instance.name })
-        : finish({ success: false, error: result.error || 'Flow execution failed' });
-    }
+    const selection = await resolveAutomationSelection({
+      workspaceId,
+      triggerType,
+      messageText: normalizedMessage,
+      messageContext,
+    });
 
     logAutomationStep('match_triggers', matchStart, {
-      matched: 0,
-      evaluated: instances.length,
+      matched: selection.match ? 1 : 0,
+      evaluated: selection.evaluated,
       triggerType,
     });
 
-    if (matchDiagnostics.length > 0) {
-      logAutomation('🔍 [AUTOMATION] Match diagnostics', {
-        triggerType,
-        messageContext: contextSummary,
-        evaluated: matchDiagnostics.length,
-        diagnostics: matchDiagnostics.slice(0, 10),
-        truncated: matchDiagnostics.length > 10,
+    if (!selection.match) {
+      if (selection.diagnostics.length > 0) {
+        logAutomation('🔍 [AUTOMATION] Match diagnostics', {
+          triggerType,
+          messageContext: contextSummary,
+          evaluated: selection.diagnostics.length,
+          diagnostics: selection.diagnostics.slice(0, 10),
+          truncated: selection.diagnostics.length > 10,
+        });
+      }
+      logAutomation('⚠️  [AUTOMATION] No automations matched trigger filters');
+      return finish({ success: false, error: 'No automations matched trigger filters' });
+    }
+
+    const { instance, version, runtime } = selection.match;
+    logAutomation('✅ [AUTOMATION] Match', {
+      instanceId: instance._id?.toString(),
+      name: instance.name,
+      triggerType,
+    });
+
+    const result = await executeFlowForInstance({
+      instance,
+      version,
+      runtime,
+      conversationId,
+      workspaceId,
+      instagramAccountId,
+      messageText: normalizedMessage,
+      platform,
+      messageContext,
+    });
+
+    logAutomationStep('execute_flow', matchStart, {
+      success: result.success,
+      templateVersionId: version._id?.toString(),
+    });
+
+    if (!result.success) {
+      logAutomation('⚠️  [AUTOMATION] Match execution failed', {
+        instanceId: instance._id?.toString(),
+        name: instance.name,
+        templateVersionId: version._id?.toString(),
+        error: result.error,
       });
     }
 
-    logAutomation('⚠️  [AUTOMATION] No automations matched trigger filters');
-    return finish({ success: false, error: 'No automations matched trigger filters' });
+    return result.success
+      ? finish({ success: true, automationExecuted: instance.name })
+      : finish({ success: false, error: result.error || 'Flow execution failed' });
   } catch (error: any) {
     console.error('❌ [AUTOMATION] Error executing automation:', error);
     console.error('❌ [AUTOMATION] Error stack:', error.stack);
