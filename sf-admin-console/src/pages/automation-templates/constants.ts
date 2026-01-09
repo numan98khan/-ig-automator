@@ -55,14 +55,12 @@ export const TRIGGER_METADATA = TRIGGER_LIBRARY.reduce((acc, trigger) => {
 export const DEFAULT_TRIGGER_TYPE: TriggerType = 'dm_message'
 
 export const AI_MODEL_SUGGESTIONS = [
+  'gpt-5.2',
+  'gpt-5.2-pro',
   'gpt-5',
   'gpt-5-mini',
   'gpt-5-nano',
-  'gpt-4o',
-  'gpt-4o-mini',
-  'o1',
-  'o1-mini',
-  'o1-preview',
+  'gpt-4.1',
 ]
 
 export const MESSAGE_STATE_VARIABLES = [
