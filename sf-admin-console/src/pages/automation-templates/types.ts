@@ -81,6 +81,8 @@ export type FlowNodeType =
   | 'handoff'
   | 'router'
 
+export type AiProvider = 'openai' | 'groq'
+
 export type RouterMatchMode = 'first' | 'all'
 export type RouterRuleOperator = 'equals' | 'contains' | 'gt' | 'lt' | 'keywords'
 export type RouterRuleSource = 'vars' | 'message' | 'config' | 'context'
@@ -112,6 +114,7 @@ export type FlowAiSettings = {
   allowEmojis?: boolean
   replyLanguage?: string
   systemPrompt?: string
+  provider?: AiProvider
   model?: string
   temperature?: number
   maxOutputTokens?: number
@@ -119,6 +122,7 @@ export type FlowAiSettings = {
 }
 
 export type FlowIntentSettings = {
+  provider?: AiProvider
   model?: string
   temperature?: number
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
@@ -136,6 +140,8 @@ export type FlowTriggerConfig = {
   keywordMatch?: 'any' | 'all'
   triggerMode?: 'keywords' | 'any' | 'intent'
   intentText?: string
+  intentProvider?: AiProvider
+  intentModel?: string
 }
 
 export type FlowButton = {

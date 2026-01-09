@@ -36,7 +36,12 @@ export async function matchTriggerConfigDetailed(
     ? matchesKeywords(messageText, keywordList, keywordMatch)
     : false;
   const keywordPass = keywordList.length > 0 ? keywordMatched : true;
-  const intentMatched = intentText ? await matchesIntent(messageText, intentText) : false;
+  const intentMatched = intentText
+    ? await matchesIntent(messageText, intentText, {
+        provider: triggerConfig.intentProvider,
+        model: triggerConfig.intentModel,
+      })
+    : false;
 
   if (
     triggerConfig.excludeKeywords &&

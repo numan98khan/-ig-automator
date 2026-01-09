@@ -338,7 +338,10 @@ const matchesIntentCategory = async (
   if (!passesBaseFilters(messageText, config, context)) return false;
   const intentText = config?.intentText?.trim() || '';
   if (!intentText) return false;
-  return matchesIntent(messageText, intentText);
+  return matchesIntent(messageText, intentText, {
+    provider: config?.intentProvider,
+    model: config?.intentModel,
+  });
 };
 
 const matchesUnqualifiedCategory = (
@@ -1156,6 +1159,7 @@ async function buildAutomationAiReply(params: {
     allowHashtags: aiSettings?.allowHashtags,
     allowEmojis: aiSettings?.allowEmojis,
     replyLanguage: aiSettings?.replyLanguage,
+    provider: aiSettings?.provider,
     model: aiSettings?.model,
     temperature: aiSettings?.temperature,
     maxOutputTokens: aiSettings?.maxOutputTokens,

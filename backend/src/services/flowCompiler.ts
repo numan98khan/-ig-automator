@@ -22,6 +22,7 @@ type FlowRuntimeStep = {
   agentMaxQuestions?: number;
   agentSlots?: Array<{ key: string; question?: string; defaultValue?: string }>;
   intentSettings?: {
+    provider?: 'openai' | 'groq';
     model?: string;
     temperature?: number;
     reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';

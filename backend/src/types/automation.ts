@@ -29,6 +29,7 @@ export interface AutomationAiSettings {
   allowHashtags?: boolean;
   allowEmojis?: boolean;
   replyLanguage?: string;
+  provider?: 'openai' | 'groq';
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
@@ -36,6 +37,7 @@ export interface AutomationAiSettings {
 }
 
 export interface AutomationIntentSettings {
+  provider?: 'openai' | 'groq';
   model?: string;
   temperature?: number;
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
@@ -49,6 +51,8 @@ export interface TriggerConfig {
   keywordMatch?: 'any' | 'all';
   triggerMode?: 'keywords' | 'any' | 'intent';
   intentText?: string;
+  intentProvider?: 'openai' | 'groq';
+  intentModel?: string;
   outsideBusinessHours?: boolean;
   businessHours?: BusinessHoursConfig;
   matchOn?: {

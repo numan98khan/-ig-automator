@@ -1,4 +1,3 @@
-import OpenAI from 'openai';
 import mongoose from 'mongoose';
 import { IConversation } from '../models/Conversation';
 import Message, { IMessage } from '../models/Message';
@@ -7,10 +6,10 @@ import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logOpenAiUsage } from './openAiUsageService';
 import { normalizeReasoningEffort } from '../utils/aiReasoning';
+import { AiProvider, getAiClient, normalizeAiProvider } from '../utils/aiProvider';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
+const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b';
 
 export interface AIReplyResult {
   replyText: string;
@@ -33,6 +32,7 @@ export interface AIReplyOptions {
   allowHashtags?: boolean;
   allowEmojis?: boolean;
   replyLanguage?: string;
+  provider?: AiProvider;
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
@@ -45,8 +45,10 @@ const splitIntoSentences = (text: string): string[] => {
   return matches.map((sentence) => sentence.trim()).filter(Boolean);
 };
 
-const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
-const supportsReasoningEffort = (model?: string): boolean => /^(gpt-5|o)/i.test(model || '');
+const supportsTemperature = (provider: AiProvider, model?: string): boolean =>
+  provider === 'openai' ? !/^gpt-5/i.test(model || '') : true;
+const supportsReasoningEffort = (provider: AiProvider, model?: string): boolean =>
+  provider === 'openai' && /^(gpt-5|o)/i.test(model || '');
 const getDurationMs = (startNs: bigint) => Number(process.hrtime.bigint() - startNs) / 1e6;
 const logAiTiming = (label: string, model: string | undefined, startNs: bigint, success: boolean) => {
   if (!getLogSettingsSnapshot().aiTimingEnabled) return;
@@ -157,12 +159,15 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
 
   const knowledgeItems = await KnowledgeItem.find(knowledgeQuery);
 
-  const model = options.model || 'gpt-4o-mini';
+  const provider = normalizeAiProvider(options.provider);
+  const model = options.model || (provider === 'groq' ? DEFAULT_GROQ_MODEL : DEFAULT_OPENAI_MODEL);
   const temperature = typeof options.temperature === 'number' ? options.temperature : 0.35;
   const maxOutputTokens = typeof options.maxOutputTokens === 'number'
     ? options.maxOutputTokens
     : 420;
-  const reasoningEffort = normalizeReasoningEffort(model, options.reasoningEffort);
+  const reasoningEffort = provider === 'openai'
+    ? normalizeReasoningEffort(model, options.reasoningEffort)
+    : undefined;
   const ragEnabled = options.ragEnabled !== false;
   const messages: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[] = messageHistory
     ? [...messageHistory].slice(-historyLimit)
@@ -377,38 +382,23 @@ Generate a response following all rules above. Return JSON with:
       }
     }
 
-    const requestPayload: any = {
-      model,
-      max_output_tokens: maxOutputTokens,
-      input: [
-        { role: 'system', content: systemMessage.trim() },
-        { role: 'user', content: userContent },
-      ],
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'ai_reply',
-          schema,
-          strict: true,
-        },
-      },
-      store: true, // Enable stateful context for better multi-turn conversations
-    };
-
-    if (supportsTemperature(model)) {
-      requestPayload.temperature = temperature;
-    }
-    if (supportsReasoningEffort(model) && reasoningEffort) {
-      requestPayload.reasoning = { effort: reasoningEffort };
-    }
+    const temperatureSupported = supportsTemperature(provider, model);
+    const reasoningSupported = supportsReasoningEffort(provider, model);
+    const groqAttachmentSummary = recentCustomerAttachments.length > 0
+      ? `\n\nATTACHMENTS:\n${recentCustomerAttachments.map((attachment: any) =>
+        `- ${attachment?.type || 'attachment'}`,
+      ).join('\n')}\nNote: You cannot view attachments.`
+      : '';
+    const groqUserMessage = `${userMessage.trim()}${groqAttachmentSummary}`;
 
     logAiDebug('reply_request', {
       conversationId: conversation._id?.toString(),
       workspaceId: workspaceId.toString(),
+      provider,
       model,
-      temperature: supportsTemperature(model) ? temperature : undefined,
-      temperatureOmitted: !supportsTemperature(model),
-      reasoningEffort: supportsReasoningEffort(model) ? reasoningEffort : undefined,
+      temperature: temperatureSupported ? temperature : undefined,
+      temperatureOmitted: !temperatureSupported,
+      reasoningEffort: reasoningSupported ? reasoningEffort : undefined,
       maxOutputTokens,
       ragEnabled,
       tone: tone || 'default',
@@ -422,33 +412,90 @@ Generate a response following all rules above. Return JSON with:
     });
 
     requestStart = process.hrtime.bigint();
-    const response = await openai.responses.create(requestPayload);
-    await logOpenAiUsage({
-      workspaceId: String(workspaceId),
-      model: response?.model || model,
-      usage: response?.usage,
-      requestId: response?.id,
-    });
-    logAiTiming('ai_reply', model, requestStart, true);
-    logOpenAiApi('response', summarizeOpenAiResponse(response));
+    if (provider === 'groq') {
+      const response = await getAiClient('groq').chat.completions.create({
+        model,
+        max_tokens: maxOutputTokens,
+        messages: [
+          { role: 'system', content: systemMessage.trim() },
+          { role: 'user', content: groqUserMessage },
+        ],
+        ...(temperatureSupported ? { temperature } : {}),
+      });
+      logAiTiming('ai_reply', model, requestStart, true);
+      responseContent = response.choices?.[0]?.message?.content || '{}';
+    } else {
+      const requestPayload: any = {
+        model,
+        max_output_tokens: maxOutputTokens,
+        input: [
+          { role: 'system', content: systemMessage.trim() },
+          { role: 'user', content: userContent },
+        ],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'ai_reply',
+            schema,
+            strict: true,
+          },
+        },
+        store: true, // Enable stateful context for better multi-turn conversations
+      };
 
-    responseContent = response.output_text || '{}';
-    const structured = extractStructuredJson<AIReplyResult>(response);
-    const raw = structured || safeParseJson(responseContent);
-    logAiDebug('reply_parse', {
-      responseChars: responseContent.length,
-      usedStructured: Boolean(structured),
-      replyPreview: String(raw.replyText || '').trim().slice(0, 160),
-      shouldEscalate: Boolean(raw.shouldEscalate),
-      tagsCount: Array.isArray(raw.tags) ? raw.tags.length : 0,
-    });
+      if (temperatureSupported) {
+        requestPayload.temperature = temperature;
+      }
+      if (reasoningSupported && reasoningEffort) {
+        requestPayload.reasoning = { effort: reasoningEffort };
+      }
 
-    parsed = {
-      replyText: String(raw.replyText || '').trim(),
-      shouldEscalate: Boolean(raw.shouldEscalate),
-      escalationReason: raw.escalationReason ? String(raw.escalationReason).trim() : undefined,
-      tags: Array.isArray(raw.tags) ? raw.tags.map((t: any) => String(t).trim()).filter(Boolean) : [],
-    };
+      const response = await getAiClient('openai').responses.create(requestPayload);
+      await logOpenAiUsage({
+        workspaceId: String(workspaceId),
+        model: response?.model || model,
+        usage: response?.usage,
+        requestId: response?.id,
+      });
+      logAiTiming('ai_reply', model, requestStart, true);
+      logOpenAiApi('response', summarizeOpenAiResponse(response));
+
+      responseContent = response.output_text || '{}';
+      const structured = extractStructuredJson<AIReplyResult>(response);
+      const raw = structured || safeParseJson(responseContent);
+      logAiDebug('reply_parse', {
+        responseChars: responseContent.length,
+        usedStructured: Boolean(structured),
+        replyPreview: String(raw.replyText || '').trim().slice(0, 160),
+        shouldEscalate: Boolean(raw.shouldEscalate),
+        tagsCount: Array.isArray(raw.tags) ? raw.tags.length : 0,
+      });
+
+      parsed = {
+        replyText: String(raw.replyText || '').trim(),
+        shouldEscalate: Boolean(raw.shouldEscalate),
+        escalationReason: raw.escalationReason ? String(raw.escalationReason).trim() : undefined,
+        tags: Array.isArray(raw.tags) ? raw.tags.map((t: any) => String(t).trim()).filter(Boolean) : [],
+      };
+    }
+
+    if (!parsed) {
+      const raw = safeParseJson(responseContent);
+      logAiDebug('reply_parse', {
+        responseChars: responseContent.length,
+        usedStructured: false,
+        replyPreview: String(raw.replyText || '').trim().slice(0, 160),
+        shouldEscalate: Boolean(raw.shouldEscalate),
+        tagsCount: Array.isArray(raw.tags) ? raw.tags.length : 0,
+      });
+
+      parsed = {
+        replyText: String(raw.replyText || '').trim(),
+        shouldEscalate: Boolean(raw.shouldEscalate),
+        escalationReason: raw.escalationReason ? String(raw.escalationReason).trim() : undefined,
+        tags: Array.isArray(raw.tags) ? raw.tags.map((t: any) => String(t).trim()).filter(Boolean) : [],
+      };
+    }
   } catch (error: any) {
     if (requestStart) {
       logAiTiming('ai_reply', model, requestStart, false);
@@ -468,7 +515,9 @@ Generate a response following all rules above. Return JSON with:
     }
 
     requestError = details;
-    logOpenAiApi('response_error', details);
+    if (provider === 'openai') {
+      logOpenAiApi('response_error', details);
+    }
     logAiDebug('reply_error', details);
     console.error('AI reply generation failed:', details);
   }
@@ -524,6 +573,7 @@ Generate a response following all rules above. Return JSON with:
   logAiDebug('reply_generated', {
     conversationId: conversation._id?.toString(),
     workspaceId: workspaceId.toString(),
+    provider,
     model,
     replyConfig: {
       maxReplySentences,
@@ -584,12 +634,18 @@ function postProcessReply(params: {
   return trimmedSentences.join(' ').trim().replace(/\s{2,}/g, ' ');
 }
 
+function stripJsonFence(content: string): string {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  return (fenced ? fenced[1] : trimmed).trim();
+}
+
 function safeParseJson(content: string): any {
   try {
-    return JSON.parse(content);
+    return JSON.parse(stripJsonFence(content));
   } catch (primaryError) {
     try {
-      const repaired = repairJson(content);
+      const repaired = repairJson(stripJsonFence(content));
       return JSON.parse(repaired);
     } catch (secondaryError) {
       throw primaryError;

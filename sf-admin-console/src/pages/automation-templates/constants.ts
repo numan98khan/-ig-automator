@@ -7,7 +7,7 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react'
-import type { FlowAiSettings, FlowDisplay, FlowField, FlowNodeType, TriggerType } from './types'
+import type { AiProvider, FlowAiSettings, FlowDisplay, FlowField, FlowNodeType, TriggerType } from './types'
 
 export const TRIGGER_LIBRARY: Array<{ type: TriggerType; label: string; description: string }> = [
   {
@@ -54,14 +54,27 @@ export const TRIGGER_METADATA = TRIGGER_LIBRARY.reduce((acc, trigger) => {
 
 export const DEFAULT_TRIGGER_TYPE: TriggerType = 'dm_message'
 
-export const AI_MODEL_SUGGESTIONS = [
-  'gpt-5.2',
-  'gpt-5.2-pro',
-  'gpt-5',
-  'gpt-5-mini',
-  'gpt-5-nano',
-  'gpt-4.1',
+export const DEFAULT_AI_PROVIDER: AiProvider = 'openai'
+
+export const AI_PROVIDER_OPTIONS: Array<{ value: AiProvider; label: string }> = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'groq', label: 'Groq' },
 ]
+
+export const AI_MODEL_SUGGESTIONS_BY_PROVIDER: Record<AiProvider, string[]> = {
+  openai: [
+    'gpt-5.2',
+    'gpt-5.2-pro',
+    'gpt-5',
+    'gpt-5-mini',
+    'gpt-5-nano',
+    'gpt-4.1',
+  ],
+  groq: [
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+  ],
+}
 
 export const MESSAGE_STATE_VARIABLES = [
   { key: 'detectedIntent', label: 'Detected intent', token: '{{ vars.detectedIntent }}' },
