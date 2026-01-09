@@ -157,6 +157,20 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     }[sessionStatus]
     : { label: 'Idle', variant: 'neutral' as const };
 
+  const mergePreviewMessages = (
+    existing: AutomationPreviewMessage[],
+    incoming?: AutomationPreviewMessage[],
+  ) => {
+    if (!incoming) return existing;
+    const seen = new Set(incoming.map((message) => message.id));
+    const merged = [...incoming, ...existing.filter((message) => !seen.has(message.id))];
+    if (merged.length > 1 && merged.every((message) => message.createdAt)) {
+      return [...merged].sort((a, b) =>
+        new Date(a.createdAt as string).getTime() - new Date(b.createdAt as string).getTime());
+    }
+    return merged;
+  };
+
   const applyPreviewPayload = useCallback((payload: Partial<AutomationPreviewSessionState> & {
     sessionId?: string;
     status?: 'active' | 'paused' | 'completed' | 'handoff';
@@ -168,7 +182,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       setPreviewSessionId(payload.session._id);
     }
     if (payload.messages) {
-      setPreviewMessages(payload.messages);
+      setPreviewMessages((prev) => mergePreviewMessages(prev, payload.messages));
     }
     const nextStatus = payload.status || payload.session?.status;
     if (nextStatus) {
