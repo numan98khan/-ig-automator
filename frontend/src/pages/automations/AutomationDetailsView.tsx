@@ -37,6 +37,8 @@ type AutomationDetailsViewProps = {
   embedded?: boolean;
 };
 
+type RightPaneTab = 'persona' | 'state' | 'timeline';
+
 const DEFAULT_PERSONA: AutomationPreviewPersona = {
   name: 'Mock Tester',
   handle: '',
@@ -86,7 +88,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [personaDraft, setPersonaDraft] = useState<AutomationPreviewPersona>(DEFAULT_PERSONA);
   const [profileBusy, setProfileBusy] = useState(false);
-  const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state' | 'timeline'>('persona');
+  const [rightPaneTab, setRightPaneTab] = useState<RightPaneTab>('persona');
   const [isTyping, setIsTyping] = useState(false);
   const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
   const previewSessionIdRef = useRef<string | null>(null);
@@ -586,7 +588,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     <div className="flex flex-col gap-4 min-h-0 h-full w-full">
       <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1 w-full">
         {(() => {
-          const tabs: Array<{ id: 'persona' | 'state' | 'timeline'; label: string }> = [
+          const tabs: Array<{ id: RightPaneTab; label: string }> = [
             { id: 'persona', label: 'Mock Persona' },
             { id: 'state', label: 'Automation State' },
           ];
