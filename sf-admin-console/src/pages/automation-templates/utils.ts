@@ -132,6 +132,7 @@ export const normalizeTriggerConfig = (config?: FlowTriggerConfig) => {
   const keywords = Array.isArray(config.keywords) ? config.keywords.filter(Boolean) : []
   const excludeKeywords = Array.isArray(config.excludeKeywords) ? config.excludeKeywords.filter(Boolean) : []
   const intentText = config.intentText?.trim()
+  const intentModel = config.intentModel?.trim()
   const output: FlowTriggerConfig = {}
 
   if (config.triggerMode) output.triggerMode = config.triggerMode
@@ -139,6 +140,10 @@ export const normalizeTriggerConfig = (config?: FlowTriggerConfig) => {
   if (keywords.length > 0) output.keywords = keywords
   if (excludeKeywords.length > 0) output.excludeKeywords = excludeKeywords
   if (intentText) output.intentText = intentText
+  if (config.intentProvider === 'groq' || config.intentProvider === 'openai') {
+    output.intentProvider = config.intentProvider
+  }
+  if (intentModel) output.intentModel = intentModel
 
   return Object.keys(output).length > 0 ? output : undefined
 }

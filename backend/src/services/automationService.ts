@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import Message from '../models/Message';
+import Message, { IMessage } from '../models/Message';
 import Conversation from '../models/Conversation';
 import InstagramAccount from '../models/InstagramAccount';
 import FollowupTask from '../models/FollowupTask';
@@ -16,16 +16,11 @@ import {
 import { addTicketUpdate, createTicket, getActiveTicket } from './escalationService';
 import { addCountIncrement, trackDailyMetric } from './reportingService';
 import { assertUsageLimit } from './tierService';
-import {
-  detectAutomationIntent,
-  detectGoalIntent,
-  getGoalConfigs,
-  getWorkspaceSettings,
-  goalMatchesWorkspace,
-} from './workspaceSettingsService';
+import { detectAutomationIntentDetailed, getWorkspaceSettings } from './workspaceSettingsService';
 import { pauseForTypingIfNeeded } from './automation/typing';
-import { matchesTriggerConfig } from './automation/triggerMatcher';
-import { matchesKeywords, normalizeText } from './automation/utils';
+import { matchTriggerConfigDetailed } from './automation/triggerMatcher';
+import { matchesIntent } from './automation/intentMatcher';
+import { isOutsideBusinessHours, matchesKeywords, normalizeText } from './automation/utils';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logAdminEvent } from './adminLogEventService';
 import {
@@ -68,6 +63,7 @@ type FlowRuntimeStep = {
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
   aiSettings?: AutomationAiSettings;
+  messageHistory?: Array<Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>>;
   agentSystemPrompt?: string;
   agentSteps?: string[];
   agentEndCondition?: string;
@@ -147,6 +143,31 @@ const nowMs = () => Date.now();
 
 const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
 const shouldLogAutomationSteps = () => getLogSettingsSnapshot().automationStepsEnabled;
+
+const ensurePreviewMeta = (session: any) => {
+  if (!session.state || typeof session.state !== 'object') {
+    session.state = {};
+  }
+  if (!session.state.previewMeta || typeof session.state.previewMeta !== 'object') {
+    session.state.previewMeta = {};
+  }
+  if (!Array.isArray(session.state.previewMeta.events)) {
+    session.state.previewMeta.events = [];
+  }
+  return session.state.previewMeta as { events: Array<{ id: string; type: string; message: string; createdAt: Date; details?: Record<string, any> }> };
+};
+
+const appendPreviewMetaEvent = (session: any, event: { type: string; message: string; createdAt?: Date; details?: Record<string, any> }) => {
+  const meta = ensurePreviewMeta(session);
+  meta.events = [
+    ...meta.events,
+    {
+      id: new mongoose.Types.ObjectId().toString(),
+      createdAt: event.createdAt || new Date(),
+      ...event,
+    },
+  ].slice(-200);
+};
 
 const resolveWorkspaceId = (details?: Record<string, any>) => {
   const candidate = details?.workspaceId;
@@ -243,6 +264,364 @@ const summarizeMessageContext = (context?: AutomationTestContext) => ({
   hasAttachment: Boolean(context?.hasAttachment),
   forceOutsideBusinessHours: Boolean(context?.forceOutsideBusinessHours),
 });
+
+const hasKeywords = (config?: TriggerConfig) =>
+  Array.isArray(config?.keywords) && config.keywords.length > 0;
+
+const hasExcludeKeywords = (config?: TriggerConfig) =>
+  Array.isArray(config?.excludeKeywords) && config.excludeKeywords.length > 0;
+
+const hasIntent = (config?: TriggerConfig) =>
+  Boolean(config?.intentText && config.intentText.trim());
+
+const hasMatchOn = (config?: TriggerConfig) =>
+  Boolean(config?.matchOn?.link || config?.matchOn?.attachment);
+
+const isUnqualifiedTriggerConfig = (config?: TriggerConfig) => {
+  if (!config) return true;
+  const triggerMode = config.triggerMode || 'any';
+  if (triggerMode !== 'any') return false;
+  return !hasKeywords(config)
+    && !hasIntent(config)
+    && !hasMatchOn(config)
+    && !hasExcludeKeywords(config)
+    && !config.outsideBusinessHours;
+};
+
+const passesBaseFilters = (
+  messageText: string,
+  config?: TriggerConfig,
+  context?: AutomationTestContext,
+) => {
+  if (hasExcludeKeywords(config)) {
+    if (matchesKeywords(messageText, config?.excludeKeywords || [], 'any')) {
+      return false;
+    }
+  }
+  if (
+    config?.outsideBusinessHours &&
+    !context?.forceOutsideBusinessHours &&
+    !isOutsideBusinessHours(config.businessHours)
+  ) {
+    return false;
+  }
+  return true;
+};
+
+const matchesKeywordCategory = (
+  messageText: string,
+  config: TriggerConfig | undefined,
+  context?: AutomationTestContext,
+) => {
+  const triggerMode = config?.triggerMode || 'any';
+  if (triggerMode === 'intent') return false;
+  if (!passesBaseFilters(messageText, config, context)) return false;
+
+  const linkMatched = Boolean(config?.matchOn?.link && context?.hasLink);
+  const attachmentMatched = Boolean(config?.matchOn?.attachment && context?.hasAttachment);
+  const keywordMatched = hasKeywords(config)
+    ? matchesKeywords(messageText, config?.keywords || [], config?.keywordMatch || 'any')
+    : false;
+
+  if (!hasMatchOn(config) && !hasKeywords(config)) return false;
+  if (linkMatched || attachmentMatched) return true;
+  return keywordMatched;
+};
+
+const matchesIntentCategory = async (
+  messageText: string,
+  config: TriggerConfig | undefined,
+  context?: AutomationTestContext,
+) => {
+  const triggerMode = config?.triggerMode || 'any';
+  if (triggerMode === 'keywords') return false;
+  if (!passesBaseFilters(messageText, config, context)) return false;
+  const intentText = config?.intentText?.trim() || '';
+  if (!intentText) return false;
+  return matchesIntent(messageText, intentText, {
+    provider: config?.intentProvider,
+    model: config?.intentModel,
+  });
+};
+
+const matchesUnqualifiedCategory = (
+  messageText: string,
+  config: TriggerConfig | undefined,
+  context?: AutomationTestContext,
+) => {
+  if (!isUnqualifiedTriggerConfig(config)) return false;
+  if (!passesBaseFilters(messageText, config, context)) return false;
+  return true;
+};
+
+type AutomationMatchDiagnostic = {
+  instanceId?: string;
+  name?: string;
+  templateId?: string;
+  templateStatus?: string;
+  templateVersionId?: string;
+  latestVersionId?: string;
+  availableTriggers?: string[];
+  triggers?: Array<Record<string, any>>;
+  messageContext?: Record<string, any>;
+  reason: string;
+};
+
+type AutomationMatchResult = {
+  instance: any;
+  version: any;
+  runtime: ReturnType<typeof resolveFlowRuntime>;
+  matchedTrigger: FlowTriggerDefinition;
+};
+
+const CATEGORY_MISMATCH_REASON: Record<'keyword' | 'intent' | 'unqualified', string> = {
+  keyword: 'keyword_bucket_mismatch',
+  intent: 'intent_bucket_mismatch',
+  unqualified: 'unqualified_bucket_mismatch',
+};
+
+export async function resolveAutomationSelection(params: {
+  workspaceId: string;
+  triggerType: TriggerType;
+  messageText?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{
+  match?: AutomationMatchResult;
+  diagnostics: AutomationMatchDiagnostic[];
+  evaluated: number;
+}> {
+  const { workspaceId, triggerType, messageText, messageContext } = params;
+  const normalizedMessage = messageText || '';
+  const contextSummary = summarizeMessageContext(messageContext);
+
+  const instances = await AutomationInstance.find({
+    workspaceId: new mongoose.Types.ObjectId(workspaceId),
+    isActive: true,
+  }).sort({ createdAt: 1 });
+
+  if (instances.length === 0) {
+    return { match: undefined, diagnostics: [], evaluated: 0 };
+  }
+
+  const templateIds = Array.from(new Set(instances.map(instance => instance.templateId?.toString()).filter(Boolean)));
+  const templates = templateIds.length
+    ? await FlowTemplate.find({ _id: { $in: templateIds } }).select('currentVersionId status').lean()
+    : [];
+  const templateMap = new Map(templates.map((template: any) => [template._id.toString(), template]));
+
+  const storedVersionIds = instances
+    .map(instance => instance.templateVersionId?.toString())
+    .filter(Boolean) as string[];
+  const currentVersionIds = templates
+    .map((template: any) => template.currentVersionId?.toString())
+    .filter(Boolean) as string[];
+  const versionIds = Array.from(new Set([...storedVersionIds, ...currentVersionIds]));
+
+  const versions = versionIds.length
+    ? await FlowTemplateVersion.find({
+        _id: { $in: versionIds },
+        status: 'published',
+      }).lean()
+    : [];
+  const versionMap = new Map(versions.map(version => [version._id.toString(), version]));
+
+  const diagnostics: AutomationMatchDiagnostic[] = [];
+  const bucketDiagnostics: AutomationMatchDiagnostic[] = [];
+  const bucketedInstanceIds = new Set<string>();
+  const candidates: Array<{
+    instance: any;
+    version: any;
+    runtime: ReturnType<typeof resolveFlowRuntime>;
+    typedTriggers: FlowTriggerDefinition[];
+    diagnosticBase: AutomationMatchDiagnostic;
+  }> = [];
+
+  for (const instance of instances) {
+    const diagnostic: AutomationMatchDiagnostic = {
+      instanceId: instance._id?.toString(),
+      name: instance.name,
+      templateId: instance.templateId?.toString(),
+      reason: 'unknown',
+    };
+    const template = instance.templateId
+      ? templateMap.get(instance.templateId.toString())
+      : null;
+    if (template?.status === 'archived') {
+      diagnostic.reason = 'template_archived';
+      diagnostic.templateStatus = template.status;
+      diagnostics.push(diagnostic);
+      continue;
+    }
+    const latestVersionId = template?.currentVersionId?.toString();
+    const latestVersion = latestVersionId ? versionMap.get(latestVersionId) || null : null;
+    const storedVersion = instance.templateVersionId
+      ? versionMap.get(instance.templateVersionId.toString()) || null
+      : null;
+    const version = latestVersion || storedVersion;
+    if (!version) {
+      diagnostic.reason = 'missing_published_version';
+      diagnostic.templateVersionId = instance.templateVersionId?.toString();
+      diagnostic.latestVersionId = latestVersionId;
+      diagnostics.push(diagnostic);
+      continue;
+    }
+
+    const runtime = resolveFlowRuntime(version, instance);
+    if (!runtime) {
+      diagnostic.reason = 'runtime_resolution_failed';
+      diagnostic.templateVersionId = version._id?.toString();
+      diagnostics.push(diagnostic);
+      continue;
+    }
+    const triggers = runtime.triggers || [];
+    if (triggers.length === 0) {
+      diagnostic.reason = 'no_triggers_defined';
+      diagnostic.templateVersionId = version._id?.toString();
+      diagnostics.push(diagnostic);
+      continue;
+    }
+
+    const typedTriggers = triggers.filter((trigger) => trigger.type === triggerType);
+    if (typedTriggers.length === 0) {
+      diagnostic.reason = 'trigger_type_mismatch';
+      diagnostic.templateVersionId = version._id?.toString();
+      diagnostic.availableTriggers = triggers.map((trigger) => trigger.type);
+      diagnostics.push(diagnostic);
+      continue;
+    }
+
+    candidates.push({
+      instance,
+      version,
+      runtime,
+      typedTriggers,
+      diagnosticBase: diagnostic,
+    });
+  }
+
+  const findMatch = async (category: 'keyword' | 'intent' | 'unqualified') => {
+    const categoryDiagnostics: AutomationMatchDiagnostic[] = [];
+
+    for (const candidate of candidates) {
+      const eligibleTriggers = candidate.typedTriggers.filter((trigger) => {
+        if (category === 'keyword') {
+          return (trigger.config?.triggerMode || 'any') !== 'intent'
+            && (hasKeywords(trigger.config) || hasMatchOn(trigger.config));
+        }
+        if (category === 'intent') {
+          return (trigger.config?.triggerMode || 'any') !== 'keywords' && hasIntent(trigger.config);
+        }
+        return isUnqualifiedTriggerConfig(trigger.config);
+      });
+
+      if (eligibleTriggers.length === 0) {
+        continue;
+      }
+
+      let matchedTrigger: FlowTriggerDefinition | undefined;
+      for (const trigger of eligibleTriggers) {
+        if (category === 'keyword') {
+          if (matchesKeywordCategory(normalizedMessage, trigger.config, messageContext)) {
+            matchedTrigger = trigger;
+            break;
+          }
+        } else if (category === 'intent') {
+          if (await matchesIntentCategory(normalizedMessage, trigger.config, messageContext)) {
+            matchedTrigger = trigger;
+            break;
+          }
+        } else if (matchesUnqualifiedCategory(normalizedMessage, trigger.config, messageContext)) {
+          matchedTrigger = trigger;
+          break;
+        }
+      }
+
+      if (matchedTrigger) {
+        return {
+          match: {
+            instance: candidate.instance,
+            version: candidate.version,
+            runtime: candidate.runtime,
+            matchedTrigger,
+          },
+          diagnostics: categoryDiagnostics,
+        };
+      }
+
+      categoryDiagnostics.push({
+        ...candidate.diagnosticBase,
+        reason: CATEGORY_MISMATCH_REASON[category],
+        templateVersionId: candidate.version._id?.toString(),
+        triggers: summarizeTriggers(eligibleTriggers),
+        messageContext: contextSummary,
+      });
+    }
+
+    return { match: undefined, diagnostics: categoryDiagnostics };
+  };
+
+  const appendBucketDiagnostics = (items: AutomationMatchDiagnostic[]) => {
+    items.forEach((item) => {
+      if (item.instanceId) {
+        bucketedInstanceIds.add(item.instanceId);
+      }
+      bucketDiagnostics.push(item);
+    });
+  };
+
+  const keywordMatch = await findMatch('keyword');
+  appendBucketDiagnostics(keywordMatch.diagnostics);
+  if (keywordMatch.match) {
+    return {
+      match: keywordMatch.match,
+      diagnostics: [...diagnostics, ...bucketDiagnostics],
+      evaluated: instances.length,
+    };
+  }
+
+  const intentMatch = await findMatch('intent');
+  appendBucketDiagnostics(intentMatch.diagnostics);
+  if (intentMatch.match) {
+    return {
+      match: intentMatch.match,
+      diagnostics: [...diagnostics, ...bucketDiagnostics],
+      evaluated: instances.length,
+    };
+  }
+
+  const unqualifiedMatch = await findMatch('unqualified');
+  appendBucketDiagnostics(unqualifiedMatch.diagnostics);
+  if (unqualifiedMatch.match) {
+    return {
+      match: unqualifiedMatch.match,
+      diagnostics: [...diagnostics, ...bucketDiagnostics],
+      evaluated: instances.length,
+    };
+  }
+
+  const fallbackDiagnostics = candidates
+    .filter((candidate) => {
+      const instanceId = candidate.diagnosticBase.instanceId;
+      return !instanceId || !bucketedInstanceIds.has(instanceId);
+    })
+    .map((candidate) => ({
+      ...candidate.diagnosticBase,
+      reason: 'no_priority_bucket',
+      templateVersionId: candidate.version._id?.toString(),
+      triggers: summarizeTriggers(candidate.typedTriggers),
+      messageContext: contextSummary,
+    }));
+
+  return {
+    match: undefined,
+    diagnostics: [
+      ...diagnostics,
+      ...bucketDiagnostics,
+      ...fallbackDiagnostics,
+    ],
+    evaluated: instances.length,
+  };
+}
 
 const deepClone = <T>(value: T): T => {
   if (value === undefined) {
@@ -762,43 +1141,25 @@ async function sendFlowMessage(params: {
 async function buildAutomationAiReply(params: {
   conversation: any;
   messageText: string;
-  messageContext?: AutomationTestContext;
   aiSettings?: AutomationAiSettings;
   knowledgeItemIds?: string[];
-  workspaceSettings?: any;
+  messageHistory?: Array<Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>>;
 }) {
-  const { conversation, messageText, messageContext, aiSettings, knowledgeItemIds } = params;
-  const settings = params.workspaceSettings || await getWorkspaceSettings(conversation.workspaceId);
-  const goalConfigs = getGoalConfigs(settings);
-  const detectedGoal = await detectGoalIntent(messageText || '');
-  const goalMatched = goalMatchesWorkspace(
-    detectedGoal,
-    settings?.primaryGoal,
-    settings?.secondaryGoal,
-  )
-    ? detectedGoal
-    : 'none';
+  const { conversation, messageText, aiSettings, knowledgeItemIds, messageHistory } = params;
 
   return generateAIReply({
     conversation,
     workspaceId: conversation.workspaceId,
     latestCustomerMessage: messageText,
     historyLimit: aiSettings?.historyLimit,
-    goalContext: {
-      workspaceGoals: {
-        primaryGoal: settings?.primaryGoal,
-        secondaryGoal: settings?.secondaryGoal,
-        configs: goalConfigs,
-      },
-      detectedGoal: goalMatched !== 'none' ? goalMatched : 'none',
-      activeGoalType: goalMatched !== 'none' ? goalMatched : undefined,
-      goalState: goalMatched !== 'none' ? 'collecting' : 'idle',
-      collectedFields: conversation.goalCollectedFields || {},
-    },
-    workspaceSettingsOverride: settings,
+    messageHistory,
     tone: aiSettings?.tone,
     maxReplySentences: aiSettings?.maxReplySentences,
     ragEnabled: aiSettings?.ragEnabled,
+    allowHashtags: aiSettings?.allowHashtags,
+    allowEmojis: aiSettings?.allowEmojis,
+    replyLanguage: aiSettings?.replyLanguage,
+    provider: aiSettings?.provider,
     model: aiSettings?.model,
     temperature: aiSettings?.temperature,
     maxOutputTokens: aiSettings?.maxOutputTokens,
@@ -810,6 +1171,7 @@ async function buildAutomationAiReply(params: {
 async function handleAiReplyStep(params: {
   step: FlowRuntimeStep;
   graph: FlowRuntimeGraph;
+  session: any;
   conversation: any;
   instance: any;
   igAccount: any;
@@ -824,6 +1186,7 @@ async function handleAiReplyStep(params: {
   const {
     step,
     graph,
+    session,
     conversation,
     instance,
     igAccount,
@@ -859,11 +1222,11 @@ async function handleAiReplyStep(params: {
   const aiResponse = await buildAutomationAiReply({
     conversation,
     messageText,
-    messageContext,
     aiSettings,
     knowledgeItemIds: step.knowledgeItemIds,
-    workspaceSettings: settings,
+    messageHistory: step.messageHistory,
   });
+  const replyDurationMs = Math.max(0, Math.round(nowMs() - replyStart));
   logAutomationStep('flow_ai_reply_generate', replyStart);
   logAdminEvent({
     category: 'flow_node',
@@ -881,6 +1244,26 @@ async function handleAiReplyStep(params: {
     },
     workspaceId: resolveWorkspaceId(logContext),
   });
+  if (deliveryMode === 'preview') {
+    const tagText = aiResponse.tags && aiResponse.tags.length > 0
+      ? ` · tags: ${aiResponse.tags.slice(0, 4).join(', ')}${aiResponse.tags.length > 4 ? '…' : ''}`
+      : '';
+    const escalationText = aiResponse.shouldEscalate
+      ? ` · escalated${aiResponse.escalationReason ? `: ${aiResponse.escalationReason}` : ''}`
+      : '';
+    appendPreviewMetaEvent(session, {
+      type: 'info',
+      message: `AI Reply generated${tagText}${escalationText}`,
+      details: {
+        nodeId: step.id,
+        type: 'ai_reply',
+        tags: aiResponse.tags,
+        shouldEscalate: aiResponse.shouldEscalate,
+        escalationReason: aiResponse.escalationReason,
+        durationMs: replyDurationMs,
+      },
+    });
+  }
 
   const activeTicket = deliveryMode === 'preview' ? null : await getActiveTicket(conversation._id);
   if (activeTicket && aiResponse.shouldEscalate) {
@@ -1221,6 +1604,9 @@ async function executeFlowPlan(params: {
     if (!('agent' in base) && session.state?.agent) {
       base.agent = session.state.agent;
     }
+    if (!('previewMeta' in base) && session.state?.previewMeta) {
+      base.previewMeta = session.state.previewMeta;
+    }
     return base;
   };
   const completeWithError = async (error: string) => {
@@ -1325,6 +1711,7 @@ async function executeFlowPlan(params: {
       const aiResult = await handleAiReplyStep({
         step,
         graph: plan.graph,
+        session,
         conversation,
         instance,
         igAccount,
@@ -1406,6 +1793,7 @@ async function executeFlowPlan(params: {
         aiSettings,
         knowledgeItemIds: step.knowledgeItemIds,
       });
+      const agentDurationMs = Math.max(0, Math.round(nowMs() - agentStart));
       logAutomationStep('flow_ai_agent', agentStart, {
         stepIndex: agentStepIndex,
         advanceStep: agentResult.advanceStep,
@@ -1489,6 +1877,56 @@ async function executeFlowPlan(params: {
       const agentStop = Boolean(agentResult.shouldStop);
       const agentDone = Boolean(agentResult.endConversation) || agentStop || maxQuestionsReached;
 
+      if (deliveryMode === 'preview') {
+        const collectedEntries = Object.entries(collectedFields)
+          .filter(([key, value]) => key && value !== null && value !== undefined && String(value).trim());
+        const formatValue = (value: string) => {
+          const trimmed = value.trim();
+          return trimmed.length > 32 ? `${trimmed.slice(0, 32)}…` : trimmed;
+        };
+        const formatEntries = (entries: Array<[string, any]>) => {
+          if (entries.length === 0) return '';
+          const sample = entries.slice(0, 3).map(([key, value]) => (
+            value ? `${key}=${formatValue(String(value))}` : key
+          ));
+          const extra = entries.length - sample.length;
+          return `${sample.join(', ')}${extra > 0 ? ` +${extra} more` : ''}`;
+        };
+        const formatList = (items: string[]) => {
+          if (items.length === 0) return '';
+          const sample = items.slice(0, 3).join(', ');
+          const extra = items.length - Math.min(items.length, 3);
+          return `${sample}${extra > 0 ? ` +${extra} more` : ''}`;
+        };
+        const stepLabel = agentSteps[agentStepIndex] ? agentSteps[agentStepIndex].trim() : '';
+        const stepBadge = stepCount > 0 ? `Step ${agentStepIndex + 1}/${stepCount}` : `Step ${agentStepIndex + 1}`;
+        const detailParts = [];
+        if (stepLabel) detailParts.push(stepLabel.length > 60 ? `${stepLabel.slice(0, 60)}…` : stepLabel);
+        const collectedSummary = formatEntries(collectedEntries);
+        if (collectedSummary) detailParts.push(`captured: ${collectedSummary}`);
+        const missingSummary = formatList(missingFields);
+        if (missingSummary) detailParts.push(`missing: ${missingSummary}`);
+        if (agentResult.advanceStep) detailParts.push('advance step');
+        if (agentDone) detailParts.push('done');
+
+        appendPreviewMetaEvent(session, {
+          type: 'info',
+          message: `AI Agent ${stepBadge}${detailParts.length > 0 ? ` · ${detailParts.join(' · ')}` : ''}`,
+          details: {
+            nodeId: step.id,
+            type: stepType,
+            stepIndex: agentStepIndex,
+            stepCount,
+            collectedFields,
+            missingFields,
+            advanceStep: agentResult.advanceStep,
+            endConversation: agentResult.endConversation,
+            shouldStop: agentResult.shouldStop,
+            durationMs: agentDurationMs,
+          },
+        });
+      }
+
       const nextVars = {
         ...(session.state?.vars || {}),
         agentNodeId: step.id,
@@ -1571,7 +2009,9 @@ async function executeFlowPlan(params: {
       }
     } else if (stepType === 'detect_intent') {
       const intentStart = nowMs();
-      const detectedIntent = await detectAutomationIntent(messageText || '', step.intentSettings);
+      const detected = await detectAutomationIntentDetailed(messageText || '', step.intentSettings);
+      const intentDurationMs = Math.max(0, Math.round(nowMs() - intentStart));
+      const detectedIntent = detected.value;
       await markTriggeredOnce();
       session.state = {
         ...(session.state || {}),
@@ -1581,6 +2021,19 @@ async function executeFlowPlan(params: {
         },
       };
       logAutomationStep('flow_detect_intent', intentStart, { detectedIntent });
+      if (deliveryMode === 'preview') {
+        appendPreviewMetaEvent(session, {
+          type: 'info',
+          message: `Detected intent: ${detectedIntent || 'none'}${detected.description ? ` — ${detected.description}` : ''}`,
+          details: {
+            nodeId: step.id,
+            type: stepType,
+            detectedIntent,
+            intentDescription: detected.description,
+            durationMs: intentDurationMs,
+          },
+        });
+      }
     } else if (stepType === 'router') {
       // Router nodes only decide the next path.
     } else if (stepType === 'trigger') {
@@ -1812,15 +2265,42 @@ export async function executePreviewFlowForInstance(params: {
     if (previewTriggers.length === 0) {
       return { success: false, error: 'No triggers configured for preview', messages: [] };
     }
-    let matched = false;
+    let matchedTrigger: FlowTriggerDefinition | null = null;
+    let matchedDetails: Awaited<ReturnType<typeof matchTriggerConfigDetailed>> | null = null;
     for (const trigger of previewTriggers) {
-      if (await matchesTriggerConfig(messageText || '', trigger.config, messageContext)) {
-        matched = true;
+      const details = await matchTriggerConfigDetailed(messageText || '', trigger.config, messageContext);
+      if (details.matched) {
+        matchedTrigger = trigger;
+        matchedDetails = details;
         break;
       }
     }
-    if (!matched) {
+    if (!matchedTrigger) {
       return { success: false, error: 'Trigger conditions did not match', messages: [] };
+    }
+    if (matchedDetails) {
+      const matchSignals: string[] = [];
+      if (matchedDetails.matchedOn.link) matchSignals.push('link');
+      if (matchedDetails.matchedOn.attachment) matchSignals.push('attachment');
+      if (matchedDetails.matchedOn.intent) matchSignals.push('intent');
+      if (matchedDetails.matchedOn.keywords) matchSignals.push('keywords');
+      const triggerLabel = matchedTrigger.label || matchedTrigger.type;
+      const intentHint = matchedDetails.matchedOn.intent && matchedTrigger.config?.intentText
+        ? ` · intent: ${matchedTrigger.config.intentText.trim()}`
+        : '';
+      const signalSuffix = matchSignals.length > 0 ? ` (${matchSignals.join(', ')})` : '';
+      appendPreviewMetaEvent(session, {
+        type: 'info',
+        message: `Trigger matched: ${triggerLabel}${signalSuffix}${intentHint}`,
+        details: {
+          type: 'trigger',
+          triggerType: matchedTrigger.type,
+          triggerLabel: matchedTrigger.label,
+          triggerMode: matchedDetails.triggerMode,
+          matchedOn: matchedDetails.matchedOn,
+          messagePreview: messageText?.slice(0, 160),
+        },
+      });
     }
   }
 
@@ -1962,167 +2442,70 @@ export async function executeAutomation(params: {
       }
     }
 
-    const fetchStart = nowMs();
-    const instances = await AutomationInstance.find({
-      workspaceId: new mongoose.Types.ObjectId(workspaceId),
-      isActive: true,
-    }).sort({ createdAt: 1 });
-    logAutomationStep('fetch_instances', fetchStart, { count: instances.length, triggerType });
-
-    if (instances.length === 0) {
-      logAutomation('⚠️  [AUTOMATION] No active automations found');
-      return finish({ success: false, error: 'No active automations found for this trigger' });
-    }
-
-    const templateIds = Array.from(new Set(instances.map(instance => instance.templateId?.toString()).filter(Boolean)));
-    const templates = templateIds.length
-      ? await FlowTemplate.find({ _id: { $in: templateIds } }).select('currentVersionId status').lean()
-      : [];
-    const templateMap = new Map(templates.map((template: any) => [template._id.toString(), template]));
-
-    const storedVersionIds = instances
-      .map(instance => instance.templateVersionId?.toString())
-      .filter(Boolean) as string[];
-    const currentVersionIds = templates
-      .map((template: any) => template.currentVersionId?.toString())
-      .filter(Boolean) as string[];
-    const versionIds = Array.from(new Set([...storedVersionIds, ...currentVersionIds]));
-
-    const versions = versionIds.length
-      ? await FlowTemplateVersion.find({
-          _id: { $in: versionIds },
-          status: 'published',
-        }).lean()
-      : [];
-    const versionMap = new Map(versions.map(version => [version._id.toString(), version]));
-
     const matchStart = nowMs();
-    const matchDiagnostics: Array<Record<string, any>> = [];
-    for (const instance of instances) {
-      const diagnostic: Record<string, any> = {
-        instanceId: instance._id?.toString(),
-        name: instance.name,
-        templateId: instance.templateId?.toString(),
-      };
-      const template = instance.templateId
-        ? templateMap.get(instance.templateId.toString())
-        : null;
-      if (template?.status === 'archived') {
-        diagnostic.reason = 'template_archived';
-        diagnostic.templateStatus = template.status;
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-      const latestVersionId = template?.currentVersionId?.toString();
-      const latestVersion = latestVersionId ? versionMap.get(latestVersionId) || null : null;
-      const storedVersion = instance.templateVersionId
-        ? versionMap.get(instance.templateVersionId.toString()) || null
-        : null;
-      const version = latestVersion || storedVersion;
-      if (!version) {
-        diagnostic.reason = 'missing_published_version';
-        diagnostic.templateVersionId = instance.templateVersionId?.toString();
-        diagnostic.latestVersionId = latestVersionId;
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-
-      const runtime = resolveFlowRuntime(version, instance);
-      if (!runtime) {
-        diagnostic.reason = 'runtime_resolution_failed';
-        diagnostic.templateVersionId = version._id?.toString();
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-      const triggers = runtime.triggers || [];
-      if (triggers.length === 0) {
-        diagnostic.reason = 'no_triggers_defined';
-        diagnostic.templateVersionId = version._id?.toString();
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-
-      const typedTriggers = triggers.filter((trigger) => trigger.type === triggerType);
-      if (typedTriggers.length === 0) {
-        diagnostic.reason = 'trigger_type_mismatch';
-        diagnostic.templateVersionId = version._id?.toString();
-        diagnostic.availableTriggers = triggers.map((trigger) => trigger.type);
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-
-      let matchedTrigger: FlowTriggerDefinition | undefined;
-      for (const trigger of typedTriggers) {
-        if (await matchesTriggerConfig(normalizedMessage, trigger.config, messageContext)) {
-          matchedTrigger = trigger;
-          break;
-        }
-      }
-
-      if (!matchedTrigger) {
-        diagnostic.reason = 'trigger_config_mismatch';
-        diagnostic.templateVersionId = version._id?.toString();
-        diagnostic.triggers = summarizeTriggers(typedTriggers);
-        diagnostic.messageContext = contextSummary;
-        matchDiagnostics.push(diagnostic);
-        continue;
-      }
-
-      logAutomation('✅ [AUTOMATION] Match', {
-        instanceId: instance._id?.toString(),
-        name: instance.name,
-        triggerType,
-      });
-
-      const result = await executeFlowForInstance({
-        instance,
-        version,
-        runtime,
-        conversationId,
-        workspaceId,
-        instagramAccountId,
-        messageText: normalizedMessage,
-        platform,
-        messageContext,
-      });
-
-      logAutomationStep('execute_flow', matchStart, {
-        success: result.success,
-        templateVersionId: version._id?.toString(),
-      });
-
-      if (!result.success) {
-        logAutomation('⚠️  [AUTOMATION] Match execution failed', {
-          instanceId: instance._id?.toString(),
-          name: instance.name,
-          templateVersionId: version._id?.toString(),
-          error: result.error,
-        });
-      }
-
-      return result.success
-        ? finish({ success: true, automationExecuted: instance.name })
-        : finish({ success: false, error: result.error || 'Flow execution failed' });
-    }
+    const selection = await resolveAutomationSelection({
+      workspaceId,
+      triggerType,
+      messageText: normalizedMessage,
+      messageContext,
+    });
 
     logAutomationStep('match_triggers', matchStart, {
-      matched: 0,
-      evaluated: instances.length,
+      matched: selection.match ? 1 : 0,
+      evaluated: selection.evaluated,
       triggerType,
     });
 
-    if (matchDiagnostics.length > 0) {
-      logAutomation('🔍 [AUTOMATION] Match diagnostics', {
-        triggerType,
-        messageContext: contextSummary,
-        evaluated: matchDiagnostics.length,
-        diagnostics: matchDiagnostics.slice(0, 10),
-        truncated: matchDiagnostics.length > 10,
+    if (!selection.match) {
+      if (selection.diagnostics.length > 0) {
+        logAutomation('🔍 [AUTOMATION] Match diagnostics', {
+          triggerType,
+          messageContext: contextSummary,
+          evaluated: selection.diagnostics.length,
+          diagnostics: selection.diagnostics.slice(0, 10),
+          truncated: selection.diagnostics.length > 10,
+        });
+      }
+      logAutomation('⚠️  [AUTOMATION] No automations matched trigger filters');
+      return finish({ success: false, error: 'No automations matched trigger filters' });
+    }
+
+    const { instance, version, runtime } = selection.match;
+    logAutomation('✅ [AUTOMATION] Match', {
+      instanceId: instance._id?.toString(),
+      name: instance.name,
+      triggerType,
+    });
+
+    const result = await executeFlowForInstance({
+      instance,
+      version,
+      runtime,
+      conversationId,
+      workspaceId,
+      instagramAccountId,
+      messageText: normalizedMessage,
+      platform,
+      messageContext,
+    });
+
+    logAutomationStep('execute_flow', matchStart, {
+      success: result.success,
+      templateVersionId: version._id?.toString(),
+    });
+
+    if (!result.success) {
+      logAutomation('⚠️  [AUTOMATION] Match execution failed', {
+        instanceId: instance._id?.toString(),
+        name: instance.name,
+        templateVersionId: version._id?.toString(),
+        error: result.error,
       });
     }
 
-    logAutomation('⚠️  [AUTOMATION] No automations matched trigger filters');
-    return finish({ success: false, error: 'No automations matched trigger filters' });
+    return result.success
+      ? finish({ success: true, automationExecuted: instance.name })
+      : finish({ success: false, error: result.error || 'Flow execution failed' });
   } catch (error: any) {
     console.error('❌ [AUTOMATION] Error executing automation:', error);
     console.error('❌ [AUTOMATION] Error stack:', error.stack);

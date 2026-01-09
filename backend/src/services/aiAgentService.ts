@@ -1,4 +1,3 @@
-import OpenAI from 'openai';
 import mongoose from 'mongoose';
 import { IConversation } from '../models/Conversation';
 import Message from '../models/Message';
@@ -8,10 +7,10 @@ import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logOpenAiUsage } from './openAiUsageService';
 import { normalizeReasoningEffort } from '../utils/aiReasoning';
+import { AiProvider, getAiClient, normalizeAiProvider } from '../utils/aiProvider';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
+const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b';
 
 export type AIAgentResult = {
   replyText: string;
@@ -42,8 +41,10 @@ export type AIAgentOptions = {
   knowledgeItemIds?: string[];
 };
 
-const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
-const supportsReasoningEffort = (model?: string): boolean => /^(gpt-5|o)/i.test(model || '');
+const supportsTemperature = (provider: AiProvider, model?: string): boolean =>
+  provider === 'openai' ? !/^gpt-5/i.test(model || '') : true;
+const supportsReasoningEffort = (provider: AiProvider, model?: string): boolean =>
+  provider === 'openai' && /^(gpt-5|o)/i.test(model || '');
 const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
 
 const logAiDebug = (message: string, details?: Record<string, any>) => {
@@ -82,12 +83,15 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
 
   const historyLimit = typeof aiSettings?.historyLimit === 'number' ? aiSettings?.historyLimit : 10;
   const ragEnabled = aiSettings?.ragEnabled !== false;
-  const model = aiSettings?.model || 'gpt-4o-mini';
+  const provider = normalizeAiProvider(aiSettings?.provider);
+  const model = aiSettings?.model || (provider === 'groq' ? DEFAULT_GROQ_MODEL : DEFAULT_OPENAI_MODEL);
   const temperature = typeof aiSettings?.temperature === 'number' ? aiSettings?.temperature : 0.35;
   const maxOutputTokens = typeof aiSettings?.maxOutputTokens === 'number'
     ? aiSettings?.maxOutputTokens
     : 420;
-  const reasoningEffort = normalizeReasoningEffort(model, aiSettings?.reasoningEffort);
+  const reasoningEffort = provider === 'openai'
+    ? normalizeReasoningEffort(model, aiSettings?.reasoningEffort)
+    : undefined;
   const maxReplySentences = aiSettings?.maxReplySentences;
 
   const trimmedSteps = Array.isArray(steps)
@@ -282,37 +286,16 @@ Return JSON with:
 
   let responseContent: string | null = null;
   try {
-    const requestPayload: any = {
-      model,
-      max_output_tokens: maxOutputTokens,
-      input: [
-        { role: 'system', content: systemMessage.trim() },
-        { role: 'user', content: userMessage.trim() },
-      ],
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'ai_agent_reply',
-          schema,
-          strict: true,
-        },
-      },
-      store: true,
-    };
-
-    if (supportsTemperature(model)) {
-      requestPayload.temperature = temperature;
-    }
-    if (supportsReasoningEffort(model) && reasoningEffort) {
-      requestPayload.reasoning = { effort: reasoningEffort };
-    }
+    const temperatureSupported = supportsTemperature(provider, model);
+    const reasoningSupported = supportsReasoningEffort(provider, model);
 
     logAiDebug('agent_request', {
       conversationId: conversation._id?.toString(),
       workspaceId: String(workspaceId),
+      provider,
       model,
-      temperature: supportsTemperature(model) ? temperature : undefined,
-      reasoningEffort: supportsReasoningEffort(model) ? reasoningEffort : undefined,
+      temperature: temperatureSupported ? temperature : undefined,
+      reasoningEffort: reasoningSupported ? reasoningEffort : undefined,
       historyCount: messages.length,
       steps: trimmedSteps.length,
       stepIndex: currentStepIndex,
@@ -322,17 +305,56 @@ Return JSON with:
       maxQuestionsReached,
     });
 
-    const response = await openai.responses.create(requestPayload);
-    await logOpenAiUsage({
-      workspaceId: String(workspaceId),
-      model: response?.model || model,
-      usage: response?.usage,
-      requestId: response?.id,
-    });
-    responseContent = response.output_text || '{}';
+    let raw: any;
+    if (provider === 'groq') {
+      const response = await getAiClient('groq').chat.completions.create({
+        model,
+        max_tokens: maxOutputTokens,
+        messages: [
+          { role: 'system', content: systemMessage.trim() },
+          { role: 'user', content: userMessage.trim() },
+        ],
+        ...(temperatureSupported ? { temperature } : {}),
+      });
+      responseContent = response.choices?.[0]?.message?.content || '{}';
+      raw = safeParseJson(responseContent);
+    } else {
+      const requestPayload: any = {
+        model,
+        max_output_tokens: maxOutputTokens,
+        input: [
+          { role: 'system', content: systemMessage.trim() },
+          { role: 'user', content: userMessage.trim() },
+        ],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'ai_agent_reply',
+            schema,
+            strict: true,
+          },
+        },
+        store: true,
+      };
 
-    const structured = extractStructuredJson<AIAgentResult>(response);
-    const raw = structured || safeParseJson(responseContent);
+      if (temperatureSupported) {
+        requestPayload.temperature = temperature;
+      }
+      if (reasoningSupported && reasoningEffort) {
+        requestPayload.reasoning = { effort: reasoningEffort };
+      }
+
+      const response = await getAiClient('openai').responses.create(requestPayload);
+      await logOpenAiUsage({
+        workspaceId: String(workspaceId),
+        model: response?.model || model,
+        usage: response?.usage,
+        requestId: response?.id,
+      });
+      responseContent = response.output_text || '{}';
+      const structured = extractStructuredJson<AIAgentResult>(response);
+      raw = structured || safeParseJson(responseContent);
+    }
     const replyText = String(raw.replyText || '').trim();
     const advanceStep = Boolean(raw.advanceStep);
     const endConversation = Boolean(raw.endConversation);
@@ -409,12 +431,18 @@ Return JSON with:
   };
 }
 
+function stripJsonFence(content: string): string {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  return (fenced ? fenced[1] : trimmed).trim();
+}
+
 function safeParseJson(content: string): any {
   try {
-    return JSON.parse(content);
+    return JSON.parse(stripJsonFence(content));
   } catch (primaryError) {
     try {
-      const repaired = repairJson(content);
+      const repaired = repairJson(stripJsonFence(content));
       return JSON.parse(repaired);
     } catch (secondaryError) {
       throw primaryError;

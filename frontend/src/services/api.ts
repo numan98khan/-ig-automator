@@ -271,6 +271,46 @@ export interface AutomationPreviewMessage {
   createdAt?: string;
 }
 
+export type AutomationSimulationDiagnostic = {
+  instanceId?: string;
+  name?: string;
+  templateId?: string;
+  templateStatus?: string;
+  templateVersionId?: string;
+  latestVersionId?: string;
+  availableTriggers?: string[];
+  triggers?: Array<Record<string, any>>;
+  messageContext?: Record<string, any>;
+  reason: string;
+};
+
+export type AutomationSimulationSelection = {
+  id: string;
+  name?: string;
+  templateId?: string;
+  trigger?: { type?: string; label?: string; description?: string };
+};
+
+export type AutomationSimulationResponse = AutomationPreviewSessionState & {
+  success: boolean;
+  error?: string;
+  sessionId?: string;
+  conversationId?: string;
+  status?: 'active' | 'paused' | 'completed' | 'handoff';
+  messages?: AutomationPreviewMessage[];
+  selectedAutomation?: AutomationSimulationSelection;
+  diagnostics?: AutomationSimulationDiagnostic[];
+};
+
+export type AutomationSimulationSessionResponse = AutomationPreviewSessionState & {
+  sessionId?: string;
+  conversationId?: string;
+  status?: 'active' | 'paused' | 'completed' | 'handoff';
+  messages?: AutomationPreviewMessage[];
+  selectedAutomation?: AutomationSimulationSelection;
+  diagnostics?: AutomationSimulationDiagnostic[];
+};
+
 export interface AutomationPreviewSession extends AutomationPreviewSessionState {
   sessionId: string;
   conversationId: string;
@@ -530,6 +570,7 @@ export interface TierLimits {
   crm?: boolean;
   integrations?: boolean;
   flowBuilder?: boolean;
+  executionTimeline?: boolean;
 }
 
 export interface Tier {
@@ -1137,6 +1178,32 @@ export const automationAPI = {
     payload: { sessionId: string; reason?: string },
   ): Promise<AutomationPreviewSessionResponse> => {
     const { data } = await api.post(`/api/automations/${id}/preview-session/stop`, payload);
+    return data;
+  },
+
+  simulateMessage: async (payload: {
+    workspaceId: string;
+    text: string;
+    triggerType?: TriggerType;
+    sessionId?: string;
+    reset?: boolean;
+    profileId?: string;
+    persona?: AutomationPreviewPersona;
+  }): Promise<AutomationSimulationResponse> => {
+    const { data } = await api.post('/api/automations/simulate/message', payload);
+    return data;
+  },
+  getSimulationSession: async (workspaceId: string): Promise<AutomationSimulationSessionResponse> => {
+    const { data } = await api.get('/api/automations/simulate/session', {
+      params: { workspaceId },
+    });
+    return data;
+  },
+  resetSimulationSession: async (payload: {
+    workspaceId: string;
+    sessionId?: string;
+  }): Promise<{ success: boolean }> => {
+    const { data } = await api.post('/api/automations/simulate/reset', payload);
     return data;
   },
 };

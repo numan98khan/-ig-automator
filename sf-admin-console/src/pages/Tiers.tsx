@@ -27,6 +27,7 @@ type TierFormState = {
     crm?: boolean | null
     integrations?: boolean | null
     flowBuilder?: boolean | null
+    executionTimeline?: boolean | null
   }
 }
 
@@ -108,6 +109,7 @@ export default function Tiers() {
     { key: 'crm', label: 'CRM', description: 'Access CRM contacts, notes, and tasks.' },
     { key: 'integrations', label: 'Integrations', description: 'Enable third-party integrations.' },
     { key: 'flowBuilder', label: 'Flow builder', description: 'Create and manage automation flows.' },
+    { key: 'executionTimeline', label: 'Execution timeline', description: 'Expose execution timeline logging in automation previews.' },
   ]
 
   return (
@@ -349,7 +351,7 @@ function LabeledInput(props: React.InputHTMLAttributes<HTMLInputElement> & { lab
 }
 
 type NumericLimitKey = 'aiMessages' | 'instagramAccounts' | 'teamMembers' | 'automations' | 'knowledgeItems'
-type FeatureFlagKey = 'crm' | 'integrations' | 'flowBuilder'
+type FeatureFlagKey = 'crm' | 'integrations' | 'flowBuilder' | 'executionTimeline'
 
 type FeatureSelectProps = {
   label: string

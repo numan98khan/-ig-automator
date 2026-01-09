@@ -32,8 +32,10 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {
-  AI_MODEL_SUGGESTIONS,
+  AI_MODEL_SUGGESTIONS_BY_PROVIDER,
+  AI_PROVIDER_OPTIONS,
   DEFAULT_TRIGGER_TYPE,
+  DEFAULT_AI_PROVIDER,
   FLOW_NODE_LABELS,
   FLOW_NODE_LIBRARY,
   FLOW_NODE_STYLES,
@@ -46,6 +48,7 @@ import {
 } from './automation-templates/constants'
 import { buildFlowNodeTypes } from './automation-templates/components/FlowNodes'
 import type {
+  AiProvider,
   DraftForm,
   FlowAiSettings,
   FlowDisplay,
@@ -85,6 +88,12 @@ import {
   parseOptionsText,
   parseTags,
 } from './automation-templates/utils'
+
+const resolveAiProvider = (value?: string): AiProvider =>
+  value === 'groq' ? 'groq' : DEFAULT_AI_PROVIDER
+
+const getAiModelSuggestions = (provider: AiProvider) =>
+  AI_MODEL_SUGGESTIONS_BY_PROVIDER[provider] || AI_MODEL_SUGGESTIONS_BY_PROVIDER[DEFAULT_AI_PROVIDER]
 
 const ROUTER_SOURCE_OPTIONS: Array<{ value: RouterRuleSource; label: string }> = [
   { value: 'vars', label: 'Vars (session)' },
@@ -194,9 +203,18 @@ export default function AutomationTemplates() {
     () => flowNodes.find((node) => node.id === selectedNodeId) || null,
     [flowNodes, selectedNodeId],
   )
+  const aiProvider = resolveAiProvider(selectedNode?.aiSettings?.provider)
+  const aiModelSuggestions = getAiModelSuggestions(aiProvider)
   const aiModelValue = selectedNode?.aiSettings?.model || ''
-  const hasCustomAiModel = Boolean(aiModelValue) && !AI_MODEL_SUGGESTIONS.includes(aiModelValue)
+  const hasCustomAiModel = Boolean(aiModelValue) && !aiModelSuggestions.includes(aiModelValue)
+  const intentProvider = resolveAiProvider(selectedNode?.intentSettings?.provider)
+  const intentModelSuggestions = getAiModelSuggestions(intentProvider)
   const selectedTriggerConfig: FlowTriggerConfig = selectedNode?.triggerConfig || {}
+  const triggerIntentProvider = resolveAiProvider(selectedTriggerConfig.intentProvider)
+  const triggerIntentModelSuggestions = getAiModelSuggestions(triggerIntentProvider)
+  const triggerIntentModelValue = selectedTriggerConfig.intentModel || ''
+  const hasCustomTriggerIntentModel = Boolean(triggerIntentModelValue)
+    && !triggerIntentModelSuggestions.includes(triggerIntentModelValue)
   const reasoningEffortOptions = REASONING_EFFORT_OPTIONS
     .filter((option): option is NonNullable<typeof option> => option !== undefined)
     .map((option) => ({
@@ -1176,7 +1194,7 @@ export default function AutomationTemplates() {
               </div>
             )}
             <datalist id="ai-model-options">
-              {AI_MODEL_SUGGESTIONS.map((model) => (
+              {intentModelSuggestions.map((model) => (
                 <option key={model} value={model} />
               ))}
             </datalist>
@@ -1255,6 +1273,22 @@ export default function AutomationTemplates() {
                         type: 'text' as const,
                         defaultValue: selectedTriggerConfig.intentText || '',
                         sourcePath: 'triggers[0].config.intentText',
+                      },
+                      {
+                        label: 'Intent provider',
+                        type: 'select' as const,
+                        options: AI_PROVIDER_OPTIONS.map((option) => ({
+                          label: option.label,
+                          value: option.value,
+                        })),
+                        defaultValue: selectedTriggerConfig.intentProvider || DEFAULT_AI_PROVIDER,
+                        sourcePath: 'triggers[0].config.intentProvider',
+                      },
+                      {
+                        label: 'Intent model',
+                        type: 'text' as const,
+                        defaultValue: selectedTriggerConfig.intentModel || '',
+                        sourcePath: 'triggers[0].config.intentModel',
                       },
                     ].map((option) => {
                       const sourceNodeId = undefined
@@ -1394,25 +1428,79 @@ export default function AutomationTemplates() {
                   </>
                 )}
                 {selectedTriggerConfig.triggerMode === 'intent' && (
-                  <div className="space-y-2">
-                    <label className="text-sm text-muted-foreground">Intent description</label>
-                    <textarea
-                      className="input w-full h-24 text-sm"
-                      value={selectedTriggerConfig.intentText || ''}
-                      onChange={(event) =>
-                        updateNode(selectedNode.id, (node) => ({
-                          ...node,
-                          triggerConfig: {
-                            ...(node.triggerConfig || {}),
-                            intentText: event.target.value,
-                          },
-                        }))
-                      }
-                    />
-                    <div className="text-xs text-muted-foreground">
-                      Describe the user intent in plain language for AI matching.
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-sm text-muted-foreground">Intent description</label>
+                      <textarea
+                        className="input w-full h-24 text-sm"
+                        value={selectedTriggerConfig.intentText || ''}
+                        onChange={(event) =>
+                          updateNode(selectedNode.id, (node) => ({
+                            ...node,
+                            triggerConfig: {
+                              ...(node.triggerConfig || {}),
+                              intentText: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                      <div className="text-xs text-muted-foreground">
+                        Describe the user intent in plain language for AI matching.
+                      </div>
                     </div>
-                  </div>
+                    <div className="space-y-2">
+                      <label className="text-sm text-muted-foreground">Intent provider</label>
+                      <select
+                        className="input w-full"
+                        value={selectedTriggerConfig.intentProvider || DEFAULT_AI_PROVIDER}
+                        onChange={(event) =>
+                          updateNode(selectedNode.id, (node) => ({
+                            ...node,
+                            triggerConfig: {
+                              ...(node.triggerConfig || {}),
+                              intentProvider: event.target.value as AiProvider,
+                              intentModel: '',
+                            },
+                          }))
+                        }
+                      >
+                        {AI_PROVIDER_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm text-muted-foreground">Intent model</label>
+                      <select
+                        className="input w-full"
+                        value={triggerIntentModelValue}
+                        onChange={(event) =>
+                          updateNode(selectedNode.id, (node) => ({
+                            ...node,
+                            triggerConfig: {
+                              ...(node.triggerConfig || {}),
+                              intentModel: event.target.value,
+                            },
+                          }))
+                        }
+                      >
+                        <option value="">Auto (provider default)</option>
+                        {triggerIntentModelSuggestions.map((model) => (
+                          <option key={model} value={model}>
+                            {model}
+                          </option>
+                        ))}
+                        {hasCustomTriggerIntentModel && (
+                          <option value={triggerIntentModelValue}>Custom: {triggerIntentModelValue}</option>
+                        )}
+                      </select>
+                      <div className="text-xs text-muted-foreground">
+                        Leave blank to use the default provider model.
+                      </div>
+                    </div>
+                  </>
                 )}
                 <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Trigger description</label>
@@ -1797,6 +1885,28 @@ export default function AutomationTemplates() {
             {selectedNode.type === 'detect_intent' && (
               <>
                 <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Provider</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.intentSettings?.provider || DEFAULT_AI_PROVIDER}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        intentSettings: {
+                          ...(node.intentSettings || {}),
+                          provider: event.target.value as AiProvider,
+                        },
+                      }))
+                    }
+                  >
+                    {AI_PROVIDER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Model</label>
                   <input
                     className="input w-full"
@@ -2012,6 +2122,25 @@ export default function AutomationTemplates() {
                           sourcePath: 'aiSettings.ragEnabled',
                         },
                         {
+                          label: 'Allow hashtags',
+                          type: 'boolean' as const,
+                          defaultValue: selectedNode.aiSettings?.allowHashtags ?? false,
+                          sourcePath: 'aiSettings.allowHashtags',
+                        },
+                        {
+                          label: 'Allow emojis',
+                          type: 'boolean' as const,
+                          defaultValue: selectedNode.aiSettings?.allowEmojis ?? true,
+                          sourcePath: 'aiSettings.allowEmojis',
+                        },
+                        {
+                          label: 'Reply language',
+                          type: 'text' as const,
+                          defaultValue: selectedNode.aiSettings?.replyLanguage || 'en',
+                          sourcePath: 'aiSettings.replyLanguage',
+                          helpText: 'Use a short language code (e.g., en, es, fr).',
+                        },
+                        {
                           label: 'System instructions',
                           type: 'text' as const,
                           defaultValue: selectedNode.aiSettings?.systemPrompt || '',
@@ -2123,6 +2252,69 @@ export default function AutomationTemplates() {
                     <input
                       type="checkbox"
                       className="h-4 w-4 accent-primary"
+                      checked={selectedNode.aiSettings?.allowHashtags ?? false}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          aiSettings: {
+                            ...(node.aiSettings || {}),
+                            allowHashtags: event.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Allow hashtags
+                  </label>
+                  <div className="text-[11px] text-muted-foreground">
+                    Hashtags are removed during post-processing if disabled.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={selectedNode.aiSettings?.allowEmojis ?? true}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          aiSettings: {
+                            ...(node.aiSettings || {}),
+                            allowEmojis: event.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Allow emojis
+                  </label>
+                  <div className="text-[11px] text-muted-foreground">
+                    Emojis are stripped from replies if disabled.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Reply language</label>
+                  <input
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.replyLanguage || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          replyLanguage: event.target.value || undefined,
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Use a language code like en, es, fr. Defaults to en.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
                       checked={selectedNode.aiSettings?.ragEnabled !== false}
                       onChange={(event) =>
                         updateNode(selectedNode.id, (node) => ({
@@ -2141,6 +2333,28 @@ export default function AutomationTemplates() {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Provider</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.provider || DEFAULT_AI_PROVIDER}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          provider: event.target.value as AiProvider,
+                        },
+                      }))
+                    }
+                  >
+                    {AI_PROVIDER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Model</label>
                   <select
                     className="input w-full"
@@ -2156,7 +2370,7 @@ export default function AutomationTemplates() {
                     }
                   >
                     <option value="">Auto (workspace default)</option>
-                    {AI_MODEL_SUGGESTIONS.map((model) => (
+                    {aiModelSuggestions.map((model) => (
                       <option key={model} value={model}>
                         {model}
                       </option>
@@ -2299,6 +2513,16 @@ export default function AutomationTemplates() {
                         type: 'string' as const,
                         defaultValue: selectedNode.aiSettings?.tone || '',
                         sourcePath: 'aiSettings.tone',
+                      },
+                      {
+                        label: 'Provider',
+                        type: 'select' as const,
+                        options: AI_PROVIDER_OPTIONS.map((option) => ({
+                          label: option.label,
+                          value: option.value,
+                        })),
+                        defaultValue: selectedNode.aiSettings?.provider || DEFAULT_AI_PROVIDER,
+                        sourcePath: 'aiSettings.provider',
                       },
                       {
                         label: 'Model',
@@ -2667,6 +2891,28 @@ export default function AutomationTemplates() {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Provider</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.provider || DEFAULT_AI_PROVIDER}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          provider: event.target.value as AiProvider,
+                        },
+                      }))
+                    }
+                  >
+                    {AI_PROVIDER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm text-muted-foreground">Model</label>
                   <select
                     className="input w-full"
@@ -2682,7 +2928,7 @@ export default function AutomationTemplates() {
                     }
                   >
                     <option value="">Auto (workspace default)</option>
-                    {AI_MODEL_SUGGESTIONS.map((model) => (
+                    {aiModelSuggestions.map((model) => (
                       <option key={model} value={model}>
                         {model}
                       </option>

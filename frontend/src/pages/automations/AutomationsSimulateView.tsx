@@ -1,10 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ArrowLeft,
-  ArrowRight,
-  PauseCircle,
+  AlertTriangle,
   RefreshCcw,
-  StopCircle,
+  Sparkles,
 } from 'lucide-react';
 import {
   AutomationInstance,
@@ -12,6 +10,8 @@ import {
   AutomationPreviewPersona,
   AutomationPreviewProfile,
   AutomationPreviewSessionState,
+  AutomationSimulationDiagnostic,
+  AutomationSimulationSelection,
   automationAPI,
 } from '../../services/api';
 import { AutomationPreviewPhone } from './AutomationPreviewPhone';
@@ -21,20 +21,18 @@ import {
   AutomationPreviewTimelinePanel,
   mergePreviewEvents,
 } from './AutomationPreviewPanels';
+import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader } from '../../components/ui/Card';
-import { Badge } from '../../components/ui/Badge';
 
-type AutomationDetailsViewProps = {
-  automation: AutomationInstance;
+type AutomationsSimulateViewProps = {
+  workspaceId?: string;
   accountDisplayName: string;
   accountHandle: string;
   accountAvatarUrl?: string;
   accountInitial: string;
+  automations?: AutomationInstance[];
   canViewExecutionTimeline?: boolean;
-  onBack: () => void;
-  onEdit: (automation: AutomationInstance) => void;
-  embedded?: boolean;
 };
 
 type RightPaneTab = 'persona' | 'state' | 'timeline';
@@ -53,25 +51,51 @@ const profileToPersona = (profile: AutomationPreviewProfile): AutomationPreviewP
   avatarUrl: profile.avatarUrl || '',
 });
 
-export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
-  automation,
+const formatDiagnosticReason = (reason: string) => {
+  const map: Record<string, string> = {
+    template_archived: 'Template archived',
+    missing_published_version: 'No published version',
+    runtime_resolution_failed: 'Runtime invalid',
+    no_triggers_defined: 'No triggers defined',
+    trigger_type_mismatch: 'Trigger type mismatch',
+    trigger_config_mismatch: 'Trigger config mismatch',
+    keyword_bucket_mismatch: 'Keyword bucket mismatch',
+    intent_bucket_mismatch: 'Intent bucket mismatch',
+    unqualified_bucket_mismatch: 'Unqualified bucket mismatch',
+    no_priority_bucket: 'Not eligible for priority buckets',
+  };
+  return map[reason] || reason.replace(/_/g, ' ');
+};
+
+const mergePreviewMessages = (
+  existing: AutomationPreviewMessage[],
+  incoming?: AutomationPreviewMessage[],
+) => {
+  if (!incoming) return existing;
+  const seen = new Set(incoming.map((message) => message.id));
+  const merged = [...incoming, ...existing.filter((message) => !seen.has(message.id))];
+  if (merged.length > 1 && merged.every((message) => message.createdAt)) {
+    return [...merged].sort((a, b) =>
+      new Date(a.createdAt as string).getTime() - new Date(b.createdAt as string).getTime());
+  }
+  return merged;
+};
+
+export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = ({
+  workspaceId,
   accountDisplayName,
   accountHandle,
   accountAvatarUrl,
   accountInitial,
+  automations,
   canViewExecutionTimeline = false,
-  onBack,
-  onEdit,
-  embedded = false,
 }) => {
   const [previewSessionId, setPreviewSessionId] = useState<string | null>(null);
   const [previewMessages, setPreviewMessages] = useState<AutomationPreviewMessage[]>([]);
   const [previewInputValue, setPreviewInputValue] = useState('');
-  const [previewToast, setPreviewToast] = useState<{ status: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [previewSessionStatus, setPreviewSessionStatus] = useState<
     'active' | 'paused' | 'completed' | 'handoff' | null
   >(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
   const [previewSending, setPreviewSending] = useState(false);
   const [previewState, setPreviewState] = useState<AutomationPreviewSessionState>({
     session: null,
@@ -82,37 +106,24 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     persona: null,
   });
 
+  const [selectedAutomation, setSelectedAutomation] = useState<AutomationSimulationSelection | null>(null);
+  const [diagnostics, setDiagnostics] = useState<AutomationSimulationDiagnostic[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [rightPaneTab, setRightPaneTab] = useState<RightPaneTab>('persona');
+  const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
+
   const [profiles, setProfiles] = useState<AutomationPreviewProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [personaDraft, setPersonaDraft] = useState<AutomationPreviewPersona>(DEFAULT_PERSONA);
   const [profileBusy, setProfileBusy] = useState(false);
-  const [rightPaneTab, setRightPaneTab] = useState<RightPaneTab>('persona');
-  const [isTyping, setIsTyping] = useState(false);
-  const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
-  const previewSessionIdRef = useRef<string | null>(null);
-  const previewToastTimerRef = useRef<number | null>(null);
+  const [resetPending, setResetPending] = useState(false);
   const canViewTimeline = Boolean(canViewExecutionTimeline);
-
-  const clearPreviewToast = useCallback(() => {
-    if (previewToastTimerRef.current) {
-      window.clearTimeout(previewToastTimerRef.current);
-      previewToastTimerRef.current = null;
-    }
-    setPreviewToast(null);
-  }, []);
-
-  const pushPreviewToast = useCallback((status: 'success' | 'error' | 'info', message: string) => {
-    setPreviewToast({ status, message });
-    if (previewToastTimerRef.current) {
-      window.clearTimeout(previewToastTimerRef.current);
-    }
-    previewToastTimerRef.current = window.setTimeout(() => {
-      setPreviewToast(null);
-      previewToastTimerRef.current = null;
-    }, 2200);
-  }, []);
+  const profileAutomationId = selectedAutomation?.id
+    || automations?.find((automation) => automation.isActive)?._id
+    || automations?.[0]?._id
+    || undefined;
 
   const sessionStatus = previewSessionStatus || previewState.session?.status;
   const statusConfig = sessionStatus
@@ -123,20 +134,6 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       handoff: { label: 'Waiting', variant: 'warning' as const },
     }[sessionStatus]
     : { label: 'Idle', variant: 'neutral' as const };
-
-  const mergePreviewMessages = (
-    existing: AutomationPreviewMessage[],
-    incoming?: AutomationPreviewMessage[],
-  ) => {
-    if (!incoming) return existing;
-    const seen = new Set(incoming.map((message) => message.id));
-    const merged = [...incoming, ...existing.filter((message) => !seen.has(message.id))];
-    if (merged.length > 1 && merged.every((message) => message.createdAt)) {
-      return [...merged].sort((a, b) =>
-        new Date(a.createdAt as string).getTime() - new Date(b.createdAt as string).getTime());
-    }
-    return merged;
-  };
 
   const applyPreviewPayload = useCallback((payload: Partial<AutomationPreviewSessionState> & {
     sessionId?: string;
@@ -152,7 +149,9 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       setPreviewMessages((prev) => mergePreviewMessages(prev, payload.messages));
     }
     const nextStatus = payload.status || payload.session?.status;
-    if (nextStatus) {
+    if (payload.status !== undefined || payload.session === null) {
+      setPreviewSessionStatus(payload.status ?? null);
+    } else if (nextStatus) {
       setPreviewSessionStatus(nextStatus);
     }
     setPreviewState((prev) => ({
@@ -165,46 +164,32 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     }));
   }, []);
 
-  const startPreviewSession = useCallback(async (options?: {
-    reset?: boolean;
-    profileId?: string;
-    persona?: AutomationPreviewPersona;
-    sessionId?: string | null;
-  }) => {
-    setPreviewLoading(true);
-    clearPreviewToast();
+  const loadPersistedSimulation = useCallback(async () => {
+    if (!workspaceId) return;
     try {
-      const response = await automationAPI.createPreviewSession(automation._id, {
-        reset: options?.reset,
-        profileId: options?.profileId,
-        persona: options?.persona,
-        sessionId: options?.sessionId ?? previewSessionIdRef.current ?? undefined,
-      });
-      applyPreviewPayload(response);
+      const response = await automationAPI.getSimulationSession(workspaceId);
+      if (!response.session) return;
+      applyPreviewPayload({ ...response, messages: response.messages });
+      setSelectedAutomation(response.selectedAutomation || null);
+      setDiagnostics(response.diagnostics || []);
+      if (response.profile?._id) {
+        setSelectedProfileId(response.profile._id);
+        setPersonaDraft(profileToPersona(response.profile));
+      } else if (response.persona) {
+        setSelectedProfileId(null);
+        setPersonaDraft(response.persona);
+      }
+      setResetPending(false);
     } catch (err) {
-      console.error('Error starting preview session:', err);
-      pushPreviewToast('error', 'Unable to start preview. Please try again.');
-    } finally {
-      setPreviewLoading(false);
+      console.error('Failed to load simulation session:', err);
     }
-  }, [automation._id, applyPreviewPayload, clearPreviewToast, pushPreviewToast]);
+  }, [applyPreviewPayload, workspaceId]);
 
-  const refreshPreviewState = useCallback(async () => {
-    if (!automation._id) return;
-    if (isTyping || previewSending) return;
-    try {
-      const response = await automationAPI.getPreviewSessionStatus(automation._id, previewSessionId || undefined);
-      applyPreviewPayload(response);
-    } catch (err) {
-      console.error('Error refreshing preview state:', err);
-    }
-  }, [automation._id, applyPreviewPayload, isTyping, previewSending, previewSessionId]);
-
-  const loadProfiles = useCallback(async () => {
+  const loadProfiles = useCallback(async (automationId: string) => {
     setProfilesLoading(true);
     setProfilesError(null);
     try {
-      const data = await automationAPI.listPreviewProfiles(automation._id);
+      const data = await automationAPI.listPreviewProfiles(automationId);
       setProfiles(data);
       return data;
     } catch (err) {
@@ -214,75 +199,60 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     } finally {
       setProfilesLoading(false);
     }
-  }, [automation._id]);
+  }, []);
 
   const syncPersona = useCallback(async (params: {
     profileId?: string;
     persona?: AutomationPreviewPersona;
   }) => {
-    if (!automation._id) return;
+    if (!selectedAutomation?.id || !previewSessionId) return;
     try {
-      if (previewSessionId) {
-        const response = await automationAPI.updatePreviewPersona(automation._id, {
-          sessionId: previewSessionId,
-          profileId: params.profileId,
-          persona: params.persona,
-        });
-        applyPreviewPayload(response);
-      } else {
-        await startPreviewSession({ profileId: params.profileId, persona: params.persona });
-      }
+      const response = await automationAPI.updatePreviewPersona(selectedAutomation.id, {
+        sessionId: previewSessionId,
+        profileId: params.profileId,
+        persona: params.persona,
+      });
+      applyPreviewPayload(response);
     } catch (err) {
       console.error('Error syncing preview persona:', err);
-      pushPreviewToast('error', 'Failed to apply mock persona.');
+      setProfilesError('Failed to apply mock persona.');
     }
-  }, [automation._id, previewSessionId, applyPreviewPayload, pushPreviewToast, startPreviewSession]);
-
-  useEffect(() => {
-    previewSessionIdRef.current = previewSessionId;
-  }, [previewSessionId]);
-
-  useEffect(() => () => {
-    if (previewToastTimerRef.current) {
-      window.clearTimeout(previewToastTimerRef.current);
-      previewToastTimerRef.current = null;
-    }
-  }, []);
+  }, [applyPreviewPayload, previewSessionId, selectedAutomation?.id]);
 
   useEffect(() => {
     let active = true;
+
     const init = async () => {
-      setPreviewSessionId(null);
-      setPreviewMessages([]);
-      setPreviewInputValue('');
-      clearPreviewToast();
-      setPreviewSessionStatus(null);
-      setPreviewState({
-        session: null,
-        conversation: null,
-        currentNode: null,
-        events: [],
-        profile: null,
-        persona: null,
-      });
-      const loadedProfiles = await loadProfiles();
+      if (!profileAutomationId) {
+        setProfiles([]);
+        setSelectedProfileId(null);
+        setProfilesError('Add an automation to manage mock profiles.');
+        return;
+      }
+      const loadedProfiles = await loadProfiles(profileAutomationId);
       if (!active) return;
+
+      const selected = selectedProfileId
+        ? loadedProfiles.find((profile) => profile._id === selectedProfileId)
+        : null;
+      if (selected) return;
+
       const defaultProfile = loadedProfiles.find((profile) => profile.isDefault) || loadedProfiles[0] || null;
       if (defaultProfile) {
         setSelectedProfileId(defaultProfile._id);
         setPersonaDraft(profileToPersona(defaultProfile));
-        await startPreviewSession({ profileId: defaultProfile._id });
       } else {
         setSelectedProfileId(null);
         setPersonaDraft(DEFAULT_PERSONA);
-        await startPreviewSession({ persona: DEFAULT_PERSONA });
       }
     };
+
     init();
+
     return () => {
       active = false;
     };
-  }, [automation._id, clearPreviewToast, loadProfiles, startPreviewSession]);
+  }, [loadProfiles, profileAutomationId, selectedProfileId]);
 
   useEffect(() => {
     if (!canViewTimeline && rightPaneTab === 'timeline') {
@@ -290,115 +260,104 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     }
   }, [canViewTimeline, rightPaneTab]);
 
-  const previewStateSessionId = previewState.session?._id;
+  useEffect(() => {
+    setPreviewMessages([]);
+    setPreviewSessionId(null);
+    setPreviewSessionStatus(null);
+    setPreviewState({
+      session: null,
+      conversation: null,
+      currentNode: null,
+      events: [],
+      profile: null,
+      persona: null,
+    });
+    setSelectedAutomation(null);
+    setDiagnostics([]);
+    setError(null);
+    setResetPending(false);
+  }, [workspaceId]);
 
   useEffect(() => {
-    if (!previewSessionId) return;
-    if (previewStateSessionId === previewSessionId) return;
-    void refreshPreviewState();
-  }, [previewSessionId, previewStateSessionId, refreshPreviewState]);
+    if (!workspaceId) return;
+    void loadPersistedSimulation();
+  }, [loadPersistedSimulation, workspaceId]);
 
   const handlePreviewInputChange = (value: string) => {
     setPreviewInputValue(value);
-    if (previewToast) clearPreviewToast();
+    if (error) setError(null);
   };
 
-  const handlePreviewSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (sessionStatus === 'paused') {
-      pushPreviewToast('info', 'Preview is paused. Resume or reset to continue.');
-      return;
+  const handleReset = async () => {
+    if (workspaceId) {
+      try {
+        await automationAPI.resetSimulationSession({
+          workspaceId,
+          sessionId: previewSessionId || undefined,
+        });
+      } catch (err) {
+        console.error('Failed to reset simulation session:', err);
+      }
     }
-    if (sessionStatus === 'completed') {
-      pushPreviewToast('info', 'Preview is stopped. Reset to start a new run.');
-      return;
-    }
-    const trimmed = previewInputValue.trim();
-    if (!trimmed) return;
+    setPreviewMessages([]);
+    setPreviewSessionId(null);
+    setPreviewSessionStatus(null);
+    setPreviewState({
+      session: null,
+      conversation: null,
+      currentNode: null,
+      events: [],
+      profile: null,
+      persona: null,
+    });
+    setSelectedAutomation(null);
+    setDiagnostics([]);
+    setError(null);
+    setResetPending(true);
+  };
 
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = previewInputValue.trim();
+    if (!trimmed || !workspaceId) return;
+
+    setError(null);
+    setPreviewSending(true);
     const optimisticMessage: AutomationPreviewMessage = {
-      id: `preview-user-${Date.now()}`,
+      id: `sim-${Date.now()}`,
       from: 'customer',
       text: trimmed,
     };
     setPreviewMessages((prev) => [...prev, optimisticMessage]);
     setPreviewInputValue('');
-    setPreviewSending(true);
-    clearPreviewToast();
 
+    const resetRequested = resetPending;
     try {
-      const response = await automationAPI.sendPreviewMessage(automation._id, {
+      const response = await automationAPI.simulateMessage({
+        workspaceId,
         text: trimmed,
-        sessionId: previewSessionId || undefined,
+        sessionId: resetRequested ? undefined : previewSessionId || undefined,
+        reset: resetRequested,
+        profileId: selectedProfileId || undefined,
         persona: selectedProfileId ? undefined : personaDraft,
       });
-      if (response.sessionId && response.sessionId !== previewSessionId) {
-        setPreviewSessionId(response.sessionId);
-      }
       const { messages, ...rest } = response;
       applyPreviewPayload(rest);
+      setSelectedAutomation(response.selectedAutomation || null);
+      setDiagnostics(response.diagnostics || []);
+      setResetPending(false);
       if (messages && messages.length > 0) {
         setPreviewMessages((prev) => [...prev, ...messages]);
       }
       if (!response.success) {
-        pushPreviewToast('error', response.error || 'No automated response was generated.');
+        setError(response.error || 'No automation matched this message.');
       }
     } catch (err) {
-      console.error('Error sending preview message:', err);
-      pushPreviewToast('error', 'Failed to send preview message.');
+      console.error('Simulator message error:', err);
+      setError('Failed to send simulation message.');
     } finally {
       setPreviewSending(false);
     }
-  };
-
-  const handlePreviewPause = async () => {
-    if (!previewSessionId) return;
-    try {
-      setPreviewLoading(true);
-      const response = await automationAPI.pausePreviewSession(automation._id, {
-        sessionId: previewSessionId,
-        reason: 'Paused from preview console',
-      });
-      if (response.session) {
-        applyPreviewPayload({ session: response.session, status: response.session.status });
-      }
-      pushPreviewToast('info', 'Preview paused.');
-    } catch (err) {
-      console.error('Error pausing preview session:', err);
-      pushPreviewToast('error', 'Failed to pause preview session.');
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const handlePreviewStop = async () => {
-    if (!previewSessionId) return;
-    try {
-      setPreviewLoading(true);
-      const response = await automationAPI.stopPreviewSession(automation._id, {
-        sessionId: previewSessionId,
-        reason: 'Stopped from preview console',
-      });
-      if (response.session) {
-        applyPreviewPayload({ session: response.session, status: response.session.status });
-      }
-      pushPreviewToast('success', 'Preview stopped.');
-    } catch (err) {
-      console.error('Error stopping preview session:', err);
-      pushPreviewToast('error', 'Failed to stop preview session.');
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const handlePreviewReset = async () => {
-    setPreviewState((prev) => ({ ...prev, events: [] }));
-    await startPreviewSession({
-      reset: true,
-      profileId: selectedProfileId || undefined,
-      persona: selectedProfileId ? undefined : personaDraft,
-    });
-    pushPreviewToast('success', 'Preview reset.');
   };
 
   const handleSelectProfile = async (value: string) => {
@@ -416,26 +375,26 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   };
 
   const handleSaveProfile = async () => {
-    if (profileBusy) return;
+    if (profileBusy || !profileAutomationId) return;
     setProfileBusy(true);
     try {
       let savedProfile: AutomationPreviewProfile;
       if (selectedProfileId) {
-        savedProfile = await automationAPI.updatePreviewProfile(automation._id, selectedProfileId, {
+        savedProfile = await automationAPI.updatePreviewProfile(profileAutomationId, selectedProfileId, {
           name: personaDraft.name,
           handle: personaDraft.handle || undefined,
           userId: personaDraft.userId || undefined,
           avatarUrl: personaDraft.avatarUrl,
         });
       } else {
-        savedProfile = await automationAPI.createPreviewProfile(automation._id, {
+        savedProfile = await automationAPI.createPreviewProfile(profileAutomationId, {
           name: personaDraft.name,
           handle: personaDraft.handle || undefined,
           userId: personaDraft.userId || undefined,
           avatarUrl: personaDraft.avatarUrl,
         });
       }
-      const updatedProfiles = await loadProfiles();
+      const updatedProfiles = await loadProfiles(profileAutomationId);
       setProfiles(updatedProfiles);
       setSelectedProfileId(savedProfile._id);
       setPersonaDraft(profileToPersona(savedProfile));
@@ -449,11 +408,11 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   };
 
   const handleDuplicateProfile = async () => {
-    if (!selectedProfileId || profileBusy) return;
+    if (!selectedProfileId || profileBusy || !profileAutomationId) return;
     setProfileBusy(true);
     try {
-      const duplicated = await automationAPI.duplicatePreviewProfile(automation._id, selectedProfileId);
-      const updatedProfiles = await loadProfiles();
+      const duplicated = await automationAPI.duplicatePreviewProfile(profileAutomationId, selectedProfileId);
+      const updatedProfiles = await loadProfiles(profileAutomationId);
       setProfiles(updatedProfiles);
       setSelectedProfileId(duplicated._id);
       setPersonaDraft(profileToPersona(duplicated));
@@ -467,12 +426,12 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   };
 
   const handleDeleteProfile = async () => {
-    if (!selectedProfileId || profileBusy) return;
+    if (!selectedProfileId || profileBusy || !profileAutomationId) return;
     if (!confirm('Delete this mock profile?')) return;
     setProfileBusy(true);
     try {
-      await automationAPI.deletePreviewProfile(automation._id, selectedProfileId);
-      const updatedProfiles = await loadProfiles();
+      await automationAPI.deletePreviewProfile(profileAutomationId, selectedProfileId);
+      const updatedProfiles = await loadProfiles(profileAutomationId);
       setProfiles(updatedProfiles);
       const fallback = updatedProfiles.find((profile) => profile.isDefault) || updatedProfiles[0] || null;
       if (fallback) {
@@ -493,11 +452,11 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   };
 
   const handleSetDefaultProfile = async () => {
-    if (!selectedProfileId || profileBusy) return;
+    if (!selectedProfileId || profileBusy || !profileAutomationId) return;
     setProfileBusy(true);
     try {
-      await automationAPI.setDefaultPreviewProfile(automation._id, selectedProfileId);
-      const updatedProfiles = await loadProfiles();
+      await automationAPI.setDefaultPreviewProfile(profileAutomationId, selectedProfileId);
+      const updatedProfiles = await loadProfiles(profileAutomationId);
       setProfiles(updatedProfiles);
     } catch (err) {
       console.error('Error setting default preview profile:', err);
@@ -507,21 +466,17 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     }
   };
 
+  const activeLabel = selectedAutomation?.name || 'No automation selected';
+  const triggerLabel = selectedAutomation?.trigger?.label || selectedAutomation?.trigger?.type;
+  const diagnosticList = useMemo(() => diagnostics.slice(0, 6), [diagnostics]);
+
   const sendDisabled =
     previewSending ||
-    previewInputValue.trim().length === 0 ||
-    sessionStatus === 'completed';
+    previewInputValue.trim().length === 0;
 
   const renderTestConsole = () => (
     <Card className="flex flex-col min-h-0 h-full">
-      
       <CardHeader className="grid grid-cols-1 gap-2 border-b border-border/60 px-4 py-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-        {/* <div className="space-y-1">
-          <CardTitle>Test Console</CardTitle>
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            Mock-only DM simulator for this automation.
-          </p>
-        </div> */}
         <div className="flex flex-wrap items-center gap-2 sm:justify-start">
           <Badge variant="neutral" className="hidden sm:inline-flex">Preview</Badge>
         </div>
@@ -529,27 +484,8 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           <Button
             variant="outline"
             size="sm"
-            leftIcon={<PauseCircle className="w-4 h-4" />}
-            onClick={handlePreviewPause}
-            disabled={previewLoading || sessionStatus === 'paused'}
-          >
-            {sessionStatus === 'paused' ? 'Paused' : 'Pause'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={<StopCircle className="w-4 h-4" />}
-            onClick={handlePreviewStop}
-            disabled={previewLoading || sessionStatus === 'completed'}
-          >
-            {sessionStatus === 'completed' ? 'Stopped' : 'Stop'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
             leftIcon={<RefreshCcw className="w-4 h-4" />}
-            onClick={handlePreviewReset}
-            disabled={previewLoading}
+            onClick={handleReset}
           >
             Reset
           </Button>
@@ -565,23 +501,53 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
               accountAvatarUrl={accountAvatarUrl}
               accountInitial={accountInitial}
               messages={previewMessages}
-              showSeen={
-                previewMessages.length > 0 &&
-                previewMessages[previewMessages.length - 1].from === 'ai'
-              }
+              showSeen={previewMessages.length > 0 && previewMessages[previewMessages.length - 1].from === 'ai'}
               mode="interactive"
               inputValue={previewInputValue}
               onInputChange={handlePreviewInputChange}
-              onSubmit={handlePreviewSubmit}
-              onInputFocus={() => setIsTyping(true)}
-              onInputBlur={() => setIsTyping(false)}
-              inputDisabled={sessionStatus === 'completed'}
+              onSubmit={handleSubmit}
+              inputDisabled={false}
               sendDisabled={sendDisabled}
             />
           </div>
         </div>
       </CardContent>
     </Card>
+  );
+
+  const statePrepend = (
+    <>
+      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+        <div className="text-xs font-semibold uppercase text-muted-foreground">Matched automation</div>
+        <div className="mt-2 text-sm font-semibold text-foreground">{activeLabel}</div>
+        {triggerLabel && (
+          <div className="text-xs text-muted-foreground">Trigger: {triggerLabel}</div>
+        )}
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-2 text-xs text-red-400">
+          <AlertTriangle className="w-4 h-4 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+        <div className="text-xs font-semibold uppercase text-muted-foreground">Evaluation</div>
+        {diagnosticList.length > 0 ? (
+          <div className="mt-2 space-y-2">
+            {diagnosticList.map((entry) => (
+              <div key={`${entry.instanceId}-${entry.reason}`} className="text-xs text-muted-foreground">
+                <div className="font-medium text-foreground">{entry.name || 'Untitled automation'}</div>
+                <div>{formatDiagnosticReason(entry.reason)}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-2 text-xs text-muted-foreground">No evaluation details yet.</div>
+        )}
+      </div>
+    </>
   );
 
   const renderRightPane = () => (
@@ -619,6 +585,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           profilesError={profilesError}
           selectedProfileId={selectedProfileId}
           profileBusy={profileBusy}
+          actionsDisabled={!profileAutomationId}
           onSelectProfile={handleSelectProfile}
           onNewProfile={() => {
             setSelectedProfileId(null);
@@ -638,6 +605,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           currentNode={previewState.currentNode}
           session={previewState.session}
           conversation={previewState.conversation}
+          prepend={statePrepend}
         />
       )}
     </div>
@@ -645,46 +613,18 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
 
   return (
     <div className="h-full flex flex-col min-h-0 gap-4">
-      {!embedded ? (
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between flex-shrink-0">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:text-sm">
-            <button onClick={onBack} className="hover:text-foreground transition-colors">
-              Automations
-            </button>
-            <ArrowRight className="w-4 h-4" />
-            <span className="font-medium text-foreground">{automation.name}</span>
-            <ArrowRight className="w-4 h-4" />
-            <span className="font-medium text-foreground">Preview</span>
-            <Badge variant={statusConfig.variant} className="ml-1">
-              {statusConfig.label}
-            </Badge>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onBack}
-              className="w-full sm:w-auto hidden sm:inline-flex"
-              leftIcon={<ArrowLeft className="w-4 h-4" />}
-            >
-              Back
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onEdit(automation)}
-              className="w-full sm:w-auto hidden sm:inline-flex"
-            >
-              Edit Automation
-            </Button>
-          </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:text-sm">
+          <span className="font-medium text-foreground">Simulate</span>
+          <Badge variant={statusConfig.variant} className="ml-1">
+            {statusConfig.label}
+          </Badge>
         </div>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{automation.name}</span>
-          <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Sparkles className="w-4 h-4" />
+          Realistic inbound automation simulator
         </div>
-      )}
+      </div>
 
       <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1 sm:hidden">
         {([
@@ -714,19 +654,6 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           {renderRightPane()}
         </div>
       </div>
-      {previewToast && (
-        <div
-          className={`fixed bottom-6 left-6 z-50 rounded-full px-4 py-2 text-xs font-semibold shadow-lg ${
-            previewToast.status === 'success'
-              ? 'bg-primary text-primary-foreground'
-              : previewToast.status === 'error'
-                ? 'bg-red-500 text-white'
-                : 'bg-card/95 border border-border text-foreground'
-          }`}
-        >
-          {previewToast.message}
-        </div>
-      )}
     </div>
   );
 };

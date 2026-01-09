@@ -1,4 +1,3 @@
-import OpenAI from 'openai';
 import mongoose from 'mongoose';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import { AutomationIntentSettings } from '../types/automation';
@@ -10,6 +9,7 @@ import {
 } from './automationIntentService';
 import { requireEnv } from '../utils/requireEnv';
 import { normalizeReasoningEffort } from '../utils/aiReasoning';
+import { AiProvider, getAiClient, hasGroqApiKey, normalizeAiProvider } from '../utils/aiProvider';
 
 const DEFAULT_GOAL_CONFIGS: GoalConfigurations = {
   leadCapture: {
@@ -50,13 +50,12 @@ export function getGoalConfigs(settings: any): GoalConfigurations {
   };
 }
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const DEFAULT_GROQ_INTENT_MODEL = 'openai/gpt-oss-20b';
 
 const INTENT_MODEL = requireEnv('OPENAI_INTENT_MODEL');
 const INTENT_TEMPERATURE = 0;
 const INTENT_REASONING_EFFORT: AutomationIntentSettings['reasoningEffort'] = 'none';
+const INTENT_MAX_TOKENS = 200;
 
 const goalIntentLabels: Array<{ value: GoalType; description: string }> =
   DEFAULT_AUTOMATION_INTENTS as Array<{ value: GoalType; description: string }>;
@@ -80,8 +79,10 @@ const detectGoalIntentFallback = (text: string): GoalType => {
   return 'none';
 };
 
-const supportsTemperature = (model?: string): boolean => !/^gpt-5/i.test(model || '');
-const supportsReasoningEffort = (model?: string): boolean => /^(gpt-5|o)/i.test(model || '');
+const supportsTemperature = (provider: AiProvider, model?: string): boolean =>
+  provider === 'openai' ? !/^gpt-5/i.test(model || '') : true;
+const supportsReasoningEffort = (provider: AiProvider, model?: string): boolean =>
+  provider === 'openai' && /^(gpt-5|o)/i.test(model || '');
 const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
 
 type IntentLabel = { value: string; description: string };
@@ -101,8 +102,9 @@ const detectIntentFromLabels = async (
 
   const allowedValues = labels.map((intent) => intent.value);
   const allowedSet = new Set(allowedValues);
+  const provider = normalizeAiProvider(settings?.provider);
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (provider === 'groq' ? !hasGroqApiKey() : !process.env.OPENAI_API_KEY) {
     const fallback = detectGoalIntentFallback(trimmed);
     return allowedSet.has(fallback) ? fallback : 'none';
   }
@@ -122,52 +124,73 @@ const detectIntentFromLabels = async (
       .map((intent) => `- ${intent.value}: ${intent.description || ''}`)
       .join('\n');
 
-    const model = settings?.model || INTENT_MODEL;
+    const model = settings?.model || (provider === 'groq' ? DEFAULT_GROQ_INTENT_MODEL : INTENT_MODEL);
     const temperature = typeof settings?.temperature === 'number'
       ? settings?.temperature
       : INTENT_TEMPERATURE;
-    const reasoningEffort = normalizeReasoningEffort(
-      model,
-      settings?.reasoningEffort || INTENT_REASONING_EFFORT,
-    );
+    const reasoningEffort = provider === 'openai'
+      ? normalizeReasoningEffort(model, settings?.reasoningEffort || INTENT_REASONING_EFFORT)
+      : undefined;
+    const temperatureSupported = supportsTemperature(provider, model);
+    const reasoningSupported = supportsReasoningEffort(provider, model);
 
-    const requestPayload: any = {
-      model,
-      input: [
-        {
-          role: 'system',
-          content: 'Classify the message into one intent from the list. Return JSON only.',
+    let responseText = '{}';
+    if (provider === 'groq') {
+      const response = await getAiClient('groq').chat.completions.create({
+        model,
+        max_tokens: INTENT_MAX_TOKENS,
+        messages: [
+          {
+            role: 'system',
+            content: 'Classify the message into one intent from the list. Return JSON only.',
+          },
+          {
+            role: 'user',
+            content: `Intents:\n${intentText}\n\nMessage:\n"${trimmed}"\n\nReturn { "intent": "<intent>", "confidence": 0-1 }.`,
+          },
+        ],
+        ...(temperatureSupported ? { temperature } : {}),
+      });
+      responseText = response.choices?.[0]?.message?.content?.trim() || '{}';
+    } else {
+      const requestPayload: any = {
+        model,
+        input: [
+          {
+            role: 'system',
+            content: 'Classify the message into one intent from the list. Return JSON only.',
+          },
+          {
+            role: 'user',
+            content: `Intents:\n${intentText}\n\nMessage:\n"${trimmed}"\n\nReturn { "intent": "<intent>", "confidence": 0-1 }.`,
+          },
+        ],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'intent_detection',
+            schema,
+            strict: true,
+          },
         },
-        {
-          role: 'user',
-          content: `Intents:\n${intentText}\n\nMessage:\n"${trimmed}"\n\nReturn { "intent": "<intent>", "confidence": 0-1 }.`,
-        },
-      ],
-      text: {
-        format: {
-          type: 'json_schema',
-          name: 'intent_detection',
-          schema,
-          strict: true,
-        },
-      },
-      store: false,
-    };
+        store: false,
+      };
 
-    if (supportsTemperature(model)) {
-      requestPayload.temperature = temperature;
+      if (temperatureSupported) {
+        requestPayload.temperature = temperature;
+      }
+      if (reasoningSupported && reasoningEffort) {
+        requestPayload.reasoning = { effort: reasoningEffort };
+      }
+
+      const response = await getAiClient('openai').responses.create(requestPayload);
+      responseText = response.output_text?.trim() || '{}';
     }
-    if (supportsReasoningEffort(model) && reasoningEffort) {
-      requestPayload.reasoning = { effort: reasoningEffort };
-    }
-
-    const response = await openai.responses.create(requestPayload);
-    const responseText = response.output_text?.trim() || '{}';
 
     let intent: string | null = null;
     let confidence: number | null = null;
     try {
-      const parsed = JSON.parse(responseText);
+      const parsed = safeParseJson(responseText);
       if (allowedSet.has(parsed.intent)) {
         intent = parsed.intent as string;
       }
@@ -178,6 +201,7 @@ const detectIntentFromLabels = async (
         console.log('[AI] intent_detect', {
           intent,
           confidence,
+          provider,
           model,
           reasoningEffort,
         });
@@ -217,8 +241,18 @@ export async function detectAutomationIntent(
   text: string,
   settings?: AutomationIntentSettings,
 ): Promise<string> {
+  const result = await detectAutomationIntentDetailed(text, settings);
+  return result.value;
+}
+
+export async function detectAutomationIntentDetailed(
+  text: string,
+  settings?: AutomationIntentSettings,
+): Promise<{ value: string; description?: string }> {
   const labels = await listAutomationIntentLabels();
-  return detectIntentFromLabels(text, labels, settings);
+  const value = await detectIntentFromLabels(text, labels, settings);
+  const match = labels.find((label) => label.value === value);
+  return { value, description: match?.description };
 }
 
 export function goalMatchesWorkspace(goal: GoalType, primary?: GoalType, secondary?: GoalType): boolean {
@@ -239,4 +273,50 @@ export async function getWorkspaceSettings(
   }
 
   return settings;
+}
+
+function stripJsonFence(content: string): string {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  return (fenced ? fenced[1] : trimmed).trim();
+}
+
+function safeParseJson(content: string): any {
+  try {
+    return JSON.parse(stripJsonFence(content));
+  } catch (primaryError) {
+    try {
+      const repaired = repairJson(stripJsonFence(content));
+      return JSON.parse(repaired);
+    } catch (secondaryError) {
+      throw primaryError;
+    }
+  }
+}
+
+function repairJson(content: string): string {
+  let repaired = content
+    .replace(/,\s*([}\]])/g, '$1')
+    .replace(/,\s*,/g, ',')
+    .replace(/:\s*(\r?\n)*\s*([}\]])/g, ': null$2')
+    .trim();
+
+  const danglingField = /"([A-Za-z0-9_]+)"\s*:\s*$/m;
+  if (danglingField.test(repaired)) {
+    repaired = repaired.replace(danglingField, '"$1": null');
+  }
+
+  const openBraces = (repaired.match(/{/g) || []).length;
+  const closeBraces = (repaired.match(/}/g) || []).length;
+  if (closeBraces < openBraces) {
+    repaired += '}'.repeat(openBraces - closeBraces);
+  }
+
+  const openBrackets = (repaired.match(/\[/g) || []).length;
+  const closeBrackets = (repaired.match(/\]/g) || []).length;
+  if (closeBrackets < openBrackets) {
+    repaired += ']'.repeat(openBrackets - closeBrackets);
+  }
+
+  return repaired;
 }
