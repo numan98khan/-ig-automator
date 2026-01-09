@@ -585,11 +585,16 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const renderRightPane = () => (
     <div className="flex flex-col gap-4 min-h-0 h-full w-full">
       <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1 w-full">
-        {([
-          { id: 'persona', label: 'Mock Persona' },
-          { id: 'state', label: 'Automation State' },
-          ...(canViewTimeline ? [{ id: 'timeline', label: 'Execution Timeline' }] : []),
-        ] as const).map((tab) => (
+        {(() => {
+          const tabs: Array<{ id: 'persona' | 'state' | 'timeline'; label: string }> = [
+            { id: 'persona', label: 'Mock Persona' },
+            { id: 'state', label: 'Automation State' },
+          ];
+          if (canViewTimeline) {
+            tabs.push({ id: 'timeline', label: 'Execution Timeline' });
+          }
+          return tabs;
+        })().map((tab) => (
           <button
             key={tab.id}
             type="button"
