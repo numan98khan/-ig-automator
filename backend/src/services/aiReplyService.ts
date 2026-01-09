@@ -30,6 +30,9 @@ export interface AIReplyOptions {
   tone?: string;
   maxReplySentences?: number;
   ragEnabled?: boolean;
+  allowHashtags?: boolean;
+  allowEmojis?: boolean;
+  replyLanguage?: string;
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
@@ -172,10 +175,10 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
           return ordered;
         });
 
-  const allowHashtags = false;
-  const allowEmojis = true;
+  const allowHashtags = options.allowHashtags ?? false;
+  const allowEmojis = options.allowEmojis ?? true;
   const maxReplySentences = options.maxReplySentences ?? 3;
-  const replyLanguage = 'en';
+  const replyLanguage = options.replyLanguage || 'en';
   const tone = options.tone?.trim();
   let knowledgeItemsUsed = knowledgeItems.slice(0, 5).map(item => ({
     id: item._id.toString(),

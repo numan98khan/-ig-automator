@@ -108,6 +108,9 @@ export type FlowAiSettings = {
   maxReplySentences?: number
   historyLimit?: number
   ragEnabled?: boolean
+  allowHashtags?: boolean
+  allowEmojis?: boolean
+  replyLanguage?: string
   systemPrompt?: string
   model?: string
   temperature?: number

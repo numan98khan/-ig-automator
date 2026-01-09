@@ -556,7 +556,6 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
 
   const sendDisabled =
     previewSending ||
-    previewLoading ||
     previewInputValue.trim().length === 0 ||
     sessionStatus === 'completed';
 
@@ -623,7 +622,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
               onSubmit={handlePreviewSubmit}
               onInputFocus={() => setIsTyping(true)}
               onInputBlur={() => setIsTyping(false)}
-              inputDisabled={Boolean(previewLoading) || sessionStatus === 'completed'}
+              inputDisabled={sessionStatus === 'completed'}
               sendDisabled={sendDisabled}
             />
           </div>

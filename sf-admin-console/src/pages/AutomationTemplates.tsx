@@ -2012,6 +2012,25 @@ export default function AutomationTemplates() {
                           sourcePath: 'aiSettings.ragEnabled',
                         },
                         {
+                          label: 'Allow hashtags',
+                          type: 'boolean' as const,
+                          defaultValue: selectedNode.aiSettings?.allowHashtags ?? false,
+                          sourcePath: 'aiSettings.allowHashtags',
+                        },
+                        {
+                          label: 'Allow emojis',
+                          type: 'boolean' as const,
+                          defaultValue: selectedNode.aiSettings?.allowEmojis ?? true,
+                          sourcePath: 'aiSettings.allowEmojis',
+                        },
+                        {
+                          label: 'Reply language',
+                          type: 'text' as const,
+                          defaultValue: selectedNode.aiSettings?.replyLanguage || 'en',
+                          sourcePath: 'aiSettings.replyLanguage',
+                          helpText: 'Use a short language code (e.g., en, es, fr).',
+                        },
+                        {
                           label: 'System instructions',
                           type: 'text' as const,
                           defaultValue: selectedNode.aiSettings?.systemPrompt || '',
@@ -2116,6 +2135,69 @@ export default function AutomationTemplates() {
                   />
                   <div className="text-[11px] text-muted-foreground">
                     Number of recent messages sent to the model.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={selectedNode.aiSettings?.allowHashtags ?? false}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          aiSettings: {
+                            ...(node.aiSettings || {}),
+                            allowHashtags: event.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Allow hashtags
+                  </label>
+                  <div className="text-[11px] text-muted-foreground">
+                    Hashtags are removed during post-processing if disabled.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={selectedNode.aiSettings?.allowEmojis ?? true}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          aiSettings: {
+                            ...(node.aiSettings || {}),
+                            allowEmojis: event.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Allow emojis
+                  </label>
+                  <div className="text-[11px] text-muted-foreground">
+                    Emojis are stripped from replies if disabled.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Reply language</label>
+                  <input
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.replyLanguage || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          replyLanguage: event.target.value || undefined,
+                        },
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Use a language code like en, es, fr. Defaults to en.
                   </div>
                 </div>
                 <div className="space-y-2">
