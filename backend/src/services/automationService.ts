@@ -1222,6 +1222,7 @@ async function handleAiReplyStep(params: {
     knowledgeItemIds: step.knowledgeItemIds,
     messageHistory: step.messageHistory,
   });
+  const replyDurationMs = Math.max(0, Math.round(nowMs() - replyStart));
   logAutomationStep('flow_ai_reply_generate', replyStart);
   logAdminEvent({
     category: 'flow_node',
@@ -1255,6 +1256,7 @@ async function handleAiReplyStep(params: {
         tags: aiResponse.tags,
         shouldEscalate: aiResponse.shouldEscalate,
         escalationReason: aiResponse.escalationReason,
+        durationMs: replyDurationMs,
       },
     });
   }
@@ -1787,6 +1789,7 @@ async function executeFlowPlan(params: {
         aiSettings,
         knowledgeItemIds: step.knowledgeItemIds,
       });
+      const agentDurationMs = Math.max(0, Math.round(nowMs() - agentStart));
       logAutomationStep('flow_ai_agent', agentStart, {
         stepIndex: agentStepIndex,
         advanceStep: agentResult.advanceStep,
@@ -1915,6 +1918,7 @@ async function executeFlowPlan(params: {
             advanceStep: agentResult.advanceStep,
             endConversation: agentResult.endConversation,
             shouldStop: agentResult.shouldStop,
+            durationMs: agentDurationMs,
           },
         });
       }
@@ -2002,6 +2006,7 @@ async function executeFlowPlan(params: {
     } else if (stepType === 'detect_intent') {
       const intentStart = nowMs();
       const detected = await detectAutomationIntentDetailed(messageText || '', step.intentSettings);
+      const intentDurationMs = Math.max(0, Math.round(nowMs() - intentStart));
       const detectedIntent = detected.value;
       await markTriggeredOnce();
       session.state = {
@@ -2021,6 +2026,7 @@ async function executeFlowPlan(params: {
             type: stepType,
             detectedIntent,
             intentDescription: detected.description,
+            durationMs: intentDurationMs,
           },
         });
       }
