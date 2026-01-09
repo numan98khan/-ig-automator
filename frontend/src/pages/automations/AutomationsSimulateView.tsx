@@ -96,6 +96,11 @@ const EVENT_BADGES: Record<string, { label: string; variant: 'primary' | 'second
   info: { label: 'Info', variant: 'neutral' },
 };
 
+const EVENT_FILTER_KEYS = Object.keys(EVENT_BADGES);
+
+const buildDefaultEventFilters = () =>
+  EVENT_FILTER_KEYS.reduce((acc, key) => ({ ...acc, [key]: true }), {} as Record<string, boolean>);
+
 const NODE_TYPE_BADGES: Record<string, { label: string; badgeClass: string; dotClass: string }> = {
   send_message: { label: 'Send Message', badgeClass: 'bg-sky-500/10 text-sky-600', dotClass: 'bg-sky-500' },
   ai_reply: { label: 'AI Reply', badgeClass: 'bg-indigo-500/10 text-indigo-600', dotClass: 'bg-indigo-500' },
@@ -156,6 +161,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [personaDraft, setPersonaDraft] = useState<AutomationPreviewPersona>(DEFAULT_PERSONA);
   const [profileBusy, setProfileBusy] = useState(false);
+  const [eventFilters, setEventFilters] = useState<Record<string, boolean>>(buildDefaultEventFilters);
   const canViewTimeline = Boolean(canViewExecutionTimeline);
   const profileAutomationId = selectedAutomation?.id
     || automations?.find((automation) => automation.isActive)?._id
@@ -499,6 +505,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   }, [previewState.session?.state?.vars?.agentMissingSlots]);
   const tags = previewState.conversation?.tags || [];
   const events: AutomationPreviewEvent[] = previewState.events || [];
+  const filteredEvents = events.filter((event) => eventFilters[event.type] ?? true);
 
   const sendDisabled =
     previewSending ||
@@ -787,9 +794,43 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   const renderTimelineCard = () => (
     <Card className="flex flex-col min-h-0 flex-1 w-full">
       <CardContent className="flex-1 min-h-0 overflow-y-auto pt-6">
-        {events.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setEventFilters(buildDefaultEventFilters())}
+            className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setEventFilters(EVENT_FILTER_KEYS.reduce((acc, key) => ({ ...acc, [key]: false }), {} as Record<string, boolean>))}
+            className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+          >
+            None
+          </button>
+          {EVENT_FILTER_KEYS.map((key) => {
+            const badge = EVENT_BADGES[key];
+            const active = eventFilters[key] !== false;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setEventFilters((prev) => ({ ...prev, [key]: !active }))}
+                className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+                  active
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {badge?.label || key}
+              </button>
+            );
+          })}
+        </div>
+        {filteredEvents.length > 0 ? (
           <div className="space-y-3 pr-1">
-            {events.map((event) => {
+            {filteredEvents.map((event) => {
               const badge = EVENT_BADGES[event.type] || EVENT_BADGES.info;
               return (
                 <div key={event.id} className="flex items-start gap-3">
@@ -802,6 +843,8 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
               );
             })}
           </div>
+        ) : events.length > 0 ? (
+          <div className="text-xs text-muted-foreground">No events match the selected filters.</div>
         ) : (
           <div className="text-xs text-muted-foreground">No events yet.</div>
         )}
