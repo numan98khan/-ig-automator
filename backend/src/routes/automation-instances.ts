@@ -828,7 +828,7 @@ router.get('/simulate/session', authenticate, async (req: AuthRequest, res: Resp
       includeEvents: await canViewExecutionTimeline(workspaceId),
     });
     const messages = conversation ? await loadPreviewMessages(conversation._id) : [];
-    const selectedAutomation = session.state?.previewMeta?.selectedAutomation || null;
+    const selectedAutomation = (session.state as any)?.previewMeta?.selectedAutomation || null;
 
     return res.json({
       sessionId: session._id,
