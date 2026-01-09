@@ -198,7 +198,7 @@ const Automations: React.FC = () => {
   const isSimulateView = activeSection === 'simulate';
   const isAutomationFullHeightView = isCreateView || isDetailsView;
   const isCustomAutomationEnabled = workspaceTier?.limits?.flowBuilder !== false;
-  const canViewExecutionTimeline = Boolean(workspaceTier?.limits?.executionTimeline);
+  const canViewExecutionTimeline = workspaceTier?.limits?.executionTimeline !== false;
   const automationLimit = workspaceTier?.limits?.automations;
   const automationCount = automations.length;
   const isAutomationLimitReached = typeof automationLimit === 'number' && automationCount >= automationLimit;

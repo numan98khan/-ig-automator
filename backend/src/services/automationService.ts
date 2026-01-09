@@ -144,6 +144,31 @@ const nowMs = () => Date.now();
 const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
 const shouldLogAutomationSteps = () => getLogSettingsSnapshot().automationStepsEnabled;
 
+const ensurePreviewMeta = (session: any) => {
+  if (!session.state || typeof session.state !== 'object') {
+    session.state = {};
+  }
+  if (!session.state.previewMeta || typeof session.state.previewMeta !== 'object') {
+    session.state.previewMeta = {};
+  }
+  if (!Array.isArray(session.state.previewMeta.events)) {
+    session.state.previewMeta.events = [];
+  }
+  return session.state.previewMeta as { events: Array<{ id: string; type: string; message: string; createdAt: Date; details?: Record<string, any> }> };
+};
+
+const appendPreviewMetaEvent = (session: any, event: { type: string; message: string; createdAt?: Date; details?: Record<string, any> }) => {
+  const meta = ensurePreviewMeta(session);
+  meta.events = [
+    ...meta.events,
+    {
+      id: new mongoose.Types.ObjectId().toString(),
+      createdAt: event.createdAt || new Date(),
+      ...event,
+    },
+  ].slice(-200);
+};
+
 const resolveWorkspaceId = (details?: Record<string, any>) => {
   const candidate = details?.workspaceId;
   if (!candidate) return undefined;
@@ -1552,6 +1577,9 @@ async function executeFlowPlan(params: {
     if (!('agent' in base) && session.state?.agent) {
       base.agent = session.state.agent;
     }
+    if (!('previewMeta' in base) && session.state?.previewMeta) {
+      base.previewMeta = session.state.previewMeta;
+    }
     return base;
   };
   const completeWithError = async (error: string) => {
@@ -1605,6 +1633,13 @@ async function executeFlowPlan(params: {
     let forcedNextNodeId: string | undefined;
 
     if (shouldLogNode(step)) {
+      if (deliveryMode === 'preview') {
+        appendPreviewMetaEvent(session, {
+          type: 'node_start',
+          message: `Entered ${step.id || stepType || 'node'}`,
+          details: { nodeId: step.id, type: stepType },
+        });
+      }
       logNodeEvent('Node start', {
         ...logContext,
         nodeId: step.id,
@@ -1924,6 +1959,13 @@ async function executeFlowPlan(params: {
     executedSteps += 1;
 
     if (shouldLogNode(step)) {
+      if (deliveryMode === 'preview') {
+        appendPreviewMetaEvent(session, {
+          type: 'node_complete',
+          message: `Completed ${step.id || stepType || 'node'}`,
+          details: { nodeId: step.id, type: stepType },
+        });
+      }
       logNodeEvent('Node complete', {
         ...logContext,
         nodeId: step.id,

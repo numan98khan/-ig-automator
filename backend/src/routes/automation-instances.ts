@@ -560,7 +560,7 @@ const loadInstanceWithAccess = async (
 
 const canViewExecutionTimeline = async (workspaceId: string) => {
   const { limits } = await getWorkspaceOwnerTier(workspaceId);
-  return Boolean(limits?.executionTimeline);
+  return limits?.executionTimeline !== false;
 };
 
 const buildPreviewSessionPayload = async (
