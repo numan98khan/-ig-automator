@@ -3,8 +3,6 @@ import mongoose from 'mongoose';
 import { IConversation } from '../models/Conversation';
 import Message, { IMessage } from '../models/Message';
 import KnowledgeItem from '../models/KnowledgeItem';
-import WorkspaceSettings, { IWorkspaceSettings } from '../models/WorkspaceSettings';
-import { GoalConfigurations, GoalProgressState, GoalType } from '../types/automationGoals';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logOpenAiUsage } from './openAiUsageService';
@@ -20,12 +18,6 @@ export interface AIReplyResult {
   escalationReason?: string;
   tags?: string[];
   knowledgeItemsUsed?: { id: string; title: string }[];
-  goalProgress?: GoalProgressState & {
-    goalType?: GoalType;
-    collectedFields?: Record<string, any>;
-    shouldCreateRecord?: boolean;
-    targetLink?: string;
-  };
 }
 
 export interface AIReplyOptions {
@@ -35,18 +27,6 @@ export interface AIReplyOptions {
   knowledgeItemIds?: string[];
   historyLimit?: number;
   messageHistory?: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[];
-  goalContext?: {
-    workspaceGoals?: {
-      primaryGoal?: GoalType;
-      secondaryGoal?: GoalType;
-      configs?: GoalConfigurations;
-    };
-    detectedGoal?: GoalType;
-    activeGoalType?: GoalType;
-    goalState?: 'idle' | 'collecting' | 'completed';
-    collectedFields?: Record<string, any>;
-  };
-  workspaceSettingsOverride?: Partial<IWorkspaceSettings>;
   tone?: string;
   maxReplySentences?: number;
   ragEnabled?: boolean;
@@ -172,12 +152,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     ? { ...knowledgeBaseQuery, _id: { $in: options.knowledgeItemIds } }
     : knowledgeBaseQuery;
 
-  const [knowledgeItems, baseWorkspaceSettings] = await Promise.all([
-    KnowledgeItem.find(knowledgeQuery),
-    options.workspaceSettingsOverride ? null : WorkspaceSettings.findOne({ workspaceId }),
-  ]);
-
-  const workspaceSettings = options.workspaceSettingsOverride || baseWorkspaceSettings;
+  const knowledgeItems = await KnowledgeItem.find(knowledgeQuery);
 
   const model = options.model || 'gpt-4o-mini';
   const temperature = typeof options.temperature === 'number' ? options.temperature : 0.35;
@@ -197,54 +172,15 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
           return ordered;
         });
 
-  const decisionMode = workspaceSettings?.decisionMode || 'assist';
-  const allowHashtags = workspaceSettings?.allowHashtags ?? false;
-  const allowEmojis = workspaceSettings?.allowEmojis ?? true;
-  const maxReplySentences = (options.maxReplySentences ?? workspaceSettings?.maxReplySentences) || 3;
-  const replyLanguage = workspaceSettings?.defaultReplyLanguage || workspaceSettings?.defaultLanguage || 'en';
+  const allowHashtags = false;
+  const allowEmojis = true;
+  const maxReplySentences = options.maxReplySentences ?? 3;
+  const replyLanguage = 'en';
   const tone = options.tone?.trim();
   let knowledgeItemsUsed = knowledgeItems.slice(0, 5).map(item => ({
     id: item._id.toString(),
     title: item.title,
   }));
-
-
-  const goalContext = options.goalContext || {};
-  const workspaceGoals = goalContext.workspaceGoals;
-  const detectedGoal = goalContext.detectedGoal || 'none';
-  const activeGoalType = goalContext.activeGoalType;
-  const goalState = goalContext.goalState || 'idle';
-  const collectedGoalFields = goalContext.collectedFields || {};
-
-  const describeGoalConfigs = (configs?: GoalConfigurations) => {
-    if (!configs) return 'No specific goal configuration provided.';
-
-    const leadFields = [
-      configs.leadCapture.collectName ? 'name' : null,
-      configs.leadCapture.collectPhone ? 'phone' : null,
-      configs.leadCapture.collectEmail ? 'email' : null,
-      configs.leadCapture.collectCustomNote ? 'custom note' : null,
-    ].filter(Boolean).join(', ');
-
-    const bookingFields = [
-      configs.booking.collectDate ? 'date' : null,
-      configs.booking.collectTime ? 'time' : null,
-      configs.booking.collectServiceType ? 'serviceType' : null,
-    ].filter(Boolean).join(', ');
-
-    const orderFields = [
-      configs.order.collectProductName ? 'productName' : null,
-      configs.order.collectQuantity ? 'quantity' : null,
-      configs.order.collectVariant ? 'variant' : null,
-    ].filter(Boolean).join(', ');
-
-    const supportFields = [
-      configs.support.askForOrderId ? 'orderId' : null,
-      configs.support.askForPhoto ? 'photo' : null,
-    ].filter(Boolean).join(', ');
-
-    return `Lead capture fields: ${leadFields || 'none'} | Booking link: ${configs.booking.bookingLink || 'n/a'}; fields: ${bookingFields || 'none'} | Order catalog: ${configs.order.catalogUrl || 'n/a'}; fields: ${orderFields || 'none'} | Support asks: ${supportFields || 'none'} | Drive target: ${configs.drive.targetType || 'website'} ${configs.drive.targetLink || ''}`;
-  };
 
   // Build knowledge context (Mongo + optional vector RAG)
   let knowledgeContext = '';
@@ -329,77 +265,8 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
         type: 'array',
         items: { type: 'string' },
       },
-      goalProgress: {
-        type: ['object', 'null'],
-        additionalProperties: false,
-        properties: {
-          goalType: {
-            type: 'string',
-            enum: [
-              'none',
-              'capture_lead',
-              'book_appointment',
-              'order_now',
-              'product_inquiry',
-              'delivery',
-              'order_status',
-              'refund_exchange',
-              'human',
-              'handle_support',
-            ],
-          },
-          status: { type: ['string', 'null'], enum: ['idle', 'collecting', 'completed', null] },
-          collectedFields: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              name: { type: ['string', 'null'] },
-              phone: { type: ['string', 'null'] },
-              email: { type: ['string', 'null'] },
-              customNote: { type: ['string', 'null'] },
-              date: { type: ['string', 'null'] },
-              time: { type: ['string', 'null'] },
-              serviceType: { type: ['string', 'null'] },
-              productName: { type: ['string', 'null'] },
-              quantity: { type: ['number', 'string', 'null'] },
-              variant: { type: ['string', 'null'] },
-              orderId: { type: ['string', 'null'] },
-              photoUrl: { type: ['string', 'null'] },
-              targetChannel: { type: ['string', 'null'] },
-            },
-            required: [
-              'name',
-              'phone',
-              'email',
-              'customNote',
-              'date',
-              'time',
-              'serviceType',
-              'productName',
-              'quantity',
-              'variant',
-              'orderId',
-              'photoUrl',
-              'targetChannel',
-            ],
-          },
-          summary: { type: ['string', 'null'] },
-          nextStep: { type: ['string', 'null'] },
-          shouldCreateRecord: { type: ['boolean', 'null'] },
-          targetLink: { type: ['string', 'null'] },
-        },
-        required: [
-          'goalType',
-          'status',
-          'collectedFields',
-          'summary',
-          'nextStep',
-          'shouldCreateRecord',
-          'targetLink',
-        ],
-      },
     },
-    required: ['replyText', 'shouldEscalate', 'escalationReason', 'tags', 'goalProgress'],
+    required: ['replyText', 'shouldEscalate', 'escalationReason', 'tags'],
   };
 
   const systemMessage = `
@@ -414,7 +281,7 @@ You can see and analyze images and videos that customers send. When responding t
 Voice notes and audio messages are automatically transcribed. The transcribed text is included in the message content. Treat transcribed voice notes naturally in your response - you don't need to mention that it was a voice note unless relevant.
 
 Global rules that ALWAYS apply:
-- Strictly obey workspace guidelines provided in the context.
+- Strictly obey the reply rules provided in the context.
 - NEVER promise discounts, prices, contracts, special deals, or commitments unless the business's knowledge base explicitly authorizes you to do so.
 - Keep replies short and natural: ${Math.max(1, maxReplySentences)} sentence${maxReplySentences === 1 ? '' : 's'} max, maximum 60–80 words.
 - Use a${tone ? ` ${tone}` : ' professional and friendly'} tone that fits the brand voice.
@@ -437,28 +304,12 @@ Your response must be valid JSON matching this schema:
 
   const userMessage = `
 BUSINESS CONTEXT:
-Workspace decision mode: ${decisionMode}
-- full_auto: AI can answer most things confidently within knowledge base
-- assist: AI should help but be cautious on complex/risky topics
-- info_only: AI should be very conservative and escalate more often
-
-Workspace rules:
+Reply rules:
 - Hashtags allowed: ${allowHashtags}
 - Emojis allowed: ${allowEmojis}
 - Max sentences: ${maxReplySentences}
 - Desired tone: ${tone || 'professional and friendly'}
 - Default reply language: ${getLanguageName(replyLanguage)}
-${workspaceSettings?.escalationGuidelines ? `- Escalation guidelines: ${workspaceSettings.escalationGuidelines}` : ''}
-${workspaceSettings?.escalationExamples?.length ? `- Escalation examples: ${workspaceSettings.escalationExamples.join(' | ')}` : ''}
-
-DM goals:
-- Primary goal: ${workspaceGoals?.primaryGoal || 'none'}
-- Secondary goal: ${workspaceGoals?.secondaryGoal || 'none'}
-- Detected intent for latest message: ${detectedGoal}
-- Active conversation goal: ${activeGoalType || 'none'} (state: ${goalState})
-- Collected goal fields so far: ${Object.keys(collectedGoalFields).length ? JSON.stringify(collectedGoalFields) : 'none'}
-- Goal config summary: ${describeGoalConfigs(workspaceGoals?.configs)}
-If a detected intent matches a workspace goal, answer their question then guide them through a short 2-4 question flow to collect the configured fields. Keep it concise and avoid repeating previous asks.
 
 KNOWLEDGE BASE:
 ${knowledgeContext || 'No specific knowledge provided. Use general business courtesy.'}
@@ -477,8 +328,7 @@ Generate a response following all rules above. Return JSON with:
 - replyText: your message to the customer
 - shouldEscalate: true if human review needed, false otherwise
 - escalationReason: brief reason if escalating (e.g., "Pricing negotiation requires approval", "Complex custom request"), or null
-- tags: semantic labels like ["pricing", "bulk_request", "urgent", "complaint"] to help categorize this interaction
-- goalProgress: when working on a goal, include goalType, status ('collecting' or 'completed'), collectedFields (merge any newly inferred answers), summary, nextStep, and set shouldCreateRecord=true when the flow is complete. Include targetLink if sharing a booking or catalog link.`;
+- tags: semantic labels like ["pricing", "bulk_request", "urgent", "complaint"] to help categorize this interaction.`;
 
   let parsed: AIReplyResult | null = null;
   let responseContent: string | null = null;
@@ -558,7 +408,6 @@ Generate a response following all rules above. Return JSON with:
       reasoningEffort: supportsReasoningEffort(model) ? reasoningEffort : undefined,
       maxOutputTokens,
       ragEnabled,
-      decisionMode,
       tone: tone || 'default',
       maxReplySentences,
       historyCount: messages.length,
@@ -589,44 +438,13 @@ Generate a response following all rules above. Return JSON with:
       replyPreview: String(raw.replyText || '').trim().slice(0, 160),
       shouldEscalate: Boolean(raw.shouldEscalate),
       tagsCount: Array.isArray(raw.tags) ? raw.tags.length : 0,
-      goalStatus: raw.goalProgress?.status || null,
     });
-    const collectedFieldsDefaults = {
-      name: null,
-      phone: null,
-      email: null,
-      customNote: null,
-      date: null,
-      time: null,
-      serviceType: null,
-      productName: null,
-      quantity: null,
-      variant: null,
-      orderId: null,
-      photoUrl: null,
-      targetChannel: null,
-    };
-
-    const mergedCollectedFields = raw.goalProgress?.collectedFields
-      ? { ...collectedFieldsDefaults, ...raw.goalProgress.collectedFields }
-      : collectedFieldsDefaults;
 
     parsed = {
       replyText: String(raw.replyText || '').trim(),
       shouldEscalate: Boolean(raw.shouldEscalate),
       escalationReason: raw.escalationReason ? String(raw.escalationReason).trim() : undefined,
       tags: Array.isArray(raw.tags) ? raw.tags.map((t: any) => String(t).trim()).filter(Boolean) : [],
-      goalProgress: raw.goalProgress
-        ? {
-            goalType: raw.goalProgress.goalType,
-            status: raw.goalProgress.status,
-            collectedFields: mergedCollectedFields,
-            summary: raw.goalProgress.summary,
-            nextStep: raw.goalProgress.nextStep,
-            shouldCreateRecord: raw.goalProgress.shouldCreateRecord,
-            targetLink: raw.goalProgress.targetLink,
-          }
-        : undefined,
     };
   } catch (error: any) {
     if (requestStart) {
@@ -700,8 +518,6 @@ Generate a response following all rules above. Return JSON with:
 
   reply.knowledgeItemsUsed = knowledgeItemsUsed;
 
-  const loggedGoalType = reply.goalProgress?.goalType || activeGoalType || detectedGoal;
-
   logAiDebug('reply_generated', {
     conversationId: conversation._id?.toString(),
     workspaceId: workspaceId.toString(),
@@ -711,12 +527,6 @@ Generate a response following all rules above. Return JSON with:
       tone: tone || 'default',
       allowHashtags,
       allowEmojis,
-    },
-    goal: {
-      detected: detectedGoal,
-      active: activeGoalType,
-      replied: loggedGoalType,
-      status: reply.goalProgress?.status,
     },
     usedFallback,
     shouldEscalate: reply.shouldEscalate,

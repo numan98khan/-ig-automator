@@ -14,6 +14,7 @@ type FlowRuntimeStep = {
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
   aiSettings?: AutomationAiSettings;
+  messageHistory?: Array<{ from: string; text?: string; attachments?: any[]; createdAt?: string | Date }>;
   agentSystemPrompt?: string;
   agentSteps?: string[];
   agentEndCondition?: string;
@@ -96,6 +97,8 @@ const normalizeAgentSlots = (node: Record<string, any>) =>
 
 const normalizeKnowledgeItemIds = (node: Record<string, any>) =>
   node.knowledgeItemIds ?? node.data?.knowledgeItemIds;
+const normalizeMessageHistory = (node: Record<string, any>) =>
+  node.messageHistory ?? node.data?.messageHistory;
 
 const normalizeWaitForReply = (node: Record<string, any>) =>
   node.waitForReply ?? node.data?.waitForReply;
@@ -227,6 +230,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const agentSlots = normalizeAgentSlots(node);
     const intentSettings = normalizeIntentSettings(node);
     const knowledgeItemIds = normalizeKnowledgeItemIds(node);
+    const messageHistory = normalizeMessageHistory(node);
     const waitForReply = normalizeWaitForReply(node);
     const handoff = normalizeHandoff(node);
     const rateLimit = normalizeRateLimit(node);
@@ -256,6 +260,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       buttons,
       tags,
       aiSettings,
+      messageHistory: Array.isArray(messageHistory) ? messageHistory : undefined,
       agentSystemPrompt: typeof agentSystemPrompt === 'string' ? agentSystemPrompt : undefined,
       agentSteps: Array.isArray(agentSteps)
         ? agentSteps.filter((step) => typeof step === 'string' && step.trim())

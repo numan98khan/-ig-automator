@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import Message from '../models/Message';
+import Message, { IMessage } from '../models/Message';
 import Conversation from '../models/Conversation';
 import InstagramAccount from '../models/InstagramAccount';
 import FollowupTask from '../models/FollowupTask';
@@ -16,13 +16,7 @@ import {
 import { addTicketUpdate, createTicket, getActiveTicket } from './escalationService';
 import { addCountIncrement, trackDailyMetric } from './reportingService';
 import { assertUsageLimit } from './tierService';
-import {
-  detectAutomationIntent,
-  detectGoalIntent,
-  getGoalConfigs,
-  getWorkspaceSettings,
-  goalMatchesWorkspace,
-} from './workspaceSettingsService';
+import { detectAutomationIntent, getWorkspaceSettings } from './workspaceSettingsService';
 import { pauseForTypingIfNeeded } from './automation/typing';
 import { matchesTriggerConfig } from './automation/triggerMatcher';
 import { matchesKeywords, normalizeText } from './automation/utils';
@@ -68,6 +62,7 @@ type FlowRuntimeStep = {
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
   aiSettings?: AutomationAiSettings;
+  messageHistory?: Array<Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>>;
   agentSystemPrompt?: string;
   agentSteps?: string[];
   agentEndCondition?: string;
@@ -762,40 +757,18 @@ async function sendFlowMessage(params: {
 async function buildAutomationAiReply(params: {
   conversation: any;
   messageText: string;
-  messageContext?: AutomationTestContext;
   aiSettings?: AutomationAiSettings;
   knowledgeItemIds?: string[];
-  workspaceSettings?: any;
+  messageHistory?: Array<Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>>;
 }) {
-  const { conversation, messageText, messageContext, aiSettings, knowledgeItemIds } = params;
-  const settings = params.workspaceSettings || await getWorkspaceSettings(conversation.workspaceId);
-  const goalConfigs = getGoalConfigs(settings);
-  const detectedGoal = await detectGoalIntent(messageText || '');
-  const goalMatched = goalMatchesWorkspace(
-    detectedGoal,
-    settings?.primaryGoal,
-    settings?.secondaryGoal,
-  )
-    ? detectedGoal
-    : 'none';
+  const { conversation, messageText, aiSettings, knowledgeItemIds, messageHistory } = params;
 
   return generateAIReply({
     conversation,
     workspaceId: conversation.workspaceId,
     latestCustomerMessage: messageText,
     historyLimit: aiSettings?.historyLimit,
-    goalContext: {
-      workspaceGoals: {
-        primaryGoal: settings?.primaryGoal,
-        secondaryGoal: settings?.secondaryGoal,
-        configs: goalConfigs,
-      },
-      detectedGoal: goalMatched !== 'none' ? goalMatched : 'none',
-      activeGoalType: goalMatched !== 'none' ? goalMatched : undefined,
-      goalState: goalMatched !== 'none' ? 'collecting' : 'idle',
-      collectedFields: conversation.goalCollectedFields || {},
-    },
-    workspaceSettingsOverride: settings,
+    messageHistory,
     tone: aiSettings?.tone,
     maxReplySentences: aiSettings?.maxReplySentences,
     ragEnabled: aiSettings?.ragEnabled,
@@ -859,10 +832,9 @@ async function handleAiReplyStep(params: {
   const aiResponse = await buildAutomationAiReply({
     conversation,
     messageText,
-    messageContext,
     aiSettings,
     knowledgeItemIds: step.knowledgeItemIds,
-    workspaceSettings: settings,
+    messageHistory: step.messageHistory,
   });
   logAutomationStep('flow_ai_reply_generate', replyStart);
   logAdminEvent({

@@ -65,12 +65,6 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       escalationExamples,
       humanEscalationBehavior,
       humanHoldMinutes,
-      commentDmEnabled,
-      commentDmTemplate,
-      dmAutoReplyEnabled,
-      followupEnabled,
-      followupHoursBeforeExpiry,
-      followupTemplate,
       primaryGoal,
       secondaryGoal,
       goalConfigs,
@@ -95,12 +89,6 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     if (escalationExamples !== undefined) updateData.escalationExamples = escalationExamples;
     if (humanEscalationBehavior !== undefined) updateData.humanEscalationBehavior = humanEscalationBehavior;
     if (humanHoldMinutes !== undefined) updateData.humanHoldMinutes = humanHoldMinutes;
-    if (commentDmEnabled !== undefined) updateData.commentDmEnabled = commentDmEnabled;
-    if (commentDmTemplate !== undefined) updateData.commentDmTemplate = commentDmTemplate;
-    if (dmAutoReplyEnabled !== undefined) updateData.dmAutoReplyEnabled = dmAutoReplyEnabled;
-    if (followupEnabled !== undefined) updateData.followupEnabled = followupEnabled;
-    if (followupHoursBeforeExpiry !== undefined) updateData.followupHoursBeforeExpiry = followupHoursBeforeExpiry;
-    if (followupTemplate !== undefined) updateData.followupTemplate = followupTemplate;
     if (primaryGoal !== undefined) updateData.primaryGoal = normalizeGoalValue(primaryGoal);
     if (secondaryGoal !== undefined) updateData.secondaryGoal = normalizeGoalValue(secondaryGoal);
     if (goalConfigs !== undefined) updateData.goalConfigs = goalConfigs;
