@@ -376,25 +376,39 @@ const buildPreviewEvents = async (session: any, versionDoc: any) => {
     limit: 200,
   });
   const nodeLabelLookup = (nodeId?: string) => (nodeId ? extractNodeLabel(versionDoc?.dslSnapshot, nodeId) : undefined);
+  const formatNodeType = (nodeType?: string) => {
+    if (!nodeType) return '';
+    return nodeType
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+      .trim();
+  };
+  const buildNodeDescriptor = (nodeId?: string, nodeType?: string) => {
+    const nodeLabel = nodeId ? nodeLabelLookup(nodeId) : undefined;
+    const nodeDisplay = nodeLabel || nodeId || 'node';
+    const nodeTypeLabel = formatNodeType(nodeType);
+    return nodeTypeLabel ? `${nodeTypeLabel} · ${nodeDisplay}` : nodeDisplay;
+  };
   const mappedLogEvents: PreviewEvent[] = logEvents
     .map((event: any) => {
       const message = typeof event.message === 'string' ? event.message : 'Flow event';
-      const lower = message.toLowerCase();
+      const cleanMessage = message.replace(/^🧩\s*\[FLOW NODE\]\s*/i, '').trim();
+      const lower = cleanMessage.toLowerCase();
       const isStart = lower.includes('node start');
       const isComplete = lower.includes('node complete');
       const type: PreviewEventType = isStart ? 'node_start' : isComplete ? 'node_complete' : 'info';
       const nodeId = typeof event.details?.nodeId === 'string' ? event.details.nodeId : undefined;
-      const nodeLabel = nodeId ? nodeLabelLookup(nodeId) : undefined;
-      const nodeDisplay = nodeLabel || nodeId || 'node';
-      const cleanMessage = isStart
-        ? `Entered ${nodeDisplay}`
+      const nodeType = typeof event.details?.type === 'string' ? event.details.type : undefined;
+      const nodeDescriptor = buildNodeDescriptor(nodeId, nodeType);
+      const displayMessage = isStart
+        ? `Started ${nodeDescriptor}`
         : isComplete
-          ? `Completed ${nodeDisplay}`
-          : message;
+          ? `Completed ${nodeDescriptor}`
+          : cleanMessage || message;
       return {
         id: event._id?.toString() || new mongoose.Types.ObjectId().toString(),
         type,
-        message: cleanMessage,
+        message: displayMessage,
         createdAt: event.createdAt || new Date(),
         details: event.details,
       };
@@ -404,8 +418,19 @@ const buildPreviewEvents = async (session: any, versionDoc: any) => {
   const metaEvents = Array.isArray(session.state?.previewMeta?.events)
     ? session.state.previewMeta.events
     : [];
+  const normalizedMetaEvents = metaEvents.map((event: PreviewEvent) => {
+    if (event.type !== 'node_start' && event.type !== 'node_complete') return event;
+    const nodeId = typeof event.details?.nodeId === 'string' ? event.details.nodeId : undefined;
+    const nodeType = typeof event.details?.type === 'string' ? event.details.type : undefined;
+    if (!nodeId) return event;
+    const nodeDescriptor = buildNodeDescriptor(nodeId, nodeType);
+    const message = event.type === 'node_start'
+      ? `Started ${nodeDescriptor}`
+      : `Completed ${nodeDescriptor}`;
+    return { ...event, message };
+  });
 
-  const merged = [...mappedLogEvents, ...metaEvents].sort((a, b) => {
+  const merged = [...mappedLogEvents, ...normalizedMetaEvents].sort((a, b) => {
     const aTime = new Date(a.createdAt).getTime();
     const bTime = new Date(b.createdAt).getTime();
     return aTime - bTime;

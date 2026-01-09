@@ -16,9 +16,9 @@ import {
 import { addTicketUpdate, createTicket, getActiveTicket } from './escalationService';
 import { addCountIncrement, trackDailyMetric } from './reportingService';
 import { assertUsageLimit } from './tierService';
-import { detectAutomationIntent, getWorkspaceSettings } from './workspaceSettingsService';
+import { detectAutomationIntentDetailed, getWorkspaceSettings } from './workspaceSettingsService';
 import { pauseForTypingIfNeeded } from './automation/typing';
-import { matchesTriggerConfig } from './automation/triggerMatcher';
+import { matchTriggerConfigDetailed } from './automation/triggerMatcher';
 import { matchesIntent } from './automation/intentMatcher';
 import { isOutsideBusinessHours, matchesKeywords, normalizeText } from './automation/utils';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
@@ -1167,6 +1167,7 @@ async function buildAutomationAiReply(params: {
 async function handleAiReplyStep(params: {
   step: FlowRuntimeStep;
   graph: FlowRuntimeGraph;
+  session: any;
   conversation: any;
   instance: any;
   igAccount: any;
@@ -1181,6 +1182,7 @@ async function handleAiReplyStep(params: {
   const {
     step,
     graph,
+    session,
     conversation,
     instance,
     igAccount,
@@ -1237,6 +1239,25 @@ async function handleAiReplyStep(params: {
     },
     workspaceId: resolveWorkspaceId(logContext),
   });
+  if (deliveryMode === 'preview') {
+    const tagText = aiResponse.tags && aiResponse.tags.length > 0
+      ? ` · tags: ${aiResponse.tags.slice(0, 4).join(', ')}${aiResponse.tags.length > 4 ? '…' : ''}`
+      : '';
+    const escalationText = aiResponse.shouldEscalate
+      ? ` · escalated${aiResponse.escalationReason ? `: ${aiResponse.escalationReason}` : ''}`
+      : '';
+    appendPreviewMetaEvent(session, {
+      type: 'info',
+      message: `AI Reply generated${tagText}${escalationText}`,
+      details: {
+        nodeId: step.id,
+        type: 'ai_reply',
+        tags: aiResponse.tags,
+        shouldEscalate: aiResponse.shouldEscalate,
+        escalationReason: aiResponse.escalationReason,
+      },
+    });
+  }
 
   const activeTicket = deliveryMode === 'preview' ? null : await getActiveTicket(conversation._id);
   if (activeTicket && aiResponse.shouldEscalate) {
@@ -1691,6 +1712,7 @@ async function executeFlowPlan(params: {
       const aiResult = await handleAiReplyStep({
         step,
         graph: plan.graph,
+        session,
         conversation,
         instance,
         igAccount,
@@ -1855,6 +1877,55 @@ async function executeFlowPlan(params: {
       const agentStop = Boolean(agentResult.shouldStop);
       const agentDone = Boolean(agentResult.endConversation) || agentStop || maxQuestionsReached;
 
+      if (deliveryMode === 'preview') {
+        const collectedEntries = Object.entries(collectedFields)
+          .filter(([key, value]) => key && value !== null && value !== undefined && String(value).trim());
+        const formatValue = (value: string) => {
+          const trimmed = value.trim();
+          return trimmed.length > 32 ? `${trimmed.slice(0, 32)}…` : trimmed;
+        };
+        const formatEntries = (entries: Array<[string, any]>) => {
+          if (entries.length === 0) return '';
+          const sample = entries.slice(0, 3).map(([key, value]) => (
+            value ? `${key}=${formatValue(String(value))}` : key
+          ));
+          const extra = entries.length - sample.length;
+          return `${sample.join(', ')}${extra > 0 ? ` +${extra} more` : ''}`;
+        };
+        const formatList = (items: string[]) => {
+          if (items.length === 0) return '';
+          const sample = items.slice(0, 3).join(', ');
+          const extra = items.length - Math.min(items.length, 3);
+          return `${sample}${extra > 0 ? ` +${extra} more` : ''}`;
+        };
+        const stepLabel = agentSteps[agentStepIndex] ? agentSteps[agentStepIndex].trim() : '';
+        const stepBadge = stepCount > 0 ? `Step ${agentStepIndex + 1}/${stepCount}` : `Step ${agentStepIndex + 1}`;
+        const detailParts = [];
+        if (stepLabel) detailParts.push(stepLabel.length > 60 ? `${stepLabel.slice(0, 60)}…` : stepLabel);
+        const collectedSummary = formatEntries(collectedEntries);
+        if (collectedSummary) detailParts.push(`captured: ${collectedSummary}`);
+        const missingSummary = formatList(missingFields);
+        if (missingSummary) detailParts.push(`missing: ${missingSummary}`);
+        if (agentResult.advanceStep) detailParts.push('advance step');
+        if (agentDone) detailParts.push('done');
+
+        appendPreviewMetaEvent(session, {
+          type: 'info',
+          message: `AI Agent ${stepBadge}${detailParts.length > 0 ? ` · ${detailParts.join(' · ')}` : ''}`,
+          details: {
+            nodeId: step.id,
+            type: stepType,
+            stepIndex: agentStepIndex,
+            stepCount,
+            collectedFields,
+            missingFields,
+            advanceStep: agentResult.advanceStep,
+            endConversation: agentResult.endConversation,
+            shouldStop: agentResult.shouldStop,
+          },
+        });
+      }
+
       const nextVars = {
         ...(session.state?.vars || {}),
         agentNodeId: step.id,
@@ -1937,7 +2008,8 @@ async function executeFlowPlan(params: {
       }
     } else if (stepType === 'detect_intent') {
       const intentStart = nowMs();
-      const detectedIntent = await detectAutomationIntent(messageText || '', step.intentSettings);
+      const detected = await detectAutomationIntentDetailed(messageText || '', step.intentSettings);
+      const detectedIntent = detected.value;
       await markTriggeredOnce();
       session.state = {
         ...(session.state || {}),
@@ -1947,6 +2019,18 @@ async function executeFlowPlan(params: {
         },
       };
       logAutomationStep('flow_detect_intent', intentStart, { detectedIntent });
+      if (deliveryMode === 'preview') {
+        appendPreviewMetaEvent(session, {
+          type: 'info',
+          message: `Detected intent: ${detectedIntent || 'none'}${detected.description ? ` — ${detected.description}` : ''}`,
+          details: {
+            nodeId: step.id,
+            type: stepType,
+            detectedIntent,
+            intentDescription: detected.description,
+          },
+        });
+      }
     } else if (stepType === 'router') {
       // Router nodes only decide the next path.
     } else if (stepType === 'trigger') {
@@ -2185,15 +2269,42 @@ export async function executePreviewFlowForInstance(params: {
     if (previewTriggers.length === 0) {
       return { success: false, error: 'No triggers configured for preview', messages: [] };
     }
-    let matched = false;
+    let matchedTrigger: FlowTriggerDefinition | null = null;
+    let matchedDetails: Awaited<ReturnType<typeof matchTriggerConfigDetailed>> | null = null;
     for (const trigger of previewTriggers) {
-      if (await matchesTriggerConfig(messageText || '', trigger.config, messageContext)) {
-        matched = true;
+      const details = await matchTriggerConfigDetailed(messageText || '', trigger.config, messageContext);
+      if (details.matched) {
+        matchedTrigger = trigger;
+        matchedDetails = details;
         break;
       }
     }
-    if (!matched) {
+    if (!matchedTrigger) {
       return { success: false, error: 'Trigger conditions did not match', messages: [] };
+    }
+    if (matchedDetails) {
+      const matchSignals: string[] = [];
+      if (matchedDetails.matchedOn.link) matchSignals.push('link');
+      if (matchedDetails.matchedOn.attachment) matchSignals.push('attachment');
+      if (matchedDetails.matchedOn.intent) matchSignals.push('intent');
+      if (matchedDetails.matchedOn.keywords) matchSignals.push('keywords');
+      const triggerLabel = matchedTrigger.label || matchedTrigger.type;
+      const intentHint = matchedDetails.matchedOn.intent && matchedTrigger.config?.intentText
+        ? ` · intent: ${matchedTrigger.config.intentText.trim()}`
+        : '';
+      const signalSuffix = matchSignals.length > 0 ? ` (${matchSignals.join(', ')})` : '';
+      appendPreviewMetaEvent(session, {
+        type: 'info',
+        message: `Trigger matched: ${triggerLabel}${signalSuffix}${intentHint}`,
+        details: {
+          type: 'trigger',
+          triggerType: matchedTrigger.type,
+          triggerLabel: matchedTrigger.label,
+          triggerMode: matchedDetails.triggerMode,
+          matchedOn: matchedDetails.matchedOn,
+          messagePreview: messageText?.slice(0, 160),
+        },
+      });
     }
   }
 

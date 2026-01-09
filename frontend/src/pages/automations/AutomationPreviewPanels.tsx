@@ -98,6 +98,15 @@ const formatTime = (value?: string) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
+const formatDurationSeconds = (valueMs?: number | null) => {
+  if (valueMs === null || valueMs === undefined) return '';
+  const safeMs = Math.max(0, valueMs);
+  const seconds = safeMs / 1000;
+  if (Number.isNaN(seconds)) return '';
+  const precision = seconds < 10 ? 1 : 0;
+  return `${seconds.toFixed(precision)}s`;
+};
+
 export const AutomationPreviewPersonaPanel: React.FC<PersonaPanelProps> = ({
   persona,
   profiles,
@@ -367,9 +376,39 @@ export const AutomationPreviewStatePanel: React.FC<StatePanelProps> = ({
 
 export const AutomationPreviewTimelinePanel: React.FC<TimelinePanelProps> = ({ events }) => {
   const [eventFilters, setEventFilters] = useState<Record<string, boolean>>(buildDefaultEventFilters);
+  const sortedEvents = useMemo(() => (
+    [...events].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+  ), [events]);
+  const eventDurations = useMemo(() => {
+    const durations = new Map<string, number>();
+    const lastNodeStart = new Map<string, number>();
+    sortedEvents.forEach((event, index) => {
+      const eventTime = new Date(event.createdAt).getTime();
+      if (Number.isNaN(eventTime)) return;
+      const nodeId = typeof event.details?.nodeId === 'string' ? event.details.nodeId : '';
+      if (event.type === 'node_start' && nodeId) {
+        lastNodeStart.set(nodeId, eventTime);
+      }
+      let durationMs: number | null = null;
+      if (typeof event.details?.durationMs === 'number') {
+        durationMs = event.details.durationMs;
+      } else if (event.type === 'node_complete' && nodeId && lastNodeStart.has(nodeId)) {
+        durationMs = eventTime - (lastNodeStart.get(nodeId) || eventTime);
+      } else if (index > 0) {
+        const prevTime = new Date(sortedEvents[index - 1].createdAt).getTime();
+        if (!Number.isNaN(prevTime)) {
+          durationMs = eventTime - prevTime;
+        }
+      }
+      if (durationMs !== null) {
+        durations.set(event.id, Math.max(0, durationMs));
+      }
+    });
+    return durations;
+  }, [sortedEvents]);
   const filteredEvents = useMemo(() => (
-    events.filter((event) => eventFilters[event.type] ?? true)
-  ), [eventFilters, events]);
+    sortedEvents.filter((event) => eventFilters[event.type] ?? true)
+  ), [eventFilters, sortedEvents]);
 
   return (
     <Card className="flex flex-col min-h-0 flex-1 w-full">
@@ -412,12 +451,15 @@ export const AutomationPreviewTimelinePanel: React.FC<TimelinePanelProps> = ({ e
           <div className="space-y-3 pr-1">
             {filteredEvents.map((event) => {
               const badge = EVENT_BADGES[event.type] || EVENT_BADGES.info;
+              const durationLabel = formatDurationSeconds(eventDurations.get(event.id));
+              const timeLabel = formatTime(event.createdAt);
+              const subtitle = durationLabel ? `${timeLabel} · ${durationLabel}` : timeLabel;
               return (
                 <div key={event.id} className="flex items-start gap-3">
                   <Badge variant={badge.variant}>{badge.label}</Badge>
                   <div className="flex-1">
                     <div className="text-sm">{event.message}</div>
-                    <div className="text-xs text-muted-foreground">{formatTime(event.createdAt)}</div>
+                    <div className="text-xs text-muted-foreground">{subtitle}</div>
                   </div>
                 </div>
               );

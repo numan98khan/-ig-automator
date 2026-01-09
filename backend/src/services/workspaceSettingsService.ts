@@ -217,8 +217,18 @@ export async function detectAutomationIntent(
   text: string,
   settings?: AutomationIntentSettings,
 ): Promise<string> {
+  const result = await detectAutomationIntentDetailed(text, settings);
+  return result.value;
+}
+
+export async function detectAutomationIntentDetailed(
+  text: string,
+  settings?: AutomationIntentSettings,
+): Promise<{ value: string; description?: string }> {
   const labels = await listAutomationIntentLabels();
-  return detectIntentFromLabels(text, labels, settings);
+  const value = await detectIntentFromLabels(text, labels, settings);
+  const match = labels.find((label) => label.value === value);
+  return { value, description: match?.description };
 }
 
 export function goalMatchesWorkspace(goal: GoalType, primary?: GoalType, secondary?: GoalType): boolean {
