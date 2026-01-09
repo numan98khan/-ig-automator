@@ -805,19 +805,11 @@ router.get('/simulate/session', authenticate, async (req: AuthRequest, res: Resp
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    let session = await AutomationSession.findOne({
+    const session = await AutomationSession.findOne({
       workspaceId: new mongoose.Types.ObjectId(workspaceId),
       channel: 'preview',
       'state.previewMeta.source': 'simulate',
     }).sort({ updatedAt: -1 });
-
-    if (!session) {
-      session = await AutomationSession.findOne({
-        workspaceId: new mongoose.Types.ObjectId(workspaceId),
-        channel: 'preview',
-        'state.previewMeta.source': { $exists: false },
-      }).sort({ updatedAt: -1 });
-    }
 
     if (!session) {
       return res.json({ session: null, conversation: null, currentNode: null, events: [], profile: null, persona: null });
