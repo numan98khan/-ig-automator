@@ -19,7 +19,8 @@ import { assertUsageLimit } from './tierService';
 import { detectAutomationIntent, getWorkspaceSettings } from './workspaceSettingsService';
 import { pauseForTypingIfNeeded } from './automation/typing';
 import { matchesTriggerConfig } from './automation/triggerMatcher';
-import { matchesKeywords, normalizeText } from './automation/utils';
+import { matchesIntent } from './automation/intentMatcher';
+import { isOutsideBusinessHours, matchesKeywords, normalizeText } from './automation/utils';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logAdminEvent } from './adminLogEventService';
 import {
@@ -239,6 +240,92 @@ const summarizeMessageContext = (context?: AutomationTestContext) => ({
   forceOutsideBusinessHours: Boolean(context?.forceOutsideBusinessHours),
 });
 
+const hasKeywords = (config?: TriggerConfig) =>
+  Array.isArray(config?.keywords) && config.keywords.length > 0;
+
+const hasExcludeKeywords = (config?: TriggerConfig) =>
+  Array.isArray(config?.excludeKeywords) && config.excludeKeywords.length > 0;
+
+const hasIntent = (config?: TriggerConfig) =>
+  Boolean(config?.intentText && config.intentText.trim());
+
+const hasMatchOn = (config?: TriggerConfig) =>
+  Boolean(config?.matchOn?.link || config?.matchOn?.attachment);
+
+const isUnqualifiedTriggerConfig = (config?: TriggerConfig) => {
+  if (!config) return true;
+  const triggerMode = config.triggerMode || 'any';
+  if (triggerMode !== 'any') return false;
+  return !hasKeywords(config)
+    && !hasIntent(config)
+    && !hasMatchOn(config)
+    && !hasExcludeKeywords(config)
+    && !config.outsideBusinessHours;
+};
+
+const passesBaseFilters = (
+  messageText: string,
+  config?: TriggerConfig,
+  context?: AutomationTestContext,
+) => {
+  if (hasExcludeKeywords(config)) {
+    if (matchesKeywords(messageText, config?.excludeKeywords || [], 'any')) {
+      return false;
+    }
+  }
+  if (
+    config?.outsideBusinessHours &&
+    !context?.forceOutsideBusinessHours &&
+    !isOutsideBusinessHours(config.businessHours)
+  ) {
+    return false;
+  }
+  return true;
+};
+
+const matchesKeywordCategory = (
+  messageText: string,
+  config: TriggerConfig | undefined,
+  context?: AutomationTestContext,
+) => {
+  const triggerMode = config?.triggerMode || 'any';
+  if (triggerMode === 'intent') return false;
+  if (!passesBaseFilters(messageText, config, context)) return false;
+
+  const linkMatched = Boolean(config?.matchOn?.link && context?.hasLink);
+  const attachmentMatched = Boolean(config?.matchOn?.attachment && context?.hasAttachment);
+  const keywordMatched = hasKeywords(config)
+    ? matchesKeywords(messageText, config?.keywords || [], config?.keywordMatch || 'any')
+    : false;
+
+  if (!hasMatchOn(config) && !hasKeywords(config)) return false;
+  if (linkMatched || attachmentMatched) return true;
+  return keywordMatched;
+};
+
+const matchesIntentCategory = async (
+  messageText: string,
+  config: TriggerConfig | undefined,
+  context?: AutomationTestContext,
+) => {
+  const triggerMode = config?.triggerMode || 'any';
+  if (triggerMode === 'keywords') return false;
+  if (!passesBaseFilters(messageText, config, context)) return false;
+  const intentText = config?.intentText?.trim() || '';
+  if (!intentText) return false;
+  return matchesIntent(messageText, intentText);
+};
+
+const matchesUnqualifiedCategory = (
+  messageText: string,
+  config: TriggerConfig | undefined,
+  context?: AutomationTestContext,
+) => {
+  if (!isUnqualifiedTriggerConfig(config)) return false;
+  if (!passesBaseFilters(messageText, config, context)) return false;
+  return true;
+};
+
 type AutomationMatchDiagnostic = {
   instanceId?: string;
   name?: string;
@@ -305,6 +392,13 @@ export async function resolveAutomationSelection(params: {
   const versionMap = new Map(versions.map(version => [version._id.toString(), version]));
 
   const diagnostics: AutomationMatchDiagnostic[] = [];
+  const candidates: Array<{
+    instance: any;
+    version: any;
+    runtime: ReturnType<typeof resolveFlowRuntime>;
+    typedTriggers: FlowTriggerDefinition[];
+    diagnosticBase: AutomationMatchDiagnostic;
+  }> = [];
 
   for (const instance of instances) {
     const diagnostic: AutomationMatchDiagnostic = {
@@ -360,38 +454,115 @@ export async function resolveAutomationSelection(params: {
       continue;
     }
 
-    let matchedTrigger: FlowTriggerDefinition | undefined;
-    for (const trigger of typedTriggers) {
-      if (await matchesTriggerConfig(normalizedMessage, trigger.config, messageContext)) {
-        matchedTrigger = trigger;
-        break;
+    candidates.push({
+      instance,
+      version,
+      runtime,
+      typedTriggers,
+      diagnosticBase: diagnostic,
+    });
+  }
+
+  const findMatch = async (category: 'keyword' | 'intent' | 'unqualified') => {
+    const categoryDiagnostics: AutomationMatchDiagnostic[] = [];
+
+    for (const candidate of candidates) {
+      const eligibleTriggers = candidate.typedTriggers.filter((trigger) => {
+        if (category === 'keyword') {
+          return (trigger.config?.triggerMode || 'any') !== 'intent'
+            && (hasKeywords(trigger.config) || hasMatchOn(trigger.config));
+        }
+        if (category === 'intent') {
+          return (trigger.config?.triggerMode || 'any') !== 'keywords' && hasIntent(trigger.config);
+        }
+        return isUnqualifiedTriggerConfig(trigger.config);
+      });
+
+      if (eligibleTriggers.length === 0) {
+        continue;
       }
+
+      let matchedTrigger: FlowTriggerDefinition | undefined;
+      for (const trigger of eligibleTriggers) {
+        if (category === 'keyword') {
+          if (matchesKeywordCategory(normalizedMessage, trigger.config, messageContext)) {
+            matchedTrigger = trigger;
+            break;
+          }
+        } else if (category === 'intent') {
+          if (await matchesIntentCategory(normalizedMessage, trigger.config, messageContext)) {
+            matchedTrigger = trigger;
+            break;
+          }
+        } else if (matchesUnqualifiedCategory(normalizedMessage, trigger.config, messageContext)) {
+          matchedTrigger = trigger;
+          break;
+        }
+      }
+
+      if (matchedTrigger) {
+        return {
+          match: {
+            instance: candidate.instance,
+            version: candidate.version,
+            runtime: candidate.runtime,
+            matchedTrigger,
+          },
+          diagnostics: categoryDiagnostics,
+        };
+      }
+
+      categoryDiagnostics.push({
+        ...candidate.diagnosticBase,
+        reason: 'trigger_config_mismatch',
+        templateVersionId: candidate.version._id?.toString(),
+        triggers: summarizeTriggers(eligibleTriggers),
+        messageContext: contextSummary,
+      });
     }
 
-    if (!matchedTrigger) {
-      diagnostic.reason = 'trigger_config_mismatch';
-      diagnostic.templateVersionId = version._id?.toString();
-      diagnostic.triggers = summarizeTriggers(typedTriggers);
-      diagnostic.messageContext = contextSummary;
-      diagnostics.push(diagnostic);
-      continue;
-    }
+    return null;
+  };
 
+  const keywordMatch = await findMatch('keyword');
+  if (keywordMatch) {
     return {
-      match: {
-        instance,
-        version,
-        runtime,
-        matchedTrigger,
-      },
-      diagnostics,
+      match: keywordMatch.match,
+      diagnostics: [...diagnostics, ...keywordMatch.diagnostics],
+      evaluated: instances.length,
+    };
+  }
+
+  const intentMatch = await findMatch('intent');
+  if (intentMatch) {
+    return {
+      match: intentMatch.match,
+      diagnostics: [...diagnostics, ...intentMatch.diagnostics],
+      evaluated: instances.length,
+    };
+  }
+
+  const unqualifiedMatch = await findMatch('unqualified');
+  if (unqualifiedMatch) {
+    return {
+      match: unqualifiedMatch.match,
+      diagnostics: [...diagnostics, ...unqualifiedMatch.diagnostics],
       evaluated: instances.length,
     };
   }
 
   return {
     match: undefined,
-    diagnostics,
+    diagnostics: [
+      ...diagnostics,
+      ...candidates.map((candidate) => ({
+        ...candidate.diagnosticBase,
+        reason: 'trigger_config_mismatch',
+        templateVersionId: candidate.version._id?.toString(),
+        triggers: summarizeTriggers(candidate.typedTriggers),
+        messageContext: contextSummary,
+      })),
+    ],
     evaluated: instances.length,
   };
 }
