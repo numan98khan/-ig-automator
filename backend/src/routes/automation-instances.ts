@@ -104,7 +104,18 @@ const ensurePreviewMeta = (session: any) => {
   if (!Array.isArray(session.state.previewMeta.events)) {
     session.state.previewMeta.events = [];
   }
-  return session.state.previewMeta as { events: PreviewEvent[]; profileId?: string; persona?: PreviewPersona };
+  return session.state.previewMeta as {
+    events: PreviewEvent[];
+    profileId?: string;
+    persona?: PreviewPersona;
+    source?: string;
+    selectedAutomation?: {
+      id?: string;
+      name?: string;
+      templateId?: string;
+      trigger?: { type?: string; label?: string; description?: string };
+    };
+  };
 };
 
 const appendPreviewEvent = (session: any, event: Omit<PreviewEvent, 'id'> & { id?: string }) => {
@@ -413,22 +424,15 @@ const buildPreviewEvents = async (session: any, versionDoc: any) => {
         details: event.details,
       };
     })
-    .reverse();
+    .reverse()
+    .filter((event) => event.type !== 'node_start' && event.type !== 'node_complete');
 
   const metaEvents = Array.isArray(session.state?.previewMeta?.events)
     ? session.state.previewMeta.events
     : [];
-  const normalizedMetaEvents = metaEvents.map((event: PreviewEvent) => {
-    if (event.type !== 'node_start' && event.type !== 'node_complete') return event;
-    const nodeId = typeof event.details?.nodeId === 'string' ? event.details.nodeId : undefined;
-    const nodeType = typeof event.details?.type === 'string' ? event.details.type : undefined;
-    if (!nodeId) return event;
-    const nodeDescriptor = buildNodeDescriptor(nodeId, nodeType);
-    const message = event.type === 'node_start'
-      ? `Started ${nodeDescriptor}`
-      : `Completed ${nodeDescriptor}`;
-    return { ...event, message };
-  });
+  const normalizedMetaEvents = metaEvents
+    .filter((event: PreviewEvent) => event.type !== 'node_start' && event.type !== 'node_complete')
+    .map((event: PreviewEvent) => event);
 
   const merged = [...mappedLogEvents, ...normalizedMetaEvents].sort((a, b) => {
     const aTime = new Date(a.createdAt).getTime();
@@ -727,6 +731,16 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
       persona: resolvedPersona,
       profileId: resolvedProfile?._id?.toString(),
     });
+    const meta = ensurePreviewMeta(session);
+    meta.source = 'simulate';
+    meta.selectedAutomation = {
+      id: selectedInstance._id?.toString(),
+      name: selectedInstance.name,
+      templateId: selectedInstance.templateId?.toString(),
+      trigger: matchedTrigger
+        ? { type: matchedTrigger.type, label: matchedTrigger.label, description: matchedTrigger.description }
+        : undefined,
+    };
 
     const customerMessage = await Message.create({
       conversationId: conversation._id,
@@ -770,18 +784,104 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
       status: session.status,
       messages: result.messages,
       ...payload,
-      selectedAutomation: {
-        id: selectedInstance._id?.toString(),
-        name: selectedInstance.name,
-        templateId: selectedInstance.templateId?.toString(),
-        trigger: matchedTrigger
-          ? { type: matchedTrigger.type, label: matchedTrigger.label, description: matchedTrigger.description }
-          : undefined,
-      },
+      selectedAutomation: meta.selectedAutomation,
       diagnostics,
     });
   } catch (error) {
     console.error('Simulate automation message error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/simulate/session', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const workspaceId = typeof req.query.workspaceId === 'string' ? req.query.workspaceId : '';
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'workspaceId is required' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    let session = await AutomationSession.findOne({
+      workspaceId: new mongoose.Types.ObjectId(workspaceId),
+      channel: 'preview',
+      'state.previewMeta.source': 'simulate',
+    }).sort({ updatedAt: -1 });
+
+    if (!session) {
+      session = await AutomationSession.findOne({
+        workspaceId: new mongoose.Types.ObjectId(workspaceId),
+        channel: 'preview',
+        'state.previewMeta.source': { $exists: false },
+      }).sort({ updatedAt: -1 });
+    }
+
+    if (!session) {
+      return res.json({ session: null, conversation: null, currentNode: null, events: [], profile: null, persona: null });
+    }
+
+    const conversation = await Conversation.findById(session.conversationId);
+    const payload = await buildPreviewSessionPayload(session, conversation, {
+      includeEvents: await canViewExecutionTimeline(workspaceId),
+    });
+    const messages = conversation ? await loadPreviewMessages(conversation._id) : [];
+    const selectedAutomation = session.state?.previewMeta?.selectedAutomation || null;
+
+    return res.json({
+      sessionId: session._id,
+      conversationId: conversation?._id,
+      status: session.status,
+      messages,
+      selectedAutomation,
+      ...payload,
+    });
+  } catch (error) {
+    console.error('Get simulate session error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/simulate/reset', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { workspaceId, sessionId } = req.body || {};
+    if (!workspaceId || typeof workspaceId !== 'string') {
+      return res.status(400).json({ error: 'workspaceId is required' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const session = sessionId
+      ? await AutomationSession.findOne({
+        _id: sessionId,
+        workspaceId: new mongoose.Types.ObjectId(workspaceId),
+        channel: 'preview',
+      })
+      : await AutomationSession.findOne({
+        workspaceId: new mongoose.Types.ObjectId(workspaceId),
+        channel: 'preview',
+        'state.previewMeta.source': 'simulate',
+      }).sort({ updatedAt: -1 });
+
+    if (!session) {
+      return res.json({ success: true });
+    }
+
+    const conversationId = session.conversationId;
+    await AutomationSession.deleteOne({ _id: session._id });
+    if (conversationId) {
+      await Message.deleteMany({ conversationId });
+      await Conversation.deleteOne({ _id: conversationId });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Reset simulate session error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -1160,6 +1260,9 @@ router.post('/:id/preview-session/persona', authenticate, async (req: AuthReques
 
     await applyPersonaToConversation(conversation, resolvedPersona);
     const meta = ensurePreviewMeta(session);
+    if (!meta.source) {
+      meta.source = 'preview';
+    }
     meta.persona = resolvedPersona;
     if (resolvedProfile?._id) {
       meta.profileId = resolvedProfile._id.toString();
@@ -1222,6 +1325,10 @@ router.post('/:id/preview-session', authenticate, async (req: AuthRequest, res: 
       persona: resolvedPersona,
       profileId: resolvedProfile?._id?.toString(),
     });
+    const meta = ensurePreviewMeta(session);
+    if (!meta.source) {
+      meta.source = 'preview';
+    }
 
     const messages = await loadPreviewMessages(conversation._id);
     const payload = await buildPreviewSessionPayload(session, conversation, {
@@ -1400,6 +1507,10 @@ router.post('/:id/preview-session/message', authenticate, async (req: AuthReques
       persona: resolvedPersona,
       profileId: resolvedProfileId,
     });
+    const meta = ensurePreviewMeta(session);
+    if (!meta.source) {
+      meta.source = 'preview';
+    }
 
     const previousVars = session.state?.vars && typeof session.state.vars === 'object'
       ? { ...session.state.vars }

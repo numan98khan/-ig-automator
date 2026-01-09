@@ -164,6 +164,27 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     }));
   }, []);
 
+  const loadPersistedSimulation = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      const response = await automationAPI.getSimulationSession(workspaceId);
+      if (!response.session) return;
+      applyPreviewPayload({ ...response, messages: response.messages });
+      setSelectedAutomation(response.selectedAutomation || null);
+      setDiagnostics(response.diagnostics || []);
+      if (response.profile?._id) {
+        setSelectedProfileId(response.profile._id);
+        setPersonaDraft(profileToPersona(response.profile));
+      } else if (response.persona) {
+        setSelectedProfileId(null);
+        setPersonaDraft(response.persona);
+      }
+      setResetPending(false);
+    } catch (err) {
+      console.error('Failed to load simulation session:', err);
+    }
+  }, [applyPreviewPayload, workspaceId]);
+
   const loadProfiles = useCallback(async (automationId: string) => {
     setProfilesLoading(true);
     setProfilesError(null);
@@ -257,12 +278,27 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     setResetPending(false);
   }, [workspaceId]);
 
+  useEffect(() => {
+    if (!workspaceId) return;
+    void loadPersistedSimulation();
+  }, [loadPersistedSimulation, workspaceId]);
+
   const handlePreviewInputChange = (value: string) => {
     setPreviewInputValue(value);
     if (error) setError(null);
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
+    if (workspaceId) {
+      try {
+        await automationAPI.resetSimulationSession({
+          workspaceId,
+          sessionId: previewSessionId || undefined,
+        });
+      } catch (err) {
+        console.error('Failed to reset simulation session:', err);
+      }
+    }
     setPreviewMessages([]);
     setPreviewSessionId(null);
     setPreviewSessionStatus(null);

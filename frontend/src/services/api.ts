@@ -302,6 +302,15 @@ export type AutomationSimulationResponse = AutomationPreviewSessionState & {
   diagnostics?: AutomationSimulationDiagnostic[];
 };
 
+export type AutomationSimulationSessionResponse = AutomationPreviewSessionState & {
+  sessionId?: string;
+  conversationId?: string;
+  status?: 'active' | 'paused' | 'completed' | 'handoff';
+  messages?: AutomationPreviewMessage[];
+  selectedAutomation?: AutomationSimulationSelection;
+  diagnostics?: AutomationSimulationDiagnostic[];
+};
+
 export interface AutomationPreviewSession extends AutomationPreviewSessionState {
   sessionId: string;
   conversationId: string;
@@ -1182,6 +1191,19 @@ export const automationAPI = {
     persona?: AutomationPreviewPersona;
   }): Promise<AutomationSimulationResponse> => {
     const { data } = await api.post('/api/automations/simulate/message', payload);
+    return data;
+  },
+  getSimulationSession: async (workspaceId: string): Promise<AutomationSimulationSessionResponse> => {
+    const { data } = await api.get('/api/automations/simulate/session', {
+      params: { workspaceId },
+    });
+    return data;
+  },
+  resetSimulationSession: async (payload: {
+    workspaceId: string;
+    sessionId?: string;
+  }): Promise<{ success: boolean }> => {
+    const { data } = await api.post('/api/automations/simulate/reset', payload);
     return data;
   },
 };

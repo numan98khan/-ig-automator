@@ -1654,13 +1654,6 @@ async function executeFlowPlan(params: {
     let forcedNextNodeId: string | undefined;
 
     if (shouldLogNode(step)) {
-      if (deliveryMode === 'preview') {
-        appendPreviewMetaEvent(session, {
-          type: 'node_start',
-          message: `Entered ${step.id || stepType || 'node'}`,
-          details: { nodeId: step.id, type: stepType },
-        });
-      }
       logNodeEvent('Node start', {
         ...logContext,
         nodeId: step.id,
@@ -2043,13 +2036,6 @@ async function executeFlowPlan(params: {
     executedSteps += 1;
 
     if (shouldLogNode(step)) {
-      if (deliveryMode === 'preview') {
-        appendPreviewMetaEvent(session, {
-          type: 'node_complete',
-          message: `Completed ${step.id || stepType || 'node'}`,
-          details: { nodeId: step.id, type: stepType },
-        });
-      }
       logNodeEvent('Node complete', {
         ...logContext,
         nodeId: step.id,
