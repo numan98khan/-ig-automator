@@ -1,20 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
-  Copy,
-  Loader2,
   PauseCircle,
   RefreshCcw,
-  Save,
-  Star,
   StopCircle,
-  Trash2,
-  UserCircle2,
 } from 'lucide-react';
 import {
   AutomationInstance,
-  AutomationPreviewEvent,
   AutomationPreviewMessage,
   AutomationPreviewPersona,
   AutomationPreviewProfile,
@@ -22,10 +15,15 @@ import {
   automationAPI,
 } from '../../services/api';
 import { AutomationPreviewPhone } from './AutomationPreviewPhone';
+import {
+  AutomationPreviewPersonaPanel,
+  AutomationPreviewStatePanel,
+  AutomationPreviewTimelinePanel,
+  mergePreviewEvents,
+} from './AutomationPreviewPanels';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { Input } from '../../components/ui/Input';
 
 type AutomationDetailsViewProps = {
   automation: AutomationInstance;
@@ -52,49 +50,6 @@ const profileToPersona = (profile: AutomationPreviewProfile): AutomationPreviewP
   userId: profile.userId || '',
   avatarUrl: profile.avatarUrl || '',
 });
-
-const formatFieldValue = (value: any) => {
-  if (value === null || value === undefined) return '-';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-};
-
-const formatTime = (value?: string) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
-
-const EVENT_BADGES: Record<string, { label: string; variant: 'primary' | 'secondary' | 'success' | 'warning' | 'danger' | 'neutral' }> = {
-  node_start: { label: 'Node start', variant: 'primary' },
-  node_complete: { label: 'Node complete', variant: 'success' },
-  field_update: { label: 'Field', variant: 'secondary' },
-  field_clear: { label: 'Field', variant: 'warning' },
-  tag_added: { label: 'Tag', variant: 'success' },
-  tag_removed: { label: 'Tag', variant: 'warning' },
-  error: { label: 'Error', variant: 'danger' },
-  info: { label: 'Info', variant: 'neutral' },
-};
-
-const EVENT_FILTER_KEYS = Object.keys(EVENT_BADGES);
-
-const buildDefaultEventFilters = () =>
-  EVENT_FILTER_KEYS.reduce((acc, key) => ({ ...acc, [key]: true }), {} as Record<string, boolean>);
-
-const NODE_TYPE_BADGES: Record<string, { label: string; badgeClass: string; dotClass: string }> = {
-  send_message: { label: 'Send Message', badgeClass: 'bg-sky-500/10 text-sky-600', dotClass: 'bg-sky-500' },
-  ai_reply: { label: 'AI Reply', badgeClass: 'bg-indigo-500/10 text-indigo-600', dotClass: 'bg-indigo-500' },
-  ai_agent: { label: 'AI Agent', badgeClass: 'bg-violet-500/10 text-violet-600', dotClass: 'bg-violet-500' },
-  detect_intent: { label: 'Detect Intent', badgeClass: 'bg-emerald-500/10 text-emerald-600', dotClass: 'bg-emerald-500' },
-  handoff: { label: 'Handoff', badgeClass: 'bg-amber-500/10 text-amber-600', dotClass: 'bg-amber-500' },
-  router: { label: 'Router', badgeClass: 'bg-cyan-500/10 text-cyan-600', dotClass: 'bg-cyan-500' },
-};
 
 export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   automation,
@@ -134,7 +89,6 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [rightPaneTab, setRightPaneTab] = useState<'persona' | 'state' | 'timeline'>('persona');
   const [isTyping, setIsTyping] = useState(false);
   const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
-  const [eventFilters, setEventFilters] = useState<Record<string, boolean>>(buildDefaultEventFilters);
   const previewSessionIdRef = useRef<string | null>(null);
   const previewToastTimerRef = useRef<number | null>(null);
   const canViewTimeline = Boolean(canViewExecutionTimeline);
@@ -203,7 +157,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       session: payload.session !== undefined ? payload.session : prev.session,
       conversation: payload.conversation !== undefined ? payload.conversation : prev.conversation,
       currentNode: payload.currentNode !== undefined ? payload.currentNode : prev.currentNode,
-      events: payload.events !== undefined ? payload.events : prev.events,
+      events: mergePreviewEvents(prev.events || [], payload.events),
       profile: payload.profile !== undefined ? payload.profile : prev.profile,
       persona: payload.persona !== undefined ? payload.persona : prev.persona,
     }));
@@ -436,6 +390,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   };
 
   const handlePreviewReset = async () => {
+    setPreviewState((prev) => ({ ...prev, events: [] }));
     await startPreviewSession({
       reset: true,
       profileId: selectedProfileId || undefined,
@@ -550,42 +505,6 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     }
   };
 
-  const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      setPersonaDraft((prev) => ({ ...prev, avatarUrl: result }));
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleClearAvatar = () => {
-    setPersonaDraft((prev) => ({ ...prev, avatarUrl: '' }));
-  };
-
-  const personaInitials = (personaDraft.name || 'MT').slice(0, 2).toUpperCase();
-  const fieldEntries = useMemo(() => {
-    const vars = previewState.session?.state?.vars || {};
-    return Object.entries(vars)
-      .filter(([key]) => !key.startsWith('agent'))
-      .map(([key, value]) => ({ key, value: formatFieldValue(value) }));
-  }, [previewState.session?.state?.vars]);
-  const agentSlotEntries = useMemo(() => {
-    const slots = previewState.session?.state?.vars?.agentSlots;
-    if (!slots || typeof slots !== 'object') return [];
-    return Object.entries(slots).map(([key, value]) => ({ key, value: formatFieldValue(value) }));
-  }, [previewState.session?.state?.vars?.agentSlots]);
-  const agentMissingSlots = useMemo(() => {
-    const missing = previewState.session?.state?.vars?.agentMissingSlots;
-    if (!missing) return [];
-    return Array.isArray(missing) ? missing.filter(Boolean) : [];
-  }, [previewState.session?.state?.vars?.agentMissingSlots]);
-  const tags = previewState.conversation?.tags || [];
-  const events: AutomationPreviewEvent[] = previewState.events || [];
-  const filteredEvents = events.filter((event) => eventFilters[event.type] ?? true);
-
   const sendDisabled =
     previewSending ||
     previewInputValue.trim().length === 0 ||
@@ -663,272 +582,6 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     </Card>
   );
 
-  const renderPersonaCard = () => (
-    <Card className="flex flex-col min-h-0 flex-1 w-full">
-      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto pt-6">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="h-14 w-14 rounded-full overflow-hidden bg-muted/60 flex items-center justify-center text-sm font-semibold text-muted-foreground">
-            {personaDraft.avatarUrl ? (
-              <img src={personaDraft.avatarUrl} alt={personaDraft.name} className="h-full w-full object-cover" />
-            ) : (
-              personaInitials
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-semibold text-muted-foreground uppercase">Avatar</span>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="cursor-pointer">
-                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
-                <span className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">
-                  Upload
-                </span>
-              </label>
-              <button
-                type="button"
-                onClick={handleClearAvatar}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Input
-            label="Display name"
-            value={personaDraft.name}
-            onChange={(event) => setPersonaDraft((prev) => ({ ...prev, name: event.target.value }))}
-          />
-          <Input
-            label="Mock IG handle"
-            value={personaDraft.handle}
-            onChange={(event) => setPersonaDraft((prev) => ({ ...prev, handle: event.target.value }))}
-          />
-          <Input
-            label="Mock user ID"
-            value={personaDraft.userId}
-            onChange={(event) => setPersonaDraft((prev) => ({ ...prev, userId: event.target.value }))}
-          />
-        </div>
-
-        <div className="rounded-lg border border-border/60 bg-background/60 p-3 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold uppercase text-muted-foreground">Saved profiles</span>
-            <div className="flex items-center gap-2 text-xs">
-              {profilesLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-              {profilesError && <span className="text-destructive">{profilesError}</span>}
-            </div>
-          </div>
-          <select
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={selectedProfileId || 'custom'}
-            onChange={(event) => void handleSelectProfile(event.target.value)}
-          >
-            <option value="custom">Custom (unsaved)</option>
-            {profiles.map((profile) => (
-              <option key={profile._id} value={profile._id}>
-                {profile.name}{profile.isDefault ? ' (Default)' : ''}
-              </option>
-            ))}
-          </select>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<UserCircle2 className="w-4 h-4" />}
-              onClick={() => {
-                setSelectedProfileId(null);
-                setPersonaDraft(DEFAULT_PERSONA);
-                void syncPersona({ persona: DEFAULT_PERSONA });
-              }}
-            >
-              New
-            </Button>
-            <Button
-              size="sm"
-              leftIcon={<Save className="w-4 h-4" />}
-              onClick={handleSaveProfile}
-              isLoading={profileBusy}
-            >
-              Save
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Copy className="w-4 h-4" />}
-              onClick={handleDuplicateProfile}
-              disabled={!selectedProfileId || profileBusy}
-            >
-              Duplicate
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Star className="w-4 h-4" />}
-              onClick={handleSetDefaultProfile}
-              disabled={!selectedProfileId || profileBusy}
-            >
-              Set default
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              leftIcon={<Trash2 className="w-4 h-4" />}
-              onClick={handleDeleteProfile}
-              disabled={!selectedProfileId || profileBusy}
-            >
-              Delete
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-
-  const renderStateCard = () => (
-    <Card className="flex flex-col min-h-0 flex-1 w-full">
-      <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto pt-6">
-        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-          <div className="text-xs font-semibold uppercase text-muted-foreground">Current step</div>
-          {previewState.currentNode ? (() => {
-            const nodeTypeKey = previewState.currentNode.type?.toLowerCase() || '';
-            const nodeMeta = NODE_TYPE_BADGES[nodeTypeKey];
-            const nodeLabel = previewState.currentNode.label || previewState.currentNode.id || 'Active node';
-            const nodeTypeLabel = nodeMeta?.label || previewState.currentNode.type?.replace(/_/g, ' ') || 'Step';
-            const badgeClass = nodeMeta?.badgeClass || 'bg-muted/60 text-muted-foreground';
-            const dotClass = nodeMeta?.dotClass || 'bg-muted-foreground';
-            return (
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`h-2.5 w-2.5 rounded-full ${dotClass}`} />
-                  <div className="text-sm font-semibold truncate">{nodeLabel}</div>
-                </div>
-                <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${badgeClass}`}>
-                  {nodeTypeLabel}
-                </span>
-              </div>
-            );
-          })() : (
-            <div className="mt-2 text-xs text-muted-foreground">Waiting for the next trigger.</div>
-          )}
-        </div>
-
-        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-          <div className="text-xs font-semibold uppercase text-muted-foreground">AI slots</div>
-          {agentSlotEntries.length > 0 ? (
-            <div className="mt-2 grid gap-2">
-              {agentSlotEntries.map((slot) => (
-                <div key={slot.key} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{slot.key}</span>
-                  <span className="font-medium text-right">{slot.value}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-2 text-xs text-muted-foreground">No AI slots collected yet.</div>
-          )}
-          {agentMissingSlots.length > 0 && (
-            <div className="mt-3 text-xs text-muted-foreground">
-              Missing slots: <span className="font-medium text-foreground">{agentMissingSlots.join(', ')}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-          <div className="text-xs font-semibold uppercase text-muted-foreground">Collected fields</div>
-          {fieldEntries.length > 0 ? (
-            <div className="mt-2 grid gap-2">
-              {fieldEntries.map((field) => (
-                <div key={field.key} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{field.key}</span>
-                  <span className="font-medium text-right">{field.value}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-2 text-xs text-muted-foreground">No fields collected yet.</div>
-          )}
-        </div>
-
-        <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-          <div className="text-xs font-semibold uppercase text-muted-foreground">Tags</div>
-          {tags.length > 0 ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <Badge key={tag} variant="secondary">{tag}</Badge>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-2 text-xs text-muted-foreground">No tags applied yet.</div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-
-  const renderTimelineCard = () => (
-    <Card className="flex flex-col min-h-0 flex-1 w-full">
-      <CardContent className="flex-1 min-h-0 overflow-y-auto pt-6">
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <button
-            type="button"
-            onClick={() => setEventFilters(buildDefaultEventFilters())}
-            className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
-          >
-            All
-          </button>
-          <button
-            type="button"
-            onClick={() => setEventFilters(EVENT_FILTER_KEYS.reduce((acc, key) => ({ ...acc, [key]: false }), {} as Record<string, boolean>))}
-            className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
-          >
-            None
-          </button>
-          {EVENT_FILTER_KEYS.map((key) => {
-            const badge = EVENT_BADGES[key];
-            const active = eventFilters[key] !== false;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setEventFilters((prev) => ({ ...prev, [key]: !active }))}
-                className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
-                  active
-                    ? 'border-primary/40 bg-primary/10 text-primary'
-                    : 'border-border text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {badge?.label || key}
-              </button>
-            );
-          })}
-        </div>
-        {filteredEvents.length > 0 ? (
-          <div className="space-y-3 pr-1">
-            {filteredEvents.map((event) => {
-              const badge = EVENT_BADGES[event.type] || EVENT_BADGES.info;
-              return (
-                <div key={event.id} className="flex items-start gap-3">
-                  <Badge variant={badge.variant}>{badge.label}</Badge>
-                  <div className="flex-1">
-                    <div className="text-sm">{event.message}</div>
-                    <div className="text-xs text-muted-foreground">{formatTime(event.createdAt)}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : events.length > 0 ? (
-          <div className="text-xs text-muted-foreground">No events match the selected filters.</div>
-        ) : (
-          <div className="text-xs text-muted-foreground">No events yet.</div>
-        )}
-      </CardContent>
-    </Card>
-  );
-
   const renderRightPane = () => (
     <div className="flex flex-col gap-4 min-h-0 h-full w-full">
       <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1 w-full">
@@ -951,11 +604,35 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
           </button>
         ))}
       </div>
-      {rightPaneTab === 'persona'
-        ? renderPersonaCard()
-        : rightPaneTab === 'timeline'
-          ? renderTimelineCard()
-          : renderStateCard()}
+      {rightPaneTab === 'persona' ? (
+        <AutomationPreviewPersonaPanel
+          persona={personaDraft}
+          profiles={profiles}
+          profilesLoading={profilesLoading}
+          profilesError={profilesError}
+          selectedProfileId={selectedProfileId}
+          profileBusy={profileBusy}
+          onSelectProfile={handleSelectProfile}
+          onNewProfile={() => {
+            setSelectedProfileId(null);
+            setPersonaDraft(DEFAULT_PERSONA);
+            void syncPersona({ persona: DEFAULT_PERSONA });
+          }}
+          onSaveProfile={handleSaveProfile}
+          onDuplicateProfile={handleDuplicateProfile}
+          onSetDefaultProfile={handleSetDefaultProfile}
+          onDeleteProfile={handleDeleteProfile}
+          onPersonaChange={setPersonaDraft}
+        />
+      ) : rightPaneTab === 'timeline' ? (
+        <AutomationPreviewTimelinePanel events={previewState.events || []} />
+      ) : (
+        <AutomationPreviewStatePanel
+          currentNode={previewState.currentNode}
+          session={previewState.session}
+          conversation={previewState.conversation}
+        />
+      )}
     </div>
   );
 
