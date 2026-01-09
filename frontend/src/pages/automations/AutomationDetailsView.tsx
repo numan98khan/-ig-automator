@@ -33,6 +33,7 @@ type AutomationDetailsViewProps = {
   accountHandle: string;
   accountAvatarUrl?: string;
   accountInitial: string;
+  canViewExecutionTimeline?: boolean;
   onBack: () => void;
   onEdit: (automation: AutomationInstance) => void;
   embedded?: boolean;
@@ -96,6 +97,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   accountHandle,
   accountAvatarUrl,
   accountInitial,
+  canViewExecutionTimeline = false,
   onBack,
   onEdit,
   embedded = false,
@@ -129,6 +131,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
   const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
   const previewSessionIdRef = useRef<string | null>(null);
   const previewToastTimerRef = useRef<number | null>(null);
+  const canViewTimeline = Boolean(canViewExecutionTimeline);
 
   const clearPreviewToast = useCallback(() => {
     if (previewToastTimerRef.current) {
@@ -318,6 +321,12 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       active = false;
     };
   }, [automation._id, clearPreviewToast, loadProfiles, startPreviewSession]);
+
+  useEffect(() => {
+    if (!canViewTimeline && rightPaneTab === 'timeline') {
+      setRightPaneTab('persona');
+    }
+  }, [canViewTimeline, rightPaneTab]);
 
   const previewStateSessionId = previewState.session?._id;
 
@@ -883,7 +892,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         {([
           { id: 'persona', label: 'Mock Persona' },
           { id: 'state', label: 'Automation State' },
-          { id: 'timeline', label: 'Execution Timeline' },
+          ...(canViewTimeline ? [{ id: 'timeline', label: 'Execution Timeline' }] : []),
         ] as const).map((tab) => (
           <button
             key={tab.id}

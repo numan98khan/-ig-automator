@@ -16,7 +16,7 @@ import {
   resolveLatestTemplateVersion,
   resolveAutomationSelection,
 } from '../services/automationService';
-import { assertWorkspaceLimit } from '../services/tierService';
+import { assertWorkspaceLimit, getWorkspaceOwnerTier } from '../services/tierService';
 
 const router = express.Router();
 
@@ -540,7 +540,11 @@ const ensurePreviewSession = async (params: {
   return { session, conversation };
 };
 
-const loadInstanceWithAccess = async (id: string, userId: string, res: Response) => {
+const loadInstanceWithAccess = async (
+  id: string,
+  userId: string,
+  res: Response,
+): Promise<{ instance: any } | null> => {
   const instance = await AutomationInstance.findById(id);
   if (!instance) {
     res.status(404).json({ error: 'Automation instance not found' });
@@ -551,10 +555,19 @@ const loadInstanceWithAccess = async (id: string, userId: string, res: Response)
     res.status(403).json({ error: 'Access denied' });
     return null;
   }
-  return instance;
+  return { instance };
 };
 
-const buildPreviewSessionPayload = async (session: any, conversation: any) => {
+const canViewExecutionTimeline = async (workspaceId: string) => {
+  const { limits } = await getWorkspaceOwnerTier(workspaceId);
+  return Boolean(limits?.executionTimeline);
+};
+
+const buildPreviewSessionPayload = async (
+  session: any,
+  conversation: any,
+  options?: { includeEvents?: boolean },
+) => {
   const sessionDoc = session?.toObject ? session.toObject() : session;
   const versionDoc = sessionDoc?.templateVersionId
     ? await FlowTemplateVersion.findById(sessionDoc.templateVersionId)
@@ -562,7 +575,8 @@ const buildPreviewSessionPayload = async (session: any, conversation: any) => {
       .lean()
     : null;
   const currentNode = sessionDoc && versionDoc ? buildCurrentNodeSummary(sessionDoc, versionDoc) : null;
-  const events = sessionDoc ? await buildPreviewEvents(sessionDoc, versionDoc) : [];
+  const includeEvents = options?.includeEvents !== false;
+  const events = includeEvents && sessionDoc ? await buildPreviewEvents(sessionDoc, versionDoc) : [];
   const profileId = sessionDoc?.state?.previewMeta?.profileId;
   const profile = profileId && mongoose.Types.ObjectId.isValid(profileId)
     ? await AutomationPreviewProfile.findById(profileId).lean()
@@ -719,7 +733,9 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
     }
 
     await session.save();
-    const payload = await buildPreviewSessionPayload(session, conversation);
+    const payload = await buildPreviewSessionPayload(session, conversation, {
+      includeEvents: await canViewExecutionTimeline(workspaceId),
+    });
 
     return res.json({
       success: result.success,
@@ -908,8 +924,9 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
 
 router.get('/:id/preview-profiles', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const instance = await loadInstanceWithAccess(req.params.id, req.userId!, res);
-    if (!instance) return;
+    const access = await loadInstanceWithAccess(req.params.id, req.userId!, res);
+    if (!access) return;
+    const { instance } = access;
 
     const profiles = await AutomationPreviewProfile.find({ workspaceId: instance.workspaceId })
       .sort({ isDefault: -1, createdAt: -1 })
@@ -924,8 +941,9 @@ router.get('/:id/preview-profiles', authenticate, async (req: AuthRequest, res: 
 
 router.post('/:id/preview-profiles', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const instance = await loadInstanceWithAccess(req.params.id, req.userId!, res);
-    if (!instance) return;
+    const access = await loadInstanceWithAccess(req.params.id, req.userId!, res);
+    if (!access) return;
+    const { instance } = access;
 
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     const handle = normalizeHandle(typeof req.body?.handle === 'string' ? req.body.handle : undefined);
@@ -965,8 +983,9 @@ router.post('/:id/preview-profiles', authenticate, async (req: AuthRequest, res:
 
 router.put('/:id/preview-profiles/:profileId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const instance = await loadInstanceWithAccess(req.params.id, req.userId!, res);
-    if (!instance) return;
+    const access = await loadInstanceWithAccess(req.params.id, req.userId!, res);
+    if (!access) return;
+    const { instance } = access;
 
     const profile = await AutomationPreviewProfile.findOne({
       _id: req.params.profileId,
@@ -1001,8 +1020,9 @@ router.put('/:id/preview-profiles/:profileId', authenticate, async (req: AuthReq
 
 router.post('/:id/preview-profiles/:profileId/duplicate', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const instance = await loadInstanceWithAccess(req.params.id, req.userId!, res);
-    if (!instance) return;
+    const access = await loadInstanceWithAccess(req.params.id, req.userId!, res);
+    if (!access) return;
+    const { instance } = access;
 
     const profile = await AutomationPreviewProfile.findOne({
       _id: req.params.profileId,
@@ -1030,8 +1050,9 @@ router.post('/:id/preview-profiles/:profileId/duplicate', authenticate, async (r
 
 router.post('/:id/preview-profiles/:profileId/default', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const instance = await loadInstanceWithAccess(req.params.id, req.userId!, res);
-    if (!instance) return;
+    const access = await loadInstanceWithAccess(req.params.id, req.userId!, res);
+    if (!access) return;
+    const { instance } = access;
 
     const profile = await AutomationPreviewProfile.findOneAndUpdate(
       { _id: req.params.profileId, workspaceId: instance.workspaceId },
@@ -1056,8 +1077,9 @@ router.post('/:id/preview-profiles/:profileId/default', authenticate, async (req
 
 router.delete('/:id/preview-profiles/:profileId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const instance = await loadInstanceWithAccess(req.params.id, req.userId!, res);
-    if (!instance) return;
+    const access = await loadInstanceWithAccess(req.params.id, req.userId!, res);
+    if (!access) return;
+    const { instance } = access;
 
     const profile = await AutomationPreviewProfile.findOneAndDelete({
       _id: req.params.profileId,
@@ -1085,8 +1107,9 @@ router.delete('/:id/preview-profiles/:profileId', authenticate, async (req: Auth
 
 router.post('/:id/preview-session/persona', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const instance = await loadInstanceWithAccess(req.params.id, req.userId!, res);
-    if (!instance) return;
+    const access = await loadInstanceWithAccess(req.params.id, req.userId!, res);
+    if (!access) return;
+    const { instance } = access;
 
     const { sessionId, profileId, persona } = req.body || {};
     const session = sessionId
@@ -1123,7 +1146,9 @@ router.post('/:id/preview-session/persona', authenticate, async (req: AuthReques
     });
     await session.save();
 
-    const payload = await buildPreviewSessionPayload(session, conversation);
+    const payload = await buildPreviewSessionPayload(session, conversation, {
+      includeEvents: await canViewExecutionTimeline(instance.workspaceId.toString()),
+    });
     res.json(payload);
   } catch (error) {
     console.error('Update preview persona error:', error);
@@ -1174,7 +1199,9 @@ router.post('/:id/preview-session', authenticate, async (req: AuthRequest, res: 
     });
 
     const messages = await loadPreviewMessages(conversation._id);
-    const payload = await buildPreviewSessionPayload(session, conversation);
+    const payload = await buildPreviewSessionPayload(session, conversation, {
+      includeEvents: await canViewExecutionTimeline(instance.workspaceId.toString()),
+    });
     return res.json({
       sessionId: session._id,
       conversationId: conversation._id,
@@ -1190,8 +1217,9 @@ router.post('/:id/preview-session', authenticate, async (req: AuthRequest, res: 
 
 router.get('/:id/preview-session/status', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const instance = await loadInstanceWithAccess(req.params.id, req.userId!, res);
-    if (!instance) return;
+    const access = await loadInstanceWithAccess(req.params.id, req.userId!, res);
+    if (!access) return;
+    const { instance } = access;
 
     const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
     const session = sessionId
@@ -1204,7 +1232,9 @@ router.get('/:id/preview-session/status', authenticate, async (req: AuthRequest,
     }
 
     const conversation = await Conversation.findById(session.conversationId);
-    const payload = await buildPreviewSessionPayload(session, conversation);
+    const payload = await buildPreviewSessionPayload(session, conversation, {
+      includeEvents: await canViewExecutionTimeline(instance.workspaceId.toString()),
+    });
     res.json(payload);
   } catch (error) {
     console.error('Get preview session status error:', error);
@@ -1443,7 +1473,9 @@ router.post('/:id/preview-session/message', authenticate, async (req: AuthReques
     }
 
     await session.save();
-    const payload = await buildPreviewSessionPayload(session, conversation);
+    const payload = await buildPreviewSessionPayload(session, conversation, {
+      includeEvents: await canViewExecutionTimeline(instance.workspaceId.toString()),
+    });
     return res.json({
       success: result.success,
       error: result.error,

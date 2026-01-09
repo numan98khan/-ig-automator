@@ -346,6 +346,12 @@ type AutomationMatchResult = {
   matchedTrigger: FlowTriggerDefinition;
 };
 
+const CATEGORY_MISMATCH_REASON: Record<'keyword' | 'intent' | 'unqualified', string> = {
+  keyword: 'keyword_bucket_mismatch',
+  intent: 'intent_bucket_mismatch',
+  unqualified: 'unqualified_bucket_mismatch',
+};
+
 export async function resolveAutomationSelection(params: {
   workspaceId: string;
   triggerType: TriggerType;
@@ -392,6 +398,8 @@ export async function resolveAutomationSelection(params: {
   const versionMap = new Map(versions.map(version => [version._id.toString(), version]));
 
   const diagnostics: AutomationMatchDiagnostic[] = [];
+  const bucketDiagnostics: AutomationMatchDiagnostic[] = [];
+  const bucketedInstanceIds = new Set<string>();
   const candidates: Array<{
     instance: any;
     version: any;
@@ -514,54 +522,74 @@ export async function resolveAutomationSelection(params: {
 
       categoryDiagnostics.push({
         ...candidate.diagnosticBase,
-        reason: 'trigger_config_mismatch',
+        reason: CATEGORY_MISMATCH_REASON[category],
         templateVersionId: candidate.version._id?.toString(),
         triggers: summarizeTriggers(eligibleTriggers),
         messageContext: contextSummary,
       });
     }
 
-    return null;
+    return { match: undefined, diagnostics: categoryDiagnostics };
+  };
+
+  const appendBucketDiagnostics = (items: AutomationMatchDiagnostic[]) => {
+    items.forEach((item) => {
+      if (item.instanceId) {
+        bucketedInstanceIds.add(item.instanceId);
+      }
+      bucketDiagnostics.push(item);
+    });
   };
 
   const keywordMatch = await findMatch('keyword');
-  if (keywordMatch) {
+  appendBucketDiagnostics(keywordMatch.diagnostics);
+  if (keywordMatch.match) {
     return {
       match: keywordMatch.match,
-      diagnostics: [...diagnostics, ...keywordMatch.diagnostics],
+      diagnostics: [...diagnostics, ...bucketDiagnostics],
       evaluated: instances.length,
     };
   }
 
   const intentMatch = await findMatch('intent');
-  if (intentMatch) {
+  appendBucketDiagnostics(intentMatch.diagnostics);
+  if (intentMatch.match) {
     return {
       match: intentMatch.match,
-      diagnostics: [...diagnostics, ...intentMatch.diagnostics],
+      diagnostics: [...diagnostics, ...bucketDiagnostics],
       evaluated: instances.length,
     };
   }
 
   const unqualifiedMatch = await findMatch('unqualified');
-  if (unqualifiedMatch) {
+  appendBucketDiagnostics(unqualifiedMatch.diagnostics);
+  if (unqualifiedMatch.match) {
     return {
       match: unqualifiedMatch.match,
-      diagnostics: [...diagnostics, ...unqualifiedMatch.diagnostics],
+      diagnostics: [...diagnostics, ...bucketDiagnostics],
       evaluated: instances.length,
     };
   }
+
+  const fallbackDiagnostics = candidates
+    .filter((candidate) => {
+      const instanceId = candidate.diagnosticBase.instanceId;
+      return !instanceId || !bucketedInstanceIds.has(instanceId);
+    })
+    .map((candidate) => ({
+      ...candidate.diagnosticBase,
+      reason: 'no_priority_bucket',
+      templateVersionId: candidate.version._id?.toString(),
+      triggers: summarizeTriggers(candidate.typedTriggers),
+      messageContext: contextSummary,
+    }));
 
   return {
     match: undefined,
     diagnostics: [
       ...diagnostics,
-      ...candidates.map((candidate) => ({
-        ...candidate.diagnosticBase,
-        reason: 'trigger_config_mismatch',
-        templateVersionId: candidate.version._id?.toString(),
-        triggers: summarizeTriggers(candidate.typedTriggers),
-        messageContext: contextSummary,
-      })),
+      ...bucketDiagnostics,
+      ...fallbackDiagnostics,
     ],
     evaluated: instances.length,
   };

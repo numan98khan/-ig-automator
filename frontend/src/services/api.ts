@@ -561,6 +561,7 @@ export interface TierLimits {
   crm?: boolean;
   integrations?: boolean;
   flowBuilder?: boolean;
+  executionTimeline?: boolean;
 }
 
 export interface Tier {

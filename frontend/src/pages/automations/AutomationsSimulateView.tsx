@@ -34,6 +34,7 @@ type AutomationsSimulateViewProps = {
   accountAvatarUrl?: string;
   accountInitial: string;
   automations?: AutomationInstance[];
+  canViewExecutionTimeline?: boolean;
 };
 
 const DEFAULT_PERSONA: AutomationPreviewPersona = {
@@ -58,6 +59,10 @@ const formatDiagnosticReason = (reason: string) => {
     no_triggers_defined: 'No triggers defined',
     trigger_type_mismatch: 'Trigger type mismatch',
     trigger_config_mismatch: 'Trigger config mismatch',
+    keyword_bucket_mismatch: 'Keyword bucket mismatch',
+    intent_bucket_mismatch: 'Intent bucket mismatch',
+    unqualified_bucket_mismatch: 'Unqualified bucket mismatch',
+    no_priority_bucket: 'Not eligible for priority buckets',
   };
   return map[reason] || reason.replace(/_/g, ' ');
 };
@@ -121,6 +126,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   accountAvatarUrl,
   accountInitial,
   automations,
+  canViewExecutionTimeline = false,
 }) => {
   const [previewSessionId, setPreviewSessionId] = useState<string | null>(null);
   const [previewMessages, setPreviewMessages] = useState<AutomationPreviewMessage[]>([]);
@@ -150,7 +156,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [personaDraft, setPersonaDraft] = useState<AutomationPreviewPersona>(DEFAULT_PERSONA);
   const [profileBusy, setProfileBusy] = useState(false);
-
+  const canViewTimeline = Boolean(canViewExecutionTimeline);
   const profileAutomationId = selectedAutomation?.id
     || automations?.find((automation) => automation.isActive)?._id
     || automations?.[0]?._id
@@ -263,6 +269,12 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
       active = false;
     };
   }, [loadProfiles, profileAutomationId, selectedProfileId]);
+
+  useEffect(() => {
+    if (!canViewTimeline && rightPaneTab === 'timeline') {
+      setRightPaneTab('persona');
+    }
+  }, [canViewTimeline, rightPaneTab]);
 
   useEffect(() => {
     setPreviewMessages([]);
@@ -803,7 +815,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
         {([
           { id: 'persona', label: 'Mock Persona' },
           { id: 'state', label: 'Automation State' },
-          { id: 'timeline', label: 'Execution Timeline' },
+          ...(canViewTimeline ? [{ id: 'timeline', label: 'Execution Timeline' }] : []),
         ] as const).map((tab) => (
           <button
             key={tab.id}

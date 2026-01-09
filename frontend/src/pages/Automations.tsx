@@ -198,6 +198,7 @@ const Automations: React.FC = () => {
   const isSimulateView = activeSection === 'simulate';
   const isAutomationFullHeightView = isCreateView || isDetailsView;
   const isCustomAutomationEnabled = workspaceTier?.limits?.flowBuilder !== false;
+  const canViewExecutionTimeline = Boolean(workspaceTier?.limits?.executionTimeline);
   const automationLimit = workspaceTier?.limits?.automations;
   const automationCount = automations.length;
   const isAutomationLimitReached = typeof automationLimit === 'number' && automationCount >= automationLimit;
@@ -835,6 +836,7 @@ const Automations: React.FC = () => {
                   accountHandle={accountHandle}
                   accountAvatarUrl={accountAvatarUrl}
                   accountInitial={accountInitial}
+                  canViewExecutionTimeline={canViewExecutionTimeline}
                   onBack={() => {
                     setAutomationView('list');
                     setSelectedAutomation(null);
@@ -869,6 +871,7 @@ const Automations: React.FC = () => {
               accountAvatarUrl={accountAvatarUrl}
               accountInitial={accountInitial}
               automations={automations}
+              canViewExecutionTimeline={canViewExecutionTimeline}
             />
           )}
 

@@ -9,6 +9,7 @@ export interface TierLimits {
   crm?: boolean;
   integrations?: boolean;
   flowBuilder?: boolean;
+  executionTimeline?: boolean;
 }
 
 export type UsageResourceType =
@@ -20,4 +21,4 @@ export type UsageResourceType =
 
 export type WorkspaceMemberRole = 'owner' | 'admin' | 'agent' | 'viewer';
 
-export type TierFeature = 'crm' | 'integrations' | 'flowBuilder';
+export type TierFeature = 'crm' | 'integrations' | 'flowBuilder' | 'executionTimeline';
