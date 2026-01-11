@@ -655,9 +655,20 @@ export interface WorkspaceSettings {
   defaultReplyLanguage?: string;
   uiLanguage: string;
   businessName?: string;
+  businessDescription?: string;
   businessHours?: string;
   businessTone?: string;
   businessLocation?: string;
+  businessWebsite?: string;
+  businessCatalog?: Array<{
+    name: string;
+    description?: string;
+    price?: string;
+  }>;
+  businessDocuments?: Array<{
+    title: string;
+    url?: string;
+  }>;
   allowHashtags?: boolean;
   allowEmojis?: boolean;
   maxReplySentences?: number;

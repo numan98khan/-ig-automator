@@ -23,6 +23,7 @@ import { AutomationsHumanAlerts } from './automations/AutomationsHumanAlerts';
 import { AutomationsSimulateView } from './automations/AutomationsSimulateView';
 import Knowledge from './Knowledge';
 import { AutomationsIntegrationsView } from './automations/AutomationsIntegrationsView';
+import { AutomationsBusinessProfileView } from './automations/AutomationsBusinessProfileView';
 import { FLOW_GOAL_FILTERS } from './automations/constants';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -163,7 +164,7 @@ const Automations: React.FC = () => {
   const { activeAccount } = useAccountContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeSection, setActiveSection] = useState<
-    'automations' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
+    'automations' | 'business-profile' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
   >('automations');
   const [automationView, setAutomationView] = useState<'list' | 'create' | 'edit' | 'details'>('list');
   const [automations, setAutomations] = useState<AutomationInstance[]>([]);
@@ -245,7 +246,7 @@ const Automations: React.FC = () => {
 
   useEffect(() => {
     const section = searchParams.get('section');
-    if (section === 'knowledge' || section === 'alerts' || section === 'simulate') {
+    if (section === 'knowledge' || section === 'alerts' || section === 'simulate' || section === 'business-profile') {
       setActiveSection(section);
     }
   }, [searchParams]);
@@ -421,10 +422,10 @@ const Automations: React.FC = () => {
   };
 
   const handleSectionChange = (
-    section: 'automations' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
+    section: 'automations' | 'business-profile' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
   ) => {
     setActiveSection(section);
-    if (section === 'knowledge' || section === 'alerts' || section === 'simulate') {
+    if (section === 'knowledge' || section === 'alerts' || section === 'simulate' || section === 'business-profile') {
       setSearchParams({ section });
     } else if (searchParams.get('section')) {
       setSearchParams({});
@@ -880,6 +881,10 @@ const Automations: React.FC = () => {
                 />
               )}
             </div>
+          )}
+
+          {activeSection === 'business-profile' && (
+            <AutomationsBusinessProfileView />
           )}
 
           {activeSection === 'knowledge' && (
