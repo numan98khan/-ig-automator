@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authAPI, tierAPI, TierSummaryResponse, instagramAPI, InstagramAccount } from '../services/api';
-import { Shield, Eye, EyeOff, Mail, CheckCircle, AlertCircle, Users, Zap, Gauge, RefreshCw, Instagram } from 'lucide-react';
+import { Shield, Eye, EyeOff, Mail, CheckCircle, AlertCircle, Users, Zap, Gauge, RefreshCw, Instagram, AlertTriangle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -12,8 +12,9 @@ import Team from './Team';
 type TabType = 'account' | 'plan' | 'team';
 
 export default function Settings() {
-  const { user, refreshUser, currentWorkspace } = useAuth();
+  const { user, refreshUser, currentWorkspace, logout } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>('account');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +24,7 @@ export default function Settings() {
   const [instagramAccounts, setInstagramAccounts] = useState<InstagramAccount[]>([]);
   const [igLoading, setIgLoading] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [accountForm, setAccountForm] = useState({
     email: '',
@@ -158,6 +160,30 @@ export default function Settings() {
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to initiate Instagram reconnection');
       setReconnecting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setError(null);
+    setSuccess(null);
+
+    const confirmed = window.confirm(
+      'This will permanently delete your account and all workspace data (conversations, messages, automations, analytics, and connected accounts). This action cannot be undone.'
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await authAPI.deleteAccount();
+      logout();
+      navigate('/');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to delete account');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -456,6 +482,28 @@ export default function Settings() {
                       </Button>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-red-500/40 bg-red-500/5">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-red-500">
+                    <AlertTriangle className="w-5 h-5" /> Danger Zone
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Delete your account and all associated data, including Instagram connections, conversations, messages,
+                    automations, and analytics. This action cannot be undone.
+                  </p>
+                  <Button
+                    variant="danger"
+                    onClick={handleDeleteAccount}
+                    isLoading={deleting}
+                    disabled={deleting}
+                  >
+                    Delete Account
+                  </Button>
                 </CardContent>
               </Card>
             </div>

@@ -810,6 +810,11 @@ export const authAPI = {
     const { data } = await api.post('/api/auth/reset-password', { token, newPassword });
     return data;
   },
+
+  deleteAccount: async () => {
+    const { data } = await api.delete('/api/auth/account');
+    return data;
+  },
 };
 
 // Workspace Members API
