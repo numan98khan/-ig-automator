@@ -654,6 +654,10 @@ export interface WorkspaceSettings {
   defaultLanguage: string;
   defaultReplyLanguage?: string;
   uiLanguage: string;
+  businessName?: string;
+  businessHours?: string;
+  businessTone?: string;
+  businessLocation?: string;
   allowHashtags?: boolean;
   allowEmojis?: boolean;
   maxReplySentences?: number;

@@ -65,6 +65,10 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       escalationExamples,
       humanEscalationBehavior,
       humanHoldMinutes,
+      businessName,
+      businessHours,
+      businessTone,
+      businessLocation,
       primaryGoal,
       secondaryGoal,
       goalConfigs,
@@ -89,6 +93,10 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     if (escalationExamples !== undefined) updateData.escalationExamples = escalationExamples;
     if (humanEscalationBehavior !== undefined) updateData.humanEscalationBehavior = humanEscalationBehavior;
     if (humanHoldMinutes !== undefined) updateData.humanHoldMinutes = humanHoldMinutes;
+    if (businessName !== undefined) updateData.businessName = businessName;
+    if (businessHours !== undefined) updateData.businessHours = businessHours;
+    if (businessTone !== undefined) updateData.businessTone = businessTone;
+    if (businessLocation !== undefined) updateData.businessLocation = businessLocation;
     if (primaryGoal !== undefined) updateData.primaryGoal = normalizeGoalValue(primaryGoal);
     if (secondaryGoal !== undefined) updateData.secondaryGoal = normalizeGoalValue(secondaryGoal);
     if (goalConfigs !== undefined) updateData.goalConfigs = goalConfigs;

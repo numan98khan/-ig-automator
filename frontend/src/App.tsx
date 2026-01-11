@@ -32,7 +32,7 @@ function App() {
           <Route
             path="/app"
             element={
-              <PrivateRoute requireWorkspace requireInstagram>
+              <PrivateRoute requireWorkspace>
                 <AccountProvider>
                   <Layout />
                 </AccountProvider>

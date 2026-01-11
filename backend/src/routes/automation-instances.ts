@@ -715,9 +715,7 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
     const instagramAccount = await InstagramAccount.findOne({ workspaceId })
       .select('_id')
       .lean();
-    if (!instagramAccount?._id) {
-      return res.status(400).json({ error: 'Instagram account not connected for this workspace' });
-    }
+    const instagramAccountId = instagramAccount?._id || new mongoose.Types.ObjectId();
 
     const resolvedProfile = await resolvePreviewProfile(new mongoose.Types.ObjectId(workspaceId), profileId);
     const resolvedPersona = normalizePersona(persona) || toPersonaFromProfile(resolvedProfile);
@@ -725,7 +723,7 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
     const { session, conversation } = await ensurePreviewSession({
       instance: selectedInstance,
       templateVersionId: selectedVersion._id,
-      instagramAccountId: instagramAccount._id,
+      instagramAccountId,
       reset: Boolean(reset),
       sessionId: activePreviewSession?._id?.toString(),
       persona: resolvedPersona,

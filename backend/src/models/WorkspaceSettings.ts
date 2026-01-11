@@ -14,6 +14,10 @@ export interface IWorkspaceSettings extends Document {
   assistantName?: string;
   assistantDescription?: string;
   systemPrompt?: string;
+  businessName?: string;
+  businessHours?: string;
+  businessTone?: string;
+  businessLocation?: string;
 
   // Language settings
   defaultLanguage: string;        // Legacy default
@@ -134,6 +138,22 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
     trim: true,
   },
   systemPrompt: {
+    type: String,
+    trim: true,
+  },
+  businessName: {
+    type: String,
+    trim: true,
+  },
+  businessHours: {
+    type: String,
+    trim: true,
+  },
+  businessTone: {
+    type: String,
+    trim: true,
+  },
+  businessLocation: {
     type: String,
     trim: true,
   },
