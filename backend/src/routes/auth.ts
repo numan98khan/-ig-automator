@@ -32,6 +32,7 @@ import SupportTicketStub from '../models/SupportTicketStub';
 import WorkspaceInvite from '../models/WorkspaceInvite';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import {
+  CoreUser,
   createUser,
   getUserByEmail,
   getUserByEmailExcludingId,
@@ -39,10 +40,67 @@ import {
   updateUser,
   verifyPassword,
 } from '../repositories/core/userRepository';
-import { listWorkspaceMembersByUserId } from '../repositories/core/workspaceMemberRepository';
-import { listWorkspacesByIds, listWorkspacesByUserId } from '../repositories/core/workspaceRepository';
+import {
+  createWorkspaceMember,
+  listWorkspaceMembersByUserId,
+} from '../repositories/core/workspaceMemberRepository';
+import {
+  createWorkspace,
+  listWorkspacesByIds,
+  listWorkspacesByUserId,
+} from '../repositories/core/workspaceRepository';
 
 const router = express.Router();
+
+const resolveWorkspaceName = (user: CoreUser) => {
+  const emailPrefix = user.email?.split('@')[0]?.trim();
+  if (emailPrefix) {
+    return `${emailPrefix} Workspace`;
+  }
+  if (user.instagramUsername) {
+    return `@${user.instagramUsername}`;
+  }
+  return 'My Workspace';
+};
+
+const ensureDefaultWorkspace = async (user: CoreUser, billingAccountId?: string | null) => {
+  const memberships = await listWorkspaceMembersByUserId(user._id);
+  if (memberships.length > 0) {
+    if (!user.defaultWorkspaceId) {
+      await updateUser(user._id, { defaultWorkspaceId: memberships[0].workspaceId });
+    }
+    return;
+  }
+
+  const ownedWorkspaces = await listWorkspacesByUserId(user._id);
+  if (ownedWorkspaces.length > 0) {
+    const workspace = ownedWorkspaces[0];
+    await createWorkspaceMember({
+      workspaceId: workspace._id,
+      userId: user._id,
+      role: 'owner',
+    });
+    if (!user.defaultWorkspaceId) {
+      await updateUser(user._id, { defaultWorkspaceId: workspace._id });
+    }
+    return;
+  }
+
+  const billingAccount = billingAccountId
+    ? { _id: billingAccountId }
+    : await ensureBillingAccountForUser(user._id);
+  const workspace = await createWorkspace({
+    name: resolveWorkspaceName(user),
+    userId: user._id,
+    billingAccountId: billingAccount?._id ?? null,
+  });
+  await createWorkspaceMember({
+    workspaceId: workspace._id,
+    userId: user._id,
+    role: 'owner',
+  });
+  await updateUser(user._id, { defaultWorkspaceId: workspace._id });
+};
 
 // Signup
 router.post('/signup', async (req: Request, res: Response) => {
@@ -59,8 +117,9 @@ router.post('/signup', async (req: Request, res: Response) => {
     }
 
     const user = await createUser({ email, password });
-    await ensureBillingAccountForUser(user._id);
+    const billingAccount = await ensureBillingAccountForUser(user._id);
     await ensureUserTier(user._id);
+    await ensureDefaultWorkspace(user, billingAccount?._id ?? null);
 
     const token = generateToken(user._id);
 
@@ -98,8 +157,9 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     const token = generateToken(user._id);
-    await ensureBillingAccountForUser(user._id);
+    const billingAccount = await ensureBillingAccountForUser(user._id);
     await ensureUserTier(user._id);
+    await ensureDefaultWorkspace(user, billingAccount?._id ?? null);
 
     res.json({
       token,
