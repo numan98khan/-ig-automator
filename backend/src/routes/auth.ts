@@ -483,6 +483,16 @@ router.delete('/account', authenticate, async (req: AuthRequest, res: Response) 
 
     await Promise.all(deleteTasks);
 
+    await postgresQuery(
+      `UPDATE core.users
+      SET default_workspace_id = NULL,
+          billing_account_id = NULL,
+          tier_id = NULL,
+          tier_limit_overrides = NULL
+      WHERE id = $1`,
+      [req.userId]
+    );
+
     if (workspaceIds.length > 0) {
       await postgresQuery('DELETE FROM core.workspace_members WHERE workspace_id = ANY($1)', [workspaceIds]);
       await postgresQuery('DELETE FROM core.openai_usage WHERE workspace_id = ANY($1)', [workspaceIds]);
