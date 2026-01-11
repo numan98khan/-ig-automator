@@ -216,6 +216,8 @@ const Automations: React.FC = () => {
   const [templateSearch, setTemplateSearch] = useState('');
   const [goalFilter, setGoalFilter] = useState<'all' | (typeof FLOW_GOAL_FILTERS)[number]>('all');
   const [industryFilter, setIndustryFilter] = useState<'all' | 'Clinics' | 'Salons' | 'Retail' | 'Restaurants' | 'Real Estate' | 'General'>('all');
+  const listFilter = searchParams.get('filter');
+  const initialStatusFilter = listFilter === 'active' || listFilter === 'inactive' ? listFilter : 'all';
 
   const createViewTitle = editingAutomation
     ? 'Edit Automation'
@@ -273,6 +275,26 @@ const Automations: React.FC = () => {
     nextParams.delete('templateId');
     setSearchParams(nextParams);
   }, [searchParams, setSearchParams, templates]);
+
+  useEffect(() => {
+    const automationId = searchParams.get('automationId');
+    if (!automationId || automations.length === 0) return;
+    const mode = searchParams.get('mode');
+    const automation = automations.find((item) => item._id === automationId);
+    if (!automation) return;
+
+    setActiveSection('automations');
+    if (mode === 'edit') {
+      handleOpenEditAutomation(automation);
+    } else {
+      handleOpenAutomationDetails(automation);
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('automationId');
+    nextParams.delete('mode');
+    setSearchParams(nextParams);
+  }, [automations, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -873,6 +895,7 @@ const Automations: React.FC = () => {
                   summaryStats={summaryStats}
                   loading={loading}
                   aiUsage={aiUsage}
+                  initialStatusFilter={initialStatusFilter}
                   onCreate={handleOpenCreateModal}
                   onOpen={handleOpenAutomationDetails}
                   onEdit={handleOpenEditAutomation}

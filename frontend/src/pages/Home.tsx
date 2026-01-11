@@ -142,6 +142,10 @@ const Home: React.FC = () => {
   const hasPublishedAutomation = publishedCount > 0;
   const hasSimulation = Boolean(simulation?.sessionId || simulation?.session?.status);
   const isActivated = hasConnection && hasPublishedAutomation && hasSimulation;
+  const liveAutomation = useMemo(
+    () => automations.find((automation) => automation.isActive && automation.template?.status !== 'archived') || null,
+    [automations],
+  );
 
   const currentStepId = useMemo(() => {
     if (!hasConnection) return 'connect';
@@ -190,6 +194,38 @@ const Home: React.FC = () => {
   const showSecurityPrompt = Boolean(user?.isProvisional || !user?.emailVerified);
   const kpiSummary = dashboard?.kpis;
   const kpiOutcomes = dashboard?.outcomes;
+  const nextStepLabel = currentStepId === 'simulate'
+    ? 'Test in simulator'
+    : SETUP_STEPS.find((step) => step.id === currentStepId)?.title || 'Continue setup';
+  const nextStepAction = () => {
+    switch (currentStepId) {
+      case 'connect':
+        navigate('/app/settings');
+        break;
+      case 'template':
+        navigate('/app/automations');
+        break;
+      case 'basics':
+        navigate('/app/automations?section=business-profile');
+        break;
+      case 'publish':
+        navigate('/app/automations');
+        break;
+      case 'simulate':
+      default:
+        navigate('/app/automations?section=simulate');
+        break;
+    }
+  };
+  const simulationTimestamp = useMemo(() => {
+    const timestamp = simulation?.session?.updatedAt || simulation?.session?.createdAt || null;
+    if (!timestamp) return null;
+    try {
+      return new Date(timestamp).toLocaleString();
+    } catch {
+      return null;
+    }
+  }, [simulation]);
 
   return (
     <div className="space-y-6">
@@ -198,7 +234,7 @@ const Home: React.FC = () => {
         <p className="text-sm text-muted-foreground">
           {isActivated
             ? 'Keep an eye on automation health and jump into your next task.'
-            : 'Complete the quick setup to activate your first automation.'}
+            : 'Complete setup to go live with confidence.'}
         </p>
       </div>
 
@@ -228,13 +264,20 @@ const Home: React.FC = () => {
                   <Bolt className="w-5 h-5 text-primary" />
                   Get your first automation live
                 </CardTitle>
-                <p className="text-sm text-muted-foreground">Estimated setup time: 3 minutes</p>
+                <p className="text-sm text-muted-foreground">Complete setup to go live with confidence.</p>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Step {completedSteps + 1} of {SETUP_STEPS.length}</span>
                   <span>{progressPercent}% complete</span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-muted/60">
                   <div className="h-2 rounded-full bg-primary" style={{ width: `${progressPercent}%` }} />
+                </div>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                  <div className="text-xs text-muted-foreground">
+                    Next step: <span className="text-foreground font-semibold">{nextStepLabel}</span>
+                  </div>
+                  <Button size="sm" onClick={nextStepAction}>
+                    {currentStepId === 'simulate' ? 'Open simulator' : 'Continue'}
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -261,10 +304,36 @@ const Home: React.FC = () => {
                             <p className="text-xs text-muted-foreground">{step.why}</p>
                           </div>
                         </div>
-                        <Badge variant={isComplete ? 'success' : isCurrent ? 'primary' : 'secondary'}>
+                        <Badge
+                          variant={isComplete ? 'secondary' : isCurrent ? 'primary' : 'secondary'}
+                          className={isComplete ? 'text-muted-foreground' : undefined}
+                        >
                           {isComplete ? 'Done' : isCurrent ? 'In progress' : 'Not started'}
                         </Badge>
                       </div>
+
+                      {isComplete && (
+                        <div className="flex justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs"
+                            onClick={() => {
+                              if (step.id === 'connect') navigate('/app/settings');
+                              if (step.id === 'template') navigate('/app/automations');
+                              if (step.id === 'basics') navigate('/app/automations?section=business-profile');
+                              if (step.id === 'publish') navigate('/app/automations');
+                              if (step.id === 'simulate') navigate('/app/automations?section=simulate');
+                            }}
+                          >
+                            {step.id === 'connect' && 'Manage'}
+                            {step.id === 'template' && 'Change'}
+                            {step.id === 'basics' && 'Edit'}
+                            {step.id === 'publish' && 'View settings'}
+                            {step.id === 'simulate' && 'Run again'}
+                          </Button>
+                        </div>
+                      )}
 
                       {isCurrent && step.id === 'connect' && (
                         <div className="flex flex-col md:flex-row md:items-center gap-3">
@@ -362,11 +431,30 @@ const Home: React.FC = () => {
                       {isCurrent && step.id === 'simulate' && (
                         <div className="space-y-2">
                           <div className="text-xs text-muted-foreground">
-                            Run a quick test to see the automation logic and fields update.
+                            What you’ll see: captured fields, tags, and the current step as it runs.
                           </div>
-                          <Button onClick={() => navigate('/app/automations?section=simulate')} leftIcon={<TestTube2 className="w-4 h-4" />}>
-                            Test in simulator
-                          </Button>
+                          {hasSimulation ? (
+                            <div className="space-y-2">
+                              <div className="text-xs text-emerald-500 font-semibold">
+                                Test complete{simulationTimestamp ? ` · ${simulationTimestamp}` : ''}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <Button size="sm" variant="outline" onClick={() => navigate('/app/inbox')}>
+                                  Open Inbox
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => navigate('/app/automations')}>
+                                  View automation
+                                </Button>
+                                <Button size="sm" onClick={() => navigate('/app/automations?section=simulate')}>
+                                  Run again
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <Button onClick={() => navigate('/app/automations?section=simulate')} leftIcon={<TestTube2 className="w-4 h-4" />}>
+                              Test in simulator
+                            </Button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -467,22 +555,76 @@ const Home: React.FC = () => {
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Instagram</span>
-                <Badge variant={hasInstagram ? 'success' : 'secondary'}>
-                  {hasInstagram ? 'Connected' : 'Not connected'}
-                </Badge>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/app/settings')}>
+                  <Badge variant={hasInstagram ? 'success' : 'secondary'}>
+                    {hasInstagram ? 'Connected' : 'Not connected'}
+                  </Badge>
+                </Button>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Demo mode</span>
-                <Badge variant={isDemoMode ? 'primary' : 'secondary'}>
-                  {isDemoMode ? 'On' : 'Off'}
-                </Badge>
-              </div>
+              {!hasInstagram && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Demo mode</span>
+                  <Button variant="ghost" size="sm" onClick={() => enableDemoMode()}>
+                    <Badge variant={isDemoMode ? 'primary' : 'secondary'}>
+                      {isDemoMode ? 'On' : 'Off'}
+                    </Badge>
+                  </Button>
+                </div>
+              )}
+              {hasInstagram && isDemoMode && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Demo mode</span>
+                  <Button variant="ghost" size="sm" onClick={() => disableDemoMode()}>
+                    <Badge variant="primary">On</Badge>
+                  </Button>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Automations published</span>
-                <span className="text-foreground font-semibold">{publishedCount}</span>
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/app/automations?filter=active')}>
+                    <span className="text-foreground font-semibold">{publishedCount}</span>
+                  </Button>
               </div>
             </CardContent>
           </Card>
+
+          {liveAutomation && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Live automation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{liveAutomation.name}</p>
+                    <p className="text-xs text-muted-foreground">Active and running</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate(`/app/automations?automationId=${liveAutomation._id}`)}
+                  >
+                    View
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate(`/app/automations?automationId=${liveAutomation._id}&mode=edit`)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => navigate('/app/automations?section=simulate')}
+                  >
+                    Test
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

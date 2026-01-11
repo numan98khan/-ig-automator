@@ -16,6 +16,7 @@ type AutomationsListViewProps = {
   summaryStats: SummaryStats;
   loading: boolean;
   aiUsage?: ResourceUsage | null;
+  initialStatusFilter?: 'all' | 'active' | 'inactive';
   onCreate: () => void;
   onOpen?: (automation: AutomationInstance) => void;
   onEdit?: (automation: AutomationInstance) => void;
@@ -28,6 +29,7 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
   summaryStats,
   loading,
   aiUsage,
+  initialStatusFilter = 'all',
   onCreate,
   onOpen,
   onEdit,
@@ -36,7 +38,7 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
 }) => {
   const isOpenEnabled = typeof onOpen === 'function';
   const isEditEnabled = typeof onEdit === 'function';
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>(initialStatusFilter);
   const [searchQuery, setSearchQuery] = useState('');
   const filteredAutomations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
