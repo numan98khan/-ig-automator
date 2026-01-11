@@ -669,6 +669,7 @@ export interface WorkspaceSettings {
     title: string;
     url?: string;
   }>;
+  demoModeEnabled?: boolean;
   allowHashtags?: boolean;
   allowEmojis?: boolean;
   maxReplySentences?: number;

@@ -74,14 +74,15 @@ const Home: React.FC = () => {
   const navigate = useNavigate();
   const { currentWorkspace, user } = useAuth();
   const { accounts } = useAccountContext();
-  const { isDemoMode, enableDemoMode, disableDemoMode } = useDemoMode();
+  const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
+  const { isDemoMode, enableDemoMode, disableDemoMode } = useDemoMode(settings?.demoModeEnabled);
   const [automations, setAutomations] = useState<AutomationInstance[]>([]);
   const [templates, setTemplates] = useState<FlowTemplate[]>([]);
-  const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
   const [dashboard, setDashboard] = useState<DashboardSummaryResponse | null>(null);
   const [simulation, setSimulation] = useState<AutomationSimulationSessionResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingBasics, setSavingBasics] = useState(false);
+  const [demoModeUpdating, setDemoModeUpdating] = useState(false);
   const [basicsForm, setBasicsForm] = useState({
     businessName: '',
     businessHours: '',
@@ -138,13 +139,18 @@ const Home: React.FC = () => {
   const hasConnection = hasInstagram || isDemoMode;
   const hasTemplateChoice = automations.length > 0;
   const hasBusinessBasics = Boolean(settings?.businessName && settings?.businessHours);
-  const publishedCount = automations.filter((automation) => automation.isActive && automation.template?.status !== 'archived').length;
+  const activeAutomationCount = automations.filter(
+    (automation) => automation.isActive && automation.template?.status !== 'archived'
+  ).length;
+  const publishedCount = isDemoMode ? 0 : activeAutomationCount;
   const hasPublishedAutomation = publishedCount > 0;
   const hasSimulation = Boolean(simulation?.sessionId || simulation?.session?.status);
   const isActivated = hasConnection && hasPublishedAutomation && hasSimulation;
   const liveAutomation = useMemo(
-    () => automations.find((automation) => automation.isActive && automation.template?.status !== 'archived') || null,
-    [automations],
+    () => (isDemoMode
+      ? null
+      : automations.find((automation) => automation.isActive && automation.template?.status !== 'archived') || null),
+    [automations, isDemoMode],
   );
 
   const currentStepId = useMemo(() => {
@@ -184,6 +190,22 @@ const Home: React.FC = () => {
       console.error('Failed to update business basics', error);
     } finally {
       setSavingBasics(false);
+    }
+  };
+
+  const handleDemoModeUpdate = async (nextValue: boolean) => {
+    if (!currentWorkspace || nextValue === isDemoMode) return;
+    const previousValue = isDemoMode;
+    nextValue ? enableDemoMode() : disableDemoMode();
+    setDemoModeUpdating(true);
+    try {
+      const updated = await settingsAPI.update(currentWorkspace._id, { demoModeEnabled: nextValue });
+      setSettings(updated);
+    } catch (error) {
+      console.error('Failed to update demo mode', error);
+      previousValue ? enableDemoMode() : disableDemoMode();
+    } finally {
+      setDemoModeUpdating(false);
     }
   };
 
@@ -229,14 +251,14 @@ const Home: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-2">
+      {/* <div className="flex flex-col gap-2">
         <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Home</h1>
         <p className="text-sm text-muted-foreground">
           {isActivated
             ? 'Keep an eye on automation health and jump into your next task.'
             : 'Complete setup to go live with confidence.'}
         </p>
-      </div>
+      </div> */}
 
       {isDemoMode && (
         <Card className="border-amber-400/40 bg-amber-50/70 dark:bg-amber-400/10">
@@ -248,7 +270,12 @@ const Home: React.FC = () => {
                 <p className="text-xs text-muted-foreground">You can finish setup with simulated data until you connect.</p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={disableDemoMode}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleDemoModeUpdate(false)}
+              isLoading={demoModeUpdating}
+            >
               Turn off demo mode
             </Button>
           </CardContent>
@@ -270,6 +297,23 @@ const Home: React.FC = () => {
                 </div>
                 <div className="h-2 w-full rounded-full bg-muted/60">
                   <div className="h-2 rounded-full bg-primary" style={{ width: `${progressPercent}%` }} />
+                </div>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                  <div className="text-xs text-muted-foreground">
+                    Workspace mode:{' '}
+                    <span className="text-foreground font-semibold">{isDemoMode ? 'Demo' : 'Live'}</span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      Demo mode keeps messages simulated until you are ready to go live.
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={isDemoMode ? 'secondary' : 'outline'}
+                    onClick={() => handleDemoModeUpdate(!isDemoMode)}
+                    isLoading={demoModeUpdating}
+                  >
+                    {isDemoMode ? 'Switch to live mode' : 'Enable demo mode'}
+                  </Button>
                 </div>
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
                   <div className="text-xs text-muted-foreground">
@@ -340,7 +384,11 @@ const Home: React.FC = () => {
                           <Button onClick={() => navigate('/app/settings')} leftIcon={<Instagram className="w-4 h-4" />}>
                             Connect Instagram
                           </Button>
-                          <Button variant="outline" onClick={enableDemoMode}>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleDemoModeUpdate(true)}
+                            isLoading={demoModeUpdating}
+                          >
                             Try demo mode
                           </Button>
                         </div>
@@ -564,7 +612,12 @@ const Home: React.FC = () => {
               {!hasInstagram && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Demo mode</span>
-                  <Button variant="ghost" size="sm" onClick={() => enableDemoMode()}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDemoModeUpdate(true)}
+                    isLoading={demoModeUpdating}
+                  >
                     <Badge variant={isDemoMode ? 'primary' : 'secondary'}>
                       {isDemoMode ? 'On' : 'Off'}
                     </Badge>
@@ -574,7 +627,12 @@ const Home: React.FC = () => {
               {hasInstagram && isDemoMode && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Demo mode</span>
-                  <Button variant="ghost" size="sm" onClick={() => disableDemoMode()}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDemoModeUpdate(false)}
+                    isLoading={demoModeUpdating}
+                  >
                     <Badge variant="primary">On</Badge>
                   </Button>
                 </div>

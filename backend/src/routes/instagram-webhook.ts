@@ -12,6 +12,7 @@ import {
 import { transcribeAudioFromUrl } from '../services/transcriptionService';
 import { trackDailyMetric } from '../services/reportingService';
 import { getLogSettingsSnapshot } from '../services/adminLogSettingsService';
+import { getWorkspaceSettings } from '../services/workspaceSettingsService';
 import { requireEnv } from '../utils/requireEnv';
 import type { TriggerType } from '../types/automation';
 
@@ -533,6 +534,15 @@ async function processMessageAutomations(
 ) {
   try {
     logAutomation(`🤖 Processing automations for conversation ${conversation._id}`);
+
+    const workspaceSettings = await getWorkspaceSettings(workspaceId);
+    if (workspaceSettings?.demoModeEnabled) {
+      logAutomation('ℹ️ Demo mode enabled - skipping automations', {
+        workspaceId,
+        conversationId: conversation._id?.toString(),
+      });
+      return;
+    }
 
     const messageContext = {
       hasLink: Boolean(savedMessage.linkPreview?.url || /https?:\/\/\S+/i.test(messageText)),

@@ -29,6 +29,7 @@ export interface IWorkspaceSettings extends Document {
     title: string;
     url?: string;
   }>;
+  demoModeEnabled?: boolean;
 
   // Language settings
   defaultLanguage: string;        // Legacy default
@@ -194,6 +195,10 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
       }, { _id: false }),
     ],
     default: [],
+  },
+  demoModeEnabled: {
+    type: Boolean,
+    default: false,
   },
 
   // Language settings

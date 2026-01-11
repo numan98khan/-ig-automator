@@ -73,6 +73,7 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       businessWebsite,
       businessCatalog,
       businessDocuments,
+      demoModeEnabled,
       primaryGoal,
       secondaryGoal,
       goalConfigs,
@@ -105,6 +106,7 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     if (businessWebsite !== undefined) updateData.businessWebsite = businessWebsite;
     if (businessCatalog !== undefined) updateData.businessCatalog = businessCatalog;
     if (businessDocuments !== undefined) updateData.businessDocuments = businessDocuments;
+    if (demoModeEnabled !== undefined) updateData.demoModeEnabled = demoModeEnabled;
     if (primaryGoal !== undefined) updateData.primaryGoal = normalizeGoalValue(primaryGoal);
     if (secondaryGoal !== undefined) updateData.secondaryGoal = normalizeGoalValue(secondaryGoal);
     if (goalConfigs !== undefined) updateData.goalConfigs = goalConfigs;
