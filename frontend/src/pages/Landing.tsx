@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Instagram,
-  Loader2,
   Sparkles,
   MessageSquare,
   AlertCircle,
@@ -24,19 +22,18 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import AssistantWidget from '../components/AssistantWidget';
 import Seo from '../components/Seo';
-import { getApiBaseUrl } from '../utils/apiBaseUrl';
 import { requireEnv } from '../utils/env';
 
 const Landing: React.FC = () => {
-  const [loading, setLoading] = useState(false);
-  const [loginLoading, setLoginLoading] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('signup');
   const [showAssistant, setShowAssistant] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { user, currentWorkspace, login, refreshUser } = useAuth();
+  const { user, currentWorkspace, login, signup, refreshUser } = useAuth();
   const { theme, setTheme, uiTheme } = useTheme();
   const navigate = useNavigate();
   const seoDescription =
@@ -59,8 +56,9 @@ const Landing: React.FC = () => {
       demoSection.scrollIntoView({ behavior: 'smooth' });
     }
   };
-  const openEmailModal = () => {
+  const openAuthModal = (mode: 'login' | 'signup') => {
     setError(null);
+    setAuthMode(mode);
     setShowEmailModal(true);
   };
   const closeEmailModal = () => {
@@ -120,13 +118,13 @@ const Landing: React.FC = () => {
       return;
     }
 
-    // If user is already logged in with workspace, redirect to inbox or original destination
+    // If user is already logged in with workspace, redirect to Home or original destination
     if (user && currentWorkspace) {
       console.log('✅ User authenticated, redirecting...');
-      const from = location.state?.from?.pathname || '/app/inbox';
-      // If the destination is the public landing, go to the app inbox
+      const from = location.state?.from?.pathname || '/app/home';
+      // If the destination is the public landing, go to Home
       const target = (from === '/' || from === '/landing' || from === '/app')
-        ? '/app/inbox'
+        ? '/app/home'
         : from;
       navigate(target, { replace: true });
     }
@@ -155,31 +153,10 @@ const Landing: React.FC = () => {
     };
   }, [showAssistant]);
 
-  const handleInstagramLogin = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const apiUrl = getApiBaseUrl();
-      const response = await fetch(`${apiUrl}/api/instagram/auth-login`);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      window.location.href = data.authUrl;
-    } catch (error) {
-      console.error('Error initiating Instagram login:', error);
-      setError('Failed to connect Instagram. Please check your connection and try again.');
-      setLoading(false);
-    }
-  };
-
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      setLoginLoading(true);
+      setAuthLoading(true);
       setError(null);
 
       await login(email, password);
@@ -187,14 +164,32 @@ const Landing: React.FC = () => {
 
       // Refresh user data to get workspaces
       await refreshUser();
-      console.log('✅ User data refreshed, navigating to inbox...');
+      console.log('✅ User data refreshed, navigating to home...');
 
-      // Navigate to inbox
-      navigate('/app/inbox', { replace: true });
+      // Navigate to Home
+      navigate('/app/home', { replace: true });
     } catch (error: any) {
       console.error('Login error:', error);
       setError(error.response?.data?.error || 'Invalid email or password');
-      setLoginLoading(false);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleEmailSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setAuthLoading(true);
+      setError(null);
+
+      await signup(email, password);
+      await refreshUser();
+      navigate('/app/home', { replace: true });
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      setError(error.response?.data?.error || 'Unable to create your account');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -273,7 +268,10 @@ const Landing: React.FC = () => {
             >
               {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
-            <Button onClick={handleInstagramLogin} className="hidden md:inline-flex">Start free</Button>
+            <div className="hidden md:flex items-center gap-2">
+              <Button variant="ghost" onClick={() => openAuthModal('login')}>Log in</Button>
+              <Button onClick={() => openAuthModal('signup')}>Sign up free</Button>
+            </div>
           </div>
         </div>
       </header>
@@ -303,13 +301,18 @@ const Landing: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
-                    onClick={handleInstagramLogin}
-                    disabled={loading}
+                    onClick={() => openAuthModal('signup')}
                     className="group inline-flex items-center gap-3 px-6 py-3 text-base"
                   >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Instagram className="w-4 h-4" />}
-                    <span>Start free</span>
+                    <span>Sign up free</span>
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={`inline-flex items-center gap-2 ${isComic ? 'shadow-none bg-white/70' : ''}`}
+                    onClick={() => openAuthModal('login')}
+                  >
+                    Log in
                   </Button>
                   <Button
                     variant="outline"
@@ -344,10 +347,10 @@ const Landing: React.FC = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={openEmailModal}
+                  onClick={() => openAuthModal('login')}
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors font-medium"
                 >
-                  Prefer email? Continue with email
+                  Already have an account? Log in
                 </button>
               </div>
             </div>
@@ -489,9 +492,9 @@ const Landing: React.FC = () => {
                 ) : (
                   <div className="aspect-video rounded-2xl border border-dashed border-border/70 bg-muted/40 flex flex-col items-center justify-center gap-3 px-6 text-center text-sm text-muted-foreground">
                     <p className="text-base font-semibold text-foreground">Demo video coming soon.</p>
-                    <p>Start free to explore templates and workflows inside the app.</p>
-                    <Button onClick={handleInstagramLogin} disabled={loading} className="mt-1">
-                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Start free'}
+                    <p>Sign up free to explore templates and workflows inside the app.</p>
+                    <Button onClick={() => openAuthModal('signup')} className="mt-1">
+                      Sign up free
                     </Button>
                   </div>
                 )}
@@ -614,7 +617,7 @@ const Landing: React.FC = () => {
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Pricing</p>
                 <h2 className={`text-2xl md:text-3xl font-extrabold text-foreground mt-2 ${sectionHeadingClass}`}>Simple pricing for Instagram businesses</h2>
-                <p className="text-muted-foreground mt-2 max-w-2xl">Start free, upgrade as your DM volume grows.</p>
+                <p className="text-muted-foreground mt-2 max-w-2xl">Sign up free, upgrade as your DM volume grows.</p>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CreditCard className="w-4 h-4" />
@@ -648,8 +651,8 @@ const Landing: React.FC = () => {
                       </li>
                     ))}
                   </ul>
-                  <Button onClick={handleInstagramLogin} disabled={loading} className="w-full">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Start free'}
+                  <Button onClick={() => openAuthModal('signup')} className="w-full">
+                    Sign up free
                   </Button>
                   <p className="text-xs text-muted-foreground">Usage counts when a reply is sent or a flow runs.</p>
                 </div>
@@ -693,7 +696,9 @@ const Landing: React.FC = () => {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 id="email-login-title" className="text-xl font-bold text-foreground">Log in with email</h2>
+              <h2 id="email-login-title" className="text-xl font-bold text-foreground">
+                {authMode === 'login' ? 'Log in with email' : 'Create your account'}
+              </h2>
               <button
                 type="button"
                 onClick={closeEmailModal}
@@ -713,7 +718,7 @@ const Landing: React.FC = () => {
               </div>
             )}
 
-            <form onSubmit={handleEmailLogin} className="mt-5 space-y-4">
+            <form onSubmit={authMode === 'login' ? handleEmailLogin : handleEmailSignup} className="mt-5 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-muted-foreground mb-2">Email</label>
                 <div className="relative">
@@ -747,29 +752,31 @@ const Landing: React.FC = () => {
               <Button
                 type="submit"
                 size="lg"
-                isLoading={loginLoading}
+                isLoading={authLoading}
                 className="w-full"
               >
-                Log In
+                {authMode === 'login' ? 'Log in' : 'Create account'}
               </Button>
 
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                {authMode === 'login' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeEmailModal();
+                      navigate('/request-password-reset');
+                    }}
+                    className="hover:text-foreground transition"
+                  >
+                    Forgot password?
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => {
-                    closeEmailModal();
-                    navigate('/request-password-reset');
-                  }}
+                  onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
                   className="hover:text-foreground transition"
                 >
-                  Forgot password?
-                </button>
-                <button
-                  type="button"
-                  onClick={handleInstagramLogin}
-                  className="hover:text-foreground transition"
-                >
-                  New here? Continue with Instagram
+                  {authMode === 'login' ? 'New here? Create an account' : 'Already have an account? Log in'}
                 </button>
               </div>
             </form>
