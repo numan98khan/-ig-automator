@@ -15,6 +15,7 @@ import { AccountProvider } from './context/AccountContext';
 import Support from './pages/Support';
 import Automations from './pages/Automations';
 import CRM from './pages/CRM';
+import Home from './pages/Home';
 
 function App() {
   return (
@@ -32,16 +33,18 @@ function App() {
           <Route
             path="/app"
             element={
-              <PrivateRoute requireWorkspace requireInstagram>
+              <PrivateRoute requireWorkspace>
                 <AccountProvider>
                   <Layout />
                 </AccountProvider>
               </PrivateRoute>
             }
           >
-            <Route index element={<Navigate to="/app/dashboard" replace />} />
+            <Route index element={<Navigate to="/app/home" replace />} />
+            <Route path="home" element={<Home />} />
             <Route path="inbox" element={<Inbox />} />
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="analytics" element={<Dashboard />} />
             <Route path="knowledge" element={<Navigate to="/app/automations?section=knowledge" replace />} />
             <Route path="settings" element={<Settings />} />
             <Route path="automations" element={<Automations />} />

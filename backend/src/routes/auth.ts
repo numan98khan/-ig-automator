@@ -1,10 +1,36 @@
 import express, { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { generateToken } from '../utils/jwt';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/emailService';
 import { generateToken as generateEmailToken, verifyToken } from '../services/tokenService';
 import { ensureUserTier } from '../services/tierService';
 import { ensureBillingAccountForUser } from '../services/billingService';
+import { postgresQuery } from '../db/postgres';
+import AdminLogEvent from '../models/AdminLogEvent';
+import AutomationInstance from '../models/AutomationInstance';
+import AutomationPreviewProfile from '../models/AutomationPreviewProfile';
+import AutomationSession from '../models/AutomationSession';
+import CommentDMLog from '../models/CommentDMLog';
+import Contact from '../models/Contact';
+import ContactNote from '../models/ContactNote';
+import Conversation from '../models/Conversation';
+import CrmTask from '../models/CrmTask';
+import Escalation from '../models/Escalation';
+import FlowDraft from '../models/FlowDraft';
+import FlowTemplate from '../models/FlowTemplate';
+import FlowTemplateVersion from '../models/FlowTemplateVersion';
+import FollowupTask from '../models/FollowupTask';
+import InstagramAccount from '../models/InstagramAccount';
+import KnowledgeItem from '../models/KnowledgeItem';
+import LeadCapture from '../models/LeadCapture';
+import Message from '../models/Message';
+import ReportDailyWorkspace from '../models/ReportDailyWorkspace';
+import SupportTicket from '../models/SupportTicket';
+import SupportTicketComment from '../models/SupportTicketComment';
+import SupportTicketStub from '../models/SupportTicketStub';
+import WorkspaceInvite from '../models/WorkspaceInvite';
+import WorkspaceSettings from '../models/WorkspaceSettings';
 import {
   createUser,
   getUserByEmail,
@@ -14,7 +40,7 @@ import {
   verifyPassword,
 } from '../repositories/core/userRepository';
 import { listWorkspaceMembersByUserId } from '../repositories/core/workspaceMemberRepository';
-import { listWorkspacesByIds } from '../repositories/core/workspaceRepository';
+import { listWorkspacesByIds, listWorkspacesByUserId } from '../repositories/core/workspaceRepository';
 
 const router = express.Router();
 
@@ -371,6 +397,135 @@ router.post('/reset-password', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete account and all associated data
+router.delete('/account', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const user = await getUserById(req.userId, { includePassword: true });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const ownedWorkspaces = await listWorkspacesByUserId(req.userId);
+    const workspaceIds = ownedWorkspaces.map((workspace) => workspace._id);
+    const workspaceObjectIds = workspaceIds
+      .filter((workspaceId) => mongoose.isValidObjectId(workspaceId))
+      .map((workspaceId) => new mongoose.Types.ObjectId(workspaceId));
+    const userObjectId = mongoose.isValidObjectId(req.userId) ? new mongoose.Types.ObjectId(req.userId) : null;
+    let flowTemplateIds: mongoose.Types.ObjectId[] = [];
+
+    let ticketIds: mongoose.Types.ObjectId[] = [];
+    if (workspaceObjectIds.length > 0) {
+      const tickets = await SupportTicket.find({ workspaceId: { $in: workspaceObjectIds } })
+        .select('_id')
+        .lean();
+      ticketIds = tickets.map((ticket) => ticket._id);
+    }
+
+    if (userObjectId) {
+      const templates = await FlowTemplate.find({ createdBy: userObjectId }).select('_id').lean();
+      flowTemplateIds = templates.map((template) => template._id);
+    }
+
+    const deleteTasks: Array<Promise<unknown>> = [];
+    if (workspaceObjectIds.length > 0) {
+      deleteTasks.push(
+        AdminLogEvent.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        AutomationInstance.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        AutomationPreviewProfile.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        AutomationSession.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        CommentDMLog.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        Contact.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        ContactNote.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        Conversation.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        CrmTask.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        Escalation.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        FollowupTask.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        InstagramAccount.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        KnowledgeItem.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        LeadCapture.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        Message.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        ReportDailyWorkspace.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        SupportTicket.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        SupportTicketStub.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        WorkspaceInvite.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
+        WorkspaceSettings.deleteMany({ workspaceId: { $in: workspaceObjectIds } })
+      );
+    }
+
+    if (userObjectId) {
+      deleteTasks.push(
+        SupportTicketComment.deleteMany({ authorId: userObjectId }),
+        FlowDraft.deleteMany({ createdBy: userObjectId }),
+        FlowTemplate.deleteMany({ createdBy: userObjectId }),
+        FlowTemplateVersion.deleteMany({ createdBy: userObjectId })
+      );
+    }
+
+    if (flowTemplateIds.length > 0) {
+      deleteTasks.push(
+        FlowDraft.deleteMany({ templateId: { $in: flowTemplateIds } }),
+        FlowTemplateVersion.deleteMany({ templateId: { $in: flowTemplateIds } })
+      );
+    }
+
+    if (ticketIds.length > 0) {
+      deleteTasks.push(SupportTicketComment.deleteMany({ ticketId: { $in: ticketIds } }));
+    }
+
+    deleteTasks.push(AutomationPreviewProfile.deleteMany({ userId: req.userId }));
+
+    await Promise.all(deleteTasks);
+
+    await postgresQuery(
+      `UPDATE core.users
+      SET default_workspace_id = NULL,
+          billing_account_id = NULL,
+          tier_id = NULL,
+          tier_limit_overrides = NULL
+      WHERE id = $1`,
+      [req.userId]
+    );
+
+    if (workspaceIds.length > 0) {
+      await postgresQuery('DELETE FROM core.workspace_members WHERE workspace_id = ANY($1)', [workspaceIds]);
+      await postgresQuery('DELETE FROM core.openai_usage WHERE workspace_id = ANY($1)', [workspaceIds]);
+      await postgresQuery('DELETE FROM core.usage_counters WHERE workspace_id = ANY($1)', [workspaceIds]);
+      await postgresQuery('DELETE FROM core.workspaces WHERE id = ANY($1)', [workspaceIds]);
+    }
+
+    await postgresQuery('DELETE FROM core.workspace_members WHERE user_id = $1', [req.userId]);
+    await postgresQuery('DELETE FROM core.openai_usage WHERE user_id = $1', [req.userId]);
+    await postgresQuery('DELETE FROM core.usage_counters WHERE user_id = $1', [req.userId]);
+
+    const billingAccountIds = new Set<string>();
+    if (user.billingAccountId) {
+      billingAccountIds.add(user.billingAccountId);
+    }
+    ownedWorkspaces.forEach((workspace) => {
+      if (workspace.billingAccountId) {
+        billingAccountIds.add(workspace.billingAccountId);
+      }
+    });
+
+    if (billingAccountIds.size > 0) {
+      const billingIds = Array.from(billingAccountIds);
+      await postgresQuery('DELETE FROM core.subscriptions WHERE billing_account_id = ANY($1)', [billingIds]);
+      await postgresQuery('DELETE FROM core.billing_accounts WHERE id = ANY($1)', [billingIds]);
+    }
+
+    await postgresQuery('DELETE FROM core.users WHERE id = $1', [req.userId]);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ error: 'Failed to delete account' });
   }
 });
 

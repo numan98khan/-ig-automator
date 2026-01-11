@@ -23,6 +23,7 @@ import { AutomationsHumanAlerts } from './automations/AutomationsHumanAlerts';
 import { AutomationsSimulateView } from './automations/AutomationsSimulateView';
 import Knowledge from './Knowledge';
 import { AutomationsIntegrationsView } from './automations/AutomationsIntegrationsView';
+import { AutomationsBusinessProfileView } from './automations/AutomationsBusinessProfileView';
 import { FLOW_GOAL_FILTERS } from './automations/constants';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -163,7 +164,7 @@ const Automations: React.FC = () => {
   const { activeAccount } = useAccountContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeSection, setActiveSection] = useState<
-    'automations' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
+    'automations' | 'business-profile' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
   >('automations');
   const [automationView, setAutomationView] = useState<'list' | 'create' | 'edit' | 'details'>('list');
   const [automations, setAutomations] = useState<AutomationInstance[]>([]);
@@ -215,6 +216,8 @@ const Automations: React.FC = () => {
   const [templateSearch, setTemplateSearch] = useState('');
   const [goalFilter, setGoalFilter] = useState<'all' | (typeof FLOW_GOAL_FILTERS)[number]>('all');
   const [industryFilter, setIndustryFilter] = useState<'all' | 'Clinics' | 'Salons' | 'Retail' | 'Restaurants' | 'Real Estate' | 'General'>('all');
+  const listFilter = searchParams.get('filter');
+  const initialStatusFilter = listFilter === 'active' || listFilter === 'inactive' ? listFilter : 'all';
 
   const createViewTitle = editingAutomation
     ? 'Edit Automation'
@@ -245,10 +248,53 @@ const Automations: React.FC = () => {
 
   useEffect(() => {
     const section = searchParams.get('section');
-    if (section === 'knowledge' || section === 'alerts' || section === 'simulate') {
+    if (section === 'knowledge' || section === 'alerts' || section === 'simulate' || section === 'business-profile') {
       setActiveSection(section);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    const templateId = searchParams.get('templateId');
+    if (!templateId || templates.length === 0) return;
+    const template = templates.find((item) => item._id === templateId);
+    if (!template) return;
+
+    setActiveSection('automations');
+    setEditingAutomation(null);
+    setSelectedAutomation(null);
+    setSelectedTemplate(template);
+    setCreationMode('templates');
+    setCurrentStep('setup');
+    setTemplateSearch('');
+    setGoalFilter('all');
+    setIndustryFilter('all');
+    setConfigValues(buildDefaultConfig(template.currentVersion?.exposedFields || []));
+    setAutomationView('create');
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('templateId');
+    setSearchParams(nextParams);
+  }, [searchParams, setSearchParams, templates]);
+
+  useEffect(() => {
+    const automationId = searchParams.get('automationId');
+    if (!automationId || automations.length === 0) return;
+    const mode = searchParams.get('mode');
+    const automation = automations.find((item) => item._id === automationId);
+    if (!automation) return;
+
+    setActiveSection('automations');
+    if (mode === 'edit') {
+      handleOpenEditAutomation(automation);
+    } else {
+      handleOpenAutomationDetails(automation);
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('automationId');
+    nextParams.delete('mode');
+    setSearchParams(nextParams);
+  }, [automations, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -398,10 +444,10 @@ const Automations: React.FC = () => {
   };
 
   const handleSectionChange = (
-    section: 'automations' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
+    section: 'automations' | 'business-profile' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
   ) => {
     setActiveSection(section);
-    if (section === 'knowledge' || section === 'alerts' || section === 'simulate') {
+    if (section === 'knowledge' || section === 'alerts' || section === 'simulate' || section === 'business-profile') {
       setSearchParams({ section });
     } else if (searchParams.get('section')) {
       setSearchParams({});
@@ -849,6 +895,7 @@ const Automations: React.FC = () => {
                   summaryStats={summaryStats}
                   loading={loading}
                   aiUsage={aiUsage}
+                  initialStatusFilter={initialStatusFilter}
                   onCreate={handleOpenCreateModal}
                   onOpen={handleOpenAutomationDetails}
                   onEdit={handleOpenEditAutomation}
@@ -857,6 +904,10 @@ const Automations: React.FC = () => {
                 />
               )}
             </div>
+          )}
+
+          {activeSection === 'business-profile' && (
+            <AutomationsBusinessProfileView />
           )}
 
           {activeSection === 'knowledge' && (
