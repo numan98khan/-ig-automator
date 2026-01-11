@@ -140,7 +140,7 @@ const Dashboard: React.FC = () => {
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">Workspace</p>
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
             <LayoutDashboard className="w-7 h-7 text-primary" />
-            Dashboard
+            Analytics
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             Instant snapshot of inbox health, outcomes, and where humans need to jump in.

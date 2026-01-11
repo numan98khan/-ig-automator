@@ -251,6 +251,29 @@ const Automations: React.FC = () => {
   }, [searchParams]);
 
   useEffect(() => {
+    const templateId = searchParams.get('templateId');
+    if (!templateId || templates.length === 0) return;
+    const template = templates.find((item) => item._id === templateId);
+    if (!template) return;
+
+    setActiveSection('automations');
+    setEditingAutomation(null);
+    setSelectedAutomation(null);
+    setSelectedTemplate(template);
+    setCreationMode('templates');
+    setCurrentStep('setup');
+    setTemplateSearch('');
+    setGoalFilter('all');
+    setIndustryFilter('all');
+    setConfigValues(buildDefaultConfig(template.currentVersion?.exposedFields || []));
+    setAutomationView('create');
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('templateId');
+    setSearchParams(nextParams);
+  }, [searchParams, setSearchParams, templates]);
+
+  useEffect(() => {
     if (currentWorkspace) {
       const cachedAutomations = automationsCache.get(currentWorkspace._id);
       if (cachedAutomations) {

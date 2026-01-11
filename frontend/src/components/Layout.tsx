@@ -17,6 +17,7 @@ import {
   LifeBuoy,
   Atom,
   Users,
+  Home as HomeIcon,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
@@ -47,8 +48,9 @@ const Layout: React.FC = () => {
 
   const navLinks = useMemo(() => {
     const links = [
-      { to: '/app/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/app/inbox') || location.pathname === '/app' },
-      { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/app/dashboard') },
+      { to: '/app/home', label: 'Home', icon: HomeIcon, isActive: isActive('/app/home') || location.pathname === '/app' },
+      { to: '/app/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/app/inbox') },
+      { to: '/app/analytics', label: 'Analytics', icon: LayoutDashboard, isActive: isActive('/app/analytics') || isActive('/app/dashboard') },
       { to: '/app/crm', label: 'CRM', icon: Users, isActive: isActive('/app/crm') },
       { to: '/app/automations', label: 'Automations', icon: Atom, isActive: isActive('/app/automations') },
     ];
@@ -58,8 +60,9 @@ const Layout: React.FC = () => {
 
   const pageTitle = useMemo(() => {
     const path = location.pathname;
-    if (path === '/app' || path.startsWith('/app/inbox')) return 'Inbox';
-    if (path.startsWith('/app/dashboard')) return 'Dashboard';
+    if (path === '/app' || path.startsWith('/app/home')) return 'Home';
+    if (path.startsWith('/app/inbox')) return 'Inbox';
+    if (path.startsWith('/app/analytics') || path.startsWith('/app/dashboard')) return 'Analytics';
     if (path.startsWith('/app/crm')) return 'CRM';
     if (path.startsWith('/app/automations')) return 'Automations';
     if (path.startsWith('/app/settings')) return 'Settings';
@@ -119,7 +122,7 @@ const Layout: React.FC = () => {
         <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full grid grid-cols-[auto,1fr,auto] items-center gap-4">
           <div className="flex items-center gap-2 min-w-0">
             <Link
-              to="/app/inbox"
+              to="/app/home"
               className="flex items-center gap-2 rounded-md px-2 py-1 transition"
             >
               <img

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowRight, MessageSquare, BookOpen, Users, AlertTriangle } from 'lucide-react';
+import { Search, ArrowRight, MessageSquare, BookOpen, Users, AlertTriangle, Home, LayoutDashboard } from 'lucide-react';
 
 interface GlobalSearchModalProps {
   open: boolean;
@@ -18,11 +18,25 @@ interface SearchItem {
 
 const searchIndex: SearchItem[] = [
   {
+    title: 'Home',
+    description: 'View onboarding progress and quick actions.',
+    path: '/app/home',
+    icon: Home,
+    tags: ['setup', 'overview', 'activation'],
+  },
+  {
     title: 'Inbox',
     description: 'Jump to conversations, unreplied threads, or escalations.',
     path: '/app/inbox',
     icon: MessageSquare,
     tags: ['conversation', 'reply', 'follow-up'],
+  },
+  {
+    title: 'Analytics',
+    description: 'Review performance metrics and trends.',
+    path: '/app/analytics',
+    icon: LayoutDashboard,
+    tags: ['dashboard', 'metrics', 'kpis'],
   },
   {
     title: 'Knowledge Base (Automations)',

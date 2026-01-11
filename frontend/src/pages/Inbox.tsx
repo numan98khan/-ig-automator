@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
 import ReactMarkdown from 'react-markdown';
@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ImageAttachment, VideoAttachment, VoiceAttachment, LinkPreviewComponent, FileAttachment } from '../components/MessageMedia';
+import { useDemoMode } from '../hooks/useDemoMode';
 
 type InboxCacheEntry = {
   conversations: Conversation[];
@@ -52,6 +53,8 @@ const Inbox: React.FC = () => {
   const { currentWorkspace } = useAuth();
   const { activeAccount, accounts: accountContextList } = useAccountContext();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isDemoMode } = useDemoMode();
   const requestedConversationId = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return params.get('conversationId');
@@ -79,6 +82,16 @@ const Inbox: React.FC = () => {
   const workspaceId = currentWorkspace?._id ?? null;
   const activeAccountId = activeAccount?._id ?? null;
   const selectedConversationId = selectedConversation?._id ?? null;
+  const hasConnection = useMemo(
+    () => accountContextList.length > 0 || isDemoMode,
+    [accountContextList.length, isDemoMode],
+  );
+  const emptyStateTitle = hasConnection
+    ? 'No conversations yet.'
+    : 'Connect Instagram to start seeing DMs.';
+  const emptyStateDescription = hasConnection
+    ? 'When you connect your account, new messages will appear here.'
+    : 'Finish setup on Home to start receiving messages.';
 
   const getCurrentCacheKey = () => (
     workspaceId ? getInboxCacheKey(workspaceId, activeAccountId) : null
@@ -589,8 +602,18 @@ const Inbox: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-border/60">
               {filteredConversations.length === 0 && (
-                <div className="flex items-center justify-center h-full text-sm text-muted-foreground p-6 text-center">
-                  No conversations found.
+                <div className="flex flex-col items-center justify-center h-full text-center p-6 gap-3">
+                  <MessageSquare className="w-8 h-8 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{emptyStateTitle}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{emptyStateDescription}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => navigate('/app/home')}
+                  >
+                    Go to Home to finish setup
+                  </Button>
                 </div>
               )}
 
