@@ -29,7 +29,7 @@ import ReportDailyWorkspace from '../models/ReportDailyWorkspace';
 import SupportTicket from '../models/SupportTicket';
 import SupportTicketComment from '../models/SupportTicketComment';
 import SupportTicketStub from '../models/SupportTicketStub';
-import WorkspaceInvite from '../models/WorkspaceInvite';
+import { WorkspaceInvite } from '../models/WorkspaceInvite';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import {
   CoreUser,
