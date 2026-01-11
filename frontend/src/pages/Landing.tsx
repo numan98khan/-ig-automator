@@ -269,7 +269,6 @@ const Landing: React.FC = () => {
               {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
             <div className="hidden md:flex items-center gap-2">
-              <Button variant="ghost" onClick={() => openAuthModal('login')}>Log in</Button>
               <Button onClick={() => openAuthModal('signup')}>Sign up free</Button>
             </div>
           </div>
@@ -306,13 +305,6 @@ const Landing: React.FC = () => {
                   >
                     <span>Sign up free</span>
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className={`inline-flex items-center gap-2 ${isComic ? 'shadow-none bg-white/70' : ''}`}
-                    onClick={() => openAuthModal('login')}
-                  >
-                    Log in
                   </Button>
                   <Button
                     variant="outline"
