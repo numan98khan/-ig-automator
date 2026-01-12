@@ -210,7 +210,7 @@ const Home: React.FC = () => {
   };
 
   const handleTemplateSelect = (templateId: string) => {
-    navigate(`/app/automations?templateId=${templateId}`);
+    navigate(`/app/automations?templateId=${templateId}&source=onboarding`);
   };
 
   const showSecurityPrompt = Boolean(user?.isProvisional || !user?.emailVerified);
