@@ -216,6 +216,7 @@ const Automations: React.FC = () => {
   const [templateSearch, setTemplateSearch] = useState('');
   const [goalFilter, setGoalFilter] = useState<'all' | (typeof FLOW_GOAL_FILTERS)[number]>('all');
   const [industryFilter, setIndustryFilter] = useState<'all' | 'Clinics' | 'Salons' | 'Retail' | 'Restaurants' | 'Real Estate' | 'General'>('all');
+  const [templateSource, setTemplateSource] = useState<'onboarding' | null>(null);
   const listFilter = searchParams.get('filter');
   const initialStatusFilter = listFilter === 'active' || listFilter === 'inactive' ? listFilter : 'all';
 
@@ -255,6 +256,7 @@ const Automations: React.FC = () => {
 
   useEffect(() => {
     const templateId = searchParams.get('templateId');
+    const source = searchParams.get('source');
     if (!templateId || templates.length === 0) return;
     const template = templates.find((item) => item._id === templateId);
     if (!template) return;
@@ -268,11 +270,13 @@ const Automations: React.FC = () => {
     setTemplateSearch('');
     setGoalFilter('all');
     setIndustryFilter('all');
+    setTemplateSource(source === 'onboarding' ? 'onboarding' : null);
     setConfigValues(buildDefaultConfig(template.currentVersion?.exposedFields || []));
     setAutomationView('create');
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('templateId');
+    nextParams.delete('source');
     setSearchParams(nextParams);
   }, [searchParams, setSearchParams, templates]);
 
@@ -497,6 +501,7 @@ const Automations: React.FC = () => {
     setTemplateSearch('');
     setGoalFilter('all');
     setIndustryFilter('all');
+    setTemplateSource(null);
     setConfigValues({});
   };
 
@@ -542,7 +547,7 @@ const Automations: React.FC = () => {
         savedAutomation = await automationAPI.create({
           ...payload,
           workspaceId: currentWorkspace._id,
-          isActive: true,
+          isActive: templateSource !== 'onboarding',
           templateId: selectedTemplate._id,
         });
       }

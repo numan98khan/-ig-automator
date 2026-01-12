@@ -8,6 +8,7 @@ import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import InstagramAccount from '../models/InstagramAccount';
 import Message from '../models/Message';
 import AutomationPreviewProfile from '../models/AutomationPreviewProfile';
+import WorkspaceSettings from '../models/WorkspaceSettings';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { getAdminLogEvents } from '../services/adminLogEventService';
@@ -116,6 +117,15 @@ const ensurePreviewMeta = (session: any) => {
       trigger?: { type?: string; label?: string; description?: string };
     };
   };
+};
+
+const markOnboardingTimestamp = async (workspaceId: string, field: string) => {
+  const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
+  await WorkspaceSettings.updateOne(
+    { workspaceId: workspaceObjectId, [field]: { $exists: false } },
+    { $set: { [field]: new Date() }, $setOnInsert: { workspaceId: workspaceObjectId } },
+    { upsert: true }
+  );
 };
 
 const appendPreviewEvent = (session: any, event: Omit<PreviewEvent, 'id'> & { id?: string }) => {
@@ -563,6 +573,7 @@ const ensurePreviewSession = async (params: {
     if (profileId) {
       meta.profileId = profileId;
     }
+    session.markModified('state');
     await session.save();
   }
 
@@ -769,6 +780,11 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
       });
     }
 
+    if (result.success) {
+      await markOnboardingTimestamp(workspaceId, 'onboarding.simulatorCompletedAt');
+    }
+
+    session.markModified('state');
     await session.save();
     const payload = await buildPreviewSessionPayload(session, conversation, {
       includeEvents: await canViewExecutionTimeline(workspaceId),
@@ -938,6 +954,14 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       isActive: isActive !== undefined ? Boolean(isActive) : true,
     });
 
+    await markOnboardingTimestamp(workspaceId, 'onboarding.templateSelectedAt');
+    if (instance.isActive) {
+      const workspaceSettings = await WorkspaceSettings.findOne({ workspaceId });
+      if (!workspaceSettings?.demoModeEnabled) {
+        await markOnboardingTimestamp(workspaceId, 'onboarding.publishCompletedAt');
+      }
+    }
+
     const [hydrated] = await hydrateInstances([instance.toObject()]);
     res.status(201).json(hydrated);
   } catch (error: any) {
@@ -979,6 +1003,12 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     if (isActive !== undefined) instance.isActive = Boolean(isActive);
 
     await instance.save();
+    if (instance.isActive) {
+      const workspaceSettings = await WorkspaceSettings.findOne({ workspaceId: instance.workspaceId });
+      if (!workspaceSettings?.demoModeEnabled) {
+        await markOnboardingTimestamp(instance.workspaceId.toString(), 'onboarding.publishCompletedAt');
+      }
+    }
     const [hydrated] = await hydrateInstances([instance.toObject()]);
     res.json(hydrated);
   } catch (error: any) {
@@ -1002,6 +1032,12 @@ router.patch('/:id/toggle', authenticate, async (req: AuthRequest, res: Response
 
     instance.isActive = !instance.isActive;
     await instance.save();
+    if (instance.isActive) {
+      const workspaceSettings = await WorkspaceSettings.findOne({ workspaceId: instance.workspaceId });
+      if (!workspaceSettings?.demoModeEnabled) {
+        await markOnboardingTimestamp(instance.workspaceId.toString(), 'onboarding.publishCompletedAt');
+      }
+    }
     const [hydrated] = await hydrateInstances([instance.toObject()]);
     res.json(hydrated);
   } catch (error) {

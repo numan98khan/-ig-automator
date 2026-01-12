@@ -30,6 +30,12 @@ export interface IWorkspaceSettings extends Document {
     url?: string;
   }>;
   demoModeEnabled?: boolean;
+  onboarding?: {
+    templateSelectedAt?: Date;
+    basicsCompletedAt?: Date;
+    simulatorCompletedAt?: Date;
+    publishCompletedAt?: Date;
+  };
 
   // Language settings
   defaultLanguage: string;        // Legacy default
@@ -199,6 +205,15 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
   demoModeEnabled: {
     type: Boolean,
     default: false,
+  },
+  onboarding: {
+    type: new Schema({
+      templateSelectedAt: { type: Date },
+      basicsCompletedAt: { type: Date },
+      simulatorCompletedAt: { type: Date },
+      publishCompletedAt: { type: Date },
+    }, { _id: false }),
+    default: undefined,
   },
 
   // Language settings

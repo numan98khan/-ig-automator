@@ -96,8 +96,12 @@ export async function updateMemberRole(
     throw new Error('Membership not found');
   }
 
+  if (newRole === 'owner' && membership.role !== 'owner') {
+    throw new Error('Owner role cannot be assigned or transferred.');
+  }
+
   if (membership.role === 'owner' && newRole !== 'owner') {
-    throw new Error('Cannot change owner role. Transfer ownership first.');
+    throw new Error('Owner role cannot be changed.');
   }
 
   await updateWorkspaceMemberRole(workspaceId, userId, newRole);

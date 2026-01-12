@@ -14,7 +14,6 @@ import {
   ShieldCheck,
   Sparkles,
   TestTube2,
-  TriangleAlert,
   Wrench,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -37,7 +36,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Input } from '../components/ui/Input';
 
 type SetupStep = {
-  id: 'connect' | 'template' | 'basics' | 'publish' | 'simulate';
+  id: 'connect' | 'template' | 'basics' | 'simulate' | 'publish';
   title: string;
   why: string;
 };
@@ -59,14 +58,14 @@ const SETUP_STEPS: SetupStep[] = [
     why: 'Give the assistant the essentials to sound like your brand.',
   },
   {
-    id: 'publish',
-    title: 'Publish',
-    why: 'Activate your automation with safe defaults.',
-  },
-  {
     id: 'simulate',
     title: 'Test in simulator',
     why: 'Watch the automation respond before going live.',
+  },
+  {
+    id: 'publish',
+    title: 'Publish',
+    why: 'Activate your automation with safe defaults.',
   },
 ];
 
@@ -142,9 +141,13 @@ const Home: React.FC = () => {
   const activeAutomationCount = automations.filter(
     (automation) => automation.isActive && automation.template?.status !== 'archived'
   ).length;
-  const publishedCount = isDemoMode ? 0 : activeAutomationCount;
-  const hasPublishedAutomation = publishedCount > 0;
-  const hasSimulation = Boolean(simulation?.sessionId || simulation?.session?.status);
+  const publishedCount = activeAutomationCount;
+  const hasPublishedAutomation = !isDemoMode && publishedCount > 0;
+  const hasSimulation = Boolean(
+    simulation?.sessionId
+      || simulation?.session?.status
+      || settings?.onboarding?.simulatorCompletedAt
+  );
   const isActivated = hasConnection && hasPublishedAutomation && hasSimulation;
   const liveAutomation = useMemo(
     () => (isDemoMode
@@ -157,8 +160,8 @@ const Home: React.FC = () => {
     if (!hasConnection) return 'connect';
     if (!hasTemplateChoice) return 'template';
     if (!hasBusinessBasics) return 'basics';
-    if (!hasPublishedAutomation) return 'publish';
     if (!hasSimulation) return 'simulate';
+    if (!hasPublishedAutomation) return 'publish';
     return 'simulate';
   }, [hasConnection, hasTemplateChoice, hasBusinessBasics, hasPublishedAutomation, hasSimulation]);
 
@@ -167,8 +170,8 @@ const Home: React.FC = () => {
       hasConnection,
       hasTemplateChoice,
       hasBusinessBasics,
-      hasPublishedAutomation,
       hasSimulation,
+      hasPublishedAutomation,
     ].filter(Boolean).length;
   }, [hasConnection, hasTemplateChoice, hasBusinessBasics, hasPublishedAutomation, hasSimulation]);
 
@@ -210,7 +213,7 @@ const Home: React.FC = () => {
   };
 
   const handleTemplateSelect = (templateId: string) => {
-    navigate(`/app/automations?templateId=${templateId}`);
+    navigate(`/app/automations?templateId=${templateId}&source=onboarding`);
   };
 
   const showSecurityPrompt = Boolean(user?.isProvisional || !user?.emailVerified);
@@ -250,7 +253,7 @@ const Home: React.FC = () => {
   }, [simulation]);
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full flex-col gap-6 overflow-hidden">
       {/* <div className="flex flex-col gap-2">
         <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Home</h1>
         <p className="text-sm text-muted-foreground">
@@ -260,30 +263,8 @@ const Home: React.FC = () => {
         </p>
       </div> */}
 
-      {isDemoMode && (
-        <Card className="border-amber-400/40 bg-amber-50/70 dark:bg-amber-400/10">
-          <CardContent className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 py-4">
-            <div className="flex items-start gap-3">
-              <TriangleAlert className="w-5 h-5 text-amber-500" />
-              <div>
-                <p className="text-sm font-semibold text-foreground">Demo mode is on — connect Instagram to go live.</p>
-                <p className="text-xs text-muted-foreground">You can finish setup with simulated data until you connect.</p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDemoModeUpdate(false)}
-              isLoading={demoModeUpdating}
-            >
-              Turn off demo mode
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6">
-        <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 flex-1 min-h-0 overflow-hidden">
+        <div className="space-y-6 h-full overflow-y-auto pr-1">
           {!isActivated && (
             <Card className="border border-border/70">
               <CardHeader className="space-y-2">
@@ -595,7 +576,7 @@ const Home: React.FC = () => {
           )}
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-6 h-full overflow-y-auto pr-1">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Workspace status</CardTitle>
