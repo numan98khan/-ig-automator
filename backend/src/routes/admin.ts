@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import Conversation from '../models/Conversation';
@@ -8,12 +9,26 @@ import KnowledgeItem from '../models/KnowledgeItem';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import GlobalAssistantConfig, { IGlobalAssistantConfig } from '../models/GlobalAssistantConfig';
 import GlobalUiSettings, { IGlobalUiSettings } from '../models/GlobalUiSettings';
+import AdminLogEvent from '../models/AdminLogEvent';
+import AutomationPreviewProfile from '../models/AutomationPreviewProfile';
 import FlowDraft from '../models/FlowDraft';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import AutomationIntent from '../models/AutomationIntent';
 import AutomationSession from '../models/AutomationSession';
 import AutomationInstance from '../models/AutomationInstance';
+import CommentDMLog from '../models/CommentDMLog';
+import Contact from '../models/Contact';
+import ContactNote from '../models/ContactNote';
+import CrmTask from '../models/CrmTask';
+import FollowupTask from '../models/FollowupTask';
+import InstagramAccount from '../models/InstagramAccount';
+import LeadCapture from '../models/LeadCapture';
+import ReportDailyWorkspace from '../models/ReportDailyWorkspace';
+import SupportTicket from '../models/SupportTicket';
+import SupportTicketComment from '../models/SupportTicketComment';
+import SupportTicketStub from '../models/SupportTicketStub';
+import { WorkspaceInvite } from '../models/WorkspaceInvite';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
 import { deleteAdminLogEvents, getAdminLogEvents } from '../services/adminLogEventService';
@@ -55,6 +70,7 @@ import {
   listWorkspaceMembersByWorkspaceId,
 } from '../repositories/core/workspaceMemberRepository';
 import { getWorkspaceOpenAiUsageSummary } from '../repositories/core/openAiUsageRepository';
+import { postgresQuery } from '../db/postgres';
 
 const router = express.Router();
 
@@ -391,6 +407,54 @@ router.get('/workspaces/:id', authenticate, requireAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Admin workspace detail error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/workspaces/:id/reset', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const workspace = await getWorkspaceById(id);
+    if (!workspace) return res.status(404).json({ error: 'Workspace not found' });
+
+    const workspaceObjectId = new mongoose.Types.ObjectId(id);
+    const tickets = await SupportTicket.find({ workspaceId: workspaceObjectId }).select('_id').lean();
+    const ticketIds = tickets.map((ticket) => ticket._id);
+
+    await Promise.all([
+      AutomationInstance.deleteMany({ workspaceId: workspaceObjectId }),
+      AutomationSession.deleteMany({ workspaceId: workspaceObjectId }),
+      AutomationPreviewProfile.deleteMany({ workspaceId: workspaceObjectId }),
+      CommentDMLog.deleteMany({ workspaceId: workspaceObjectId }),
+      Contact.deleteMany({ workspaceId: workspaceObjectId }),
+      ContactNote.deleteMany({ workspaceId: workspaceObjectId }),
+      Conversation.deleteMany({ workspaceId: workspaceObjectId }),
+      CrmTask.deleteMany({ workspaceId: workspaceObjectId }),
+      Escalation.deleteMany({ workspaceId: workspaceObjectId }),
+      FollowupTask.deleteMany({ workspaceId: workspaceObjectId }),
+      InstagramAccount.deleteMany({ workspaceId: workspaceObjectId }),
+      KnowledgeItem.deleteMany({ workspaceId: workspaceObjectId }),
+      LeadCapture.deleteMany({ workspaceId: workspaceObjectId }),
+      Message.deleteMany({ workspaceId: workspaceObjectId }),
+      ReportDailyWorkspace.deleteMany({ workspaceId: workspaceObjectId }),
+      SupportTicket.deleteMany({ workspaceId: workspaceObjectId }),
+      SupportTicketStub.deleteMany({ workspaceId: workspaceObjectId }),
+      WorkspaceInvite.deleteMany({ workspaceId: workspaceObjectId }),
+      WorkspaceSettings.deleteMany({ workspaceId: workspaceObjectId }),
+      AdminLogEvent.deleteMany({ workspaceId: workspaceObjectId }),
+      ticketIds.length > 0
+        ? SupportTicketComment.deleteMany({ ticketId: { $in: ticketIds } })
+        : Promise.resolve(),
+    ]);
+
+    await Promise.all([
+      postgresQuery('DELETE FROM core.openai_usage WHERE workspace_id = $1', [id]),
+      postgresQuery('DELETE FROM core.workspace_members WHERE workspace_id = $1 AND user_id <> $2', [id, workspace.userId]),
+    ]);
+
+    res.json({ data: { success: true } });
+  } catch (error) {
+    console.error('Admin reset workspace error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

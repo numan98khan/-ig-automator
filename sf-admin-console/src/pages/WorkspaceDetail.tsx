@@ -21,7 +21,7 @@ export default function WorkspaceDetail() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabType>('overview')
 
-  const { data: workspaceData, isLoading: loadingWorkspace } = useQuery({
+  const { data: workspaceData, isLoading: loadingWorkspace, refetch: refetchWorkspace } = useQuery({
     queryKey: ['workspace', id],
     queryFn: () => adminApi.getWorkspaceById(id!),
     enabled: Boolean(id),
@@ -34,7 +34,7 @@ export default function WorkspaceDetail() {
     enabled: Boolean(id),
   })
 
-  const { data: membersData, isLoading: loadingMembers } = useQuery({
+  const { data: membersData, isLoading: loadingMembers, refetch: refetchMembers } = useQuery({
     queryKey: ['workspace-members', id],
     queryFn: () => adminApi.getWorkspaceMembers(id!),
     enabled: Boolean(id),
@@ -70,6 +70,32 @@ export default function WorkspaceDetail() {
   const availableConversations = availableConversationsPayload || []
   const [syncingConversationId, setSyncingConversationId] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [resettingWorkspace, setResettingWorkspace] = useState(false)
+  const [resetError, setResetError] = useState<string | null>(null)
+
+  const handleResetWorkspace = async () => {
+    if (!id || resettingWorkspace) return
+    const confirmed = window.confirm(
+      'Reset this workspace? This will delete all conversations, messages, Instagram accounts, automations, and settings.'
+    )
+    if (!confirmed) return
+    setResetError(null)
+    setResettingWorkspace(true)
+    try {
+      await adminApi.resetWorkspace(id)
+      await Promise.all([
+        refetchWorkspace(),
+        refetchConversations(),
+        refetchMembers(),
+        refetchAvailableConversations(),
+      ])
+    } catch (error) {
+      console.error('Admin reset workspace error:', error)
+      setResetError('Failed to reset workspace. Please try again.')
+    } finally {
+      setResettingWorkspace(false)
+    }
+  }
 
   const formatNumber = (value?: number) =>
     new Intl.NumberFormat('en-US').format(value || 0)
@@ -140,13 +166,25 @@ export default function WorkspaceDetail() {
               </p>
             </div>
           </div>
-          <span
-            className={`badge ${
-              workspace.isActive !== false ? 'badge-success' : 'badge-error'
-            }`}
-          >
-            {workspace.isActive !== false ? 'Active' : 'Inactive'}
-          </span>
+          <div className="flex flex-col items-end gap-2">
+            <span
+              className={`badge ${
+                workspace.isActive !== false ? 'badge-success' : 'badge-error'
+              }`}
+            >
+              {workspace.isActive !== false ? 'Active' : 'Inactive'}
+            </span>
+            <button
+              onClick={handleResetWorkspace}
+              className="btn border border-red-500/40 text-red-500 hover:bg-red-500/10"
+              disabled={resettingWorkspace}
+            >
+              {resettingWorkspace ? 'Resetting...' : 'Reset workspace'}
+            </button>
+            {resetError && (
+              <span className="text-xs text-red-500">{resetError}</span>
+            )}
+          </div>
         </div>
       </div>
 

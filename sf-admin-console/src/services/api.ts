@@ -64,6 +64,7 @@ export const adminApi = {
   getWorkspaceMembers: (id: string) => api.get(`/workspaces/${id}/members`),
   getWorkspaceUsage: (id: string, params?: { range?: string }) =>
     api.get(`/workspaces/${id}/usage`, { params }),
+  resetWorkspace: (id: string) => api.post(`/workspaces/${id}/reset`),
 
   // Users
   getUsers: (params?: { page?: number; limit?: number; search?: string }) =>
