@@ -671,6 +671,7 @@ export interface WorkspaceSettings {
   }>;
   demoModeEnabled?: boolean;
   onboarding?: {
+    connectCompletedAt?: string;
     templateSelectedAt?: string;
     basicsCompletedAt?: string;
     simulatorCompletedAt?: string;

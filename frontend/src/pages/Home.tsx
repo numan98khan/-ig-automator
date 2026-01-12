@@ -27,6 +27,7 @@ import {
   DashboardSummaryResponse,
   flowTemplateAPI,
   FlowTemplate,
+  instagramAPI,
   settingsAPI,
   WorkspaceSettings,
 } from '../services/api';
@@ -72,7 +73,7 @@ const SETUP_STEPS: SetupStep[] = [
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { currentWorkspace, user } = useAuth();
-  const { accounts } = useAccountContext();
+  const { accounts, activeAccount } = useAccountContext();
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
   const { isDemoMode, enableDemoMode, disableDemoMode } = useDemoMode(settings?.demoModeEnabled);
   const [automations, setAutomations] = useState<AutomationInstance[]>([]);
@@ -82,6 +83,7 @@ const Home: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [savingBasics, setSavingBasics] = useState(false);
   const [demoModeUpdating, setDemoModeUpdating] = useState(false);
+  const [expandedStepId, setExpandedStepId] = useState<SetupStep['id'] | null>(null);
   const [basicsForm, setBasicsForm] = useState({
     businessName: '',
     businessHours: '',
@@ -136,19 +138,35 @@ const Home: React.FC = () => {
 
   const hasInstagram = accounts.length > 0;
   const hasConnection = hasInstagram || isDemoMode;
+  const connectStepComplete = hasInstagram || Boolean(
+    settings?.onboarding?.connectCompletedAt
+      || settings?.onboarding?.templateSelectedAt
+      || settings?.onboarding?.basicsCompletedAt
+      || settings?.onboarding?.simulatorCompletedAt
+      || settings?.onboarding?.publishCompletedAt
+  );
   const hasTemplateChoice = automations.length > 0;
   const hasBusinessBasics = Boolean(settings?.businessName && settings?.businessHours);
   const activeAutomationCount = automations.filter(
     (automation) => automation.isActive && automation.template?.status !== 'archived'
   ).length;
   const publishedCount = activeAutomationCount;
-  const hasPublishedAutomation = !isDemoMode && publishedCount > 0;
+  const hasPublishedAutomation = Boolean(settings?.onboarding?.publishCompletedAt)
+    || (!isDemoMode && publishedCount > 0);
   const hasSimulation = Boolean(
     simulation?.sessionId
       || simulation?.session?.status
       || settings?.onboarding?.simulatorCompletedAt
   );
-  const isActivated = hasConnection && hasPublishedAutomation && hasSimulation;
+  const onboardingComplete = Boolean(
+    settings?.onboarding?.connectCompletedAt
+      && settings?.onboarding?.templateSelectedAt
+      && settings?.onboarding?.basicsCompletedAt
+      && settings?.onboarding?.simulatorCompletedAt
+      && settings?.onboarding?.publishCompletedAt
+  );
+  const isActivated = onboardingComplete
+    || (connectStepComplete && hasTemplateChoice && hasBusinessBasics && hasSimulation && hasPublishedAutomation);
   const liveAutomation = useMemo(
     () => (isDemoMode
       ? null
@@ -157,23 +175,23 @@ const Home: React.FC = () => {
   );
 
   const currentStepId = useMemo(() => {
-    if (!hasConnection) return 'connect';
+    if (!connectStepComplete) return 'connect';
     if (!hasTemplateChoice) return 'template';
     if (!hasBusinessBasics) return 'basics';
     if (!hasSimulation) return 'simulate';
     if (!hasPublishedAutomation) return 'publish';
     return 'simulate';
-  }, [hasConnection, hasTemplateChoice, hasBusinessBasics, hasPublishedAutomation, hasSimulation]);
+  }, [connectStepComplete, hasTemplateChoice, hasBusinessBasics, hasPublishedAutomation, hasSimulation]);
 
   const completedSteps = useMemo(() => {
     return [
-      hasConnection,
+      connectStepComplete,
       hasTemplateChoice,
       hasBusinessBasics,
       hasSimulation,
       hasPublishedAutomation,
     ].filter(Boolean).length;
-  }, [hasConnection, hasTemplateChoice, hasBusinessBasics, hasPublishedAutomation, hasSimulation]);
+  }, [connectStepComplete, hasTemplateChoice, hasBusinessBasics, hasPublishedAutomation, hasSimulation]);
 
   const progressPercent = Math.round((completedSteps / SETUP_STEPS.length) * 100);
 
@@ -208,6 +226,56 @@ const Home: React.FC = () => {
       console.error('Failed to update demo mode', error);
       previousValue ? enableDemoMode() : disableDemoMode();
     } finally {
+      setDemoModeUpdating(false);
+    }
+  };
+
+  const handleConnectDecision = async () => {
+    if (!currentWorkspace) return;
+    if (!isDemoMode) {
+      enableDemoMode();
+    }
+    setDemoModeUpdating(true);
+    try {
+      const updated = await settingsAPI.update(currentWorkspace._id, {
+        demoModeEnabled: true,
+        onboarding: { connectCompletedAt: new Date().toISOString() },
+      });
+      setSettings(updated);
+    } catch (error) {
+      console.error('Failed to confirm demo mode onboarding', error);
+    } finally {
+      setDemoModeUpdating(false);
+    }
+  };
+
+  const handleGoLive = async () => {
+    if (!currentWorkspace || !isDemoMode || !hasInstagram) return;
+    const previousValue = isDemoMode;
+    disableDemoMode();
+    setDemoModeUpdating(true);
+    try {
+      const updated = await settingsAPI.update(currentWorkspace._id, {
+        demoModeEnabled: false,
+        onboarding: { publishCompletedAt: new Date().toISOString() },
+      });
+      setSettings(updated);
+    } catch (error) {
+      console.error('Failed to switch to live mode', error);
+      previousValue ? enableDemoMode() : disableDemoMode();
+    } finally {
+      setDemoModeUpdating(false);
+    }
+  };
+
+  const handleConnectInstagram = async () => {
+    if (!currentWorkspace) return;
+    try {
+      setDemoModeUpdating(true);
+      const { authUrl } = await instagramAPI.getAuthUrl(currentWorkspace._id);
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error('Failed to connect Instagram', error);
       setDemoModeUpdating(false);
     }
   };
@@ -252,6 +320,10 @@ const Home: React.FC = () => {
     }
   }, [simulation]);
 
+  const toggleStep = (stepId: SetupStep['id']) => {
+    setExpandedStepId((prev) => (prev === stepId ? null : stepId));
+  };
+
   return (
     <div className="flex h-full flex-col gap-6 overflow-hidden">
       {/* <div className="flex flex-col gap-2">
@@ -279,48 +351,46 @@ const Home: React.FC = () => {
                 <div className="h-2 w-full rounded-full bg-muted/60">
                   <div className="h-2 rounded-full bg-primary" style={{ width: `${progressPercent}%` }} />
                 </div>
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-                  <div className="text-xs text-muted-foreground">
-                    Workspace mode:{' '}
-                    <span className="text-foreground font-semibold">{isDemoMode ? 'Demo' : 'Live'}</span>
-                    <span className="block text-[11px] text-muted-foreground">
-                      Demo mode keeps messages simulated until you are ready to go live.
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant={isDemoMode ? 'secondary' : 'outline'}
-                    onClick={() => handleDemoModeUpdate(!isDemoMode)}
-                    isLoading={demoModeUpdating}
-                  >
-                    {isDemoMode ? 'Switch to live mode' : 'Enable demo mode'}
-                  </Button>
-                </div>
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-                  <div className="text-xs text-muted-foreground">
-                    Next step: <span className="text-foreground font-semibold">{nextStepLabel}</span>
-                  </div>
-                  <Button size="sm" onClick={nextStepAction}>
-                    {currentStepId === 'simulate' ? 'Open simulator' : 'Continue'}
-                  </Button>
-                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {SETUP_STEPS.map((step, index) => {
                   const isComplete = [
-                    hasConnection,
+                    connectStepComplete,
                     hasTemplateChoice,
                     hasBusinessBasics,
-                    hasPublishedAutomation,
                     hasSimulation,
+                    hasPublishedAutomation,
                   ][index];
                   const isCurrent = step.id === currentStepId;
+                  const isExpanded = isComplete && expandedStepId === step.id;
+                  const isConnectPartial = step.id === 'connect' && connectStepComplete && !hasInstagram;
+                  const connectedUsername = activeAccount?.username || accounts[0]?.username;
+                  const selectedAutomation = automations.find((automation) => automation.template?.status !== 'archived') || automations[0];
+                  const selectedTemplateName = selectedAutomation?.template?.name || selectedAutomation?.name;
                   return (
-                    <div key={step.id} className="border border-border/60 rounded-xl p-4 space-y-3">
+                    <div
+                      key={step.id}
+                      className={`border border-border/60 rounded-xl p-4 space-y-3 transition ${
+                        isComplete ? 'cursor-pointer hover:border-border/90' : ''
+                      }`}
+                      onClick={() => {
+                        if (isComplete) toggleStep(step.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (!isComplete) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          toggleStep(step.id);
+                        }
+                      }}
+                      role={isComplete ? 'button' : undefined}
+                      tabIndex={isComplete ? 0 : undefined}
+                      aria-expanded={isComplete ? isExpanded : undefined}
+                    >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-start gap-3">
                           {isComplete ? (
-                            <BadgeCheck className="w-5 h-5 text-emerald-500 mt-0.5" />
+                            <BadgeCheck className={`w-5 h-5 mt-0.5 ${isConnectPartial ? 'text-amber-500' : 'text-emerald-500'}`} />
                           ) : (
                             <CircleDot className={`w-5 h-5 mt-0.5 ${isCurrent ? 'text-primary' : 'text-muted-foreground'}`} />
                           )}
@@ -329,21 +399,68 @@ const Home: React.FC = () => {
                             <p className="text-xs text-muted-foreground">{step.why}</p>
                           </div>
                         </div>
-                        <Badge
-                          variant={isComplete ? 'secondary' : isCurrent ? 'primary' : 'secondary'}
-                          className={isComplete ? 'text-muted-foreground' : undefined}
-                        >
-                          {isComplete ? 'Done' : isCurrent ? 'In progress' : 'Not started'}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={isComplete ? (isConnectPartial ? 'warning' : 'secondary') : isCurrent ? 'primary' : 'secondary'}
+                            className={isComplete ? 'text-muted-foreground' : undefined}
+                          >
+                            {isComplete
+                              ? (isConnectPartial ? 'Demo mode' : 'Done')
+                              : isCurrent
+                                ? 'In progress'
+                                : 'Not started'}
+                          </Badge>
+                          {isComplete && (
+                            <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                          )}
+                        </div>
                       </div>
 
-                      {isComplete && (
-                        <div className="flex justify-end">
+                      {isComplete && isExpanded && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                          {step.id === 'connect' && (
+                            <p>
+                              {hasInstagram
+                                ? `Connected account: @${connectedUsername || 'instagram'}`
+                                : isDemoMode
+                                  ? 'Demo mode active for this workspace.'
+                                  : 'Connection decision saved.'}
+                            </p>
+                          )}
+                          {step.id === 'template' && (
+                            <p>
+                              {selectedTemplateName
+                                ? `Selected template: ${selectedTemplateName}`
+                                : `Templates created: ${automations.length}`}
+                            </p>
+                          )}
+                          {step.id === 'basics' && (
+                            <p>
+                              {settings?.businessName
+                                ? `Business: ${settings.businessName}`
+                                : 'Business basics saved.'}
+                            </p>
+                          )}
+                          {step.id === 'simulate' && (
+                            <p>
+                              {simulationTimestamp
+                                ? `Last simulator run: ${simulationTimestamp}`
+                                : 'Simulator run recorded.'}
+                            </p>
+                          )}
+                          {step.id === 'publish' && (
+                            <p>
+                              {publishedCount > 0
+                                ? `${publishedCount} automation${publishedCount === 1 ? '' : 's'} published`
+                                : 'Publish settings saved.'}
+                            </p>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
                             className="text-xs"
-                            onClick={() => {
+                            onClick={(event) => {
+                              event.stopPropagation();
                               if (step.id === 'connect') navigate('/app/settings');
                               if (step.id === 'template') navigate('/app/automations');
                               if (step.id === 'basics') navigate('/app/automations?section=business-profile');
@@ -360,17 +477,17 @@ const Home: React.FC = () => {
                         </div>
                       )}
 
-                      {isCurrent && step.id === 'connect' && (
+                      {step.id === 'connect' && !connectStepComplete && (
                         <div className="flex flex-col md:flex-row md:items-center gap-3">
                           <Button onClick={() => navigate('/app/settings')} leftIcon={<Instagram className="w-4 h-4" />}>
                             Connect Instagram
                           </Button>
                           <Button
                             variant="outline"
-                            onClick={() => handleDemoModeUpdate(true)}
+                            onClick={handleConnectDecision}
                             isLoading={demoModeUpdating}
                           >
-                            Try demo mode
+                            {isDemoMode ? 'Continue with demo mode' : 'Continue with demo mode'}
                           </Button>
                         </div>
                       )}
@@ -449,10 +566,23 @@ const Home: React.FC = () => {
                       {isCurrent && step.id === 'publish' && (
                         <div className="space-y-2">
                           <div className="text-xs text-muted-foreground">
-                            Safe defaults enabled • You can pause anytime
+                            {isDemoMode
+                              ? (hasInstagram
+                                ? 'Demo mode is on • Switch to live to start sending messages.'
+                                : 'Connect Instagram to go live.')
+                              : 'Safe defaults enabled • You can pause anytime'}
                           </div>
-                          <Button onClick={() => navigate('/app/automations')}>
-                            Publish now
+                          <Button
+                            onClick={
+                              isDemoMode
+                                ? (hasInstagram ? handleGoLive : handleConnectInstagram)
+                                : () => navigate('/app/automations')
+                            }
+                            isLoading={demoModeUpdating}
+                          >
+                            {isDemoMode
+                              ? (hasInstagram ? 'Go live' : 'Connect Instagram to go live')
+                              : 'Publish now'}
                           </Button>
                         </div>
                       )}
@@ -590,31 +720,16 @@ const Home: React.FC = () => {
                   </Badge>
                 </Button>
               </div>
-              {!hasInstagram && (
+              {isDemoMode && (
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Demo mode</span>
+                  <span className="text-foreground font-semibold">Demo mode</span>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    onClick={() => handleDemoModeUpdate(true)}
+                    onClick={() => handleDemoModeUpdate(!isDemoMode)}
                     isLoading={demoModeUpdating}
                   >
-                    <Badge variant={isDemoMode ? 'primary' : 'secondary'}>
-                      {isDemoMode ? 'On' : 'Off'}
-                    </Badge>
-                  </Button>
-                </div>
-              )}
-              {hasInstagram && isDemoMode && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Demo mode</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDemoModeUpdate(false)}
-                    isLoading={demoModeUpdating}
-                  >
-                    <Badge variant="primary">On</Badge>
+                    <Badge variant="warning">On</Badge>
                   </Button>
                 </div>
               )}

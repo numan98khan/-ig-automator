@@ -31,6 +31,7 @@ export interface IWorkspaceSettings extends Document {
   }>;
   demoModeEnabled?: boolean;
   onboarding?: {
+    connectCompletedAt?: Date;
     templateSelectedAt?: Date;
     basicsCompletedAt?: Date;
     simulatorCompletedAt?: Date;
@@ -204,10 +205,11 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
   },
   demoModeEnabled: {
     type: Boolean,
-    default: false,
+    default: true,
   },
   onboarding: {
     type: new Schema({
+      connectCompletedAt: { type: Date },
       templateSelectedAt: { type: Date },
       basicsCompletedAt: { type: Date },
       simulatorCompletedAt: { type: Date },

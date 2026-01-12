@@ -77,6 +77,7 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       businessCatalog,
       businessDocuments,
       demoModeEnabled,
+      onboarding,
       primaryGoal,
       secondaryGoal,
       goalConfigs,
@@ -114,6 +115,12 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     if (businessCatalog !== undefined) updateData.businessCatalog = businessCatalog;
     if (businessDocuments !== undefined) updateData.businessDocuments = businessDocuments;
     if (demoModeEnabled !== undefined) updateData.demoModeEnabled = demoModeEnabled;
+    if (onboarding?.connectCompletedAt) {
+      updateData['onboarding.connectCompletedAt'] = new Date(onboarding.connectCompletedAt);
+    }
+    if (onboarding?.publishCompletedAt) {
+      updateData['onboarding.publishCompletedAt'] = new Date(onboarding.publishCompletedAt);
+    }
     if (primaryGoal !== undefined) updateData.primaryGoal = normalizeGoalValue(primaryGoal);
     if (secondaryGoal !== undefined) updateData.secondaryGoal = normalizeGoalValue(secondaryGoal);
     if (goalConfigs !== undefined) updateData.goalConfigs = goalConfigs;

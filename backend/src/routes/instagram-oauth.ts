@@ -293,6 +293,12 @@ router.get('/callback', async (req: Request, res: Response) => {
         console.log('✅ Created new Instagram account:', instagramAccount._id);
       }
 
+      await WorkspaceSettings.findOneAndUpdate(
+        { workspaceId: workspace._id },
+        { $set: { 'onboarding.connectCompletedAt': new Date() } },
+        { new: true, upsert: true },
+      );
+
       try {
         console.log('🔄 Subscribing to Instagram webhooks...');
         const webhookUrl = `https://graph.instagram.com/v21.0/${accountData.user_id || user_id}/subscribed_apps`;

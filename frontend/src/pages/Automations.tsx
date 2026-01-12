@@ -523,6 +523,7 @@ const Automations: React.FC = () => {
     const templateSnapshot = selectedTemplate;
     const versionSnapshot = selectedTemplate.currentVersion;
     const editingSnapshot = editingAutomation;
+    const isOnboardingCreate = templateSource === 'onboarding' && !editingAutomation;
 
     setSaving(true);
     try {
@@ -547,7 +548,7 @@ const Automations: React.FC = () => {
         savedAutomation = await automationAPI.create({
           ...payload,
           workspaceId: currentWorkspace._id,
-          isActive: templateSource !== 'onboarding',
+          isActive: true,
           templateId: selectedTemplate._id,
         });
       }
@@ -572,6 +573,9 @@ const Automations: React.FC = () => {
       });
 
       handleCloseCreateView();
+      if (isOnboardingCreate) {
+        navigate('/app/home');
+      }
     } catch (err: any) {
       const status = err?.response?.status;
       const message = err?.response?.data?.error;
