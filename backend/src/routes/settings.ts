@@ -1,7 +1,7 @@
 import express, { Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import WorkspaceSettings from '../models/WorkspaceSettings';
-import { getWorkspaceById } from '../repositories/core/workspaceRepository';
+import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 
 const router = express.Router();
 
@@ -32,9 +32,12 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   try {
     const { workspaceId } = req.params;
 
-    const workspace = await getWorkspaceById(workspaceId);
-    if (!workspace || workspace.userId !== req.userId) {
+    const { hasAccess, workspace } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     let settings = await WorkspaceSettings.findOne({ workspaceId });
@@ -80,9 +83,12 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       googleSheets,
     } = req.body;
 
-    const workspace = await getWorkspaceById(workspaceId);
-    if (!workspace || workspace.userId !== req.userId) {
+    const { hasAccess, workspace, isOwner, role } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+    if (!hasAccess || (!isOwner && role !== 'admin')) {
+      return res.status(403).json({ error: 'Only workspace owners and managers can update settings' });
     }
 
     const updateData: Record<string, any> = {};
@@ -133,9 +139,12 @@ router.get('/workspace/:workspaceId/stats', authenticate, async (req: AuthReques
   try {
     const { workspaceId } = req.params;
 
-    const workspace = await getWorkspaceById(workspaceId);
-    if (!workspace || workspace.userId !== req.userId) {
+    const { hasAccess, workspace } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     const CommentDMLog = (await import('../models/CommentDMLog')).default;

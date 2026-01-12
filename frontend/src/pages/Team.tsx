@@ -13,6 +13,7 @@ const ROLE_LABELS: Record<Role, string> = {
   agent: 'Agent',
   viewer: 'Viewer',
 };
+const EDITABLE_ROLES: Role[] = ['admin', 'agent', 'viewer'];
 
 const Team: React.FC = () => {
   const { currentWorkspace } = useAuth();
@@ -224,18 +225,24 @@ const Team: React.FC = () => {
                       <p className="text-sm text-muted-foreground">Joined {new Date(member.joinedAt).toLocaleDateString()}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <select
-                        value={member.role}
-                        onChange={(e) => handleRoleChange(member.user.id, e.target.value as Role)}
-                        className="bg-background border border-border rounded-lg text-sm px-2 py-1"
-                        disabled={saving}
-                      >
-                        {Object.keys(ROLE_LABELS).map((role) => (
-                          <option key={role} value={role}>
-                            {ROLE_LABELS[role as Role]}
-                          </option>
-                        ))}
-                      </select>
+                      {(() => {
+                        const isOwner = member.role === 'owner';
+                        const options = isOwner ? ['owner'] : EDITABLE_ROLES;
+                        return (
+                          <select
+                            value={member.role}
+                            onChange={(e) => handleRoleChange(member.user.id, e.target.value as Role)}
+                            className={`bg-background border border-border rounded-lg text-sm px-2 py-1 ${isOwner ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            disabled={saving || isOwner}
+                          >
+                            {options.map((role) => (
+                              <option key={role} value={role}>
+                                {ROLE_LABELS[role as Role]}
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })()}
                       {member.role !== 'owner' && (
                         <Button
                           variant="ghost"
@@ -263,9 +270,9 @@ const Team: React.FC = () => {
               <h3 className="font-semibold">Roles & permissions</h3>
             </div>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><span className="text-foreground font-semibold">Owner:</span> billing + workspace settings</li>
-              <li><span className="text-foreground font-semibold">Manager:</span> manage knowledge and alerts</li>
-              <li><span className="text-foreground font-semibold">Agent:</span> inbox and alerts access</li>
+              <li><span className="text-foreground font-semibold">Owner:</span> billing + full workspace access</li>
+              <li><span className="text-foreground font-semibold">Manager:</span> full workspace access (except billing)</li>
+              <li><span className="text-foreground font-semibold">Agent:</span> inbox + alerts access</li>
               <li><span className="text-foreground font-semibold">Viewer:</span> read-only analytics</li>
             </ul>
           </div>
@@ -308,7 +315,7 @@ const Team: React.FC = () => {
                   className="w-full mt-1 bg-background border border-input rounded-lg px-3 py-2 text-sm"
                   disabled={isTeamLimitReached}
                 >
-                  {Object.keys(ROLE_LABELS).map((role) => (
+                  {EDITABLE_ROLES.map((role) => (
                     <option key={role} value={role}>
                       {ROLE_LABELS[role as Role]}
                     </option>
