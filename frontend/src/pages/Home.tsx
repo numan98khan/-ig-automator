@@ -250,7 +250,7 @@ const Home: React.FC = () => {
   }, [simulation]);
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full flex-col gap-6 overflow-hidden">
       {/* <div className="flex flex-col gap-2">
         <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Home</h1>
         <p className="text-sm text-muted-foreground">
@@ -282,8 +282,8 @@ const Home: React.FC = () => {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6">
-        <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 flex-1 min-h-0 overflow-hidden">
+        <div className="space-y-6 h-full overflow-y-auto pr-1">
           {!isActivated && (
             <Card className="border border-border/70">
               <CardHeader className="space-y-2">
@@ -595,7 +595,7 @@ const Home: React.FC = () => {
           )}
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-6 h-full overflow-y-auto pr-1">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Workspace status</CardTitle>
