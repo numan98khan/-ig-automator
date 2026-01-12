@@ -14,7 +14,6 @@ import {
   ShieldCheck,
   Sparkles,
   TestTube2,
-  TriangleAlert,
   Wrench,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
