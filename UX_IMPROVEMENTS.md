@@ -6,6 +6,10 @@ This branch includes user-facing experience enhancements intended to make onboar
 - Added a dedicated Home page with an onboarding checklist and next-step calls to action.
 - Highlighted live automation status and quick entry points into key flows.
 - Added a workspace mode toggle in onboarding (Demo vs Live) to set expectations during setup.
+- Reordered onboarding steps so simulator testing comes before publish, keeping publish open in demo mode or when no active automations exist.
+- Made Home layout fit the viewport with independently scrollable left/right columns for long onboarding content.
+- Removed the large demo-mode banner in favor of keeping status within the Workspace status card.
+- Persisted onboarding completion at the workspace level (template selection, business basics, simulator completion, publish completion) so new members inherit progress and simulator steps stay checked after resets.
 
 ## Business Profile
 - Extended workspace settings to capture business basics that improve automation context.
@@ -15,6 +19,7 @@ This branch includes user-facing experience enhancements intended to make onboar
 - Added deep-link support for templates and live automations (query params like `templateId`, `automationId`, `mode`, and `filter`).
 - Introduced an initial status filter for automations lists to pre-select views.
 - Updated automation creation CTA to "Finish" to reduce confusion around activation.
+- Ensured onboarding template selection creates automations without auto-activating them until publish.
 
 ## Demo Mode
 - Added a demo mode hook to enable tailored onboarding/demo experiences.
