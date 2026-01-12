@@ -10,7 +10,9 @@ import {
   AutomationInstance,
   FlowExposedField,
   FlowTemplate,
+  ResourceUsage,
   tierAPI,
+  WorkspaceTierResponse,
 } from '../services/api';
 import { AlertTriangle, CheckCircle2, Clock, PlayCircle, X } from 'lucide-react';
 import { AutomationsSidebar } from './automations/AutomationsSidebar';
@@ -200,15 +202,8 @@ const Automations: React.FC = () => {
     },
     enabled: Boolean(workspaceId),
     placeholderData: keepPreviousData,
-    onSuccess: () => {
-      setError(null);
-    },
-    onError: (err) => {
-      console.error('Error loading data:', err);
-      setError('Failed to load automations');
-    },
   });
-  const workspaceTierQuery = useQuery({
+  const workspaceTierQuery = useQuery<WorkspaceTierResponse>({
     queryKey: ['workspace-tier', workspaceId],
     queryFn: async () => {
       if (!workspaceId) {
@@ -218,11 +213,8 @@ const Automations: React.FC = () => {
     },
     enabled: Boolean(workspaceId),
     placeholderData: keepPreviousData,
-    onError: (err) => {
-      console.error('Error loading workspace tier:', err);
-    },
   });
-  const aiUsageQuery = useQuery({
+  const aiUsageQuery = useQuery<ResourceUsage | null>({
     queryKey: ['ai-usage', workspaceId],
     queryFn: async () => {
       if (!workspaceId) {
@@ -234,9 +226,6 @@ const Automations: React.FC = () => {
     enabled: Boolean(workspaceId),
     placeholderData: keepPreviousData,
     refetchInterval: 20000,
-    onError: (err) => {
-      console.error('Error loading AI usage:', err);
-    },
   });
   const automations = automationsQuery.data?.automations ?? [];
   const templates = automationsQuery.data?.templates ?? [];
@@ -314,6 +303,27 @@ const Automations: React.FC = () => {
       totalRepliesSent,
     };
   }, [automations]);
+
+  useEffect(() => {
+    if (automationsQuery.error) {
+      console.error('Error loading data:', automationsQuery.error);
+      setError('Failed to load automations');
+    } else if (automationsQuery.isSuccess) {
+      setError(null);
+    }
+  }, [automationsQuery.error, automationsQuery.isSuccess]);
+
+  useEffect(() => {
+    if (workspaceTierQuery.error) {
+      console.error('Error loading workspace tier:', workspaceTierQuery.error);
+    }
+  }, [workspaceTierQuery.error]);
+
+  useEffect(() => {
+    if (aiUsageQuery.error) {
+      console.error('Error loading AI usage:', aiUsageQuery.error);
+    }
+  }, [aiUsageQuery.error]);
 
   useEffect(() => {
     const section = searchParams.get('section');

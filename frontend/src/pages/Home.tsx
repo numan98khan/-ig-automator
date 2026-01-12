@@ -147,9 +147,6 @@ const Home: React.FC = () => {
     },
     enabled: Boolean(workspaceId),
     placeholderData: keepPreviousData,
-    onError: (error) => {
-      console.error('Failed to load Home data', error);
-    },
   });
   const attentionQuery = useQuery<DashboardAttentionResponse>({
     queryKey: ['home-attention', workspaceId, attentionFilter],
@@ -161,9 +158,6 @@ const Home: React.FC = () => {
     },
     enabled: Boolean(workspaceId),
     placeholderData: keepPreviousData,
-    onError: (error) => {
-      console.error('Failed to load attention items', error);
-    },
   });
   const settings = homeQuery.data?.settings ?? null;
   const automations = homeQuery.data?.automations ?? [];
@@ -194,6 +188,18 @@ const Home: React.FC = () => {
       businessLocation: settings.businessLocation || '',
     });
   }, [settings]);
+
+  useEffect(() => {
+    if (homeQuery.error) {
+      console.error('Failed to load Home data', homeQuery.error);
+    }
+  }, [homeQuery.error]);
+
+  useEffect(() => {
+    if (attentionQuery.error) {
+      console.error('Failed to load attention items', attentionQuery.error);
+    }
+  }, [attentionQuery.error]);
 
   const updateSettingsCache = (updated: typeof settings) => {
     if (!workspaceId || !updated) return;
