@@ -143,7 +143,11 @@ const Home: React.FC = () => {
   ).length;
   const publishedCount = activeAutomationCount;
   const hasPublishedAutomation = !isDemoMode && publishedCount > 0;
-  const hasSimulation = Boolean(simulation?.sessionId || simulation?.session?.status);
+  const hasSimulation = Boolean(
+    simulation?.sessionId
+      || simulation?.session?.status
+      || settings?.onboarding?.simulatorCompletedAt
+  );
   const isActivated = hasConnection && hasPublishedAutomation && hasSimulation;
   const liveAutomation = useMemo(
     () => (isDemoMode

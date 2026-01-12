@@ -91,6 +91,7 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       return res.status(403).json({ error: 'Only workspace owners and managers can update settings' });
     }
 
+    const existingSettings = await WorkspaceSettings.findOne({ workspaceId });
     const updateData: Record<string, any> = {};
 
     if (defaultLanguage !== undefined) updateData.defaultLanguage = defaultLanguage;
@@ -120,6 +121,12 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       Object.entries(googleSheets as Record<string, any>).forEach(([key, value]) => {
         updateData[`googleSheets.${key}`] = value;
       });
+    }
+
+    const nextBusinessName = businessName ?? existingSettings?.businessName;
+    const nextBusinessHours = businessHours ?? existingSettings?.businessHours;
+    if (nextBusinessName && nextBusinessHours && !existingSettings?.onboarding?.basicsCompletedAt) {
+      updateData['onboarding.basicsCompletedAt'] = new Date();
     }
 
     const settings = await WorkspaceSettings.findOneAndUpdate(

@@ -670,6 +670,12 @@ export interface WorkspaceSettings {
     url?: string;
   }>;
   demoModeEnabled?: boolean;
+  onboarding?: {
+    templateSelectedAt?: string;
+    basicsCompletedAt?: string;
+    simulatorCompletedAt?: string;
+    publishCompletedAt?: string;
+  };
   allowHashtags?: boolean;
   allowEmojis?: boolean;
   maxReplySentences?: number;
