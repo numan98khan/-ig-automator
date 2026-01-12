@@ -563,6 +563,7 @@ const ensurePreviewSession = async (params: {
     if (profileId) {
       meta.profileId = profileId;
     }
+    session.markModified('state');
     await session.save();
   }
 
@@ -769,6 +770,7 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
       });
     }
 
+    session.markModified('state');
     await session.save();
     const payload = await buildPreviewSessionPayload(session, conversation, {
       includeEvents: await canViewExecutionTimeline(workspaceId),
