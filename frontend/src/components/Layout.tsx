@@ -126,15 +126,15 @@ const Layout: React.FC = () => {
               className="flex items-center gap-2 rounded-md px-2 py-1 transition"
             >
               <img
-                src="/icon.svg"
-                alt="SendFx icon"
-                className="h-10 w-10 md:h-12 md:w-12 shrink-0 object-contain rounded-[10px] md:rounded-[12px] border border-transparent dark:border-white/70"
+                src="/sendfx.png"
+                alt="SendFx logo"
+                className="h-12 w-12 md:h-14 md:w-14 shrink-0 object-contain rounded-[10px] md:rounded-[12px] border border-transparent dark:border-white/70"
               />
             </Link>
             <div className="relative" ref={accountMenuRef}>
               <button
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                className="flex items-center gap-2 md:gap-3 px-2.5 md:px-3 md:pl-1 py-2 rounded-full border border-border bg-card hover:border-primary/50 transition shadow-sm h-10 md:h-12"
+                className="flex items-center p-0.5 rounded-full border border-border bg-card hover:border-primary/50 transition shadow-sm"
                 aria-label="Switch Instagram account"
               >
                 <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border border-border bg-muted flex items-center justify-center overflow-hidden text-foreground">
@@ -144,19 +144,9 @@ const Layout: React.FC = () => {
                     <Instagram className="w-4 h-4 text-primary" />
                   )}
                 </div>
-                <div className="hidden md:flex text-left min-w-0 flex-col leading-tight">
-                  {/* <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Instagram</p> */}
-                  <p className="font-semibold text-sm text-foreground truncate">
-                    {connectedAccountLabel || 'Connect account'}
-                  </p>
-                  {currentWorkspace?.name && (
-                    <p className="text-[11px] text-muted-foreground truncate">{currentWorkspace.name}</p>
-                  )}
-                </div>
                 <span className="sr-only">
                   Workspace {currentWorkspace?.name || 'not selected'}
                 </span>
-                <ChevronDown className="w-4 h-4 text-muted-foreground hidden md:block" />
               </button>
 
               {accountMenuOpen && (
