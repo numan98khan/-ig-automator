@@ -142,7 +142,7 @@ const Home: React.FC = () => {
   const activeAutomationCount = automations.filter(
     (automation) => automation.isActive && automation.template?.status !== 'archived'
   ).length;
-  const publishedCount = isDemoMode ? 0 : activeAutomationCount;
+  const publishedCount = activeAutomationCount;
   const hasPublishedAutomation = publishedCount > 0;
   const hasSimulation = Boolean(simulation?.sessionId || simulation?.session?.status);
   const isActivated = hasConnection && hasPublishedAutomation && hasSimulation;
