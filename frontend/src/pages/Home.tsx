@@ -260,28 +260,6 @@ const Home: React.FC = () => {
         </p>
       </div> */}
 
-      {isDemoMode && (
-        <Card className="border-amber-400/40 bg-amber-50/70 dark:bg-amber-400/10">
-          <CardContent className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 py-4">
-            <div className="flex items-start gap-3">
-              <TriangleAlert className="w-5 h-5 text-amber-500" />
-              <div>
-                <p className="text-sm font-semibold text-foreground">Demo mode is on — connect Instagram to go live.</p>
-                <p className="text-xs text-muted-foreground">You can finish setup with simulated data until you connect.</p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDemoModeUpdate(false)}
-              isLoading={demoModeUpdating}
-            >
-              Turn off demo mode
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 flex-1 min-h-0 overflow-hidden">
         <div className="space-y-6 h-full overflow-y-auto pr-1">
           {!isActivated && (
