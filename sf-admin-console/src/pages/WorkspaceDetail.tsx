@@ -21,7 +21,7 @@ export default function WorkspaceDetail() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabType>('overview')
 
-  const { data: workspaceData, isLoading: loadingWorkspace, refetch: refetchWorkspace } = useQuery({
+  const { data: workspaceData, isLoading: loadingWorkspace } = useQuery({
     queryKey: ['workspace', id],
     queryFn: () => adminApi.getWorkspaceById(id!),
     enabled: Boolean(id),
@@ -34,7 +34,7 @@ export default function WorkspaceDetail() {
     enabled: Boolean(id),
   })
 
-  const { data: membersData, isLoading: loadingMembers, refetch: refetchMembers } = useQuery({
+  const { data: membersData, isLoading: loadingMembers } = useQuery({
     queryKey: ['workspace-members', id],
     queryFn: () => adminApi.getWorkspaceMembers(id!),
     enabled: Boolean(id),
