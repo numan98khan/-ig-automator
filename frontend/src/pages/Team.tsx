@@ -13,6 +13,7 @@ const ROLE_LABELS: Record<Role, string> = {
   agent: 'Agent',
   viewer: 'Viewer',
 };
+const EDITABLE_ROLES: Role[] = ['admin', 'agent', 'viewer'];
 
 const Team: React.FC = () => {
   const { currentWorkspace } = useAuth();
@@ -26,6 +27,7 @@ const Team: React.FC = () => {
   const [tierSummary, setTierSummary] = useState<WorkspaceTierResponse | null>(null);
   const [tierLoading, setTierLoading] = useState(false);
   const displayLimit = (value?: number | null) => (typeof value === 'number' ? value : '∞');
+  const resolveMemberId = (member: WorkspaceMember) => member.user._id || member.user.id || '';
 
   const sortedMembers = useMemo(
     () => [...members].sort((a, b) => a.role.localeCompare(b.role)),
@@ -217,31 +219,39 @@ const Team: React.FC = () => {
               <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" />Loading members…</div>
             ) : (
               <div className="space-y-3">
-                {sortedMembers.map((member) => (
-                  <div key={member.user.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-muted/30 border border-border/70">
+                {sortedMembers.map((member) => {
+                  const memberId = resolveMemberId(member);
+                  return (
+                  <div key={memberId} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-muted/30 border border-border/70">
                     <div>
                       <p className="font-semibold">{member.user.email || member.user.instagramUsername || 'Member'}</p>
                       <p className="text-sm text-muted-foreground">Joined {new Date(member.joinedAt).toLocaleDateString()}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <select
-                        value={member.role}
-                        onChange={(e) => handleRoleChange(member.user.id, e.target.value as Role)}
-                        className="bg-background border border-border rounded-lg text-sm px-2 py-1"
-                        disabled={saving}
-                      >
-                        {Object.keys(ROLE_LABELS).map((role) => (
-                          <option key={role} value={role}>
-                            {ROLE_LABELS[role as Role]}
-                          </option>
-                        ))}
-                      </select>
+                      {(() => {
+                        const isOwner = member.role === 'owner';
+                        const options = isOwner ? ['owner'] : EDITABLE_ROLES;
+                        return (
+                          <select
+                            value={member.role}
+                            onChange={(e) => handleRoleChange(memberId, e.target.value as Role)}
+                            className={`bg-background border border-border rounded-lg text-sm px-2 py-1 ${isOwner ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            disabled={saving || isOwner || !memberId}
+                          >
+                            {options.map((role) => (
+                              <option key={role} value={role}>
+                                {ROLE_LABELS[role as Role]}
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })()}
                       {member.role !== 'owner' && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRemoveMember(member.user.id)}
-                          disabled={saving}
+                          onClick={() => handleRemoveMember(memberId)}
+                          disabled={saving || !memberId}
                           leftIcon={<Trash2 className="w-4 h-4" />}
                         >
                           Remove
@@ -249,7 +259,8 @@ const Team: React.FC = () => {
                       )}
                     </div>
                   </div>
-                ))}
+                );
+                })}
                 {sortedMembers.length === 0 && (
                   <p className="text-sm text-muted-foreground">No members found.</p>
                 )}
@@ -263,9 +274,9 @@ const Team: React.FC = () => {
               <h3 className="font-semibold">Roles & permissions</h3>
             </div>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><span className="text-foreground font-semibold">Owner:</span> billing + workspace settings</li>
-              <li><span className="text-foreground font-semibold">Manager:</span> manage knowledge and alerts</li>
-              <li><span className="text-foreground font-semibold">Agent:</span> inbox and alerts access</li>
+              <li><span className="text-foreground font-semibold">Owner:</span> billing + full workspace access</li>
+              <li><span className="text-foreground font-semibold">Manager:</span> full workspace access (except billing)</li>
+              <li><span className="text-foreground font-semibold">Agent:</span> inbox + alerts access</li>
               <li><span className="text-foreground font-semibold">Viewer:</span> read-only analytics</li>
             </ul>
           </div>
@@ -308,7 +319,7 @@ const Team: React.FC = () => {
                   className="w-full mt-1 bg-background border border-input rounded-lg px-3 py-2 text-sm"
                   disabled={isTeamLimitReached}
                 >
-                  {Object.keys(ROLE_LABELS).map((role) => (
+                  {EDITABLE_ROLES.map((role) => (
                     <option key={role} value={role}>
                       {ROLE_LABELS[role as Role]}
                     </option>

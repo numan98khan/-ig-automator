@@ -17,6 +17,7 @@ import {
   LifeBuoy,
   Atom,
   Users,
+  Home as HomeIcon,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
@@ -47,8 +48,9 @@ const Layout: React.FC = () => {
 
   const navLinks = useMemo(() => {
     const links = [
-      { to: '/app/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/app/inbox') || location.pathname === '/app' },
-      { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard, isActive: isActive('/app/dashboard') },
+      { to: '/app/home', label: 'Home', icon: HomeIcon, isActive: isActive('/app/home') || location.pathname === '/app' },
+      { to: '/app/inbox', label: 'Inbox', icon: MessageSquare, isActive: isActive('/app/inbox') },
+      { to: '/app/analytics', label: 'Analytics', icon: LayoutDashboard, isActive: isActive('/app/analytics') || isActive('/app/dashboard') },
       { to: '/app/crm', label: 'CRM', icon: Users, isActive: isActive('/app/crm') },
       { to: '/app/automations', label: 'Automations', icon: Atom, isActive: isActive('/app/automations') },
     ];
@@ -58,19 +60,15 @@ const Layout: React.FC = () => {
 
   const pageTitle = useMemo(() => {
     const path = location.pathname;
-    if (path === '/app' || path.startsWith('/app/inbox')) return 'Inbox';
-    if (path.startsWith('/app/dashboard')) return 'Dashboard';
+    if (path === '/app' || path.startsWith('/app/home')) return 'Home';
+    if (path.startsWith('/app/inbox')) return 'Inbox';
+    if (path.startsWith('/app/analytics') || path.startsWith('/app/dashboard')) return 'Analytics';
     if (path.startsWith('/app/crm')) return 'CRM';
     if (path.startsWith('/app/automations')) return 'Automations';
     if (path.startsWith('/app/settings')) return 'Settings';
     if (path.startsWith('/app/support')) return 'Support';
     return 'App';
   }, [location.pathname]);
-
-  const connectedAccountLabel = useMemo(() => {
-    if (!activeAccount) return null;
-    return activeAccount.username ? `@${activeAccount.username}` : 'Connected IG';
-  }, [activeAccount]);
 
   const accountAvatar = useMemo(() => {
     return (activeAccount as any)?.profilePictureUrl || (activeAccount as any)?.avatarUrl || null;
@@ -119,19 +117,19 @@ const Layout: React.FC = () => {
         <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full grid grid-cols-[auto,1fr,auto] items-center gap-4">
           <div className="flex items-center gap-2 min-w-0">
             <Link
-              to="/app/inbox"
+              to="/app/home"
               className="flex items-center gap-2 rounded-md px-2 py-1 transition"
             >
               <img
-                src="/icon.svg"
-                alt="SendFx icon"
-                className="h-10 w-10 md:h-12 md:w-12 shrink-0 object-contain rounded-[10px] md:rounded-[12px] border border-transparent dark:border-white/70"
+                src="/sendfx.png"
+                alt="SendFx logo"
+                className="h-9 md:h-11 w-auto shrink-0 object-contain"
               />
             </Link>
             <div className="relative" ref={accountMenuRef}>
               <button
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                className="flex items-center gap-2 md:gap-3 px-2.5 md:px-3 md:pl-1 py-2 rounded-full border border-border bg-card hover:border-primary/50 transition shadow-sm h-10 md:h-12"
+                className="flex items-center p-0.5 rounded-full border border-border bg-card hover:border-primary/50 transition shadow-sm"
                 aria-label="Switch Instagram account"
               >
                 <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border border-border bg-muted flex items-center justify-center overflow-hidden text-foreground">
@@ -141,19 +139,9 @@ const Layout: React.FC = () => {
                     <Instagram className="w-4 h-4 text-primary" />
                   )}
                 </div>
-                <div className="hidden md:flex text-left min-w-0 flex-col leading-tight">
-                  {/* <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Instagram</p> */}
-                  <p className="font-semibold text-sm text-foreground truncate">
-                    {connectedAccountLabel || 'Connect account'}
-                  </p>
-                  {currentWorkspace?.name && (
-                    <p className="text-[11px] text-muted-foreground truncate">{currentWorkspace.name}</p>
-                  )}
-                </div>
                 <span className="sr-only">
                   Workspace {currentWorkspace?.name || 'not selected'}
                 </span>
-                <ChevronDown className="w-4 h-4 text-muted-foreground hidden md:block" />
               </button>
 
               {accountMenuOpen && (

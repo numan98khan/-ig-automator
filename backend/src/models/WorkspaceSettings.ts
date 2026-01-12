@@ -14,6 +14,29 @@ export interface IWorkspaceSettings extends Document {
   assistantName?: string;
   assistantDescription?: string;
   systemPrompt?: string;
+  businessName?: string;
+  businessDescription?: string;
+  businessHours?: string;
+  businessTone?: string;
+  businessLocation?: string;
+  businessWebsite?: string;
+  businessCatalog?: Array<{
+    name: string;
+    description?: string;
+    price?: string;
+  }>;
+  businessDocuments?: Array<{
+    title: string;
+    url?: string;
+  }>;
+  demoModeEnabled?: boolean;
+  onboarding?: {
+    connectCompletedAt?: Date;
+    templateSelectedAt?: Date;
+    basicsCompletedAt?: Date;
+    simulatorCompletedAt?: Date;
+    publishCompletedAt?: Date;
+  };
 
   // Language settings
   defaultLanguage: string;        // Legacy default
@@ -136,6 +159,63 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
   systemPrompt: {
     type: String,
     trim: true,
+  },
+  businessName: {
+    type: String,
+    trim: true,
+  },
+  businessDescription: {
+    type: String,
+    trim: true,
+  },
+  businessHours: {
+    type: String,
+    trim: true,
+  },
+  businessTone: {
+    type: String,
+    trim: true,
+  },
+  businessLocation: {
+    type: String,
+    trim: true,
+  },
+  businessWebsite: {
+    type: String,
+    trim: true,
+  },
+  businessCatalog: {
+    type: [
+      new Schema({
+        name: { type: String, trim: true, required: true },
+        description: { type: String, trim: true },
+        price: { type: String, trim: true },
+      }, { _id: false }),
+    ],
+    default: [],
+  },
+  businessDocuments: {
+    type: [
+      new Schema({
+        title: { type: String, trim: true, required: true },
+        url: { type: String, trim: true },
+      }, { _id: false }),
+    ],
+    default: [],
+  },
+  demoModeEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  onboarding: {
+    type: new Schema({
+      connectCompletedAt: { type: Date },
+      templateSelectedAt: { type: Date },
+      basicsCompletedAt: { type: Date },
+      simulatorCompletedAt: { type: Date },
+      publishCompletedAt: { type: Date },
+    }, { _id: false }),
+    default: undefined,
   },
 
   // Language settings

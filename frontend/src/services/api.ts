@@ -654,6 +654,29 @@ export interface WorkspaceSettings {
   defaultLanguage: string;
   defaultReplyLanguage?: string;
   uiLanguage: string;
+  businessName?: string;
+  businessDescription?: string;
+  businessHours?: string;
+  businessTone?: string;
+  businessLocation?: string;
+  businessWebsite?: string;
+  businessCatalog?: Array<{
+    name: string;
+    description?: string;
+    price?: string;
+  }>;
+  businessDocuments?: Array<{
+    title: string;
+    url?: string;
+  }>;
+  demoModeEnabled?: boolean;
+  onboarding?: {
+    connectCompletedAt?: string;
+    templateSelectedAt?: string;
+    basicsCompletedAt?: string;
+    simulatorCompletedAt?: string;
+    publishCompletedAt?: string;
+  };
   allowHashtags?: boolean;
   allowEmojis?: boolean;
   maxReplySentences?: number;
@@ -793,6 +816,11 @@ export const authAPI = {
 
   resetPassword: async (token: string, newPassword: string) => {
     const { data } = await api.post('/api/auth/reset-password', { token, newPassword });
+    return data;
+  },
+
+  deleteAccount: async () => {
+    const { data } = await api.delete('/api/auth/account');
     return data;
   },
 };

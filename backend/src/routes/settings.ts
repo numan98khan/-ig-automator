@@ -1,7 +1,7 @@
 import express, { Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import WorkspaceSettings from '../models/WorkspaceSettings';
-import { getWorkspaceById } from '../repositories/core/workspaceRepository';
+import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 
 const router = express.Router();
 
@@ -32,9 +32,12 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
   try {
     const { workspaceId } = req.params;
 
-    const workspace = await getWorkspaceById(workspaceId);
-    if (!workspace || workspace.userId !== req.userId) {
+    const { hasAccess, workspace } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     let settings = await WorkspaceSettings.findOne({ workspaceId });
@@ -65,17 +68,31 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       escalationExamples,
       humanEscalationBehavior,
       humanHoldMinutes,
+      businessName,
+      businessDescription,
+      businessHours,
+      businessTone,
+      businessLocation,
+      businessWebsite,
+      businessCatalog,
+      businessDocuments,
+      demoModeEnabled,
+      onboarding,
       primaryGoal,
       secondaryGoal,
       goalConfigs,
       googleSheets,
     } = req.body;
 
-    const workspace = await getWorkspaceById(workspaceId);
-    if (!workspace || workspace.userId !== req.userId) {
+    const { hasAccess, workspace, isOwner, role } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
     }
+    if (!hasAccess || (!isOwner && role !== 'admin')) {
+      return res.status(403).json({ error: 'Only workspace owners and managers can update settings' });
+    }
 
+    const existingSettings = await WorkspaceSettings.findOne({ workspaceId });
     const updateData: Record<string, any> = {};
 
     if (defaultLanguage !== undefined) updateData.defaultLanguage = defaultLanguage;
@@ -89,6 +106,21 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
     if (escalationExamples !== undefined) updateData.escalationExamples = escalationExamples;
     if (humanEscalationBehavior !== undefined) updateData.humanEscalationBehavior = humanEscalationBehavior;
     if (humanHoldMinutes !== undefined) updateData.humanHoldMinutes = humanHoldMinutes;
+    if (businessName !== undefined) updateData.businessName = businessName;
+    if (businessDescription !== undefined) updateData.businessDescription = businessDescription;
+    if (businessHours !== undefined) updateData.businessHours = businessHours;
+    if (businessTone !== undefined) updateData.businessTone = businessTone;
+    if (businessLocation !== undefined) updateData.businessLocation = businessLocation;
+    if (businessWebsite !== undefined) updateData.businessWebsite = businessWebsite;
+    if (businessCatalog !== undefined) updateData.businessCatalog = businessCatalog;
+    if (businessDocuments !== undefined) updateData.businessDocuments = businessDocuments;
+    if (demoModeEnabled !== undefined) updateData.demoModeEnabled = demoModeEnabled;
+    if (onboarding?.connectCompletedAt) {
+      updateData['onboarding.connectCompletedAt'] = new Date(onboarding.connectCompletedAt);
+    }
+    if (onboarding?.publishCompletedAt) {
+      updateData['onboarding.publishCompletedAt'] = new Date(onboarding.publishCompletedAt);
+    }
     if (primaryGoal !== undefined) updateData.primaryGoal = normalizeGoalValue(primaryGoal);
     if (secondaryGoal !== undefined) updateData.secondaryGoal = normalizeGoalValue(secondaryGoal);
     if (goalConfigs !== undefined) updateData.goalConfigs = goalConfigs;
@@ -96,6 +128,12 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       Object.entries(googleSheets as Record<string, any>).forEach(([key, value]) => {
         updateData[`googleSheets.${key}`] = value;
       });
+    }
+
+    const nextBusinessName = businessName ?? existingSettings?.businessName;
+    const nextBusinessHours = businessHours ?? existingSettings?.businessHours;
+    if (nextBusinessName && nextBusinessHours && !existingSettings?.onboarding?.basicsCompletedAt) {
+      updateData['onboarding.basicsCompletedAt'] = new Date();
     }
 
     const settings = await WorkspaceSettings.findOneAndUpdate(
@@ -115,9 +153,12 @@ router.get('/workspace/:workspaceId/stats', authenticate, async (req: AuthReques
   try {
     const { workspaceId } = req.params;
 
-    const workspace = await getWorkspaceById(workspaceId);
-    if (!workspace || workspace.userId !== req.userId) {
+    const { hasAccess, workspace } = await checkWorkspaceAccess(workspaceId, req.userId!);
+    if (!workspace) {
       return res.status(404).json({ error: 'Workspace not found' });
+    }
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this workspace' });
     }
 
     const CommentDMLog = (await import('../models/CommentDMLog')).default;

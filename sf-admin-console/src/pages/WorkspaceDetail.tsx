@@ -70,6 +70,27 @@ export default function WorkspaceDetail() {
   const availableConversations = availableConversationsPayload || []
   const [syncingConversationId, setSyncingConversationId] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [deletingWorkspace, setDeletingWorkspace] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const handleDeleteWorkspace = async () => {
+    if (!id || deletingWorkspace) return
+    const confirmed = window.confirm(
+      'Delete this workspace? This will permanently delete all conversations, messages, Instagram accounts, automations, settings, and billing data.'
+    )
+    if (!confirmed) return
+    setDeleteError(null)
+    setDeletingWorkspace(true)
+    try {
+      await adminApi.deleteWorkspace(id)
+      navigate('/workspaces')
+    } catch (error) {
+      console.error('Admin delete workspace error:', error)
+      setDeleteError('Failed to delete workspace. Please try again.')
+    } finally {
+      setDeletingWorkspace(false)
+    }
+  }
 
   const formatNumber = (value?: number) =>
     new Intl.NumberFormat('en-US').format(value || 0)
@@ -140,13 +161,25 @@ export default function WorkspaceDetail() {
               </p>
             </div>
           </div>
-          <span
-            className={`badge ${
-              workspace.isActive !== false ? 'badge-success' : 'badge-error'
-            }`}
-          >
-            {workspace.isActive !== false ? 'Active' : 'Inactive'}
-          </span>
+          <div className="flex flex-col items-end gap-2">
+            <span
+              className={`badge ${
+                workspace.isActive !== false ? 'badge-success' : 'badge-error'
+              }`}
+            >
+              {workspace.isActive !== false ? 'Active' : 'Inactive'}
+            </span>
+            <button
+              onClick={handleDeleteWorkspace}
+              className="btn border border-red-500/40 text-red-500 hover:bg-red-500/10"
+              disabled={deletingWorkspace}
+            >
+              {deletingWorkspace ? 'Deleting...' : 'Delete workspace'}
+            </button>
+            {deleteError && (
+              <span className="text-xs text-red-500">{deleteError}</span>
+            )}
+          </div>
         </div>
       </div>
 

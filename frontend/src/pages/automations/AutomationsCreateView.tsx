@@ -749,7 +749,7 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
                 )}
                 {currentStep === 'review' && (
                   <Button onClick={() => onSubmit()} isLoading={saving} leftIcon={<CheckCircle className="w-4 h-4" />}>
-                    Activate Automation
+                    Finish
                   </Button>
                 )}
               </div>

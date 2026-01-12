@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import InstagramAccount from '../models/InstagramAccount';
+import WorkspaceSettings from '../models/WorkspaceSettings';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
@@ -292,6 +293,12 @@ router.get('/callback', async (req: Request, res: Response) => {
         });
         console.log('✅ Created new Instagram account:', instagramAccount._id);
       }
+
+      await WorkspaceSettings.findOneAndUpdate(
+        { workspaceId: workspace._id },
+        { $set: { 'onboarding.connectCompletedAt': new Date() } },
+        { new: true, upsert: true },
+      );
 
       try {
         console.log('🔄 Subscribing to Instagram webhooks...');
