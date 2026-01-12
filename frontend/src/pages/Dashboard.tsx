@@ -12,7 +12,6 @@ import {
   User,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { AiHandledCard } from '../components/AiHandledCard';
 import { dashboardAPI, DashboardInsightsResponse, DashboardSummaryResponse } from '../services/api';
