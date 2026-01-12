@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import InstagramAccount from '../models/InstagramAccount';
+import WorkspaceSettings from '../models/WorkspaceSettings';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
