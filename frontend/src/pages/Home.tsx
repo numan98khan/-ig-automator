@@ -36,7 +36,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Input } from '../components/ui/Input';
 
 type SetupStep = {
-  id: 'connect' | 'template' | 'basics' | 'publish' | 'simulate';
+  id: 'connect' | 'template' | 'basics' | 'simulate' | 'publish';
   title: string;
   why: string;
 };
@@ -58,14 +58,14 @@ const SETUP_STEPS: SetupStep[] = [
     why: 'Give the assistant the essentials to sound like your brand.',
   },
   {
-    id: 'publish',
-    title: 'Publish',
-    why: 'Activate your automation with safe defaults.',
-  },
-  {
     id: 'simulate',
     title: 'Test in simulator',
     why: 'Watch the automation respond before going live.',
+  },
+  {
+    id: 'publish',
+    title: 'Publish',
+    why: 'Activate your automation with safe defaults.',
   },
 ];
 
@@ -142,7 +142,7 @@ const Home: React.FC = () => {
     (automation) => automation.isActive && automation.template?.status !== 'archived'
   ).length;
   const publishedCount = activeAutomationCount;
-  const hasPublishedAutomation = publishedCount > 0;
+  const hasPublishedAutomation = !isDemoMode && publishedCount > 0;
   const hasSimulation = Boolean(simulation?.sessionId || simulation?.session?.status);
   const isActivated = hasConnection && hasPublishedAutomation && hasSimulation;
   const liveAutomation = useMemo(
@@ -156,8 +156,8 @@ const Home: React.FC = () => {
     if (!hasConnection) return 'connect';
     if (!hasTemplateChoice) return 'template';
     if (!hasBusinessBasics) return 'basics';
-    if (!hasPublishedAutomation) return 'publish';
     if (!hasSimulation) return 'simulate';
+    if (!hasPublishedAutomation) return 'publish';
     return 'simulate';
   }, [hasConnection, hasTemplateChoice, hasBusinessBasics, hasPublishedAutomation, hasSimulation]);
 
@@ -166,8 +166,8 @@ const Home: React.FC = () => {
       hasConnection,
       hasTemplateChoice,
       hasBusinessBasics,
-      hasPublishedAutomation,
       hasSimulation,
+      hasPublishedAutomation,
     ].filter(Boolean).length;
   }, [hasConnection, hasTemplateChoice, hasBusinessBasics, hasPublishedAutomation, hasSimulation]);
 
