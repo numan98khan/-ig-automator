@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
 import {
@@ -9,9 +10,7 @@ import {
   AutomationInstance,
   FlowExposedField,
   FlowTemplate,
-  ResourceUsage,
   tierAPI,
-  WorkspaceTierResponse,
 } from '../services/api';
 import { AlertTriangle, CheckCircle2, Clock, PlayCircle, X } from 'lucide-react';
 import { AutomationsSidebar } from './automations/AutomationsSidebar';
@@ -129,10 +128,9 @@ const DEFAULT_AUTOMATION_STATS: AutomationInstance['stats'] = {
   },
 };
 
-const automationsCache = new Map<string, { items: AutomationInstance[]; updatedAt: number }>();
-const templatesCache: { items: FlowTemplate[] | null; updatedAt: number | null } = {
-  items: null,
-  updatedAt: null,
+type AutomationsQueryData = {
+  automations: AutomationInstance[];
+  templates: FlowTemplate[];
 };
 
 const hydrateAutomation = (
@@ -167,11 +165,7 @@ const Automations: React.FC = () => {
     'automations' | 'business-profile' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
   >('automations');
   const [automationView, setAutomationView] = useState<'list' | 'create' | 'edit' | 'details'>('list');
-  const [automations, setAutomations] = useState<AutomationInstance[]>([]);
-  const [templates, setTemplates] = useState<FlowTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [workspaceTier, setWorkspaceTier] = useState<WorkspaceTierResponse | null>(null);
 
   const [editingAutomation, setEditingAutomation] = useState<AutomationInstance | null>(null);
   const [selectedAutomation, setSelectedAutomation] = useState<AutomationInstance | null>(null);
@@ -187,7 +181,81 @@ const Automations: React.FC = () => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewSending, setPreviewSending] = useState(false);
   const [showAutomationUpgrade, setShowAutomationUpgrade] = useState(false);
-  const [aiUsage, setAiUsage] = useState<ResourceUsage | null>(null);
+  const workspaceId = currentWorkspace?._id;
+  const queryClient = useQueryClient();
+  const automationsQuery = useQuery<AutomationsQueryData>({
+    queryKey: ['automations', workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) {
+        throw new Error('Missing workspace');
+      }
+      const [automationsData, templatesData] = await Promise.all([
+        automationAPI.getByWorkspace(workspaceId),
+        flowTemplateAPI.list(),
+      ]);
+      return {
+        automations: automationsData,
+        templates: templatesData,
+      };
+    },
+    enabled: Boolean(workspaceId),
+    placeholderData: keepPreviousData,
+    onSuccess: () => {
+      setError(null);
+    },
+    onError: (err) => {
+      console.error('Error loading data:', err);
+      setError('Failed to load automations');
+    },
+  });
+  const workspaceTierQuery = useQuery({
+    queryKey: ['workspace-tier', workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) {
+        throw new Error('Missing workspace');
+      }
+      return tierAPI.getWorkspace(workspaceId);
+    },
+    enabled: Boolean(workspaceId),
+    placeholderData: keepPreviousData,
+    onError: (err) => {
+      console.error('Error loading workspace tier:', err);
+    },
+  });
+  const aiUsageQuery = useQuery({
+    queryKey: ['ai-usage', workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) {
+        throw new Error('Missing workspace');
+      }
+      const data = await tierAPI.getMine(workspaceId);
+      return data?.usage?.aiMessages || null;
+    },
+    enabled: Boolean(workspaceId),
+    placeholderData: keepPreviousData,
+    refetchInterval: 20000,
+    onError: (err) => {
+      console.error('Error loading AI usage:', err);
+    },
+  });
+  const automations = automationsQuery.data?.automations ?? [];
+  const templates = automationsQuery.data?.templates ?? [];
+  const isInitialLoading = automationsQuery.isLoading && !automationsQuery.data;
+  const workspaceTier = workspaceTierQuery.data ?? null;
+  const aiUsage = aiUsageQuery.data ?? null;
+
+  const updateAutomationsCache = (updater: (items: AutomationInstance[]) => AutomationInstance[]) => {
+    if (!workspaceId) return;
+    queryClient.setQueryData<AutomationsQueryData>(['automations', workspaceId], (prev) => {
+      if (!prev) return prev;
+      const next = updater(prev.automations);
+      return {
+        ...prev,
+        automations: next,
+      };
+    });
+    queryClient.invalidateQueries({ queryKey: ['home', workspaceId] });
+  };
 
   const accountDisplayName = activeAccount?.name || activeAccount?.username || 'Connected account';
   const accountHandle = activeAccount?.username || 'connected_account';
@@ -301,69 +369,6 @@ const Automations: React.FC = () => {
   }, [automations, searchParams, setSearchParams]);
 
   useEffect(() => {
-    if (currentWorkspace) {
-      const cachedAutomations = automationsCache.get(currentWorkspace._id);
-      if (cachedAutomations) {
-        setAutomations(cachedAutomations.items);
-        setLoading(false);
-      }
-      if (templatesCache.items) {
-        setTemplates(templatesCache.items);
-      }
-      loadData({ silent: Boolean(cachedAutomations) });
-    }
-  }, [currentWorkspace]);
-
-  useEffect(() => {
-    if (!currentWorkspace) return;
-    let cancelled = false;
-    const loadTier = async () => {
-      try {
-        const data = await tierAPI.getWorkspace(currentWorkspace._id);
-        if (!cancelled) {
-          setWorkspaceTier(data);
-        }
-      } catch (err) {
-        console.error('Error loading workspace tier:', err);
-        if (!cancelled) {
-          setWorkspaceTier(null);
-        }
-      }
-    };
-    loadTier();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentWorkspace]);
-
-  useEffect(() => {
-    if (!currentWorkspace) return;
-    let cancelled = false;
-    let pollTimer: number | undefined;
-    const loadUsage = async () => {
-      try {
-        const data = await tierAPI.getMine(currentWorkspace._id);
-        if (!cancelled) {
-          setAiUsage(data?.usage?.aiMessages || null);
-        }
-      } catch (err) {
-        console.error('Error loading AI usage:', err);
-        if (!cancelled) {
-          setAiUsage(null);
-        }
-      }
-    };
-    loadUsage();
-    pollTimer = window.setInterval(loadUsage, 20000);
-    return () => {
-      cancelled = true;
-      if (pollTimer) {
-        window.clearInterval(pollTimer);
-      }
-    };
-  }, [currentWorkspace]);
-
-  useEffect(() => {
     if (!isCustomAutomationEnabled && creationMode === 'custom') {
       setCreationMode('templates');
     }
@@ -374,33 +379,6 @@ const Automations: React.FC = () => {
       setShowAutomationUpgrade(false);
     }
   }, [isAutomationLimitReached]);
-
-  const loadData = async (options?: { silent?: boolean }) => {
-    if (!currentWorkspace) return;
-
-    try {
-      if (!options?.silent) {
-        setLoading(true);
-      }
-      setError(null);
-      const [automationsData, templatesData] = await Promise.all([
-        automationAPI.getByWorkspace(currentWorkspace._id),
-        flowTemplateAPI.list(),
-      ]);
-      setAutomations(automationsData);
-      setTemplates(templatesData);
-      automationsCache.set(currentWorkspace._id, { items: automationsData, updatedAt: Date.now() });
-      templatesCache.items = templatesData;
-      templatesCache.updatedAt = Date.now();
-    } catch (err) {
-      console.error('Error loading data:', err);
-      setError('Failed to load automations');
-    } finally {
-      if (!options?.silent) {
-        setLoading(false);
-      }
-    }
-  };
 
   const resetPreviewState = () => {
     setPreviewSessionId(null);
@@ -554,22 +532,16 @@ const Automations: React.FC = () => {
       }
 
       const hydrated = hydrateAutomation(savedAutomation, editingSnapshot, templateSnapshot, versionSnapshot);
-      setAutomations((prev) => {
+      updateAutomationsCache((prev) => {
         const existingIndex = prev.findIndex((item) => item._id === hydrated._id);
-        let next: AutomationInstance[];
         if (existingIndex >= 0) {
-          next = prev.map((item) => (
+          return prev.map((item) => (
             item._id === hydrated._id
               ? hydrateAutomation(hydrated, item, templateSnapshot, versionSnapshot)
               : item
           ));
-        } else {
-          next = [hydrated, ...prev];
         }
-        if (currentWorkspace) {
-          automationsCache.set(currentWorkspace._id, { items: next, updatedAt: Date.now() });
-        }
-        return next;
+        return [hydrated, ...prev];
       });
 
       handleCloseCreateView();
@@ -593,15 +565,9 @@ const Automations: React.FC = () => {
   const handleToggle = async (automation: AutomationInstance) => {
     try {
       const updated = await automationAPI.toggle(automation._id);
-      setAutomations((prev) => {
-        const next = prev.map((item) => (
-          item._id === updated._id ? hydrateAutomation(updated, item) : item
-        ));
-        if (currentWorkspace) {
-          automationsCache.set(currentWorkspace._id, { items: next, updatedAt: Date.now() });
-        }
-        return next;
-      });
+      updateAutomationsCache((prev) => prev.map((item) => (
+        item._id === updated._id ? hydrateAutomation(updated, item) : item
+      )));
       if (selectedAutomation?._id === updated._id) {
         setSelectedAutomation((prev) => (prev ? hydrateAutomation(updated, prev) : prev));
       }
@@ -616,13 +582,7 @@ const Automations: React.FC = () => {
 
     try {
       await automationAPI.delete(automation._id);
-      setAutomations((prev) => {
-        const next = prev.filter((item) => item._id !== automation._id);
-        if (currentWorkspace) {
-          automationsCache.set(currentWorkspace._id, { items: next, updatedAt: Date.now() });
-        }
-        return next;
-      });
+      updateAutomationsCache((prev) => prev.filter((item) => item._id !== automation._id));
       if (selectedAutomation?._id === automation._id) {
         setSelectedAutomation(null);
         setAutomationView('list');
@@ -902,7 +862,7 @@ const Automations: React.FC = () => {
                 <AutomationsListView
                   automations={automations}
                   summaryStats={summaryStats}
-                  loading={loading}
+                  loading={isInitialLoading}
                   aiUsage={aiUsage}
                   initialStatusFilter={initialStatusFilter}
                   onCreate={handleOpenCreateModal}

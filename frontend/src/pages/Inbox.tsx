@@ -31,6 +31,7 @@ import {
   Clock3,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { Skeleton } from '../components/ui/Skeleton';
 import { ImageAttachment, VideoAttachment, VoiceAttachment, LinkPreviewComponent, FileAttachment } from '../components/MessageMedia';
 import { useDemoMode } from '../hooks/useDemoMode';
 
@@ -47,6 +48,59 @@ const inboxCache = new Map<string, InboxCacheEntry>();
 
 const getInboxCacheKey = (workspaceId: string, accountId?: string | null) => (
   `${workspaceId}:${accountId || 'none'}`
+);
+
+const InboxSkeleton: React.FC = () => (
+  <div className="h-full flex flex-col">
+    <div className="flex h-full min-h-0 gap-3 md:gap-4">
+      <div className="w-full md:w-[340px] lg:w-[360px] flex-shrink-0 flex flex-col rounded-xl border border-border glass-panel shadow-sm min-h-0">
+        <div className="p-3 border-b border-border bg-background/50 rounded-t-xl space-y-3">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-3 w-32" />
+          <div className="flex gap-2">
+            <Skeleton className="h-7 w-16" />
+            <Skeleton className="h-7 w-20" />
+            <Skeleton className="h-7 w-20" />
+          </div>
+          <Skeleton className="h-9 w-full" />
+        </div>
+        <div className="flex-1 overflow-y-auto divide-y divide-border/60">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={`inbox-skeleton-${index}`} className="p-3 space-y-2">
+              <div className="flex items-start gap-3">
+                <Skeleton className="h-10 w-10 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-3 w-full" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col rounded-xl border border-border glass-panel shadow-sm min-h-0">
+        <div className="px-4 md:px-5 py-3 border-b border-border bg-background/60 rounded-t-xl">
+          <Skeleton className="h-5 w-44" />
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 md:px-5 py-4">
+          <div className="max-w-3xl mx-auto space-y-4">
+            <Skeleton className="h-16 w-3/4" />
+            <Skeleton className="h-16 w-2/3 ml-auto" />
+            <Skeleton className="h-16 w-4/5" />
+            <Skeleton className="h-16 w-2/3 ml-auto" />
+          </div>
+        </div>
+        <div className="px-4 md:px-5 py-3 border-t border-border bg-background/60 rounded-b-xl">
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+    </div>
+  </div>
 );
 
 const Inbox: React.FC = () => {
@@ -512,11 +566,7 @@ const Inbox: React.FC = () => {
 
   // Render Loading
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <InboxSkeleton />;
   }
 
   // Render Connect State

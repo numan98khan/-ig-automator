@@ -2,6 +2,38 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, RefreshCw, User, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { escalationAPI, EscalationCase, settingsAPI, WorkspaceSettings } from '../../services/api';
+import { Skeleton } from '../../components/ui/Skeleton';
+
+const AlertsSkeleton: React.FC = () => (
+  <div className="h-full flex flex-col space-y-6">
+    <div className="space-y-3">
+      <Skeleton className="h-8 w-56" />
+      <Skeleton className="h-4 w-80" />
+      <div className="flex flex-wrap gap-3">
+        <Skeleton className="h-7 w-28" />
+        <Skeleton className="h-7 w-28" />
+      </div>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={`alert-skeleton-${index}`} className="glass-panel rounded-xl p-5 space-y-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+            <Skeleton className="h-8 w-20" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-48" />
+            <Skeleton className="h-3 w-56" />
+          </div>
+          <Skeleton className="h-20 w-full" />
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 export const AutomationsHumanAlerts: React.FC = () => {
   const { currentWorkspace } = useAuth();
@@ -57,11 +89,7 @@ export const AutomationsHumanAlerts: React.FC = () => {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AlertsSkeleton />;
   }
 
   return (

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -27,7 +28,7 @@ import {
   AutomationInstance,
   AutomationSimulationSessionResponse,
   dashboardAPI,
-  DashboardAttentionItem,
+  DashboardAttentionResponse,
   DashboardSummaryResponse,
   flowTemplateAPI,
   FlowTemplate,
@@ -39,6 +40,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
+import { Skeleton } from '../components/ui/Skeleton';
 
 type SetupStep = {
   id: 'connect' | 'template' | 'basics' | 'simulate' | 'publish';
@@ -47,6 +49,14 @@ type SetupStep = {
 };
 
 type AttentionFilter = 'escalations' | 'unreplied' | 'followups';
+
+type HomeQueryData = {
+  automations: AutomationInstance[];
+  templates: FlowTemplate[];
+  settings: WorkspaceSettings;
+  simulation: AutomationSimulationSessionResponse;
+  dashboard: DashboardSummaryResponse;
+};
 
 const badgeVariantMap = {
   escalated: { label: 'Escalated', variant: 'danger' as const },
@@ -82,23 +92,92 @@ const SETUP_STEPS: SetupStep[] = [
   },
 ];
 
+const HomeSkeleton: React.FC = () => (
+  <div className="flex h-full flex-col gap-6 overflow-hidden">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 flex-1 min-h-0 overflow-hidden">
+      <div className="space-y-6 h-full overflow-y-auto pr-1">
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-72 w-full" />
+        <Skeleton className="h-56 w-full" />
+        <Skeleton className="h-40 w-full" />
+      </div>
+      <div className="space-y-6 h-full overflow-y-auto pr-1">
+        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-60 w-full" />
+        <Skeleton className="h-52 w-full" />
+        <Skeleton className="h-20 w-full" />
+      </div>
+    </div>
+  </div>
+);
+
 const Home: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { currentWorkspace, user } = useAuth();
   const { accounts, activeAccount } = useAccountContext();
-  const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
+  const workspaceId = currentWorkspace?._id;
+  const [attentionFilter, setAttentionFilter] = useState<AttentionFilter>('escalations');
+  const homeQuery = useQuery<HomeQueryData>({
+    queryKey: ['home', workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) {
+        throw new Error('Missing workspace');
+      }
+      const [
+        automationData,
+        templateData,
+        workspaceSettings,
+        simulationSession,
+        summary,
+      ] = await Promise.all([
+        automationAPI.getByWorkspace(workspaceId),
+        flowTemplateAPI.list(),
+        settingsAPI.getByWorkspace(workspaceId),
+        automationAPI.getSimulationSession(workspaceId),
+        dashboardAPI.getSummary(workspaceId, 'today'),
+      ]);
+      return {
+        automations: automationData,
+        templates: templateData,
+        settings: workspaceSettings,
+        simulation: simulationSession,
+        dashboard: summary,
+      };
+    },
+    enabled: Boolean(workspaceId),
+    placeholderData: keepPreviousData,
+    onError: (error) => {
+      console.error('Failed to load Home data', error);
+    },
+  });
+  const attentionQuery = useQuery<DashboardAttentionResponse>({
+    queryKey: ['home-attention', workspaceId, attentionFilter],
+    queryFn: async () => {
+      if (!workspaceId) {
+        throw new Error('Missing workspace');
+      }
+      return dashboardAPI.getAttention(workspaceId, attentionFilter);
+    },
+    enabled: Boolean(workspaceId),
+    placeholderData: keepPreviousData,
+    onError: (error) => {
+      console.error('Failed to load attention items', error);
+    },
+  });
+  const settings = homeQuery.data?.settings ?? null;
+  const automations = homeQuery.data?.automations ?? [];
+  const templates = homeQuery.data?.templates ?? [];
+  const dashboard = homeQuery.data?.dashboard ?? null;
+  const simulation = homeQuery.data?.simulation ?? null;
+  const attentionItems = attentionQuery.data?.items ?? [];
+  const isInitialLoading = homeQuery.isLoading && !homeQuery.data;
+  const isSyncing = homeQuery.isFetching && !homeQuery.isLoading;
+  const isAttentionLoading = attentionQuery.isLoading && !attentionQuery.data;
   const { isDemoMode, enableDemoMode, disableDemoMode } = useDemoMode(settings?.demoModeEnabled);
-  const [automations, setAutomations] = useState<AutomationInstance[]>([]);
-  const [templates, setTemplates] = useState<FlowTemplate[]>([]);
-  const [dashboard, setDashboard] = useState<DashboardSummaryResponse | null>(null);
-  const [simulation, setSimulation] = useState<AutomationSimulationSessionResponse | null>(null);
-  const [loading, setLoading] = useState(true);
   const [savingBasics, setSavingBasics] = useState(false);
   const [demoModeUpdating, setDemoModeUpdating] = useState(false);
   const [expandedStepId, setExpandedStepId] = useState<SetupStep['id'] | null>(null);
-  const [attentionFilter, setAttentionFilter] = useState<AttentionFilter>('escalations');
-  const [attentionItems, setAttentionItems] = useState<DashboardAttentionItem[]>([]);
-  const [attentionLoading, setAttentionLoading] = useState(false);
   const [basicsForm, setBasicsForm] = useState({
     businessName: '',
     businessHours: '',
@@ -107,62 +186,25 @@ const Home: React.FC = () => {
   });
 
   useEffect(() => {
-    if (!currentWorkspace) return;
-    let cancelled = false;
-    const loadHome = async () => {
-      setLoading(true);
-      try {
-        const [
-          automationData,
-          templateData,
-          workspaceSettings,
-          simulationSession,
-          summary,
-        ] = await Promise.all([
-          automationAPI.getByWorkspace(currentWorkspace._id),
-          flowTemplateAPI.list(),
-          settingsAPI.getByWorkspace(currentWorkspace._id),
-          automationAPI.getSimulationSession(currentWorkspace._id),
-          dashboardAPI.getSummary(currentWorkspace._id, 'today'),
-        ]);
-        if (cancelled) return;
-        setAutomations(automationData);
-        setTemplates(templateData);
-        setSettings(workspaceSettings);
-        setSimulation(simulationSession);
-        setDashboard(summary);
-        setBasicsForm({
-          businessName: workspaceSettings?.businessName || '',
-          businessHours: workspaceSettings?.businessHours || '',
-          businessTone: workspaceSettings?.businessTone || '',
-          businessLocation: workspaceSettings?.businessLocation || '',
-        });
-      } catch (error) {
-        console.error('Failed to load Home data', error);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-    loadHome();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentWorkspace]);
+    if (!settings) return;
+    setBasicsForm({
+      businessName: settings.businessName || '',
+      businessHours: settings.businessHours || '',
+      businessTone: settings.businessTone || '',
+      businessLocation: settings.businessLocation || '',
+    });
+  }, [settings]);
 
-  useEffect(() => {
-    if (!currentWorkspace) return;
-    setAttentionLoading(true);
-
-    dashboardAPI.getAttention(currentWorkspace._id, attentionFilter)
-      .then((resp) => setAttentionItems(resp.items))
-      .catch((error) => {
-        console.error('Failed to load attention items', error);
-        setAttentionItems([]);
-      })
-      .finally(() => setAttentionLoading(false));
-  }, [currentWorkspace, attentionFilter]);
+  const updateSettingsCache = (updated: typeof settings) => {
+    if (!workspaceId || !updated) return;
+    queryClient.setQueryData<HomeQueryData>(['home', workspaceId], (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        settings: updated,
+      };
+    });
+  };
 
   const hasInstagram = accounts.length > 0;
   const connectStepComplete = hasInstagram || Boolean(
@@ -233,7 +275,7 @@ const Home: React.FC = () => {
     setSavingBasics(true);
     try {
       const updated = await settingsAPI.update(currentWorkspace._id, basicsForm);
-      setSettings(updated);
+      updateSettingsCache(updated);
     } catch (error) {
       console.error('Failed to update business basics', error);
     } finally {
@@ -248,7 +290,7 @@ const Home: React.FC = () => {
     setDemoModeUpdating(true);
     try {
       const updated = await settingsAPI.update(currentWorkspace._id, { demoModeEnabled: nextValue });
-      setSettings(updated);
+      updateSettingsCache(updated);
     } catch (error) {
       console.error('Failed to update demo mode', error);
       previousValue ? enableDemoMode() : disableDemoMode();
@@ -268,7 +310,7 @@ const Home: React.FC = () => {
         demoModeEnabled: true,
         onboarding: { connectCompletedAt: new Date().toISOString() },
       });
-      setSettings(updated);
+      updateSettingsCache(updated);
     } catch (error) {
       console.error('Failed to confirm demo mode onboarding', error);
     } finally {
@@ -286,7 +328,7 @@ const Home: React.FC = () => {
         demoModeEnabled: false,
         onboarding: { publishCompletedAt: new Date().toISOString() },
       });
-      setSettings(updated);
+      updateSettingsCache(updated);
     } catch (error) {
       console.error('Failed to switch to live mode', error);
       previousValue ? enableDemoMode() : disableDemoMode();
@@ -327,6 +369,10 @@ const Home: React.FC = () => {
   const toggleStep = (stepId: SetupStep['id']) => {
     setExpandedStepId((prev) => (prev === stepId ? null : stepId));
   };
+
+  if (isInitialLoading) {
+    return <HomeSkeleton />;
+  }
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-hidden">
@@ -682,11 +728,28 @@ const Home: React.FC = () => {
                 </div>
               </CardHeader>
               <CardContent className="divide-y divide-border/60">
-                {attentionLoading && (
-                  <div className="py-6 text-center text-muted-foreground text-sm">Loading attention queue…</div>
+                {isAttentionLoading && (
+                  <div className="space-y-4 py-4">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <div key={`attention-skeleton-${index}`} className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="flex items-start gap-3 flex-1">
+                          <Skeleton className="h-10 w-10 rounded-full" />
+                          <div className="space-y-2 flex-1">
+                            <Skeleton className="h-4 w-40" />
+                            <Skeleton className="h-3 w-full" />
+                            <Skeleton className="h-3 w-32" />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Skeleton className="h-8 w-28" />
+                          <Skeleton className="h-8 w-24" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
-                {!attentionLoading && attentionItems.map((item) => (
+                {!isAttentionLoading && attentionItems.map((item) => (
                   <div key={item.id} className="py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-start gap-3">
                       <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold">
@@ -736,7 +799,7 @@ const Home: React.FC = () => {
                   </div>
                 ))}
 
-                {!attentionLoading && attentionItems.length === 0 && (
+                {!isAttentionLoading && attentionItems.length === 0 && (
                   <div className="py-6 text-center text-muted-foreground text-sm">All clear. No items need attention for this filter.</div>
                 )}
               </CardContent>
@@ -866,7 +929,7 @@ const Home: React.FC = () => {
             <CardContent className="py-4 flex items-center justify-between text-xs text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4" />
-                <span>{loading ? 'Syncing updates...' : 'Last updated just now'}</span>
+                <span>{isSyncing ? 'Syncing updates...' : 'Last updated just now'}</span>
               </div>
               <Badge variant="secondary">Home</Badge>
             </CardContent>
