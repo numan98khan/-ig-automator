@@ -70,11 +70,6 @@ const Layout: React.FC = () => {
     return 'App';
   }, [location.pathname]);
 
-  const connectedAccountLabel = useMemo(() => {
-    if (!activeAccount) return null;
-    return activeAccount.username ? `@${activeAccount.username}` : 'Connected IG';
-  }, [activeAccount]);
-
   const accountAvatar = useMemo(() => {
     return (activeAccount as any)?.profilePictureUrl || (activeAccount as any)?.avatarUrl || null;
   }, [activeAccount]);

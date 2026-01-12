@@ -137,7 +137,6 @@ const Home: React.FC = () => {
   }, [currentWorkspace]);
 
   const hasInstagram = accounts.length > 0;
-  const hasConnection = hasInstagram || isDemoMode;
   const connectStepComplete = hasInstagram || Boolean(
     settings?.onboarding?.connectCompletedAt
       || settings?.onboarding?.templateSelectedAt
@@ -287,29 +286,6 @@ const Home: React.FC = () => {
   const showSecurityPrompt = Boolean(user?.isProvisional || !user?.emailVerified);
   const kpiSummary = dashboard?.kpis;
   const kpiOutcomes = dashboard?.outcomes;
-  const nextStepLabel = currentStepId === 'simulate'
-    ? 'Test in simulator'
-    : SETUP_STEPS.find((step) => step.id === currentStepId)?.title || 'Continue setup';
-  const nextStepAction = () => {
-    switch (currentStepId) {
-      case 'connect':
-        navigate('/app/settings');
-        break;
-      case 'template':
-        navigate('/app/automations');
-        break;
-      case 'basics':
-        navigate('/app/automations?section=business-profile');
-        break;
-      case 'publish':
-        navigate('/app/automations');
-        break;
-      case 'simulate':
-      default:
-        navigate('/app/automations?section=simulate');
-        break;
-    }
-  };
   const simulationTimestamp = useMemo(() => {
     const timestamp = simulation?.session?.updatedAt || simulation?.session?.createdAt || null;
     if (!timestamp) return null;
