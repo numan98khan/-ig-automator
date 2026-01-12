@@ -70,30 +70,25 @@ export default function WorkspaceDetail() {
   const availableConversations = availableConversationsPayload || []
   const [syncingConversationId, setSyncingConversationId] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
-  const [resettingWorkspace, setResettingWorkspace] = useState(false)
-  const [resetError, setResetError] = useState<string | null>(null)
+  const [deletingWorkspace, setDeletingWorkspace] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  const handleResetWorkspace = async () => {
-    if (!id || resettingWorkspace) return
+  const handleDeleteWorkspace = async () => {
+    if (!id || deletingWorkspace) return
     const confirmed = window.confirm(
-      'Reset this workspace? This will delete all conversations, messages, Instagram accounts, automations, and settings.'
+      'Delete this workspace? This will permanently delete all conversations, messages, Instagram accounts, automations, settings, and billing data.'
     )
     if (!confirmed) return
-    setResetError(null)
-    setResettingWorkspace(true)
+    setDeleteError(null)
+    setDeletingWorkspace(true)
     try {
-      await adminApi.resetWorkspace(id)
-      await Promise.all([
-        refetchWorkspace(),
-        refetchConversations(),
-        refetchMembers(),
-        refetchAvailableConversations(),
-      ])
+      await adminApi.deleteWorkspace(id)
+      navigate('/workspaces')
     } catch (error) {
-      console.error('Admin reset workspace error:', error)
-      setResetError('Failed to reset workspace. Please try again.')
+      console.error('Admin delete workspace error:', error)
+      setDeleteError('Failed to delete workspace. Please try again.')
     } finally {
-      setResettingWorkspace(false)
+      setDeletingWorkspace(false)
     }
   }
 
@@ -175,14 +170,14 @@ export default function WorkspaceDetail() {
               {workspace.isActive !== false ? 'Active' : 'Inactive'}
             </span>
             <button
-              onClick={handleResetWorkspace}
+              onClick={handleDeleteWorkspace}
               className="btn border border-red-500/40 text-red-500 hover:bg-red-500/10"
-              disabled={resettingWorkspace}
+              disabled={deletingWorkspace}
             >
-              {resettingWorkspace ? 'Resetting...' : 'Reset workspace'}
+              {deletingWorkspace ? 'Deleting...' : 'Delete workspace'}
             </button>
-            {resetError && (
-              <span className="text-xs text-red-500">{resetError}</span>
+            {deleteError && (
+              <span className="text-xs text-red-500">{deleteError}</span>
             )}
           </div>
         </div>

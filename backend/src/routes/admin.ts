@@ -411,7 +411,7 @@ router.get('/workspaces/:id', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-router.post('/workspaces/:id/reset', authenticate, requireAdmin, async (req, res) => {
+router.delete('/workspaces/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const workspace = await getWorkspaceById(id);
@@ -447,14 +447,25 @@ router.post('/workspaces/:id/reset', authenticate, requireAdmin, async (req, res
         : Promise.resolve(),
     ]);
 
+    if (workspace.billingAccountId) {
+      await postgresQuery('DELETE FROM core.subscriptions WHERE billing_account_id = $1', [workspace.billingAccountId]);
+      await postgresQuery('DELETE FROM core.billing_accounts WHERE id = $1', [workspace.billingAccountId]);
+      await postgresQuery('UPDATE core.users SET billing_account_id = NULL, tier_id = NULL WHERE billing_account_id = $1', [
+        workspace.billingAccountId,
+      ]);
+    }
+
     await Promise.all([
       postgresQuery('DELETE FROM core.openai_usage WHERE workspace_id = $1', [id]),
-      postgresQuery('DELETE FROM core.workspace_members WHERE workspace_id = $1 AND user_id <> $2', [id, workspace.userId]),
+      postgresQuery('DELETE FROM core.usage_counters WHERE workspace_id = $1', [id]),
+      postgresQuery('DELETE FROM core.workspace_members WHERE workspace_id = $1', [id]),
+      postgresQuery('DELETE FROM core.workspaces WHERE id = $1', [id]),
+      postgresQuery('UPDATE core.users SET default_workspace_id = NULL WHERE default_workspace_id = $1', [id]),
     ]);
 
-    res.json({ data: { success: true } });
+    res.json({ data: { success: true, deletedWorkspaceId: id } });
   } catch (error) {
-    console.error('Admin reset workspace error:', error);
+    console.error('Admin delete workspace error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
