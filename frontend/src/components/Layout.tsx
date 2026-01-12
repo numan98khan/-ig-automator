@@ -123,7 +123,12 @@ const Layout: React.FC = () => {
               <img
                 src="/sendfx.png"
                 alt="SendFx logo"
-                className="h-9 md:h-11 w-auto shrink-0 object-contain"
+                className="h-9 md:h-11 w-auto shrink-0 object-contain dark:hidden"
+              />
+              <img
+                src="/sendfx-dark.png"
+                alt="SendFx logo"
+                className="hidden h-9 md:h-11 w-auto shrink-0 object-contain dark:block"
               />
             </Link>
             <div className="relative" ref={accountMenuRef}>
