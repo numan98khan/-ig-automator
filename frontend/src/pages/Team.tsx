@@ -27,6 +27,7 @@ const Team: React.FC = () => {
   const [tierSummary, setTierSummary] = useState<WorkspaceTierResponse | null>(null);
   const [tierLoading, setTierLoading] = useState(false);
   const displayLimit = (value?: number | null) => (typeof value === 'number' ? value : '∞');
+  const resolveMemberId = (member: WorkspaceMember) => member.user._id || member.user.id || '';
 
   const sortedMembers = useMemo(
     () => [...members].sort((a, b) => a.role.localeCompare(b.role)),
@@ -218,8 +219,10 @@ const Team: React.FC = () => {
               <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" />Loading members…</div>
             ) : (
               <div className="space-y-3">
-                {sortedMembers.map((member) => (
-                  <div key={member.user.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-muted/30 border border-border/70">
+                {sortedMembers.map((member) => {
+                  const memberId = resolveMemberId(member);
+                  return (
+                  <div key={memberId} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-muted/30 border border-border/70">
                     <div>
                       <p className="font-semibold">{member.user.email || member.user.instagramUsername || 'Member'}</p>
                       <p className="text-sm text-muted-foreground">Joined {new Date(member.joinedAt).toLocaleDateString()}</p>
@@ -231,9 +234,9 @@ const Team: React.FC = () => {
                         return (
                           <select
                             value={member.role}
-                            onChange={(e) => handleRoleChange(member.user.id, e.target.value as Role)}
+                            onChange={(e) => handleRoleChange(memberId, e.target.value as Role)}
                             className={`bg-background border border-border rounded-lg text-sm px-2 py-1 ${isOwner ? 'opacity-60 cursor-not-allowed' : ''}`}
-                            disabled={saving || isOwner}
+                            disabled={saving || isOwner || !memberId}
                           >
                             {options.map((role) => (
                               <option key={role} value={role}>
@@ -247,8 +250,8 @@ const Team: React.FC = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRemoveMember(member.user.id)}
-                          disabled={saving}
+                          onClick={() => handleRemoveMember(memberId)}
+                          disabled={saving || !memberId}
                           leftIcon={<Trash2 className="w-4 h-4" />}
                         >
                           Remove
@@ -256,7 +259,8 @@ const Team: React.FC = () => {
                       )}
                     </div>
                   </div>
-                ))}
+                );
+                })}
                 {sortedMembers.length === 0 && (
                   <p className="text-sm text-muted-foreground">No members found.</p>
                 )}
