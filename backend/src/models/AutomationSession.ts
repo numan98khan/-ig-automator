@@ -21,6 +21,29 @@ export interface IAutomationSession extends Document {
       slots?: Record<string, string>;
       questionsAsked?: number;
     };
+    previewMeta?: {
+      events?: Array<{
+        id?: string;
+        type: string;
+        message: string;
+        createdAt: Date;
+        details?: Record<string, any>;
+      }>;
+      profileId?: string;
+      persona?: {
+        name?: string;
+        handle?: string;
+        userId?: string;
+        avatarUrl?: string;
+      };
+      source?: string;
+      selectedAutomation?: {
+        id?: string;
+        name?: string;
+        templateId?: string;
+        trigger?: { type?: string; label?: string; description?: string };
+      };
+    };
   };
   rateLimit?: {
     windowStart: Date;
