@@ -789,6 +789,12 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
     const payload = await buildPreviewSessionPayload(session, conversation, {
       includeEvents: await canViewExecutionTimeline(workspaceId),
     });
+    const fallbackMessages = conversation
+      ? (await loadPreviewMessages(conversation._id)).filter((message) => message.from === 'ai')
+      : [];
+    const responseMessages = result.messages && result.messages.length > 0
+      ? result.messages
+      : fallbackMessages;
 
     return res.json({
       success: result.success,
@@ -796,7 +802,7 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
       sessionId: session._id,
       conversationId: conversation._id,
       status: session.status,
-      messages: result.messages,
+      messages: responseMessages,
       ...payload,
       selectedAutomation: meta.selectedAutomation,
       diagnostics,
