@@ -1390,9 +1390,10 @@ async function handleAiReplyStep(params: {
     trackStats = true,
     logContext,
   } = params;
+  const isPreviewMode = deliveryMode === 'preview' || deliveryAdapter?.mode === 'preview';
   const workspaceId = conversation.workspaceId?.toString?.() || conversation.workspaceId;
   let usageOwnerId: string | null = null;
-  if (deliveryMode !== 'preview' && workspaceId) {
+  if (!isPreviewMode && workspaceId) {
     const usageCheck = await checkAiMessageAllowance(workspaceId);
     if (!usageCheck.allowed) {
       logAutomation('⚠️  [AUTOMATION] AI message limit reached', {
@@ -1497,7 +1498,7 @@ async function handleAiReplyStep(params: {
     aiContext.summaryForPrompt = appendSummaryForPrompt(aiContext, 'AI', aiResponse.replyText);
     aiContext.summaryDirty = true;
   }
-  if (deliveryMode === 'preview' && onMessageSent) {
+  if (isPreviewMode && onMessageSent) {
     onMessageSent({
       id: message._id?.toString() || '',
       from: 'ai',
@@ -1789,6 +1790,7 @@ async function executeFlowPlan(params: {
   let triggered = false;
   let nodeQueue = Array.isArray(session.state?.nodeQueue) ? [...session.state.nodeQueue] : [];
   let fallbackToStart = false;
+  const isPreviewMode = deliveryMode === 'preview' || deliveryAdapter?.mode === 'preview';
   const logContext = {
     automationSessionId: session._id?.toString(),
     automationInstanceId: instance._id?.toString(),
@@ -1911,7 +1913,7 @@ async function executeFlowPlan(params: {
         aiContext.summaryForPrompt = appendSummaryForPrompt(aiContext, 'AI', text);
         aiContext.summaryDirty = true;
       }
-      if (deliveryMode === 'preview' && onMessageSent) {
+      if (isPreviewMode && onMessageSent) {
         onMessageSent({
           id: message._id?.toString() || '',
           from: 'ai',
@@ -1966,7 +1968,7 @@ async function executeFlowPlan(params: {
       };
       const workspaceId = conversation.workspaceId?.toString?.() || conversation.workspaceId;
       let usageOwnerId: string | null = null;
-      if (deliveryMode !== 'preview' && workspaceId) {
+      if (!isPreviewMode && workspaceId) {
         const usageCheck = await checkAiMessageAllowance(workspaceId);
         if (!usageCheck.allowed) {
           logAutomation('⚠️  [AUTOMATION] AI message limit reached', {
@@ -2071,7 +2073,7 @@ async function executeFlowPlan(params: {
         aiContext.summaryForPrompt = appendSummaryForPrompt(aiContext, 'AI', agentResult.replyText);
         aiContext.summaryDirty = true;
       }
-      if (deliveryMode === 'preview' && onMessageSent) {
+      if (isPreviewMode && onMessageSent) {
         onMessageSent({
           id: message._id?.toString() || '',
           from: 'ai',
@@ -2081,7 +2083,7 @@ async function executeFlowPlan(params: {
         });
       }
       sentCount += 1;
-      if (deliveryMode !== 'preview' && usageOwnerId && workspaceId) {
+      if (!isPreviewMode && usageOwnerId && workspaceId) {
         await assertUsageLimit(usageOwnerId, 'aiMessages', 1, workspaceId);
       }
 
@@ -2245,7 +2247,7 @@ async function executeFlowPlan(params: {
           aiContext.summaryForPrompt = appendSummaryForPrompt(aiContext, 'AI', step.handoff.message);
           aiContext.summaryDirty = true;
         }
-        if (deliveryMode === 'preview' && onMessageSent) {
+        if (isPreviewMode && onMessageSent) {
           onMessageSent({
             id: message._id?.toString() || '',
             from: 'ai',
@@ -2599,10 +2601,24 @@ export async function executePreviewFlowForInstance(params: {
     onMessageSent: (message) => outbound.push(message),
     trackStats: false,
   });
+  let previewMessages = outbound;
+  if (previewMessages.length === 0) {
+    const storedMessages = await Message.find({ conversationId: conversation._id })
+      .sort({ createdAt: 1 })
+      .lean();
+    previewMessages = storedMessages
+      .filter((message) => message.from === 'ai')
+      .map((message) => ({
+        id: message._id?.toString() || '',
+        from: 'ai' as const,
+        text: message.text,
+        createdAt: message.createdAt || new Date(),
+      }));
+  }
 
   return result.success
-    ? { success: true, messages: outbound }
-    : { success: false, error: result.error || 'Flow execution failed', messages: outbound };
+    ? { success: true, messages: previewMessages }
+    : { success: false, error: result.error || 'Flow execution failed', messages: previewMessages };
 }
 
 /**
