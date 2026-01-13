@@ -121,10 +121,16 @@ const ensurePreviewMeta = (session: any) => {
 
 const markOnboardingTimestamp = async (workspaceId: string, field: string) => {
   const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
-  await WorkspaceSettings.updateOne(
+  const timestamp = new Date();
+  const updateResult = await WorkspaceSettings.updateOne(
     { workspaceId: workspaceObjectId, [field]: { $exists: false } },
-    { $set: { [field]: new Date() }, $setOnInsert: { workspaceId: workspaceObjectId } },
-    { upsert: true }
+    { $set: { [field]: timestamp } },
+  );
+  if (updateResult.matchedCount > 0) return;
+  await WorkspaceSettings.updateOne(
+    { workspaceId: workspaceObjectId },
+    { $setOnInsert: { workspaceId: workspaceObjectId, [field]: timestamp } },
+    { upsert: true },
   );
 };
 
@@ -511,9 +517,12 @@ const ensurePreviewSession = async (params: {
         channel: 'preview',
       }).sort({ updatedAt: -1 });
 
-  const shouldReset = reset || !session || session.status !== 'active' || session.channel !== 'preview';
-  if (shouldReset) {
-    const conversation = await buildPreviewConversation({ instance, instagramAccountId, persona });
+  const shouldCreate = reset || !session || session.channel !== 'preview';
+  let conversation = session?.conversationId
+    ? await Conversation.findById(session.conversationId)
+    : null;
+  if (shouldCreate) {
+    conversation = await buildPreviewConversation({ instance, instagramAccountId, persona });
     session = await AutomationSession.create({
       workspaceId: instance.workspaceId,
       conversationId: conversation._id,
@@ -544,17 +553,51 @@ const ensurePreviewSession = async (params: {
     throw new Error('Preview session missing');
   }
 
-  if (session.templateVersionId?.toString() !== templateVersionId.toString()) {
-    session.templateVersionId = templateVersionId;
+  if (!conversation) {
+    conversation = await buildPreviewConversation({ instance, instagramAccountId, persona });
+    session.conversationId = conversation._id;
     await session.save();
+    return { session, conversation };
   }
 
-  const conversation = await Conversation.findById(session.conversationId);
-  if (!conversation) {
-    const newConversation = await buildPreviewConversation({ instance, instagramAccountId, persona });
-    session.conversationId = newConversation._id;
+  if (session.status === 'completed' || session.status === 'handoff') {
+    const existingMeta = session.state?.previewMeta && typeof session.state.previewMeta === 'object'
+      ? { ...session.state.previewMeta }
+      : {};
+    const nextMeta = {
+      ...existingMeta,
+      events: [],
+    } as {
+      events: PreviewEvent[];
+      profileId?: string;
+      persona?: PreviewPersona;
+      source?: string;
+      selectedAutomation?: {
+        id?: string;
+        name?: string;
+        templateId?: string;
+        trigger?: { type?: string; label?: string; description?: string };
+      };
+    };
+    if (persona) {
+      nextMeta.persona = persona;
+    }
+    if (profileId) {
+      nextMeta.profileId = profileId;
+    }
+    session.status = 'active';
+    session.templateVersionId = templateVersionId;
+    session.state = { previewMeta: nextMeta };
+    appendPreviewEvent(session, {
+      type: 'info',
+      message: 'Preview session restarted',
+      createdAt: new Date(),
+    });
+    session.markModified('state');
     await session.save();
-    return { session, conversation: newConversation };
+  } else if (session.templateVersionId?.toString() !== templateVersionId.toString()) {
+    session.templateVersionId = templateVersionId;
+    await session.save();
   }
 
   if (persona) {

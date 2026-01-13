@@ -128,14 +128,35 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
     existing: AutomationPreviewMessage[],
     incoming?: AutomationPreviewMessage[],
   ) => {
-    if (!incoming) return existing;
-    const seen = new Set(incoming.map((message) => message.id));
-    const merged = [...incoming, ...existing.filter((message) => !seen.has(message.id))];
-    if (merged.length > 1 && merged.every((message) => message.createdAt)) {
-      return [...merged].sort((a, b) =>
-        new Date(a.createdAt as string).getTime() - new Date(b.createdAt as string).getTime());
-    }
-    return merged;
+    if (!incoming || incoming.length === 0) return existing;
+    let tempCounter = 0;
+    const order: string[] = [];
+    const items = new Map<string, AutomationPreviewMessage>();
+    const upsert = (message: AutomationPreviewMessage) => {
+      const key = message.id || `tmp-${tempCounter++}`;
+      if (!items.has(key)) {
+        order.push(key);
+      }
+      items.set(key, message);
+    };
+    existing.forEach(upsert);
+    incoming.forEach(upsert);
+    const merged = order.map((key) => items.get(key)).filter(Boolean) as AutomationPreviewMessage[];
+    if (merged.length <= 1) return merged;
+    const decorated = merged.map((message, index) => ({
+      message,
+      index,
+      timestamp: message.createdAt ? new Date(message.createdAt as string).getTime() : null,
+    }));
+    decorated.sort((a, b) => {
+      if (a.timestamp !== null && b.timestamp !== null && a.timestamp !== b.timestamp) {
+        return a.timestamp - b.timestamp;
+      }
+      if (a.timestamp !== null && b.timestamp === null) return -1;
+      if (a.timestamp === null && b.timestamp !== null) return 1;
+      return a.index - b.index;
+    });
+    return decorated.map((entry) => entry.message);
   };
 
   const applyPreviewPayload = useCallback((payload: Partial<AutomationPreviewSessionState> & {
@@ -320,6 +341,7 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       id: `preview-user-${Date.now()}`,
       from: 'customer',
       text: trimmed,
+      createdAt: new Date().toISOString(),
     };
     setPreviewMessages((prev) => [...prev, optimisticMessage]);
     setPreviewInputValue('');
@@ -337,8 +359,8 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
       }
       const { messages, ...rest } = response;
       applyPreviewPayload(rest);
-      if (messages && messages.length > 0) {
-        setPreviewMessages((prev) => [...prev, ...messages]);
+      if (messages) {
+        setPreviewMessages((prev) => mergePreviewMessages(prev, messages));
       }
       if (!response.success) {
         pushPreviewToast('error', response.error || 'No automated response was generated.');
