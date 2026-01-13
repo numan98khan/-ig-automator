@@ -2,6 +2,8 @@ import express, { Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
+import { buildBusinessProfileContext } from '../services/businessProfileKnowledge';
+import { deleteKnowledgeEmbedding, upsertKnowledgeEmbedding } from '../services/vectorStore';
 
 const router = express.Router();
 
@@ -122,6 +124,23 @@ router.put('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
       { $set: updateData },
       { new: true, upsert: true }
     );
+
+    try {
+      const businessProfile = buildBusinessProfileContext(settings);
+      const businessProfileId = `business-profile:${workspaceId}`;
+      if (businessProfile) {
+        await upsertKnowledgeEmbedding({
+          id: businessProfileId,
+          workspaceId,
+          title: businessProfile.title,
+          content: businessProfile.content,
+        });
+      } else {
+        await deleteKnowledgeEmbedding(businessProfileId);
+      }
+    } catch (error) {
+      console.error('Business profile vector sync failed:', error);
+    }
 
     res.json(sanitizeSettings(settings));
   } catch (error) {

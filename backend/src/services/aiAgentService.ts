@@ -2,12 +2,14 @@ import mongoose from 'mongoose';
 import { IConversation } from '../models/Conversation';
 import Message, { IMessage } from '../models/Message';
 import KnowledgeItem from '../models/KnowledgeItem';
+import WorkspaceSettings from '../models/WorkspaceSettings';
 import { AutomationAiSettings } from '../types/automation';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logOpenAiUsage } from './openAiUsageService';
 import { normalizeReasoningEffort } from '../utils/aiReasoning';
 import { AiProvider, getAiClient, normalizeAiProvider } from '../utils/aiProvider';
+import { buildBusinessProfileContext } from './businessProfileKnowledge';
 
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b';
@@ -149,6 +151,14 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
   // Build knowledge context (Mongo + optional vector RAG)
   let knowledgeContext = '';
   let vectorContexts: RetrievedContext[] = [];
+  const appendKnowledgeBlock = (label: string, content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    if (knowledgeContext) {
+      knowledgeContext += '\n\n';
+    }
+    knowledgeContext += `${label}:\n${trimmed}`;
+  };
 
   const knowledgeBaseQuery = {
     workspaceId,
@@ -159,6 +169,8 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     : knowledgeBaseQuery;
 
   const knowledgeItems = await KnowledgeItem.find(knowledgeQuery);
+  const workspaceSettings = await WorkspaceSettings.findOne({ workspaceId }).lean();
+  const businessProfile = buildBusinessProfileContext(workspaceSettings);
 
   if (recentCustomerText && ragEnabled) {
     try {
@@ -168,16 +180,22 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     }
   }
 
+  if (businessProfile) {
+    appendKnowledgeBlock('Business Profile', businessProfile.content);
+  }
+
   if (knowledgeItems.length > 0) {
-    knowledgeContext += '\nKnowledge Base:\n';
-    knowledgeContext += knowledgeItems.map((item: any) => `- ${item.title}: ${item.content}`).join('\n');
+    appendKnowledgeBlock(
+      'Knowledge Base',
+      knowledgeItems.map((item: any) => `- ${item.title}: ${item.content}`).join('\n'),
+    );
   }
 
   if (vectorContexts.length > 0) {
-    knowledgeContext += '\n\nVector RAG Matches:\n';
-    knowledgeContext += vectorContexts
-      .map((ctx) => `- ${ctx.title}: ${ctx.content}`)
-      .join('\n');
+    appendKnowledgeBlock(
+      'Vector RAG Matches',
+      vectorContexts.map((ctx) => `- ${ctx.title}: ${ctx.content}`).join('\n'),
+    );
   }
 
   const conversationHistory = messages.map((msg: any) => {
