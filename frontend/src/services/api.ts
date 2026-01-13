@@ -543,19 +543,6 @@ export interface AutomationInstance {
   updatedAt: string;
 }
 
-export type GoalType =
-  | 'none'
-  | 'capture_lead'
-  | 'book_appointment'
-  | 'order_now'
-  | 'product_inquiry'
-  | 'delivery'
-  | 'order_status'
-  | 'refund_exchange'
-  | 'human'
-  | 'handle_support'
-  ;
-
 export interface BusinessHoursConfig {
   startTime: string;
   endTime: string;
@@ -620,35 +607,6 @@ export interface WorkspaceTierResponse {
   usage?: WorkspaceTierUsage;
 }
 
-export interface GoalConfigs {
-  leadCapture: {
-    collectName: boolean;
-    collectPhone: boolean;
-    collectEmail: boolean;
-    collectCustomNote: boolean;
-  };
-  booking: {
-    bookingLink?: string;
-    collectDate: boolean;
-    collectTime: boolean;
-    collectServiceType: boolean;
-  };
-  order: {
-    catalogUrl?: string;
-    collectProductName: boolean;
-    collectQuantity: boolean;
-    collectVariant: boolean;
-  };
-  support: {
-    askForOrderId: boolean;
-    askForPhoto: boolean;
-  };
-  drive: {
-    targetType: 'website' | 'WhatsApp' | 'store' | 'app';
-    targetLink?: string;
-  };
-}
-
 // Phase 2: Automation Types
 export interface WorkspaceSettings {
   _id: string;
@@ -693,9 +651,6 @@ export interface WorkspaceSettings {
   followupEnabled: boolean;
   followupHoursBeforeExpiry: number;
   followupTemplate: string;
-  primaryGoal?: GoalType;
-  secondaryGoal?: GoalType;
-  goalConfigs?: GoalConfigs;
   googleSheets?: GoogleSheetsIntegration;
   createdAt: string;
   updatedAt: string;
@@ -1440,14 +1395,6 @@ export interface DashboardSummaryResponse {
     aiHandledRate: number;
     humanAlerts: { open: number; critical: number };
     medianFirstResponseMs: number;
-  };
-  outcomes: {
-    leads: number;
-    bookings: number;
-    orders: number;
-    support: number;
-    escalated: number;
-    goal: { attempts: number; completions: number };
   };
   trend: { date: string; inboundMessages: number; aiReplies: number; escalationsOpened: number; kbBackedReplies: number }[];
 }

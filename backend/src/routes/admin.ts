@@ -23,11 +23,9 @@ import ContactNote from '../models/ContactNote';
 import CrmTask from '../models/CrmTask';
 import FollowupTask from '../models/FollowupTask';
 import InstagramAccount from '../models/InstagramAccount';
-import LeadCapture from '../models/LeadCapture';
 import ReportDailyWorkspace from '../models/ReportDailyWorkspace';
 import SupportTicket from '../models/SupportTicket';
 import SupportTicketComment from '../models/SupportTicketComment';
-import SupportTicketStub from '../models/SupportTicketStub';
 import { WorkspaceInvite } from '../models/WorkspaceInvite';
 import { ensureBillingAccountForUser, upsertActiveSubscription } from '../services/billingService';
 import { getLogSettings, updateLogSettings } from '../services/adminLogSettingsService';
@@ -434,11 +432,9 @@ router.delete('/workspaces/:id', authenticate, requireAdmin, async (req, res) =>
       FollowupTask.deleteMany({ workspaceId: workspaceObjectId }),
       InstagramAccount.deleteMany({ workspaceId: workspaceObjectId }),
       KnowledgeItem.deleteMany({ workspaceId: workspaceObjectId }),
-      LeadCapture.deleteMany({ workspaceId: workspaceObjectId }),
       Message.deleteMany({ workspaceId: workspaceObjectId }),
       ReportDailyWorkspace.deleteMany({ workspaceId: workspaceObjectId }),
       SupportTicket.deleteMany({ workspaceId: workspaceObjectId }),
-      SupportTicketStub.deleteMany({ workspaceId: workspaceObjectId }),
       WorkspaceInvite.deleteMany({ workspaceId: workspaceObjectId }),
       WorkspaceSettings.deleteMany({ workspaceId: workspaceObjectId }),
       AdminLogEvent.deleteMany({ workspaceId: workspaceObjectId }),

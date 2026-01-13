@@ -2,10 +2,7 @@ import mongoose from 'mongoose';
 import Conversation from '../models/Conversation';
 import Message from '../models/Message';
 import Escalation from '../models/Escalation';
-import LeadCapture from '../models/LeadCapture';
-import SupportTicketStub from '../models/SupportTicketStub';
 import ReportDailyWorkspace from '../models/ReportDailyWorkspace';
-import { GoalType } from '../types/automationGoals';
 import { listAllWorkspaceIds } from '../repositories/core/workspaceRepository';
 
 export type DashboardRange = 'today' | '7d' | '30d';
@@ -82,8 +79,6 @@ export async function rebuildWorkspaceReportForDate(workspaceId: string, date: D
     escalationsClosed,
     followupsSent,
     kbBackedReplies,
-    goalCompletionCounts,
-    goalAttemptCounts,
     escalationReasons,
     tagCounts,
     kbArticleCounts,
@@ -98,14 +93,6 @@ export async function rebuildWorkspaceReportForDate(workspaceId: string, date: D
     Escalation.countDocuments({ workspaceId, updatedAt: { $gte: start, $lt: end }, status: 'resolved' }),
     Message.countDocuments({ ...match, automationSource: 'followup', from: 'ai' }),
     Message.countDocuments({ ...match, kbItemIdsUsed: { $exists: true, $not: { $size: 0 } } }),
-    Promise.all([
-      LeadCapture.countDocuments({ workspaceId, createdAt: { $gte: start, $lt: end } }),
-      SupportTicketStub.countDocuments({ workspaceId, createdAt: { $gte: start, $lt: end } }),
-    ]).then(([leads, supports]) => ({
-      capture_lead: leads,
-      handle_support: supports,
-    })),
-    Promise.resolve({}),
     Message.aggregate([
       { $match: { ...match, aiEscalationReason: { $exists: true, $ne: null } } },
       { $group: { _id: '$aiEscalationReason', count: { $sum: 1 } } },
@@ -142,9 +129,6 @@ export async function rebuildWorkspaceReportForDate(workspaceId: string, date: D
     ]),
   ]);
 
-  const goalAttemptsCombined: Record<string, number> = { ...goalAttemptCounts };
-  const goalCompletionsCombined: Record<string, number> = { ...goalCompletionCounts };
-
   const responseSum = responseAggregation[0]?.sum || 0;
   const responseCount = responseAggregation[0]?.count || 0;
 
@@ -178,8 +162,6 @@ export async function rebuildWorkspaceReportForDate(workspaceId: string, date: D
         escalationsClosed,
         followupsSent,
         kbBackedReplies,
-        goalAttempts: goalAttemptsCombined,
-        goalCompletions: goalCompletionsCombined,
         firstResponseTimeSumMs: responseSum,
         firstResponseTimeCount: responseCount,
         tagCounts: tagCountMap,
@@ -205,33 +187,4 @@ export async function rebuildYesterdayReports() {
       }
     })
   );
-}
-
-export function mapGoalKey(goal: GoalType | string): string {
-  switch (goal) {
-    case 'capture_lead':
-      return 'capture_lead';
-    case 'book_appointment':
-      return 'book_appointment';
-    case 'order_now':
-      return 'order_now';
-    case 'product_inquiry':
-      return 'product_inquiry';
-    case 'delivery':
-      return 'delivery';
-    case 'order_status':
-      return 'order_status';
-    case 'refund_exchange':
-      return 'refund_exchange';
-    case 'human':
-      return 'human';
-    case 'handle_support':
-      return 'handle_support';
-    case 'start_order':
-      return 'order_now';
-    case 'drive_to_channel':
-      return 'other';
-    default:
-      return goal || 'other';
-  }
 }

@@ -1,5 +1,4 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { GoalType } from '../types/automationGoals';
 
 export interface IConversation extends Document {
   participantName: string;
@@ -32,13 +31,6 @@ export interface IConversation extends Document {
   humanTriggeredAt?: Date;
   humanTriggeredByMessageId?: mongoose.Types.ObjectId;
   humanHoldUntil?: Date;
-
-  // DM Goal flows
-  activeGoalType?: GoalType;
-  goalState?: 'idle' | 'collecting' | 'completed';
-  goalCollectedFields?: Record<string, any>;
-  goalSummary?: string;
-  goalLastInteractionAt?: Date;
 
   // AI summary (audit + automation context)
   aiSummary?: string;
@@ -150,39 +142,6 @@ const conversationSchema = new Schema<IConversation>({
     ref: 'Message',
   },
   humanHoldUntil: {
-    type: Date,
-  },
-
-  // DM Goals
-  activeGoalType: {
-    type: String,
-    enum: [
-      'none',
-      'capture_lead',
-      'book_appointment',
-      'order_now',
-      'product_inquiry',
-      'delivery',
-      'order_status',
-      'refund_exchange',
-      'human',
-      'handle_support',
-      'start_order',
-      'drive_to_channel',
-    ],
-  },
-  goalState: {
-    type: String,
-    enum: ['idle', 'collecting', 'completed'],
-    default: 'idle',
-  },
-  goalCollectedFields: {
-    type: Schema.Types.Mixed,
-  },
-  goalSummary: {
-    type: String,
-  },
-  goalLastInteractionAt: {
     type: Date,
   },
 
