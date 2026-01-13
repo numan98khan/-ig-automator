@@ -63,7 +63,6 @@ type FlowRuntimeStep = {
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
   aiSettings?: AutomationAiSettings;
-  messageHistory?: Array<Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>>;
   agentSystemPrompt?: string;
   agentSteps?: string[];
   agentEndCondition?: string;
@@ -1383,7 +1382,7 @@ async function handleAiReplyStep(params: {
     conversationSummary,
     historyLimit: aiContext?.historyWindow,
     knowledgeItemIds: step.knowledgeItemIds,
-    messageHistory: messageHistory || step.messageHistory,
+    messageHistory,
   });
   const replyDurationMs = Math.max(0, Math.round(nowMs() - replyStart));
   logAutomationStep('flow_ai_reply_generate', replyStart);
