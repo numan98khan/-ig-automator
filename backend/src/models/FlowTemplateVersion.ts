@@ -100,6 +100,7 @@ const flowTemplateVersionSchema = new Schema<IFlowTemplateVersion>({
   },
   aiSummarySettings: {
     enabled: { type: Boolean },
+    generateOnFlowEnd: { type: Boolean },
     provider: { type: String, enum: ['openai', 'groq'] },
     model: { type: String, trim: true },
     temperature: { type: Number },

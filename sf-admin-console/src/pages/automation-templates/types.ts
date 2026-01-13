@@ -53,6 +53,7 @@ export type FlowDisplay = {
 
 export type FlowSummarySettings = {
   enabled?: boolean
+  generateOnFlowEnd?: boolean
   provider?: AiProvider
   model?: string
   temperature?: number
@@ -248,6 +249,7 @@ export type DraftForm = {
   }
   summarySettings: {
     enabled: boolean
+    generateOnFlowEnd: boolean
     provider: AiProvider
     model: string
     temperature: string

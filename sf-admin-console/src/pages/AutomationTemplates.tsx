@@ -445,6 +445,7 @@ export default function AutomationTemplates() {
       },
       summarySettings: {
         enabled: selectedDraft.aiSummarySettings?.enabled ?? false,
+        generateOnFlowEnd: selectedDraft.aiSummarySettings?.generateOnFlowEnd ?? true,
         provider: resolveAiProvider(selectedDraft.aiSummarySettings?.provider),
         model: selectedDraft.aiSummarySettings?.model || '',
         temperature: selectedDraft.aiSummarySettings?.temperature !== undefined
@@ -707,6 +708,7 @@ export default function AutomationTemplates() {
 
     const summarySettings = {
       enabled: draftForm.summarySettings.enabled,
+      generateOnFlowEnd: draftForm.summarySettings.generateOnFlowEnd,
       provider: draftForm.summarySettings.provider || undefined,
       model: draftForm.summarySettings.model.trim() || undefined,
       temperature: parseOptionalNumber(draftForm.summarySettings.temperature),
@@ -3584,7 +3586,30 @@ export default function AutomationTemplates() {
                       Enable LLM summary
                     </label>
                     <div className="text-[11px] text-muted-foreground">
-                      Generates a concise summary after each automation run.
+                      Generates a concise summary for the conversation.
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        checked={draftForm.summarySettings.generateOnFlowEnd}
+                        onChange={(event) =>
+                          setDraftForm((prev) => ({
+                            ...prev,
+                            summarySettings: {
+                              ...prev.summarySettings,
+                              generateOnFlowEnd: event.target.checked,
+                            },
+                          }))
+                        }
+                        disabled={isLive}
+                      />
+                      Generate summary on flow end
+                    </label>
+                    <div className="text-[11px] text-muted-foreground">
+                      Runs a summary even if the history limit is not met.
                     </div>
                   </div>
                   <div className="space-y-2">

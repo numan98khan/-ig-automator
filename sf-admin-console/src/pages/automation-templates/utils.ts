@@ -340,6 +340,7 @@ export const buildEmptyDraftForm = (): DraftForm => ({
   },
   summarySettings: {
     enabled: false,
+    generateOnFlowEnd: true,
     provider: 'openai',
     model: '',
     temperature: '',

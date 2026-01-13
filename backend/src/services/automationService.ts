@@ -1819,7 +1819,8 @@ async function executeFlowPlan(params: {
   const shouldGenerateSummary = async (force: boolean) => {
     if (!aiContext?.persistSummary) return false;
     if (!summarySettings?.enabled) return false;
-    if (force) return true;
+    const allowForce = force && summarySettings?.generateOnFlowEnd !== false;
+    if (allowForce) return true;
     const limit = summaryHistoryLimit();
     const query: Record<string, any> = { conversationId: conversation._id };
     if (conversation.aiSummaryUpdatedAt) {
@@ -1842,7 +1843,8 @@ async function executeFlowPlan(params: {
       query.createdAt = { $gt: conversation.aiSummaryUpdatedAt };
     }
     const messageCount = await Message.countDocuments(query);
-    const shouldUpdate = force || messageCount >= limit;
+    const allowForce = force && summarySettings?.generateOnFlowEnd !== false;
+    const shouldUpdate = allowForce || messageCount >= limit;
     if (!shouldUpdate) return;
     const summary = await generateConversationSummary({
       conversation,

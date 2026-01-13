@@ -67,6 +67,7 @@ export type FlowPreviewMessage = {
 
 export type AiSummarySettings = {
   enabled?: boolean;
+  generateOnFlowEnd?: boolean;
   provider?: 'openai' | 'groq';
   model?: string;
   temperature?: number;
