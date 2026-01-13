@@ -29,6 +29,7 @@ export type AIAgentOptions = {
   latestCustomerMessage?: string;
   conversationSummary?: string;
   messageHistory?: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[];
+  historyLimit?: number;
   systemPrompt?: string;
   steps?: string[];
   stepIndex?: number;
@@ -71,6 +72,7 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     latestCustomerMessage,
     conversationSummary,
     messageHistory,
+    historyLimit,
     systemPrompt,
     steps,
     stepIndex,
@@ -85,7 +87,11 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     knowledgeItemIds,
   } = options;
 
-  const historyLimit = typeof aiSettings?.historyLimit === 'number' ? aiSettings?.historyLimit : 10;
+  const historyLimitValue = typeof historyLimit === 'number'
+    ? historyLimit
+    : typeof aiSettings?.historyLimit === 'number'
+      ? aiSettings?.historyLimit
+      : 10;
   const ragEnabled = aiSettings?.ragEnabled !== false;
   const provider = normalizeAiProvider(aiSettings?.provider);
   const model = aiSettings?.model || (provider === 'groq' ? DEFAULT_GROQ_MODEL : DEFAULT_OPENAI_MODEL);
@@ -124,10 +130,10 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     : {};
 
   const messages = messageHistory
-    ? [...messageHistory].slice(-historyLimit)
+    ? [...messageHistory].slice(-historyLimitValue)
     : await Message.find({ conversationId: conversation._id })
         .sort({ createdAt: -1 })
-        .limit(historyLimit)
+        .limit(historyLimitValue)
         .then(found => {
           const ordered = [...found];
           ordered.reverse();

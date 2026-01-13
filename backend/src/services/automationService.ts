@@ -1283,17 +1283,26 @@ async function buildAutomationAiReply(params: {
   messageText: string;
   aiSettings?: AutomationAiSettings;
   conversationSummary?: string;
+  historyLimit?: number;
   knowledgeItemIds?: string[];
   messageHistory?: Array<Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>>;
 }) {
-  const { conversation, messageText, aiSettings, conversationSummary, knowledgeItemIds, messageHistory } = params;
+  const {
+    conversation,
+    messageText,
+    aiSettings,
+    conversationSummary,
+    historyLimit,
+    knowledgeItemIds,
+    messageHistory,
+  } = params;
 
   return generateAIReply({
     conversation,
     workspaceId: conversation.workspaceId,
     latestCustomerMessage: messageText,
     conversationSummary,
-    historyLimit: aiSettings?.historyLimit,
+    historyLimit: historyLimit ?? aiSettings?.historyLimit,
     messageHistory,
     tone: aiSettings?.tone,
     maxReplySentences: aiSettings?.maxReplySentences,
@@ -1372,6 +1381,7 @@ async function handleAiReplyStep(params: {
     messageText,
     aiSettings,
     conversationSummary,
+    historyLimit: aiContext?.historyWindow,
     knowledgeItemIds: step.knowledgeItemIds,
     messageHistory: messageHistory || step.messageHistory,
   });
@@ -1970,6 +1980,7 @@ async function executeFlowPlan(params: {
         knowledgeItemIds: step.knowledgeItemIds,
         conversationSummary: aiContext?.summaryForPrompt,
         messageHistory: aiContext?.messageHistory,
+        historyLimit: aiContext?.historyWindow,
       });
       const agentDurationMs = Math.max(0, Math.round(nowMs() - agentStart));
       logAutomationStep('flow_ai_agent', agentStart, {
