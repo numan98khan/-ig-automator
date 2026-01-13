@@ -46,6 +46,27 @@ type PreviewAutomationMessage = {
   createdAt: Date;
 };
 
+type AutomationDeliveryAdapter = {
+  mode: AutomationDeliveryMode;
+  sendMessage: (params: {
+    conversation: any;
+    instance: any;
+    igAccount?: any;
+    recipientId?: string;
+    text: string;
+    buttons?: Array<{ title: string; payload?: string } | string>;
+    platform?: string;
+    tags?: string[];
+    source?: 'template_flow' | 'ai_reply';
+    trackStats?: boolean;
+    aiMeta?: {
+      shouldEscalate?: boolean;
+      escalationReason?: string;
+      knowledgeItemIds?: string[];
+    };
+  }) => Promise<any>;
+};
+
 type FlowRuntimeEdge = {
   from: string;
   to: string;
@@ -1277,6 +1298,19 @@ async function sendFlowMessage(params: {
   return message;
 }
 
+const createDeliveryAdapter = (params: {
+  deliveryMode: AutomationDeliveryMode;
+}): AutomationDeliveryAdapter => {
+  const { deliveryMode } = params;
+  return {
+    mode: deliveryMode,
+    sendMessage: async (payload) => sendFlowMessage({
+      ...payload,
+      deliveryMode,
+    }),
+  };
+};
+
 async function buildAutomationAiReply(params: {
   conversation: any;
   messageText: string;
@@ -1329,6 +1363,7 @@ async function handleAiReplyStep(params: {
   conversationSummary?: string;
   messageHistory?: Array<Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>>;
   aiContext?: AiAutomationContext;
+  deliveryAdapter?: AutomationDeliveryAdapter;
   platform?: string;
   messageContext?: AutomationTestContext;
   deliveryMode?: AutomationDeliveryMode;
@@ -1347,6 +1382,7 @@ async function handleAiReplyStep(params: {
     conversationSummary,
     messageHistory,
     aiContext,
+    deliveryAdapter,
     platform,
     messageContext,
     deliveryMode = 'instagram',
@@ -1433,7 +1469,8 @@ async function handleAiReplyStep(params: {
   }
 
   const sendStart = nowMs();
-  const message = await sendFlowMessage({
+  const adapter = deliveryAdapter || createDeliveryAdapter({ deliveryMode });
+  const message = await adapter.sendMessage({
     conversation,
     instance,
     igAccount,
@@ -1442,7 +1479,6 @@ async function handleAiReplyStep(params: {
     platform,
     tags: aiResponse.tags,
     source: 'ai_reply',
-    deliveryMode,
     trackStats,
     aiMeta: {
       shouldEscalate: aiResponse.shouldEscalate,
@@ -1724,6 +1760,7 @@ async function executeFlowPlan(params: {
   messageContext?: AutomationTestContext;
   config?: Record<string, any>;
   deliveryMode?: AutomationDeliveryMode;
+  deliveryAdapter?: AutomationDeliveryAdapter;
   onMessageSent?: (message: PreviewAutomationMessage) => void;
   trackStats?: boolean;
   aiContext?: AiAutomationContext;
@@ -1739,6 +1776,7 @@ async function executeFlowPlan(params: {
     messageContext,
     config,
     deliveryMode = 'instagram',
+    deliveryAdapter,
     onMessageSent,
     trackStats = true,
     aiContext,
@@ -1849,7 +1887,8 @@ async function executeFlowPlan(params: {
         return { success: false, error: 'Rate limit exceeded', sentCount, executedSteps };
       }
       await markTriggeredOnce();
-      const message = await sendFlowMessage({
+      const adapter = deliveryAdapter || createDeliveryAdapter({ deliveryMode });
+      const message = await adapter.sendMessage({
         conversation,
         instance,
         igAccount,
@@ -1859,7 +1898,6 @@ async function executeFlowPlan(params: {
         platform,
         tags: step.tags,
         source: 'template_flow',
-        deliveryMode,
         trackStats,
       });
       if (aiContext) {
@@ -1901,6 +1939,7 @@ async function executeFlowPlan(params: {
         conversationSummary: aiContext?.summaryForPrompt,
         messageHistory: aiContext?.messageHistory,
         aiContext,
+        deliveryAdapter,
         platform,
         messageContext,
         deliveryMode,
@@ -2010,7 +2049,8 @@ async function executeFlowPlan(params: {
         return { success: false, error: 'AI agent reply missing', sentCount, executedSteps };
       }
 
-      const message = await sendFlowMessage({
+      const adapter = deliveryAdapter || createDeliveryAdapter({ deliveryMode });
+      const message = await adapter.sendMessage({
         conversation,
         instance,
         igAccount,
@@ -2018,7 +2058,6 @@ async function executeFlowPlan(params: {
         text: agentResult.replyText,
         platform,
         source: 'ai_reply',
-        deliveryMode,
         trackStats,
       });
       if (aiContext) {
@@ -2184,7 +2223,8 @@ async function executeFlowPlan(params: {
       }
 
       if (step.handoff?.message) {
-        const message = await sendFlowMessage({
+        const adapter = deliveryAdapter || createDeliveryAdapter({ deliveryMode });
+        const message = await adapter.sendMessage({
           conversation,
           instance,
           igAccount,
@@ -2192,7 +2232,6 @@ async function executeFlowPlan(params: {
           text: step.handoff.message,
           platform,
           source: 'template_flow',
-          deliveryMode,
           trackStats,
         });
         if (aiContext) {
@@ -2427,6 +2466,7 @@ async function executeFlowForInstance(params: {
     config: resolvedRuntime.config,
     persistSummary: true,
   });
+  const deliveryAdapter = createDeliveryAdapter({ deliveryMode: 'instagram' });
 
   const runStart = nowMs();
   const result = await executeFlowPlan({
@@ -2440,6 +2480,7 @@ async function executeFlowForInstance(params: {
     messageContext,
     config: resolvedRuntime.config,
     aiContext,
+    deliveryAdapter,
   });
   logAutomationStep('flow_execute', runStart, { success: result.success, steps: result.executedSteps });
 
@@ -2541,6 +2582,7 @@ export async function executePreviewFlowForInstance(params: {
     config: runtime.config,
     persistSummary: false,
   });
+  const deliveryAdapter = createDeliveryAdapter({ deliveryMode: 'preview' });
   const result = await executeFlowPlan({
     plan,
     session,
@@ -2552,6 +2594,7 @@ export async function executePreviewFlowForInstance(params: {
     messageContext,
     config: runtime.config,
     aiContext,
+    deliveryAdapter,
     deliveryMode: 'preview',
     onMessageSent: (message) => outbound.push(message),
     trackStats: false,
