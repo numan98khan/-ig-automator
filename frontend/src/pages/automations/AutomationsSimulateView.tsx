@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   RefreshCcw,
@@ -71,14 +71,35 @@ const mergePreviewMessages = (
   existing: AutomationPreviewMessage[],
   incoming?: AutomationPreviewMessage[],
 ) => {
-  if (!incoming) return existing;
-  const seen = new Set(incoming.map((message) => message.id));
-  const merged = [...incoming, ...existing.filter((message) => !seen.has(message.id))];
-  if (merged.length > 1 && merged.every((message) => message.createdAt)) {
-    return [...merged].sort((a, b) =>
-      new Date(a.createdAt as string).getTime() - new Date(b.createdAt as string).getTime());
-  }
-  return merged;
+  if (!incoming || incoming.length === 0) return existing;
+  let tempCounter = 0;
+  const order: string[] = [];
+  const items = new Map<string, AutomationPreviewMessage>();
+  const upsert = (message: AutomationPreviewMessage) => {
+    const key = message.id || `tmp-${tempCounter++}`;
+    if (!items.has(key)) {
+      order.push(key);
+    }
+    items.set(key, message);
+  };
+  existing.forEach(upsert);
+  incoming.forEach(upsert);
+  const merged = order.map((key) => items.get(key)).filter(Boolean) as AutomationPreviewMessage[];
+  if (merged.length <= 1) return merged;
+  const decorated = merged.map((message, index) => ({
+    message,
+    index,
+    timestamp: message.createdAt ? new Date(message.createdAt as string).getTime() : null,
+  }));
+  decorated.sort((a, b) => {
+    if (a.timestamp !== null && b.timestamp !== null && a.timestamp !== b.timestamp) {
+      return a.timestamp - b.timestamp;
+    }
+    if (a.timestamp !== null && b.timestamp === null) return -1;
+    if (a.timestamp === null && b.timestamp !== null) return 1;
+    return a.index - b.index;
+  });
+  return decorated.map((entry) => entry.message);
 };
 
 export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = ({
@@ -119,6 +140,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   const [personaDraft, setPersonaDraft] = useState<AutomationPreviewPersona>(DEFAULT_PERSONA);
   const [profileBusy, setProfileBusy] = useState(false);
   const [resetPending, setResetPending] = useState(false);
+  const refreshTimerRef = useRef<number | null>(null);
   const canViewTimeline = Boolean(canViewExecutionTimeline);
   const profileAutomationId = selectedAutomation?.id
     || automations?.find((automation) => automation.isActive)?._id
@@ -184,6 +206,42 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
       console.error('Failed to load simulation session:', err);
     }
   }, [applyPreviewPayload, workspaceId]);
+
+  const clearRefreshTimer = useCallback(() => {
+    if (refreshTimerRef.current !== null) {
+      window.clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleSimulationRefresh = useCallback((baselineIds: Set<string>, remainingAttempts = 6) => {
+    if (!workspaceId || remainingAttempts <= 0) {
+      clearRefreshTimer();
+      return;
+    }
+    refreshTimerRef.current = window.setTimeout(async () => {
+      try {
+        const response = await automationAPI.getSimulationSession(workspaceId);
+        applyPreviewPayload({ ...response, messages: response.messages });
+        if (response.selectedAutomation) {
+          setSelectedAutomation(response.selectedAutomation);
+        }
+        const hasNewAiMessage = (response.messages || []).some((message) =>
+          message.from === 'ai' && message.id && !baselineIds.has(message.id));
+        if (hasNewAiMessage) {
+          clearRefreshTimer();
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to refresh simulation session:', err);
+      }
+      scheduleSimulationRefresh(baselineIds, remainingAttempts - 1);
+    }, 1000);
+  }, [applyPreviewPayload, clearRefreshTimer, workspaceId]);
+
+  useEffect(() => () => {
+    clearRefreshTimer();
+  }, [clearRefreshTimer]);
 
   const loadProfiles = useCallback(async (automationId: string) => {
     setProfilesLoading(true);
@@ -276,7 +334,8 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     setDiagnostics([]);
     setError(null);
     setResetPending(false);
-  }, [workspaceId]);
+    clearRefreshTimer();
+  }, [clearRefreshTimer, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -289,6 +348,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   };
 
   const handleReset = async () => {
+    clearRefreshTimer();
     if (workspaceId) {
       try {
         await automationAPI.resetSimulationSession({
@@ -321,12 +381,15 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     const trimmed = previewInputValue.trim();
     if (!trimmed || !workspaceId) return;
 
+    clearRefreshTimer();
     setError(null);
     setPreviewSending(true);
+    const baselineIds = new Set(previewMessages.map((message) => message.id).filter(Boolean));
     const optimisticMessage: AutomationPreviewMessage = {
       id: `sim-${Date.now()}`,
       from: 'customer',
       text: trimmed,
+      createdAt: new Date().toISOString(),
     };
     setPreviewMessages((prev) => [...prev, optimisticMessage]);
     setPreviewInputValue('');
@@ -346,8 +409,13 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
       setSelectedAutomation(response.selectedAutomation || null);
       setDiagnostics(response.diagnostics || []);
       setResetPending(false);
-      if (messages && messages.length > 0) {
-        setPreviewMessages((prev) => [...prev, ...messages]);
+      if (messages) {
+        setPreviewMessages((prev) => mergePreviewMessages(prev, messages));
+      }
+      const hasNewAiMessage = (messages || []).some((message) =>
+        message.from === 'ai' && message.id && !baselineIds.has(message.id));
+      if (!hasNewAiMessage) {
+        scheduleSimulationRefresh(baselineIds);
       }
       if (!response.success) {
         setError(response.error || 'No automation matched this message.');
@@ -605,6 +673,9 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
           currentNode={previewState.currentNode}
           session={previewState.session}
           conversation={previewState.conversation}
+          messages={previewMessages}
+          showConversationHistory
+          canViewHistory={canViewTimeline}
           prepend={statePrepend}
         />
       )}

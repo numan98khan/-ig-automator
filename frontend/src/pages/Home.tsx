@@ -361,7 +361,6 @@ const Home: React.FC = () => {
 
   const showSecurityPrompt = Boolean(user?.isProvisional || !user?.emailVerified);
   const kpiSummary = dashboard?.kpis;
-  const kpiOutcomes = dashboard?.outcomes;
   const simulationTimestamp = useMemo(() => {
     const timestamp = simulation?.session?.updatedAt || simulation?.session?.createdAt || null;
     if (!timestamp) return null;
@@ -685,14 +684,10 @@ const Home: React.FC = () => {
                 <CardTitle className="text-lg">Ops summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   <div className="rounded-lg border border-border/60 p-3">
                     <p className="text-xs text-muted-foreground">DMs today</p>
                     <p className="text-xl font-semibold text-foreground">{kpiSummary?.inboundMessages ?? 0}</p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 p-3">
-                    <p className="text-xs text-muted-foreground">Leads captured</p>
-                    <p className="text-xl font-semibold text-foreground">{kpiOutcomes?.leads ?? 0}</p>
                   </div>
                   <div className="rounded-lg border border-border/60 p-3">
                     <p className="text-xs text-muted-foreground">Automations running</p>

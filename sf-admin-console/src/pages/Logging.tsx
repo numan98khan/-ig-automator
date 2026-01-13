@@ -47,7 +47,10 @@ export default function Logging() {
     purgeLogsMutation.mutate()
   }
 
-  const logEvents = unwrapData<AdminLogEvent[]>(logEventsData) || []
+  const logEventsPayload = unwrapData<AdminLogEvent[] | { events?: AdminLogEvent[] }>(logEventsData)
+  const logEvents = Array.isArray(logEventsPayload)
+    ? logEventsPayload
+    : logEventsPayload?.events || []
 
   const formatTimestamp = (value?: string) => {
     if (!value) return '—'

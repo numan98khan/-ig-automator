@@ -6,6 +6,7 @@ import {
   FlowTemplateDisplay,
   FlowTemplateVersionStatus,
   FlowTriggerDefinition,
+  AiSummarySettings,
 } from '../types/flow';
 
 export interface IFlowTemplateVersion extends Document {
@@ -18,6 +19,7 @@ export interface IFlowTemplateVersion extends Document {
   triggers?: FlowTriggerDefinition[];
   exposedFields?: FlowExposedField[];
   display?: FlowTemplateDisplay;
+  aiSummarySettings?: AiSummarySettings;
   publishedAt?: Date;
   createdBy?: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -95,6 +97,16 @@ const flowTemplateVersionSchema = new Schema<IFlowTemplateVersion>({
     collects: { type: [String], default: [] },
     icon: { type: String, trim: true },
     previewConversation: { type: [previewMessageSchema], default: [] },
+  },
+  aiSummarySettings: {
+    enabled: { type: Boolean },
+    generateOnFlowEnd: { type: Boolean },
+    provider: { type: String, enum: ['openai', 'groq'] },
+    model: { type: String, trim: true },
+    temperature: { type: Number },
+    maxOutputTokens: { type: Number },
+    historyLimit: { type: Number },
+    systemPrompt: { type: String, trim: true },
   },
   publishedAt: { type: Date },
   createdBy: { type: Schema.Types.ObjectId, ref: 'User' },

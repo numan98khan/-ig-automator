@@ -65,6 +65,17 @@ export type FlowPreviewMessage = {
   message: string;
 };
 
+export type AiSummarySettings = {
+  enabled?: boolean;
+  generateOnFlowEnd?: boolean;
+  provider?: 'openai' | 'groq';
+  model?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+  historyLimit?: number;
+  systemPrompt?: string;
+};
+
 export type FlowTemplateDisplay = {
   outcome?: string;
   goal?: 'Bookings' | 'Sales' | 'Leads' | 'Support' | 'General';
@@ -83,6 +94,7 @@ export type FlowDraftInput = {
   triggers?: FlowTriggerDefinition[];
   exposedFields?: FlowExposedField[];
   display?: FlowTemplateDisplay;
+  aiSummarySettings?: AiSummarySettings;
 };
 
 export type FlowTemplateInput = {
@@ -99,6 +111,7 @@ export type FlowTemplatePublishInput = {
   exposedFields?: FlowExposedField[];
   display?: FlowTemplateDisplay;
   versionLabel?: string;
+  aiSummarySettings?: AiSummarySettings;
 };
 
 export type AutomationInstanceInput = {

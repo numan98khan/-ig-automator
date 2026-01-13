@@ -188,6 +188,7 @@ Key points:
 - Runtime loads `version.compiled.graph` (or the compiled object if no `graph` key).
 - Exposed fields patch the graph/triggers, then config + vars are interpolated into the graph.
 - Flow steps are executed against the compiled graph using the node types above.
+- Runtime builds a shared AI context per execution run (message history + summary) and reuses it across AI nodes.
 - `detect_intent` stores the output in `session.state.vars.detectedIntent`.
 - `detect_intent` runs intent detection against the global AutomationIntent list and stores the output in `session.state.vars.detectedIntent`.
 - `ai_agent` runs a multi-turn agent loop using its own system prompt, steps, end condition, and stop condition. It persists
@@ -198,6 +199,17 @@ Key points:
 - `waitForReply` stops the current run and stores the next node pointer in session state.
 - `ai_reply` merges `graph.aiSettings` with node `aiSettings`, supports `knowledgeItemIds`, and respects `rateLimit`.
 - `send_message` supports buttons/tags, and templates can reference `{{ vars.* }}`.
+
+### AI Context (History + Summary)
+
+Automation runs create a shared AI context for the full execution:
+- Message history and summaries are built once per run and reused by `ai_reply` and `ai_agent` nodes.
+- Node-level `messageHistory` is no longer used; AI nodes consume the shared context instead.
+- History window size and summary expiry are configurable via automation config:
+  - `aiHistoryWindow` (default: 10, min: 1, max: 50)
+  - `aiSummaryExpiryHours` (default: 48, min: 0, max: 168; set to 0 to disable summary usage)
+- Conversation-level summaries are persisted on `Conversation.aiSummary` with `aiSummaryUpdatedAt` for audit use.
+- Preview runs reuse history but do not persist summary updates.
 
 ### Always Use Latest Published Version
 

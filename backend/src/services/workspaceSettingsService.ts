@@ -1,54 +1,11 @@
 import mongoose from 'mongoose';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import { AutomationIntentSettings } from '../types/automation';
-import { GoalConfigurations, GoalType } from '../types/automationGoals';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
-import {
-  DEFAULT_AUTOMATION_INTENTS,
-  listAutomationIntentLabels,
-} from './automationIntentService';
+import { listAutomationIntentLabels } from './automationIntentService';
 import { requireEnv } from '../utils/requireEnv';
 import { normalizeReasoningEffort } from '../utils/aiReasoning';
 import { AiProvider, getAiClient, hasGroqApiKey, normalizeAiProvider } from '../utils/aiProvider';
-
-const DEFAULT_GOAL_CONFIGS: GoalConfigurations = {
-  leadCapture: {
-    collectName: true,
-    collectPhone: true,
-    collectEmail: false,
-    collectCustomNote: false,
-  },
-  booking: {
-    bookingLink: '',
-    collectDate: true,
-    collectTime: true,
-    collectServiceType: false,
-  },
-  order: {
-    catalogUrl: '',
-    collectProductName: true,
-    collectQuantity: true,
-    collectVariant: false,
-  },
-  support: {
-    askForOrderId: true,
-    askForPhoto: false,
-  },
-  drive: {
-    targetType: 'website',
-    targetLink: '',
-  },
-};
-
-export function getGoalConfigs(settings: any): GoalConfigurations {
-  return {
-    leadCapture: { ...DEFAULT_GOAL_CONFIGS.leadCapture, ...(settings?.goalConfigs?.leadCapture || {}) },
-    booking: { ...DEFAULT_GOAL_CONFIGS.booking, ...(settings?.goalConfigs?.booking || {}) },
-    order: { ...DEFAULT_GOAL_CONFIGS.order, ...(settings?.goalConfigs?.order || {}) },
-    support: { ...DEFAULT_GOAL_CONFIGS.support, ...(settings?.goalConfigs?.support || {}) },
-    drive: { ...DEFAULT_GOAL_CONFIGS.drive, ...(settings?.goalConfigs?.drive || {}) },
-  };
-}
 
 const DEFAULT_GROQ_INTENT_MODEL = 'openai/gpt-oss-20b';
 
@@ -57,28 +14,6 @@ const INTENT_TEMPERATURE = 0;
 const INTENT_REASONING_EFFORT: AutomationIntentSettings['reasoningEffort'] = 'none';
 const INTENT_MAX_TOKENS = 200;
 
-const goalIntentLabels: Array<{ value: GoalType; description: string }> =
-  DEFAULT_AUTOMATION_INTENTS as Array<{ value: GoalType; description: string }>;
-
-const detectGoalIntentFallback = (text: string): GoalType => {
-  const lower = text.toLowerCase();
-
-  if (/(refund|exchange|return|replace|replacement)/.test(lower)) return 'refund_exchange';
-  if (/(order status|track|tracking|where is my order|last order|shipment status|delivery status)/.test(lower)) {
-    return 'order_status';
-  }
-  if (/(shipping|delivery|eta|when will|ship|cod|cash on delivery)/.test(lower)) return 'delivery';
-  if (/(buy now|order now|checkout|place order|ready to buy|purchase now)/.test(lower)) return 'order_now';
-  if (/(price|availability|in stock|variant|variants|size|color|colour|material|fabric)/.test(lower)) {
-    return 'product_inquiry';
-  }
-  if (/(human|agent|representative|real person|someone|operator)/.test(lower)) return 'human';
-  if (/(book|appointment|schedule|reserve|reservation)/.test(lower)) return 'book_appointment';
-  if (/(interested|contact me|reach out|quote|more info|call me|email me)/.test(lower)) return 'capture_lead';
-  if (/(late|broken|problem|issue|support|help with order|cancel|complaint)/.test(lower)) return 'handle_support';
-  return 'none';
-};
-
 const supportsTemperature = (provider: AiProvider, model?: string): boolean =>
   provider === 'openai' ? !/^gpt-5/i.test(model || '') : true;
 const supportsReasoningEffort = (provider: AiProvider, model?: string): boolean =>
@@ -86,6 +21,13 @@ const supportsReasoningEffort = (provider: AiProvider, model?: string): boolean 
 const shouldLogAutomation = () => getLogSettingsSnapshot().automationLogsEnabled;
 
 type IntentLabel = { value: string; description: string };
+const DEFAULT_INTENT_FALLBACK = 'none';
+
+const resolveIntentFallback = (allowedValues: string[]): string => {
+  if (allowedValues.includes('other')) return 'other';
+  if (allowedValues.includes('none')) return 'none';
+  return allowedValues[0] || DEFAULT_INTENT_FALLBACK;
+};
 
 const detectIntentFromLabels = async (
   text: string,
@@ -105,8 +47,7 @@ const detectIntentFromLabels = async (
   const provider = normalizeAiProvider(settings?.provider);
 
   if (provider === 'groq' ? !hasGroqApiKey() : !process.env.OPENAI_API_KEY) {
-    const fallback = detectGoalIntentFallback(trimmed);
-    return allowedSet.has(fallback) ? fallback : 'none';
+    return resolveIntentFallback(allowedValues);
   }
 
   try {
@@ -211,31 +152,12 @@ const detectIntentFromLabels = async (
     }
 
     if (intent && allowedSet.has(intent)) return intent;
-    const fallback = detectGoalIntentFallback(trimmed);
-    return allowedSet.has(fallback) ? fallback : 'none';
+    return resolveIntentFallback(allowedValues);
   } catch (error: any) {
     console.error('AI intent detection failed:', error?.message || error);
-    const fallback = detectGoalIntentFallback(trimmed);
-    return allowedSet.has(fallback) ? fallback : 'none';
+    return resolveIntentFallback(allowedValues);
   }
 };
-
-const normalizeGoalType = (value?: string | null): GoalType | 'none' => {
-  if (!value) return 'none';
-  if (value === 'start_order') return 'order_now';
-  if (value === 'drive_to_channel') return 'none';
-  return value as GoalType;
-};
-
-export async function detectGoalIntent(
-  text: string,
-  settings?: AutomationIntentSettings,
-): Promise<GoalType> {
-  const intent = await detectIntentFromLabels(text, goalIntentLabels, settings);
-  return (goalIntentLabels.some((label) => label.value === intent)
-    ? intent
-    : 'none') as GoalType;
-}
 
 export async function detectAutomationIntent(
   text: string,
@@ -253,14 +175,6 @@ export async function detectAutomationIntentDetailed(
   const value = await detectIntentFromLabels(text, labels, settings);
   const match = labels.find((label) => label.value === value);
   return { value, description: match?.description };
-}
-
-export function goalMatchesWorkspace(goal: GoalType, primary?: GoalType, secondary?: GoalType): boolean {
-  const normalizedGoal = normalizeGoalType(goal);
-  if (!normalizedGoal || normalizedGoal === 'none') return false;
-  const normalizedPrimary = normalizeGoalType(primary);
-  const normalizedSecondary = normalizeGoalType(secondary);
-  return normalizedGoal === normalizedPrimary || normalizedGoal === normalizedSecondary;
 }
 
 export async function getWorkspaceSettings(

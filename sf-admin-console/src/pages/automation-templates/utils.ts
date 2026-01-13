@@ -338,6 +338,16 @@ export const buildEmptyDraftForm = (): DraftForm => ({
     icon: '',
     previewText: '',
   },
+  summarySettings: {
+    enabled: false,
+    generateOnFlowEnd: true,
+    provider: 'openai',
+    model: '',
+    temperature: '',
+    maxOutputTokens: '',
+    historyLimit: '',
+    systemPrompt: '',
+  },
 })
 
 export const buildFieldForm = (field?: FlowField): FieldForm => ({
