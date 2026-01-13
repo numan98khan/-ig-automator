@@ -51,6 +51,16 @@ export type FlowDisplay = {
   previewConversation?: Array<{ from: 'bot' | 'customer'; message: string }>
 }
 
+export type FlowSummarySettings = {
+  enabled?: boolean
+  provider?: AiProvider
+  model?: string
+  temperature?: number
+  maxOutputTokens?: number
+  historyLimit?: number
+  systemPrompt?: string
+}
+
 export type FlowDraft = {
   _id: string
   name: string
@@ -61,6 +71,7 @@ export type FlowDraft = {
   triggers?: FlowTrigger[]
   exposedFields?: FlowField[]
   display?: FlowDisplay
+  aiSummarySettings?: FlowSummarySettings
   updatedAt?: string
 }
 
@@ -234,5 +245,14 @@ export type DraftForm = {
     collectsText: string
     icon: string
     previewText: string
+  }
+  summarySettings: {
+    enabled: boolean
+    provider: AiProvider
+    model: string
+    temperature: string
+    maxOutputTokens: string
+    historyLimit: string
+    systemPrompt: string
   }
 }

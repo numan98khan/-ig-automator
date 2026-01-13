@@ -330,6 +330,8 @@ export interface AutomationPreviewConversation {
   participantProfilePictureUrl?: string;
   tags?: string[];
   lastMessageAt?: string;
+  aiSummary?: string;
+  aiSummaryUpdatedAt?: string;
 }
 
 export interface AutomationPreviewPersona {

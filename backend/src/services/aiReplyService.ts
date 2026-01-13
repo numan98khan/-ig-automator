@@ -7,9 +7,17 @@ import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logOpenAiUsage } from './openAiUsageService';
 import { normalizeReasoningEffort } from '../utils/aiReasoning';
 import { AiProvider, getAiClient, normalizeAiProvider } from '../utils/aiProvider';
+import { AiSummarySettings } from '../types/flow';
 
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b';
+const DEFAULT_SUMMARY_MAX_TOKENS = 240;
+const DEFAULT_SUMMARY_HISTORY_LIMIT = 20;
+const DEFAULT_SUMMARY_SYSTEM_PROMPT =
+  'You are a concise conversation summarizer for customer support chats. ' +
+  'Summarize the customer intent, key details, decisions, and next steps. ' +
+  'Do not list messages or include speaker labels. ' +
+  'Keep it brief (2-4 sentences, under 120 words). If there is no meaningful context, return an empty string.';
 
 export interface AIReplyResult {
   replyText: string;
@@ -38,6 +46,14 @@ export interface AIReplyOptions {
   temperature?: number;
   maxOutputTokens?: number;
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+}
+
+export interface ConversationSummaryOptions {
+  conversation: IConversation;
+  workspaceId: mongoose.Types.ObjectId | string;
+  messageHistory?: Pick<IMessage, 'from' | 'text' | 'createdAt'>[];
+  previousSummary?: string;
+  settings?: AiSummarySettings;
 }
 
 const splitIntoSentences = (text: string): string[] => {
@@ -592,6 +608,157 @@ Generate a response following all rules above. Return JSON with:
   });
 
   return reply;
+}
+
+export async function generateConversationSummary(
+  options: ConversationSummaryOptions,
+): Promise<string | null> {
+  const settings = options.settings;
+  const provider = normalizeAiProvider(settings?.provider);
+  const model = settings?.model || (provider === 'groq' ? DEFAULT_GROQ_MODEL : DEFAULT_OPENAI_MODEL);
+  const temperature = typeof settings?.temperature === 'number' ? settings.temperature : 0.2;
+  const maxOutputTokens = typeof settings?.maxOutputTokens === 'number'
+    ? settings.maxOutputTokens
+    : DEFAULT_SUMMARY_MAX_TOKENS;
+  const historyLimit = typeof settings?.historyLimit === 'number'
+    ? settings.historyLimit
+    : DEFAULT_SUMMARY_HISTORY_LIMIT;
+  const systemPrompt = settings?.systemPrompt?.trim() || DEFAULT_SUMMARY_SYSTEM_PROMPT;
+  const temperatureSupported = supportsTemperature(provider, model);
+  const previousSummary = options.previousSummary?.trim() || '';
+
+  let messages: Pick<IMessage, 'from' | 'text' | 'createdAt'>[] = [];
+  if (options.messageHistory) {
+    messages = [...options.messageHistory];
+  }
+  if (!options.messageHistory || messages.length < historyLimit) {
+    const found = await Message.find({ conversationId: options.conversation._id })
+      .sort({ createdAt: -1 })
+      .limit(historyLimit)
+      .lean();
+    messages = [...found].reverse();
+  }
+
+  const trimmedMessages = messages
+    .filter((message) => message.text && String(message.text).trim())
+    .slice(-historyLimit);
+
+  if (trimmedMessages.length === 0) {
+    return previousSummary || null;
+  }
+
+  const messageLines = trimmedMessages
+    .map((message) => {
+      const roleLabel = message.from === 'customer' ? 'Customer' : message.from === 'ai' ? 'AI' : 'User';
+      return `${roleLabel}: ${message.text}`;
+    })
+    .join('\n');
+
+  const userMessage = [
+    previousSummary ? `Previous summary:\n${previousSummary}` : null,
+    'Recent messages:',
+    messageLines,
+    'Return an updated summary.',
+  ].filter(Boolean).join('\n\n');
+
+  let responseContent = '';
+  let summaryText = '';
+  let requestStart: bigint | null = null;
+
+  try {
+    logAiDebug('summary_request', {
+      conversationId: options.conversation._id?.toString(),
+      workspaceId: options.workspaceId.toString(),
+      provider,
+      model,
+      temperature: temperatureSupported ? temperature : undefined,
+      temperatureOmitted: !temperatureSupported,
+      maxOutputTokens,
+      historyCount: trimmedMessages.length,
+    });
+
+    requestStart = process.hrtime.bigint();
+    if (provider === 'groq') {
+      const response = await getAiClient('groq').chat.completions.create({
+        model,
+        max_tokens: maxOutputTokens,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `${userMessage}\n\nReturn JSON: {"summary":"..."}` },
+        ],
+        ...(temperatureSupported ? { temperature } : {}),
+      });
+      logAiTiming('ai_summary', model, requestStart, true);
+      responseContent = response.choices?.[0]?.message?.content || '';
+      try {
+        const parsed = safeParseJson(responseContent);
+        summaryText = String(parsed?.summary || '').trim();
+      } catch {
+        summaryText = String(responseContent || '').trim();
+      }
+    } else {
+      const schema = {
+        type: 'object',
+        properties: {
+          summary: { type: 'string' },
+        },
+        required: ['summary'],
+        additionalProperties: false,
+      };
+      const requestPayload: any = {
+        model,
+        max_output_tokens: maxOutputTokens,
+        input: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'conversation_summary',
+            schema,
+            strict: true,
+          },
+        },
+      };
+
+      if (temperatureSupported) {
+        requestPayload.temperature = temperature;
+      }
+
+      const response = await getAiClient('openai').responses.create(requestPayload);
+      await logOpenAiUsage({
+        workspaceId: String(options.workspaceId),
+        model: response?.model || model,
+        usage: response?.usage,
+        requestId: response?.id,
+      });
+      logAiTiming('ai_summary', model, requestStart, true);
+      logOpenAiApi('summary', summarizeOpenAiResponse(response));
+      responseContent = response.output_text || '';
+      const structured = extractStructuredJson<{ summary: string }>(response);
+      if (structured?.summary) {
+        summaryText = String(structured.summary || '').trim();
+      } else {
+        try {
+          const parsed = safeParseJson(responseContent);
+          summaryText = String(parsed?.summary || '').trim();
+        } catch {
+          summaryText = String(responseContent || '').trim();
+        }
+      }
+    }
+  } catch (error: any) {
+    if (requestStart) {
+      logAiTiming('ai_summary', model, requestStart, false);
+    }
+    console.error('AI summary error:', error?.message || error);
+    return null;
+  }
+
+  const cleaned = summaryText.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+  return cleaned.length > 1200 ? `${cleaned.slice(0, 1200).trim()}…` : cleaned;
 }
 
 function postProcessReply(params: {

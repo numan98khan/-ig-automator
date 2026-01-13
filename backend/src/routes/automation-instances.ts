@@ -336,6 +336,8 @@ const formatPreviewConversation = (conversation: any) => ({
   participantProfilePictureUrl: conversation.participantProfilePictureUrl,
   tags: Array.isArray(conversation.tags) ? conversation.tags : [],
   lastMessageAt: conversation.lastMessageAt,
+  aiSummary: conversation.aiSummary,
+  aiSummaryUpdatedAt: conversation.aiSummaryUpdatedAt,
 });
 
 const buildCurrentNodeSummary = (session: any, versionDoc: any) => {

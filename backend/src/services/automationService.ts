@@ -7,7 +7,7 @@ import AutomationInstance from '../models/AutomationInstance';
 import AutomationSession from '../models/AutomationSession';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
-import { generateAIReply } from './aiReplyService';
+import { generateAIReply, generateConversationSummary } from './aiReplyService';
 import { generateAIAgentReply } from './aiAgentService';
 import {
   sendMessage as sendInstagramMessage,
@@ -30,7 +30,7 @@ import {
   TriggerConfig,
   TriggerType,
 } from '../types/automation';
-import { FlowExposedField, FlowTriggerDefinition } from '../types/flow';
+import { AiSummarySettings, FlowExposedField, FlowTriggerDefinition } from '../types/flow';
 import { AutomationTestContext } from './automation/types';
 import { getWorkspaceById } from '../repositories/core/workspaceRepository';
 
@@ -1765,6 +1765,7 @@ async function executeFlowPlan(params: {
   onMessageSent?: (message: PreviewAutomationMessage) => void;
   trackStats?: boolean;
   aiContext?: AiAutomationContext;
+  summarySettings?: AiSummarySettings;
 }): Promise<{ success: boolean; error?: string; sentCount: number; executedSteps: number }> {
   const {
     plan,
@@ -1781,6 +1782,7 @@ async function executeFlowPlan(params: {
     onMessageSent,
     trackStats = true,
     aiContext,
+    summarySettings,
   } = params;
 
   const runtimeConfig = config && typeof config === 'object' ? config : {};
@@ -1807,6 +1809,51 @@ async function executeFlowPlan(params: {
       await markAutomationTriggered(instance._id, new Date());
     }
   };
+  const summaryHistoryLimit = () => {
+    const rawLimit = summarySettings?.historyLimit;
+    if (typeof rawLimit === 'number' && Number.isFinite(rawLimit) && rawLimit > 0) {
+      return Math.max(1, Math.round(rawLimit));
+    }
+    return 20;
+  };
+  const shouldGenerateSummary = async (force: boolean) => {
+    if (!aiContext?.persistSummary) return false;
+    if (!summarySettings?.enabled) return false;
+    if (force) return true;
+    const limit = summaryHistoryLimit();
+    const query: Record<string, any> = { conversationId: conversation._id };
+    if (conversation.aiSummaryUpdatedAt) {
+      query.createdAt = { $gt: conversation.aiSummaryUpdatedAt };
+    }
+    const count = await Message.countDocuments(query);
+    return count >= limit;
+  };
+  const updateConversationSummary = async (force: boolean) => {
+    if (!aiContext?.persistSummary) return;
+    if (!summarySettings?.enabled) {
+      conversation.aiSummary = undefined;
+      conversation.aiSummaryUpdatedAt = undefined;
+      await conversation.save();
+      return;
+    }
+    const shouldUpdate = await shouldGenerateSummary(force);
+    if (!shouldUpdate) return;
+    const summary = await generateConversationSummary({
+      conversation,
+      workspaceId: conversation.workspaceId,
+      messageHistory: aiContext.messageHistory,
+      previousSummary: conversation.aiSummary,
+      settings: summarySettings,
+    });
+    if (summary) {
+      conversation.aiSummary = summary;
+      conversation.aiSummaryUpdatedAt = new Date();
+    } else {
+      conversation.aiSummary = undefined;
+      conversation.aiSummaryUpdatedAt = undefined;
+    }
+    await conversation.save();
+  };
   const buildNextState = (nextState: Record<string, any>) => {
     const base = { ...nextState };
     if (!('vars' in base) && session.state?.vars) {
@@ -1824,6 +1871,7 @@ async function executeFlowPlan(params: {
     session.status = 'completed';
     session.state = buildNextState({});
     await session.save();
+    await updateConversationSummary(true);
     return { success: false, error, sentCount, executedSteps };
   };
 
@@ -2370,11 +2418,8 @@ async function executeFlowPlan(params: {
 
   await session.save();
 
-  if (aiContext?.persistSummary && aiContext.summaryDirty) {
-    conversation.aiSummary = aiContext.summaryValue;
-    conversation.aiSummaryUpdatedAt = new Date();
-    await conversation.save();
-  }
+  const isSessionEnded = session.status === 'completed' || session.status === 'handoff';
+  await updateConversationSummary(isSessionEnded);
 
   if (executedSteps === 0) {
     return { success: false, error: 'Flow has no runnable steps', sentCount, executedSteps };
@@ -2483,6 +2528,7 @@ async function executeFlowForInstance(params: {
     config: resolvedRuntime.config,
     aiContext,
     deliveryAdapter,
+    summarySettings: version?.aiSummarySettings,
   });
   logAutomationStep('flow_execute', runStart, { success: result.success, steps: result.executedSteps });
 
@@ -2582,7 +2628,7 @@ export async function executePreviewFlowForInstance(params: {
     conversation,
     messageText,
     config: runtime.config,
-    persistSummary: false,
+    persistSummary: true,
   });
   const deliveryAdapter = createDeliveryAdapter({ deliveryMode: 'preview' });
   const result = await executeFlowPlan({
@@ -2600,6 +2646,7 @@ export async function executePreviewFlowForInstance(params: {
     deliveryMode: 'preview',
     onMessageSent: (message) => outbound.push(message),
     trackStats: false,
+    summarySettings: version?.aiSummarySettings,
   });
   let previewMessages = outbound;
   if (previewMessages.length === 0) {

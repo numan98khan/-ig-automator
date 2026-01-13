@@ -673,6 +673,9 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
           currentNode={previewState.currentNode}
           session={previewState.session}
           conversation={previewState.conversation}
+          messages={previewMessages}
+          showConversationHistory
+          canViewHistory={canViewTimeline}
           prepend={statePrepend}
         />
       )}

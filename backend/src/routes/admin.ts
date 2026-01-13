@@ -975,6 +975,7 @@ router.post('/flow-drafts/:id/publish', authenticate, requireAdmin, async (req, 
       triggers: draft.triggers,
       exposedFields: draft.exposedFields,
       display: draft.display,
+      aiSummarySettings: draft.aiSummarySettings,
       publishedAt: new Date(),
       createdBy: draft.createdBy,
     });

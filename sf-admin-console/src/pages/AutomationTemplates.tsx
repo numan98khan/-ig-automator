@@ -209,6 +209,8 @@ export default function AutomationTemplates() {
   const hasCustomAiModel = Boolean(aiModelValue) && !aiModelSuggestions.includes(aiModelValue)
   const intentProvider = resolveAiProvider(selectedNode?.intentSettings?.provider)
   const intentModelSuggestions = getAiModelSuggestions(intentProvider)
+  const summaryProvider = resolveAiProvider(draftForm.summarySettings.provider)
+  const summaryModelSuggestions = getAiModelSuggestions(summaryProvider)
   const selectedTriggerConfig: FlowTriggerConfig = selectedNode?.triggerConfig || {}
   const triggerIntentProvider = resolveAiProvider(selectedTriggerConfig.intentProvider)
   const triggerIntentModelSuggestions = getAiModelSuggestions(triggerIntentProvider)
@@ -440,6 +442,21 @@ export default function AutomationTemplates() {
         collectsText: (selectedDraft.display?.collects || []).join(', '),
         icon: selectedDraft.display?.icon || '',
         previewText: formatJson(selectedDraft.display?.previewConversation || []),
+      },
+      summarySettings: {
+        enabled: selectedDraft.aiSummarySettings?.enabled ?? false,
+        provider: resolveAiProvider(selectedDraft.aiSummarySettings?.provider),
+        model: selectedDraft.aiSummarySettings?.model || '',
+        temperature: selectedDraft.aiSummarySettings?.temperature !== undefined
+          ? String(selectedDraft.aiSummarySettings?.temperature)
+          : '',
+        maxOutputTokens: selectedDraft.aiSummarySettings?.maxOutputTokens !== undefined
+          ? String(selectedDraft.aiSummarySettings?.maxOutputTokens)
+          : '',
+        historyLimit: selectedDraft.aiSummarySettings?.historyLimit !== undefined
+          ? String(selectedDraft.aiSummarySettings?.historyLimit)
+          : '',
+        systemPrompt: selectedDraft.aiSummarySettings?.systemPrompt || '',
       },
     })
     syncingRef.current = true
@@ -688,6 +705,16 @@ export default function AutomationTemplates() {
       previewConversation,
     }
 
+    const summarySettings = {
+      enabled: draftForm.summarySettings.enabled,
+      provider: draftForm.summarySettings.provider || undefined,
+      model: draftForm.summarySettings.model.trim() || undefined,
+      temperature: parseOptionalNumber(draftForm.summarySettings.temperature),
+      maxOutputTokens: parseOptionalNumber(draftForm.summarySettings.maxOutputTokens),
+      historyLimit: parseOptionalNumber(draftForm.summarySettings.historyLimit),
+      systemPrompt: draftForm.summarySettings.systemPrompt.trim() || undefined,
+    }
+
     return {
       payload: {
         name: draftForm.name.trim(),
@@ -698,6 +725,7 @@ export default function AutomationTemplates() {
         triggers,
         exposedFields,
         display,
+        aiSummarySettings: summarySettings,
       },
     }
   }
@@ -3517,6 +3545,159 @@ export default function AutomationTemplates() {
                         }))
                       }
                       disabled={isLive}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-6 space-y-4">
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">Conversation summary</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Configure the LLM summary stored on conversations for this flow.
+                  </p>
+                </div>
+                <datalist id="summary-model-options">
+                  {summaryModelSuggestions.map((model) => (
+                    <option key={model} value={model} />
+                  ))}
+                </datalist>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        checked={draftForm.summarySettings.enabled}
+                        onChange={(event) =>
+                          setDraftForm((prev) => ({
+                            ...prev,
+                            summarySettings: {
+                              ...prev.summarySettings,
+                              enabled: event.target.checked,
+                            },
+                          }))
+                        }
+                        disabled={isLive}
+                      />
+                      Enable LLM summary
+                    </label>
+                    <div className="text-[11px] text-muted-foreground">
+                      Generates a concise summary after each automation run.
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Provider</label>
+                    <select
+                      className="input w-full"
+                      value={draftForm.summarySettings.provider}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            provider: event.target.value as AiProvider,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                    >
+                      {AI_PROVIDER_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Model</label>
+                    <input
+                      className="input w-full"
+                      list="summary-model-options"
+                      value={draftForm.summarySettings.model}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            model: event.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                      placeholder="Auto (provider default)"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Temperature</label>
+                    <input
+                      className="input w-full"
+                      value={draftForm.summarySettings.temperature}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            temperature: event.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                      placeholder="0.2"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Max output tokens</label>
+                    <input
+                      className="input w-full"
+                      value={draftForm.summarySettings.maxOutputTokens}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            maxOutputTokens: event.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                      placeholder="240"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">History limit</label>
+                    <input
+                      className="input w-full"
+                      value={draftForm.summarySettings.historyLimit}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            historyLimit: event.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                      placeholder="20"
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm text-muted-foreground">System prompt</label>
+                    <textarea
+                      className="input w-full h-28 font-mono text-xs"
+                      value={draftForm.summarySettings.systemPrompt}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            systemPrompt: event.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                      placeholder="Optional: customize how the summary is written."
                     />
                   </div>
                 </div>
