@@ -6,7 +6,7 @@ import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logOpenAiUsage } from './openAiUsageService';
 import { normalizeReasoningEffort } from '../utils/aiReasoning';
-import { AiProvider, getAiClient, normalizeAiProvider } from '../utils/aiProvider';
+import { AiProvider, getAiClient, hasGroqApiKey, normalizeAiProvider } from '../utils/aiProvider';
 import { AiSummarySettings } from '../types/flow';
 
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
@@ -614,7 +614,10 @@ export async function generateConversationSummary(
   options: ConversationSummaryOptions,
 ): Promise<string | null> {
   const settings = options.settings;
-  const provider = normalizeAiProvider(settings?.provider);
+  let provider = normalizeAiProvider(settings?.provider);
+  if (provider === 'groq' && !hasGroqApiKey()) {
+    provider = 'openai';
+  }
   const model = settings?.model || (provider === 'groq' ? DEFAULT_GROQ_MODEL : DEFAULT_OPENAI_MODEL);
   const temperature = typeof settings?.temperature === 'number' ? settings.temperature : 0.2;
   const maxOutputTokens = typeof settings?.maxOutputTokens === 'number'

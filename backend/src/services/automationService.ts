@@ -1836,7 +1836,13 @@ async function executeFlowPlan(params: {
       await conversation.save();
       return;
     }
-    const shouldUpdate = await shouldGenerateSummary(force);
+    const limit = summaryHistoryLimit();
+    const query: Record<string, any> = { conversationId: conversation._id };
+    if (conversation.aiSummaryUpdatedAt) {
+      query.createdAt = { $gt: conversation.aiSummaryUpdatedAt };
+    }
+    const messageCount = await Message.countDocuments(query);
+    const shouldUpdate = force || messageCount >= limit;
     if (!shouldUpdate) return;
     const summary = await generateConversationSummary({
       conversation,
@@ -1853,6 +1859,19 @@ async function executeFlowPlan(params: {
       conversation.aiSummaryUpdatedAt = undefined;
     }
     await conversation.save();
+    if (summary && session.channel === 'preview') {
+      appendPreviewMetaEvent(session, {
+        type: 'info',
+        message: 'Conversation summary generated',
+        createdAt: new Date(),
+        details: {
+          summaryLength: summary.length,
+          historyLimit: summaryHistoryLimit(),
+        },
+      });
+      session.markModified('state');
+      await session.save();
+    }
   };
   const buildNextState = (nextState: Record<string, any>) => {
     const base = { ...nextState };
