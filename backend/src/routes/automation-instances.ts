@@ -502,6 +502,7 @@ const ensurePreviewSession = async (params: {
   sessionId?: string;
   persona?: PreviewPersona | null;
   profileId?: string;
+  source?: string;
 }) => {
   const {
     instance,
@@ -511,13 +512,21 @@ const ensurePreviewSession = async (params: {
     sessionId,
     persona,
     profileId,
+    source,
   } = params;
+  const sourceFilter = source ? { 'state.previewMeta.source': source } : {};
   let session = sessionId
-    ? await AutomationSession.findById(sessionId)
+    ? await AutomationSession.findOne({
+      _id: sessionId,
+      automationInstanceId: instance._id,
+      channel: 'preview',
+      ...sourceFilter,
+    })
     : await AutomationSession.findOne({
-        automationInstanceId: instance._id,
-        channel: 'preview',
-      }).sort({ updatedAt: -1 });
+      automationInstanceId: instance._id,
+      channel: 'preview',
+      ...sourceFilter,
+    }).sort({ updatedAt: -1 });
 
   const shouldCreate = reset || !session || session.channel !== 'preview';
   let conversation = session?.conversationId
@@ -540,12 +549,18 @@ const ensurePreviewSession = async (params: {
       message: 'Preview session started',
       createdAt: new Date(),
     });
-    if (persona) {
+    if (persona || profileId || source) {
       const meta = ensurePreviewMeta(session);
-      meta.persona = persona;
+      if (persona) {
+        meta.persona = persona;
+      }
       if (profileId) {
         meta.profileId = profileId;
       }
+      if (source) {
+        meta.source = source;
+      }
+      session.markModified('state');
     }
     await session.save();
     return { session, conversation };
@@ -587,6 +602,9 @@ const ensurePreviewSession = async (params: {
     if (profileId) {
       nextMeta.profileId = profileId;
     }
+    if (source) {
+      nextMeta.source = source;
+    }
     session.status = 'active';
     session.templateVersionId = templateVersionId;
     session.state = { previewMeta: nextMeta };
@@ -618,8 +636,18 @@ const ensurePreviewSession = async (params: {
     if (profileId) {
       meta.profileId = profileId;
     }
+    if (source) {
+      meta.source = source;
+    }
     session.markModified('state');
     await session.save();
+  } else if (source) {
+    const meta = ensurePreviewMeta(session);
+    if (meta.source !== source) {
+      meta.source = source;
+      session.markModified('state');
+      await session.save();
+    }
   }
 
   return { session, conversation };
@@ -784,6 +812,7 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
       sessionId: activePreviewSession?._id?.toString(),
       persona: resolvedPersona,
       profileId: resolvedProfile?._id?.toString(),
+      source: 'simulate',
     });
     const meta = ensurePreviewMeta(session);
     meta.source = 'simulate';
@@ -1398,6 +1427,7 @@ router.post('/:id/preview-session', authenticate, async (req: AuthRequest, res: 
       sessionId,
       persona: resolvedPersona,
       profileId: resolvedProfile?._id?.toString(),
+      source: 'preview',
     });
     const meta = ensurePreviewMeta(session);
     if (!meta.source) {
@@ -1421,6 +1451,52 @@ router.post('/:id/preview-session', authenticate, async (req: AuthRequest, res: 
   }
 });
 
+router.post('/:id/preview-session/reset', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { sessionId } = req.body || {};
+    const instance = await AutomationInstance.findById(id);
+    if (!instance) {
+      return res.status(404).json({ error: 'Automation instance not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(instance.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const sessionQuery: Record<string, any> = {
+      automationInstanceId: instance._id,
+      channel: 'preview',
+      'state.previewMeta.source': 'preview',
+    };
+    if (sessionId) {
+      sessionQuery._id = sessionId;
+    }
+
+    const sessions = await AutomationSession.find(sessionQuery).lean();
+    if (!sessions.length) {
+      return res.json({ success: true });
+    }
+
+    const sessionIds = sessions.map((session) => session._id);
+    const conversationIds = sessions
+      .map((session) => session.conversationId)
+      .filter(Boolean);
+
+    await AutomationSession.deleteMany({ _id: { $in: sessionIds } });
+    if (conversationIds.length > 0) {
+      await Message.deleteMany({ conversationId: { $in: conversationIds } });
+      await Conversation.deleteMany({ _id: { $in: conversationIds } });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Reset preview session error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.get('/:id/preview-session/status', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const access = await loadInstanceWithAccess(req.params.id, req.userId!, res);
@@ -1429,9 +1505,17 @@ router.get('/:id/preview-session/status', authenticate, async (req: AuthRequest,
 
     const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
     const session = sessionId
-      ? await AutomationSession.findOne({ _id: sessionId, automationInstanceId: instance._id, channel: 'preview' })
-      : await AutomationSession.findOne({ automationInstanceId: instance._id, channel: 'preview' })
-        .sort({ updatedAt: -1 });
+      ? await AutomationSession.findOne({
+        _id: sessionId,
+        automationInstanceId: instance._id,
+        channel: 'preview',
+        'state.previewMeta.source': 'preview',
+      })
+      : await AutomationSession.findOne({
+        automationInstanceId: instance._id,
+        channel: 'preview',
+        'state.previewMeta.source': 'preview',
+      }).sort({ updatedAt: -1 });
 
     if (!session) {
       return res.json({ session: null, conversation: null, currentNode: null, events: [], profile: null, persona: null });
@@ -1580,6 +1664,7 @@ router.post('/:id/preview-session/message', authenticate, async (req: AuthReques
       sessionId,
       persona: resolvedPersona,
       profileId: resolvedProfileId,
+      source: 'preview',
     });
     const meta = ensurePreviewMeta(session);
     if (!meta.source) {

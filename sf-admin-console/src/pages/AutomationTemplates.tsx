@@ -3202,6 +3202,7 @@ export default function AutomationTemplates() {
     ? 'Live'
     : 'Draft'
   const canEditFlow = Boolean(selectedDraftId) && !isLive
+  const canViewFlow = Boolean(selectedDraftId)
 
   return (
     <>
@@ -3327,11 +3328,11 @@ export default function AutomationTemplates() {
                     <button
                       className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={handleOpenBuilder}
-                      disabled={!canEditFlow}
-                      title={isLive ? 'Switch to Draft to edit this flow.' : undefined}
+                      disabled={!canViewFlow}
+                      title={isLive ? 'Viewing only. Switch to Draft to edit this flow.' : undefined}
                     >
                       <Maximize2 className="w-4 h-4" />
-                      Edit flow
+                      {isLive ? 'View flow' : 'Edit flow'}
                     </button>
                     <button
                       className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"

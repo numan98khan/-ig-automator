@@ -1088,6 +1088,14 @@ export const automationAPI = {
     return data;
   },
 
+  resetPreviewSession: async (
+    id: string,
+    payload?: { sessionId?: string },
+  ): Promise<{ success: boolean }> => {
+    const { data } = await api.post(`/api/automations/${id}/preview-session/reset`, payload);
+    return data;
+  },
+
   sendPreviewMessage: async (
     id: string,
     payload: { text: string; sessionId?: string; profileId?: string; persona?: AutomationPreviewPersona },

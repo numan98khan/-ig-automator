@@ -286,6 +286,11 @@ export const AutomationDetailsView: React.FC<AutomationDetailsViewProps> = ({
         profile: null,
         persona: null,
       });
+      try {
+        await automationAPI.resetPreviewSession(automation._id);
+      } catch (err) {
+        console.error('Error resetting preview session:', err);
+      }
       const loadedProfiles = await loadProfiles();
       if (!active) return;
       const defaultProfile = loadedProfiles.find((profile) => profile.isDefault) || loadedProfiles[0] || null;
