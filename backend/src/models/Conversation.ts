@@ -40,6 +40,10 @@ export interface IConversation extends Document {
   goalSummary?: string;
   goalLastInteractionAt?: Date;
 
+  // AI summary (audit + automation context)
+  aiSummary?: string;
+  aiSummaryUpdatedAt?: Date;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -179,6 +183,14 @@ const conversationSchema = new Schema<IConversation>({
     type: String,
   },
   goalLastInteractionAt: {
+    type: Date,
+  },
+
+  aiSummary: {
+    type: String,
+    trim: true,
+  },
+  aiSummaryUpdatedAt: {
     type: Date,
   },
 

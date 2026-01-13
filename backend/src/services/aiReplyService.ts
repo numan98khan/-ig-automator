@@ -23,6 +23,7 @@ export interface AIReplyOptions {
   conversation: IConversation;
   workspaceId: mongoose.Types.ObjectId | string;
   latestCustomerMessage?: string;
+  conversationSummary?: string;
   knowledgeItemIds?: string[];
   historyLimit?: number;
   messageHistory?: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[];
@@ -145,6 +146,7 @@ export async function generateAIReply(options: AIReplyOptions): Promise<AIReplyR
     conversation,
     workspaceId,
     latestCustomerMessage,
+    conversationSummary,
     historyLimit = 10,
     messageHistory,
   } = options;
@@ -323,6 +325,9 @@ KNOWLEDGE BASE:
 ${knowledgeContext || 'No specific knowledge provided. Use general business courtesy.'}
 
 CONVERSATION CONTEXT:
+Conversation summary:
+${conversationSummary?.trim() || 'No summary available.'}
+
 You must reply in: ${getLanguageName(replyLanguage)}
 
 Recent conversation history:

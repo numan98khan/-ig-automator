@@ -119,6 +119,22 @@ type RouterRule = {
   match?: 'any' | 'all';
 };
 
+type AiAutomationContext = {
+  messageHistory: Array<Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>>;
+  summaryValue: string;
+  summaryForPrompt: string;
+  summaryUpdatedAt?: Date;
+  historyWindow: number;
+  summaryExpiryHours?: number | null;
+  summaryDirty: boolean;
+  persistSummary: boolean;
+};
+
+const DEFAULT_AI_HISTORY_WINDOW = 10;
+const DEFAULT_AI_SUMMARY_EXPIRY_HOURS = 48;
+const MAX_AI_SUMMARY_CHARS = 1200;
+const MAX_AI_SUMMARY_ENTRY_CHARS = 240;
+
 type RouterCondition = {
   type?: 'rules' | 'else' | 'default';
   op?: 'all' | 'any';
@@ -630,6 +646,69 @@ const deepClone = <T>(value: T): T => {
   return JSON.parse(JSON.stringify(value)) as T;
 };
 
+const clampNumber = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const normalizeConfigNumber = (
+  value: unknown,
+  fallback: number,
+  options: { min: number; max: number },
+): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return clampNumber(value, options.min, options.max);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return clampNumber(parsed, options.min, options.max);
+    }
+  }
+  return fallback;
+};
+
+const truncateSummaryEntry = (value: string, maxLength: number) => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, Math.max(0, maxLength - 1))}…`;
+};
+
+const appendSummaryLine = (summary: string, role: string, text: string): string => {
+  const entryText = truncateSummaryEntry(text, MAX_AI_SUMMARY_ENTRY_CHARS);
+  if (!entryText) return summary;
+  const line = `${role}: ${entryText}`;
+  const next = summary ? `${summary}\n${line}` : line;
+  if (next.length <= MAX_AI_SUMMARY_CHARS) return next;
+  return next.slice(Math.max(0, next.length - MAX_AI_SUMMARY_CHARS));
+};
+
+const appendHistoryEntry = (
+  history: Array<Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>>,
+  entry: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>,
+  maxEntries: number,
+) => {
+  const last = history[history.length - 1];
+  if (last && last.from === entry.from && last.text === entry.text) {
+    return;
+  }
+  history.push(entry);
+  if (history.length > maxEntries) {
+    history.splice(0, history.length - maxEntries);
+  }
+};
+
+const shouldUseSummary = (summaryUpdatedAt: Date | undefined, expiryHours?: number | null) => {
+  if (!summaryUpdatedAt || !expiryHours || expiryHours <= 0) return false;
+  const ageMs = Date.now() - summaryUpdatedAt.getTime();
+  return ageMs <= expiryHours * 60 * 60 * 1000;
+};
+
+const appendSummaryForPrompt = (context: AiAutomationContext, role: string, text: string) => {
+  if (!context.summaryExpiryHours || context.summaryExpiryHours <= 0) {
+    return context.summaryForPrompt;
+  }
+  return appendSummaryLine(context.summaryForPrompt, role, text);
+};
+
 export const resolveLatestTemplateVersion = async (params: {
   templateId?: mongoose.Types.ObjectId | string;
   fallbackVersionId?: mongoose.Types.ObjectId | string;
@@ -853,6 +932,67 @@ const resolveFlowRuntime = (version: any, instance: any) => {
     triggers: resolvedTriggers,
     config,
   };
+};
+
+const buildAiAutomationContext = async (params: {
+  conversation: any;
+  messageText?: string;
+  config: Record<string, any>;
+  persistSummary?: boolean;
+}): Promise<AiAutomationContext> => {
+  const { conversation, messageText, config, persistSummary = true } = params;
+  const historyWindow = normalizeConfigNumber(config?.aiHistoryWindow, DEFAULT_AI_HISTORY_WINDOW, { min: 1, max: 50 });
+  const summaryExpiryHours = normalizeConfigNumber(
+    config?.aiSummaryExpiryHours,
+    DEFAULT_AI_SUMMARY_EXPIRY_HOURS,
+    { min: 0, max: 168 },
+  );
+
+  const messages = await Message.find({ conversationId: conversation._id })
+    .sort({ createdAt: -1 })
+    .limit(historyWindow)
+    .then(found => {
+      const ordered = [...found];
+      ordered.reverse();
+      return ordered;
+    });
+
+  const summaryValue = typeof conversation.aiSummary === 'string' ? conversation.aiSummary.trim() : '';
+  const summaryUpdatedAt = conversation.aiSummaryUpdatedAt
+    ? new Date(conversation.aiSummaryUpdatedAt)
+    : undefined;
+  const summaryAllowed = shouldUseSummary(summaryUpdatedAt, summaryExpiryHours);
+  const summaryForPrompt = summaryAllowed ? summaryValue : '';
+
+  const context: AiAutomationContext = {
+    messageHistory: messages.map((msg) => ({
+      from: msg.from,
+      text: msg.text,
+      attachments: msg.attachments,
+      createdAt: msg.createdAt,
+    })),
+    summaryValue,
+    summaryForPrompt,
+    summaryUpdatedAt,
+    historyWindow,
+    summaryExpiryHours,
+    summaryDirty: false,
+    persistSummary,
+  };
+
+  if (messageText) {
+    appendHistoryEntry(context.messageHistory, {
+      from: 'customer',
+      text: messageText,
+      attachments: [],
+      createdAt: new Date(),
+    }, context.historyWindow);
+    context.summaryValue = appendSummaryLine(context.summaryValue, 'Customer', messageText);
+    context.summaryForPrompt = appendSummaryForPrompt(context, 'Customer', messageText);
+    context.summaryDirty = true;
+  }
+
+  return context;
 };
 
 const buildExecutionPlan = (graph: FlowRuntimeGraph): ExecutionPlan | null => {
@@ -1142,15 +1282,17 @@ async function buildAutomationAiReply(params: {
   conversation: any;
   messageText: string;
   aiSettings?: AutomationAiSettings;
+  conversationSummary?: string;
   knowledgeItemIds?: string[];
   messageHistory?: Array<Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>>;
 }) {
-  const { conversation, messageText, aiSettings, knowledgeItemIds, messageHistory } = params;
+  const { conversation, messageText, aiSettings, conversationSummary, knowledgeItemIds, messageHistory } = params;
 
   return generateAIReply({
     conversation,
     workspaceId: conversation.workspaceId,
     latestCustomerMessage: messageText,
+    conversationSummary,
     historyLimit: aiSettings?.historyLimit,
     messageHistory,
     tone: aiSettings?.tone,
@@ -1176,6 +1318,9 @@ async function handleAiReplyStep(params: {
   instance: any;
   igAccount: any;
   messageText: string;
+  conversationSummary?: string;
+  messageHistory?: Array<Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>>;
+  aiContext?: AiAutomationContext;
   platform?: string;
   messageContext?: AutomationTestContext;
   deliveryMode?: AutomationDeliveryMode;
@@ -1191,6 +1336,9 @@ async function handleAiReplyStep(params: {
     instance,
     igAccount,
     messageText,
+    conversationSummary,
+    messageHistory,
+    aiContext,
     platform,
     messageContext,
     deliveryMode = 'instagram',
@@ -1223,8 +1371,9 @@ async function handleAiReplyStep(params: {
     conversation,
     messageText,
     aiSettings,
+    conversationSummary,
     knowledgeItemIds: step.knowledgeItemIds,
-    messageHistory: step.messageHistory,
+    messageHistory: messageHistory || step.messageHistory,
   });
   const replyDurationMs = Math.max(0, Math.round(nowMs() - replyStart));
   logAutomationStep('flow_ai_reply_generate', replyStart);
@@ -1292,6 +1441,17 @@ async function handleAiReplyStep(params: {
       knowledgeItemIds: aiResponse.knowledgeItemsUsed?.map((item) => item.id),
     },
   });
+  if (aiContext) {
+    appendHistoryEntry(aiContext.messageHistory, {
+      from: 'ai',
+      text: aiResponse.replyText,
+      attachments: [],
+      createdAt: message.createdAt || new Date(),
+    }, aiContext.historyWindow);
+    aiContext.summaryValue = appendSummaryLine(aiContext.summaryValue, 'AI', aiResponse.replyText);
+    aiContext.summaryForPrompt = appendSummaryForPrompt(aiContext, 'AI', aiResponse.replyText);
+    aiContext.summaryDirty = true;
+  }
   if (deliveryMode === 'preview' && onMessageSent) {
     onMessageSent({
       id: message._id?.toString() || '',
@@ -1557,6 +1717,7 @@ async function executeFlowPlan(params: {
   deliveryMode?: AutomationDeliveryMode;
   onMessageSent?: (message: PreviewAutomationMessage) => void;
   trackStats?: boolean;
+  aiContext?: AiAutomationContext;
 }): Promise<{ success: boolean; error?: string; sentCount: number; executedSteps: number }> {
   const {
     plan,
@@ -1571,6 +1732,7 @@ async function executeFlowPlan(params: {
     deliveryMode = 'instagram',
     onMessageSent,
     trackStats = true,
+    aiContext,
   } = params;
 
   const runtimeConfig = config && typeof config === 'object' ? config : {};
@@ -1691,6 +1853,17 @@ async function executeFlowPlan(params: {
         deliveryMode,
         trackStats,
       });
+      if (aiContext) {
+        appendHistoryEntry(aiContext.messageHistory, {
+          from: 'ai',
+          text,
+          attachments: [],
+          createdAt: message.createdAt || new Date(),
+        }, aiContext.historyWindow);
+        aiContext.summaryValue = appendSummaryLine(aiContext.summaryValue, 'AI', text);
+        aiContext.summaryForPrompt = appendSummaryForPrompt(aiContext, 'AI', text);
+        aiContext.summaryDirty = true;
+      }
       if (deliveryMode === 'preview' && onMessageSent) {
         onMessageSent({
           id: message._id?.toString() || '',
@@ -1716,6 +1889,9 @@ async function executeFlowPlan(params: {
         instance,
         igAccount,
         messageText,
+        conversationSummary: aiContext?.summaryForPrompt,
+        messageHistory: aiContext?.messageHistory,
+        aiContext,
         platform,
         messageContext,
         deliveryMode,
@@ -1792,6 +1968,8 @@ async function executeFlowPlan(params: {
         maxQuestionsReached,
         aiSettings,
         knowledgeItemIds: step.knowledgeItemIds,
+        conversationSummary: aiContext?.summaryForPrompt,
+        messageHistory: aiContext?.messageHistory,
       });
       const agentDurationMs = Math.max(0, Math.round(nowMs() - agentStart));
       logAutomationStep('flow_ai_agent', agentStart, {
@@ -1833,6 +2011,17 @@ async function executeFlowPlan(params: {
         deliveryMode,
         trackStats,
       });
+      if (aiContext) {
+        appendHistoryEntry(aiContext.messageHistory, {
+          from: 'ai',
+          text: agentResult.replyText,
+          attachments: [],
+          createdAt: message.createdAt || new Date(),
+        }, aiContext.historyWindow);
+        aiContext.summaryValue = appendSummaryLine(aiContext.summaryValue, 'AI', agentResult.replyText);
+        aiContext.summaryForPrompt = appendSummaryForPrompt(aiContext, 'AI', agentResult.replyText);
+        aiContext.summaryDirty = true;
+      }
       if (deliveryMode === 'preview' && onMessageSent) {
         onMessageSent({
           id: message._id?.toString() || '',
@@ -1996,6 +2185,17 @@ async function executeFlowPlan(params: {
           deliveryMode,
           trackStats,
         });
+        if (aiContext) {
+          appendHistoryEntry(aiContext.messageHistory, {
+            from: 'ai',
+            text: step.handoff.message,
+            attachments: [],
+            createdAt: message.createdAt || new Date(),
+          }, aiContext.historyWindow);
+          aiContext.summaryValue = appendSummaryLine(aiContext.summaryValue, 'AI', step.handoff.message);
+          aiContext.summaryForPrompt = appendSummaryForPrompt(aiContext, 'AI', step.handoff.message);
+          aiContext.summaryDirty = true;
+        }
         if (deliveryMode === 'preview' && onMessageSent) {
           onMessageSent({
             id: message._id?.toString() || '',
@@ -2119,6 +2319,12 @@ async function executeFlowPlan(params: {
 
   await session.save();
 
+  if (aiContext?.persistSummary && aiContext.summaryDirty) {
+    conversation.aiSummary = aiContext.summaryValue;
+    conversation.aiSummaryUpdatedAt = new Date();
+    await conversation.save();
+  }
+
   if (executedSteps === 0) {
     return { success: false, error: 'Flow has no runnable steps', sentCount, executedSteps };
   }
@@ -2205,6 +2411,13 @@ async function executeFlowForInstance(params: {
 
   activeSession.lastCustomerMessageAt = new Date();
 
+  const aiContext = await buildAiAutomationContext({
+    conversation,
+    messageText,
+    config: resolvedRuntime.config,
+    persistSummary: true,
+  });
+
   const runStart = nowMs();
   const result = await executeFlowPlan({
     plan,
@@ -2216,6 +2429,7 @@ async function executeFlowForInstance(params: {
     platform,
     messageContext,
     config: resolvedRuntime.config,
+    aiContext,
   });
   logAutomationStep('flow_execute', runStart, { success: result.success, steps: result.executedSteps });
 
@@ -2311,6 +2525,12 @@ export async function executePreviewFlowForInstance(params: {
   session.lastCustomerMessageAt = new Date();
 
   const outbound: PreviewAutomationMessage[] = [];
+  const aiContext = await buildAiAutomationContext({
+    conversation,
+    messageText,
+    config: runtime.config,
+    persistSummary: false,
+  });
   const result = await executeFlowPlan({
     plan,
     session,
@@ -2321,6 +2541,7 @@ export async function executePreviewFlowForInstance(params: {
     platform: 'mock',
     messageContext,
     config: runtime.config,
+    aiContext,
     deliveryMode: 'preview',
     onMessageSent: (message) => outbound.push(message),
     trackStats: false,

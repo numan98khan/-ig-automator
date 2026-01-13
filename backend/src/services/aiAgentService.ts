@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { IConversation } from '../models/Conversation';
-import Message from '../models/Message';
+import Message, { IMessage } from '../models/Message';
 import KnowledgeItem from '../models/KnowledgeItem';
 import { AutomationAiSettings } from '../types/automation';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
@@ -27,6 +27,8 @@ export type AIAgentOptions = {
   conversation: IConversation;
   workspaceId: mongoose.Types.ObjectId | string;
   latestCustomerMessage?: string;
+  conversationSummary?: string;
+  messageHistory?: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[];
   systemPrompt?: string;
   steps?: string[];
   stepIndex?: number;
@@ -67,6 +69,8 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     conversation,
     workspaceId,
     latestCustomerMessage,
+    conversationSummary,
+    messageHistory,
     systemPrompt,
     steps,
     stepIndex,
@@ -119,14 +123,16 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
       }, {} as Record<string, string>)
     : {};
 
-  const messages = await Message.find({ conversationId: conversation._id })
-    .sort({ createdAt: -1 })
-    .limit(historyLimit)
-    .then(found => {
-      const ordered = [...found];
-      ordered.reverse();
-      return ordered;
-    });
+  const messages = messageHistory
+    ? [...messageHistory].slice(-historyLimit)
+    : await Message.find({ conversationId: conversation._id })
+        .sort({ createdAt: -1 })
+        .limit(historyLimit)
+        .then(found => {
+          const ordered = [...found];
+          ordered.reverse();
+          return ordered;
+        });
 
   const recentCustomerMessage = [...messages].reverse().find((msg: any) => msg.from === 'customer');
   const recentCustomerText =
@@ -228,6 +234,9 @@ ${knowledgeContext || 'No knowledge provided.'}
 
 CONVERSATION HISTORY:
 ${conversationHistory || 'No prior messages.'}
+
+CONVERSATION SUMMARY:
+${conversationSummary?.trim() || 'No summary available.'}
 
 LATEST CUSTOMER MESSAGE:
 "${recentCustomerText}"
