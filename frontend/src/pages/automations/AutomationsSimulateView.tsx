@@ -382,7 +382,6 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
 
     clearRefreshTimer();
     setError(null);
-    setPreviewSending(true);
     const baselineIds = new Set(previewMessages.map((message) => message.id).filter(Boolean));
     const optimisticMessage: AutomationPreviewMessage = {
       id: `sim-${Date.now()}`,
@@ -422,8 +421,6 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     } catch (err) {
       console.error('Simulator message error:', err);
       setError('Failed to send simulation message.');
-    } finally {
-      setPreviewSending(false);
     }
   };
 
