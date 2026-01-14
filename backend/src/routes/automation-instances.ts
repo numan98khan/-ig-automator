@@ -864,6 +864,7 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
         appendPreviewEvent(session, {
           type: 'info',
           message: `Buffered DM burst for ${bufferSeconds}s`,
+          createdAt: new Date(),
           details: {
             bufferId: bufferResult.bufferId,
             bufferSeconds,
