@@ -89,6 +89,9 @@ const buildNodeSummary = (node: any, options: {
     const ai = node.aiSettings || {};
     add('Model', ai.model);
     add('Reasoning', ai.reasoningEffort);
+    if (typeof node.burstBufferSeconds === 'number' && node.burstBufferSeconds > 0) {
+      add('Reply buffer', `${node.burstBufferSeconds}s`);
+    }
     if (typeof ai.temperature === 'number') add('Temperature', `${ai.temperature}`);
     if (typeof ai.maxOutputTokens === 'number') add('Max tokens', `${ai.maxOutputTokens}`);
     if (typeof ai.historyLimit === 'number') add('History', `${ai.historyLimit}`);
@@ -100,6 +103,9 @@ const buildNodeSummary = (node: any, options: {
     if (steps.length > 0) add('Steps', `${steps.length}`);
     add('End condition', truncateText(node.agentEndCondition, 120));
     add('Stop condition', truncateText(node.agentStopCondition, 120));
+    if (typeof node.burstBufferSeconds === 'number' && node.burstBufferSeconds > 0) {
+      add('Reply buffer', `${node.burstBufferSeconds}s`);
+    }
     if (typeof node.agentMaxQuestions === 'number') add('Max questions', `${node.agentMaxQuestions}`);
     const slots = Array.isArray(node.agentSlots) ? node.agentSlots : [];
     if (slots.length > 0) {

@@ -93,6 +93,7 @@ type FlowRuntimeStep = {
   agentSlots?: Array<{ key: string; question?: string; defaultValue?: string }>;
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
+  burstBufferSeconds?: number;
   next?: string;
   logEnabled?: boolean;
   handoff?: {
@@ -708,6 +709,41 @@ const resolveBurstBufferSeconds = (triggers: FlowTriggerDefinition[] | undefined
   return value > 0 ? value : 0;
 };
 
+const resolveNodeBurstBufferSeconds = (step?: FlowRuntimeStep): number => {
+  if (!step) return 0;
+  const stepType = normalizeStepType(step);
+  if (stepType !== 'ai_reply' && stepType !== 'ai_agent') return 0;
+  const value = normalizeBurstBufferSeconds(step.burstBufferSeconds);
+  return value > 0 ? value : 0;
+};
+
+const resolveNodeBurstBufferSecondsForSessionState = (
+  session: any,
+  runtime: { graph: FlowRuntimeGraph } | null,
+): number => {
+  if (!session || !runtime?.graph) return 0;
+  const plan = buildExecutionPlan(runtime.graph);
+  if (!plan) return 0;
+  let step: FlowRuntimeStep | undefined;
+  if (plan.mode === 'steps') {
+    const index = typeof session.state?.stepIndex === 'number'
+      ? session.state.stepIndex
+      : (plan.startIndex || 0);
+    step = plan.steps[index];
+  } else {
+    const nodeId = session.state?.nodeId || plan.startNodeId;
+    if (nodeId) {
+      step = plan.nodeMap?.get(nodeId) || plan.steps.find((candidate) => candidate.id === nodeId);
+    } else if (Array.isArray(session.state?.nodeQueue) && session.state.nodeQueue.length > 0) {
+      const queuedId = session.state.nodeQueue[0];
+      if (typeof queuedId === 'string') {
+        step = plan.nodeMap?.get(queuedId) || plan.steps.find((candidate) => candidate.id === queuedId);
+      }
+    }
+  }
+  return resolveNodeBurstBufferSeconds(step);
+};
+
 const buildMessageContextFromMessages = (
   messages: Array<Pick<IMessage, 'text' | 'attachments' | 'linkPreview'>>,
 ) => {
@@ -1021,6 +1057,8 @@ const resolveBurstBufferSecondsForMessage = async (params: {
     });
     if (!version) return 0;
     const runtime = resolveFlowRuntime(version, instance);
+    const sessionBufferSeconds = resolveNodeBurstBufferSecondsForSessionState(activeSession, runtime);
+    if (sessionBufferSeconds > 0) return sessionBufferSeconds;
     return resolveBurstBufferSeconds(runtime?.triggers, triggerType);
   }
 
@@ -2777,6 +2815,22 @@ export const resolveBurstBufferSecondsForAutomation = (params: {
   const { instance, version, triggerType } = params;
   const runtime = resolveFlowRuntime(version, instance);
   return resolveBurstBufferSeconds(runtime?.triggers, triggerType);
+};
+
+export const resolveNodeBurstBufferSecondsForSession = async (params: {
+  session: any;
+  instance: any;
+  version?: any;
+}): Promise<number> => {
+  const { session, instance, version } = params;
+  if (!session || !instance) return 0;
+  const resolvedVersion = version || await resolveLatestTemplateVersion({
+    templateId: instance.templateId,
+    fallbackVersionId: session.templateVersionId || instance.templateVersionId,
+  });
+  if (!resolvedVersion) return 0;
+  const runtime = resolveFlowRuntime(resolvedVersion, instance);
+  return resolveNodeBurstBufferSecondsForSessionState(session, runtime);
 };
 
 export async function maybeBufferAutomationMessage(params: {

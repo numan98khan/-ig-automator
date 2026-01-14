@@ -1943,6 +1943,27 @@ export default function AutomationTemplates() {
                 </select>
               </div>
             )}
+            {(selectedNode.type === 'ai_reply' || selectedNode.type === 'ai_agent')
+              && selectedNode.waitForReply && (
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Reply buffer (seconds)</label>
+                <input
+                  className="input w-full"
+                  type="number"
+                  min="0"
+                  value={selectedNode.burstBufferSeconds ?? ''}
+                  onChange={(event) =>
+                    updateNode(selectedNode.id, (node) => ({
+                      ...node,
+                      burstBufferSeconds: parseOptionalNumber(event.target.value),
+                    }))
+                  }
+                />
+                <div className="text-xs text-muted-foreground">
+                  Buffer inbound messages while waiting for reply. Use 0 to disable.
+                </div>
+              </div>
+            )}
             {selectedNode.type === 'detect_intent' && (
               <>
                 <div className="space-y-2">

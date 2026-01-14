@@ -28,6 +28,7 @@ type FlowRuntimeStep = {
   };
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
+  burstBufferSeconds?: number;
   next?: string;
   logEnabled?: boolean;
   handoff?: {
@@ -99,6 +100,21 @@ const normalizeKnowledgeItemIds = (node: Record<string, any>) =>
   node.knowledgeItemIds ?? node.data?.knowledgeItemIds;
 const normalizeWaitForReply = (node: Record<string, any>) =>
   node.waitForReply ?? node.data?.waitForReply;
+const normalizeBurstBufferSeconds = (node: Record<string, any>) =>
+  node.burstBufferSeconds ?? node.data?.burstBufferSeconds;
+
+const normalizeBufferSecondsValue = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+};
 
 const normalizeHandoff = (node: Record<string, any>) => node.handoff ?? node.data?.handoff;
 
@@ -228,6 +244,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const intentSettings = normalizeIntentSettings(node);
     const knowledgeItemIds = normalizeKnowledgeItemIds(node);
     const waitForReply = normalizeWaitForReply(node);
+    const burstBufferSeconds = normalizeBufferSecondsValue(normalizeBurstBufferSeconds(node));
     const handoff = normalizeHandoff(node);
     const rateLimit = normalizeRateLimit(node);
     const next = normalizeNext(node);
@@ -275,6 +292,7 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       intentSettings,
       knowledgeItemIds,
       waitForReply,
+      burstBufferSeconds,
       next,
       logEnabled,
       handoff,

@@ -72,6 +72,18 @@ const mergePreviewMessages = (
   incoming?: AutomationPreviewMessage[],
 ) => {
   if (!incoming || incoming.length === 0) return existing;
+  const optimisticPrefix = 'sim-';
+  const optimisticWindowMs = 4000;
+  const isOptimistic = (message: AutomationPreviewMessage) => message.id?.startsWith(optimisticPrefix);
+  const isLikelyDuplicate = (optimistic: AutomationPreviewMessage, candidate: AutomationPreviewMessage) => {
+    if (optimistic.from !== 'customer' || candidate.from !== 'customer') return false;
+    if (optimistic.text !== candidate.text) return false;
+    if (isOptimistic(candidate)) return false;
+    if (!optimistic.createdAt || !candidate.createdAt) return false;
+    const optimisticTime = new Date(optimistic.createdAt).getTime();
+    const candidateTime = new Date(candidate.createdAt).getTime();
+    return Math.abs(optimisticTime - candidateTime) <= optimisticWindowMs;
+  };
   let tempCounter = 0;
   const order: string[] = [];
   const items = new Map<string, AutomationPreviewMessage>();
@@ -85,8 +97,14 @@ const mergePreviewMessages = (
   existing.forEach(upsert);
   incoming.forEach(upsert);
   const merged = order.map((key) => items.get(key)).filter(Boolean) as AutomationPreviewMessage[];
-  if (merged.length <= 1) return merged;
-  const decorated = merged.map((message, index) => ({
+  const deduped = merged.filter((message) => {
+    if (!isOptimistic(message) || message.from !== 'customer') {
+      return true;
+    }
+    return !merged.some((candidate) => isLikelyDuplicate(message, candidate));
+  });
+  if (deduped.length <= 1) return deduped;
+  const decorated = deduped.map((message, index) => ({
     message,
     index,
     timestamp: message.createdAt ? new Date(message.createdAt as string).getTime() : null,
@@ -213,7 +231,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     }
   }, []);
 
-  const scheduleSimulationRefresh = useCallback((baselineIds: Set<string>, remainingAttempts = 6) => {
+  const scheduleSimulationRefresh = useCallback((baselineIds: Set<string>, remainingAttempts = 15) => {
     if (!workspaceId || remainingAttempts <= 0) {
       clearRefreshTimer();
       return;

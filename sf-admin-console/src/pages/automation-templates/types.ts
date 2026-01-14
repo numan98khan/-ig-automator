@@ -188,6 +188,7 @@ export type FlowNode = Node<FlowNodeData> & {
   agentMaxQuestions?: number
   agentSlots?: FlowAgentSlot[]
   knowledgeItemIds?: string[]
+  burstBufferSeconds?: number
   handoff?: {
     topic?: string
     summary?: string

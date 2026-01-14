@@ -202,6 +202,16 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
         return null;
       }
     }
+    if (field.source?.nodeId && field.source?.path?.includes('burstBufferSeconds')) {
+      const waitField = exposedFields.find((candidate) => (
+        candidate.source?.nodeId === field.source?.nodeId
+        && typeof candidate.source?.path === 'string'
+        && candidate.source.path.includes('waitForReply')
+      ));
+      if (waitField && !Boolean(configValues[waitField.key])) {
+        return null;
+      }
+    }
     const value = configValues[field.key];
     const description = field.description || field.ui?.helpText;
 
