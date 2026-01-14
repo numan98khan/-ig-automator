@@ -2790,6 +2790,7 @@ export async function maybeBufferAutomationMessage(params: {
   source?: 'live' | 'simulate';
   sessionId?: string;
   bufferSeconds?: number;
+  bufferStartedAt?: Date;
 }): Promise<{ buffered: boolean; bufferSeconds?: number; bufferId?: string }> {
   const {
     workspaceId,
@@ -2802,6 +2803,7 @@ export async function maybeBufferAutomationMessage(params: {
     source = 'live',
     sessionId,
     bufferSeconds: providedBufferSeconds,
+    bufferStartedAt,
   } = params;
 
   if (triggerType !== 'dm_message') {
@@ -2824,6 +2826,9 @@ export async function maybeBufferAutomationMessage(params: {
 
   const now = new Date();
   const bufferUntil = new Date(now.getTime() + bufferSeconds * 1000);
+  const startAt = bufferStartedAt && !Number.isNaN(bufferStartedAt.getTime())
+    ? bufferStartedAt
+    : now;
   const buffer = await AutomationMessageBuffer.findOneAndUpdate(
     {
       conversationId: new mongoose.Types.ObjectId(conversationId),
@@ -2841,7 +2846,7 @@ export async function maybeBufferAutomationMessage(params: {
         lastMessageAt: now,
       },
       $setOnInsert: {
-        bufferStartedAt: now,
+        bufferStartedAt: startAt,
         status: 'pending',
       },
       $inc: { messageCount: 1 },

@@ -858,6 +858,7 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
         source: 'simulate',
         sessionId: session._id?.toString(),
         bufferSeconds,
+        bufferStartedAt: customerMessage.createdAt,
       });
       if (bufferResult.buffered) {
         appendPreviewEvent(session, {
