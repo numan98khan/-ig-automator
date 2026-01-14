@@ -117,7 +117,6 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   const [previewSessionStatus, setPreviewSessionStatus] = useState<
     'active' | 'paused' | 'completed' | 'handoff' | null
   >(null);
-  const [previewSending, setPreviewSending] = useState(false);
   const [previewState, setPreviewState] = useState<AutomationPreviewSessionState>({
     session: null,
     conversation: null,
