@@ -538,9 +538,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   const triggerLabel = selectedAutomation?.trigger?.label || selectedAutomation?.trigger?.type;
   const diagnosticList = useMemo(() => diagnostics.slice(0, 6), [diagnostics]);
 
-  const sendDisabled =
-    previewSending ||
-    previewInputValue.trim().length === 0;
+  const sendDisabled = previewInputValue.trim().length === 0;
 
   const renderTestConsole = () => (
     <Card className="flex flex-col min-h-0 h-full">
