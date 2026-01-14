@@ -1925,7 +1925,8 @@ export default function AutomationTemplates() {
             )}
             {selectedNode.type !== 'trigger'
               && selectedNode.type !== 'detect_intent'
-              && selectedNode.type !== 'router' && (
+              && selectedNode.type !== 'router'
+              && selectedNode.type !== 'ai_agent' && (
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Wait for reply</label>
                 <select
@@ -1943,8 +1944,8 @@ export default function AutomationTemplates() {
                 </select>
               </div>
             )}
-            {(selectedNode.type === 'ai_reply' || selectedNode.type === 'ai_agent')
-              && selectedNode.waitForReply && (
+            {((selectedNode.type === 'ai_reply' && selectedNode.waitForReply)
+              || selectedNode.type === 'ai_agent') && (
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Reply buffer (seconds)</label>
                 <input
