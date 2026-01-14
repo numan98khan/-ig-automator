@@ -647,6 +647,7 @@ async function processMessageAutomations(
         messageText,
         platform: conversation.platform || 'instagram',
         messageContext,
+        source: 'live',
       });
       if (bufferResult.buffered) {
         logAutomation('🧺 Buffered DM burst message', {

@@ -7,6 +7,8 @@ export interface IAutomationMessageBuffer extends Document {
   instagramAccountId: mongoose.Types.ObjectId;
   triggerType: TriggerType;
   platform?: string;
+  source?: 'live' | 'simulate';
+  sessionId?: mongoose.Types.ObjectId;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
   bufferStartedAt: Date;
   bufferUntil: Date;
@@ -27,6 +29,12 @@ const automationMessageBufferSchema = new Schema<IAutomationMessageBuffer>({
     required: true,
   },
   platform: { type: String, trim: true },
+  source: {
+    type: String,
+    enum: ['live', 'simulate'],
+    default: 'live',
+  },
+  sessionId: { type: Schema.Types.ObjectId, ref: 'AutomationSession' },
   status: {
     type: String,
     enum: ['pending', 'processing', 'completed', 'failed', 'cancelled'],

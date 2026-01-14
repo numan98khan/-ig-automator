@@ -2769,6 +2769,16 @@ export async function executePreviewFlowForInstance(params: {
     : { success: false, error: result.error || 'Flow execution failed', messages: previewMessages };
 }
 
+export const resolveBurstBufferSecondsForAutomation = (params: {
+  instance: any;
+  version: any;
+  triggerType: TriggerType;
+}): number => {
+  const { instance, version, triggerType } = params;
+  const runtime = resolveFlowRuntime(version, instance);
+  return resolveBurstBufferSeconds(runtime?.triggers, triggerType);
+};
+
 export async function maybeBufferAutomationMessage(params: {
   workspaceId: string;
   conversationId: string;
@@ -2777,6 +2787,9 @@ export async function maybeBufferAutomationMessage(params: {
   messageText?: string;
   platform?: string;
   messageContext?: AutomationTestContext;
+  source?: 'live' | 'simulate';
+  sessionId?: string;
+  bufferSeconds?: number;
 }): Promise<{ buffered: boolean; bufferSeconds?: number; bufferId?: string }> {
   const {
     workspaceId,
@@ -2786,19 +2799,24 @@ export async function maybeBufferAutomationMessage(params: {
     messageText,
     platform,
     messageContext,
+    source = 'live',
+    sessionId,
+    bufferSeconds: providedBufferSeconds,
   } = params;
 
   if (triggerType !== 'dm_message') {
     return { buffered: false };
   }
 
-  const bufferSeconds = await resolveBurstBufferSecondsForMessage({
-    workspaceId,
-    conversationId,
-    triggerType,
-    messageText,
-    messageContext,
-  });
+  const bufferSeconds = typeof providedBufferSeconds === 'number'
+    ? providedBufferSeconds
+    : await resolveBurstBufferSecondsForMessage({
+      workspaceId,
+      conversationId,
+      triggerType,
+      messageText,
+      messageContext,
+    });
 
   if (!bufferSeconds || bufferSeconds <= 0) {
     return { buffered: false };
@@ -2817,6 +2835,8 @@ export async function maybeBufferAutomationMessage(params: {
         workspaceId: new mongoose.Types.ObjectId(workspaceId),
         instagramAccountId: new mongoose.Types.ObjectId(instagramAccountId),
         platform,
+        source,
+        sessionId: sessionId ? new mongoose.Types.ObjectId(sessionId) : undefined,
         bufferUntil,
         lastMessageAt: now,
       },
@@ -3091,24 +3111,88 @@ export async function processDueMessageBuffers(params?: {
       const messageText = combinedText || messages[messages.length - 1]?.text || '';
       const messageContext = buildMessageContextFromMessages(messages);
 
-      const result = await checkAndExecuteAutomations({
-        workspaceId: locked.workspaceId.toString(),
-        triggerType: locked.triggerType,
-        conversationId: locked.conversationId.toString(),
-        messageText,
-        instagramAccountId: locked.instagramAccountId.toString(),
-        platform: locked.platform || 'instagram',
-        messageContext,
-      });
-
-      locked.status = result.executed ? 'completed' : 'failed';
-      locked.errorMessage = result.error;
-      await locked.save();
-
-      if (result.executed) {
-        stats.executed++;
+      if (locked.source === 'simulate') {
+        const sessionId = locked.sessionId?.toString();
+        const session = sessionId
+          ? await AutomationSession.findOne({ _id: sessionId, channel: 'preview' })
+          : null;
+        if (!session) {
+          locked.status = 'failed';
+          locked.errorMessage = 'Simulation session not found';
+          await locked.save();
+          stats.failed++;
+          continue;
+        }
+        const instance = await AutomationInstance.findById(session.automationInstanceId);
+        if (!instance || !instance.isActive) {
+          locked.status = 'failed';
+          locked.errorMessage = 'Automation instance not found or inactive';
+          await locked.save();
+          stats.failed++;
+          continue;
+        }
+        const version = await resolveLatestTemplateVersion({
+          templateId: instance.templateId,
+          fallbackVersionId: session.templateVersionId || instance.templateVersionId,
+        });
+        if (!version) {
+          locked.status = 'failed';
+          locked.errorMessage = 'Template version not found';
+          await locked.save();
+          stats.failed++;
+          continue;
+        }
+        const conversation = await Conversation.findById(locked.conversationId);
+        if (!conversation) {
+          locked.status = 'failed';
+          locked.errorMessage = 'Conversation not found';
+          await locked.save();
+          stats.failed++;
+          continue;
+        }
+        const result = await executePreviewFlowForInstance({
+          instance,
+          session,
+          conversation,
+          messageText,
+          messageContext,
+        });
+        if (!result.success) {
+          appendPreviewMetaEvent(session, {
+            type: 'error',
+            message: result.error || 'Flow execution failed',
+          });
+        }
+        session.markModified('state');
+        await session.save();
+        locked.status = result.success ? 'completed' : 'failed';
+        locked.errorMessage = result.error;
+        await locked.save();
+        if (result.success) {
+          stats.executed++;
+        } else {
+          stats.failed++;
+        }
       } else {
-        stats.failed++;
+        const result = await checkAndExecuteAutomations({
+          workspaceId: locked.workspaceId.toString(),
+          triggerType: locked.triggerType,
+          conversationId: locked.conversationId.toString(),
+          messageText,
+          instagramAccountId: locked.instagramAccountId.toString(),
+          platform: locked.platform || 'instagram',
+          messageContext,
+        });
+
+        locked.status = result.executed ? 'completed' : 'failed';
+        locked.errorMessage = result.error;
+        await locked.save();
+
+        if (result.executed) {
+          stats.executed++;
+        } else {
+          stats.failed++;
+        }
       }
     } catch (error: any) {
       locked.status = 'failed';

@@ -12,8 +12,11 @@ import WorkspaceSettings from '../models/WorkspaceSettings';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { getAdminLogEvents } from '../services/adminLogEventService';
+import type { TriggerType } from '../types/automation';
 import {
   executePreviewFlowForInstance,
+  maybeBufferAutomationMessage,
+  resolveBurstBufferSecondsForAutomation,
   resolveLatestTemplateVersion,
   resolveAutomationSelection,
 } from '../services/automationService';
@@ -837,6 +840,56 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
     conversation.lastMessageAt = customerMessage.createdAt;
     conversation.lastCustomerMessageAt = customerMessage.createdAt;
     await conversation.save();
+
+    const bufferSeconds = resolveBurstBufferSecondsForAutomation({
+      instance: selectedInstance,
+      version: selectedVersion,
+      triggerType: resolvedTriggerType as TriggerType,
+    });
+    if (resolvedTriggerType === 'dm_message' && bufferSeconds > 0) {
+      const bufferResult = await maybeBufferAutomationMessage({
+        workspaceId,
+        conversationId: conversation._id.toString(),
+        instagramAccountId: instagramAccountId.toString(),
+        triggerType: 'dm_message',
+        messageText: trimmedText,
+        platform: 'mock',
+        messageContext,
+        source: 'simulate',
+        sessionId: session._id?.toString(),
+        bufferSeconds,
+      });
+      if (bufferResult.buffered) {
+        appendPreviewEvent(session, {
+          type: 'info',
+          message: `Buffered DM burst for ${bufferSeconds}s`,
+          details: {
+            bufferId: bufferResult.bufferId,
+            bufferSeconds,
+          },
+        });
+        session.markModified('state');
+        await session.save();
+        const payload = await buildPreviewSessionPayload(session, conversation, {
+          includeEvents: await canViewExecutionTimeline(workspaceId),
+        });
+        const previewMessages = conversation
+          ? (await loadPreviewMessages(conversation._id)).filter((message) => message.from === 'ai')
+          : [];
+
+        return res.json({
+          success: true,
+          buffered: true,
+          sessionId: session._id,
+          conversationId: conversation._id,
+          status: session.status,
+          messages: previewMessages,
+          ...payload,
+          selectedAutomation: meta.selectedAutomation,
+          diagnostics,
+        });
+      }
+    }
 
     const result = await executePreviewFlowForInstance({
       instance: selectedInstance,
