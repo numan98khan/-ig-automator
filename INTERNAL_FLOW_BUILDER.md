@@ -138,6 +138,7 @@ Trigger config supports:
 - mode (`triggerMode`: `keywords`, `categories`, `any`, `intent`)
 - intent matcher (`intentText`)
 - extra filters (business hours, categories, link/attachment) via DSL only for now
+- DM burst buffer (`burstBufferSeconds`) to delay automation execution and coalesce inbound DM messages
 
 Current UI does not expose advanced trigger config (filter JSON). If needed, add UI + persist into the trigger definition.
 

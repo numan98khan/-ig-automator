@@ -154,6 +154,7 @@ export type FlowTriggerConfig = {
   intentText?: string
   intentProvider?: AiProvider
   intentModel?: string
+  burstBufferSeconds?: number
 }
 
 export type FlowButton = {

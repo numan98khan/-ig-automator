@@ -434,6 +434,7 @@ export interface TriggerConfig {
     link?: boolean;
     attachment?: boolean;
   };
+  burstBufferSeconds?: number;
 }
 
 export interface AutomationStats {

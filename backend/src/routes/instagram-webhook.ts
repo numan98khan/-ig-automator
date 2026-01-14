@@ -8,6 +8,7 @@ import { webhookLogger } from '../utils/webhook-logger';
 import {
   cancelFollowupOnCustomerReply,
   checkAndExecuteAutomations,
+  maybeBufferAutomationMessage,
 } from '../services/automationService';
 import { transcribeAudioFromUrl } from '../services/transcriptionService';
 import { trackDailyMetric } from '../services/reportingService';
@@ -552,6 +553,27 @@ async function processMessageAutomations(
         ? savedMessage.attachments.map((attachment: any) => attachment.url).filter(Boolean)
         : undefined,
     };
+
+    const shouldBufferDm = triggerTypes.length === 1 && triggerTypes[0] === 'dm_message';
+    if (shouldBufferDm) {
+      const bufferResult = await maybeBufferAutomationMessage({
+        workspaceId,
+        conversationId: conversation._id.toString(),
+        instagramAccountId: conversation.instagramAccountId.toString(),
+        triggerType: 'dm_message',
+        messageText,
+        platform: conversation.platform || 'instagram',
+        messageContext,
+      });
+      if (bufferResult.buffered) {
+        logAutomation('🧺 Buffered DM burst message', {
+          conversationId: conversation._id?.toString(),
+          bufferId: bufferResult.bufferId,
+          bufferSeconds: bufferResult.bufferSeconds,
+        });
+        return;
+      }
+    }
 
     const fallbackErrors = new Set([
       'No active automations found for this trigger',

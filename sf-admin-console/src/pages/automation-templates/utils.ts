@@ -133,6 +133,9 @@ export const normalizeTriggerConfig = (config?: FlowTriggerConfig) => {
   const excludeKeywords = Array.isArray(config.excludeKeywords) ? config.excludeKeywords.filter(Boolean) : []
   const intentText = config.intentText?.trim()
   const intentModel = config.intentModel?.trim()
+  const burstBufferSeconds = typeof config.burstBufferSeconds === 'number' && Number.isFinite(config.burstBufferSeconds)
+    ? config.burstBufferSeconds
+    : undefined
   const output: FlowTriggerConfig = {}
 
   if (config.triggerMode) output.triggerMode = config.triggerMode
@@ -144,6 +147,9 @@ export const normalizeTriggerConfig = (config?: FlowTriggerConfig) => {
     output.intentProvider = config.intentProvider
   }
   if (intentModel) output.intentModel = intentModel
+  if (burstBufferSeconds && burstBufferSeconds > 0) {
+    output.burstBufferSeconds = burstBufferSeconds
+  }
 
   return Object.keys(output).length > 0 ? output : undefined
 }

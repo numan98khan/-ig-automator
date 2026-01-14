@@ -100,6 +100,9 @@ const formatTriggerConfigSummary = (config?: TriggerConfig) => {
   if (config.businessHours) {
     parts.push('Business hours');
   }
+  if (typeof config.burstBufferSeconds === 'number' && config.burstBufferSeconds > 0) {
+    parts.push(`Burst buffer: ${config.burstBufferSeconds}s`);
+  }
 
   return parts.join(' | ');
 };

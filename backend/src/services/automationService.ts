@@ -5,6 +5,7 @@ import InstagramAccount from '../models/InstagramAccount';
 import FollowupTask from '../models/FollowupTask';
 import AutomationInstance from '../models/AutomationInstance';
 import AutomationSession from '../models/AutomationSession';
+import AutomationMessageBuffer from '../models/AutomationMessageBuffer';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import { generateAIReply, generateConversationSummary } from './aiReplyService';
@@ -152,6 +153,7 @@ type AiAutomationContext = {
 
 const DEFAULT_AI_HISTORY_WINDOW = 10;
 const DEFAULT_AI_SUMMARY_EXPIRY_HOURS = 48;
+const MAX_BURST_BUFFER_SECONDS = 120;
 const MAX_AI_SUMMARY_CHARS = 1200;
 const MAX_AI_SUMMARY_ENTRY_CHARS = 240;
 
@@ -685,6 +687,48 @@ const normalizeConfigNumber = (
   return fallback;
 };
 
+const normalizeBurstBufferSeconds = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return clampNumber(value, 0, MAX_BURST_BUFFER_SECONDS);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return clampNumber(parsed, 0, MAX_BURST_BUFFER_SECONDS);
+    }
+  }
+  return 0;
+};
+
+const resolveBurstBufferSeconds = (triggers: FlowTriggerDefinition[] | undefined, triggerType: TriggerType): number => {
+  if (!Array.isArray(triggers)) return 0;
+  const trigger = triggers.find((item) => item.type === triggerType);
+  if (!trigger?.config) return 0;
+  const value = normalizeBurstBufferSeconds(trigger.config.burstBufferSeconds);
+  return value > 0 ? value : 0;
+};
+
+const buildMessageContextFromMessages = (
+  messages: Array<Pick<IMessage, 'text' | 'attachments' | 'linkPreview'>>,
+) => {
+  const attachmentUrls = messages.flatMap((message) =>
+    Array.isArray(message.attachments)
+      ? message.attachments.map((attachment) => attachment.url).filter(Boolean)
+      : [],
+  );
+  const linkPreviewUrl = messages.find((message) => message.linkPreview?.url)?.linkPreview?.url;
+  const hasLink = Boolean(
+    linkPreviewUrl || messages.some((message) => /https?:\/\/\S+/i.test(message.text || '')),
+  );
+
+  return {
+    hasLink,
+    hasAttachment: attachmentUrls.length > 0,
+    linkUrl: linkPreviewUrl,
+    attachmentUrls: attachmentUrls.length > 0 ? attachmentUrls : undefined,
+  };
+};
+
 const truncateSummaryEntry = (value: string, maxLength: number) => {
   const trimmed = value.trim();
   if (!trimmed) return '';
@@ -756,6 +800,7 @@ export const resolveLatestTemplateVersion = async (params: {
   }
   return null;
 };
+
 
 function buildEffectiveUserConfig(
   exposedFields: FlowExposedField[] | undefined,
@@ -952,6 +997,41 @@ const resolveFlowRuntime = (version: any, instance: any) => {
     triggers: resolvedTriggers,
     config,
   };
+};
+
+const resolveBurstBufferSecondsForMessage = async (params: {
+  workspaceId: string;
+  conversationId: string;
+  triggerType: TriggerType;
+  messageText?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<number> => {
+  const { workspaceId, conversationId, triggerType, messageText, messageContext } = params;
+  const activeSession = await AutomationSession.findOne({
+    conversationId: new mongoose.Types.ObjectId(conversationId),
+    status: 'active',
+  }).sort({ updatedAt: -1 });
+
+  if (activeSession) {
+    const instance = await AutomationInstance.findById(activeSession.automationInstanceId);
+    if (!instance || !instance.isActive) return 0;
+    const version = await resolveLatestTemplateVersion({
+      templateId: instance.templateId,
+      fallbackVersionId: activeSession.templateVersionId || instance.templateVersionId,
+    });
+    if (!version) return 0;
+    const runtime = resolveFlowRuntime(version, instance);
+    return resolveBurstBufferSeconds(runtime?.triggers, triggerType);
+  }
+
+  const selection = await resolveAutomationSelection({
+    workspaceId,
+    triggerType,
+    messageText: messageText || '',
+    messageContext,
+  });
+  if (!selection.match) return 0;
+  return resolveBurstBufferSeconds(selection.match.runtime?.triggers, triggerType);
 };
 
 const buildAiAutomationContext = async (params: {
@@ -2689,6 +2769,69 @@ export async function executePreviewFlowForInstance(params: {
     : { success: false, error: result.error || 'Flow execution failed', messages: previewMessages };
 }
 
+export async function maybeBufferAutomationMessage(params: {
+  workspaceId: string;
+  conversationId: string;
+  instagramAccountId: string;
+  triggerType: TriggerType;
+  messageText?: string;
+  platform?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<{ buffered: boolean; bufferSeconds?: number; bufferId?: string }> {
+  const {
+    workspaceId,
+    conversationId,
+    instagramAccountId,
+    triggerType,
+    messageText,
+    platform,
+    messageContext,
+  } = params;
+
+  if (triggerType !== 'dm_message') {
+    return { buffered: false };
+  }
+
+  const bufferSeconds = await resolveBurstBufferSecondsForMessage({
+    workspaceId,
+    conversationId,
+    triggerType,
+    messageText,
+    messageContext,
+  });
+
+  if (!bufferSeconds || bufferSeconds <= 0) {
+    return { buffered: false };
+  }
+
+  const now = new Date();
+  const bufferUntil = new Date(now.getTime() + bufferSeconds * 1000);
+  const buffer = await AutomationMessageBuffer.findOneAndUpdate(
+    {
+      conversationId: new mongoose.Types.ObjectId(conversationId),
+      triggerType,
+      status: 'pending',
+    },
+    {
+      $set: {
+        workspaceId: new mongoose.Types.ObjectId(workspaceId),
+        instagramAccountId: new mongoose.Types.ObjectId(instagramAccountId),
+        platform,
+        bufferUntil,
+        lastMessageAt: now,
+      },
+      $setOnInsert: {
+        bufferStartedAt: now,
+        status: 'pending',
+      },
+      $inc: { messageCount: 1 },
+    },
+    { new: true, upsert: true },
+  );
+
+  return { buffered: true, bufferSeconds, bufferId: buffer._id?.toString() };
+}
+
 /**
  * Execute an automation based on trigger type
  */
@@ -2890,6 +3033,92 @@ export async function checkAndExecuteAutomations(params: {
     automationName: result.automationExecuted,
     error: result.error,
   };
+}
+
+export async function processDueMessageBuffers(params?: {
+  now?: Date;
+  limit?: number;
+}): Promise<{
+  processed: number;
+  executed: number;
+  failed: number;
+  skipped: number;
+}> {
+  const stats = { processed: 0, executed: 0, failed: 0, skipped: 0 };
+  const now = params?.now || new Date();
+  const limit = params?.limit || 50;
+
+  const dueBuffers = await AutomationMessageBuffer.find({
+    status: 'pending',
+    bufferUntil: { $lte: now },
+  })
+    .sort({ bufferUntil: 1 })
+    .limit(limit);
+
+  for (const buffer of dueBuffers) {
+    const locked = await AutomationMessageBuffer.findOneAndUpdate(
+      { _id: buffer._id, status: 'pending' },
+      { status: 'processing' },
+      { new: true },
+    );
+    if (!locked) {
+      stats.skipped++;
+      continue;
+    }
+
+    stats.processed++;
+
+    try {
+      const windowEnd = locked.lastMessageAt || locked.bufferUntil;
+      const messages = await Message.find({
+        conversationId: locked.conversationId,
+        from: 'customer',
+        createdAt: { $gte: locked.bufferStartedAt, $lte: windowEnd },
+      }).sort({ createdAt: 1 });
+
+      if (!messages.length) {
+        locked.status = 'cancelled';
+        locked.errorMessage = 'No buffered messages found';
+        await locked.save();
+        stats.skipped++;
+        continue;
+      }
+
+      const combinedText = messages
+        .map((message) => message.text)
+        .filter((text) => text && text.trim())
+        .join('\n');
+      const messageText = combinedText || messages[messages.length - 1]?.text || '';
+      const messageContext = buildMessageContextFromMessages(messages);
+
+      const result = await checkAndExecuteAutomations({
+        workspaceId: locked.workspaceId.toString(),
+        triggerType: locked.triggerType,
+        conversationId: locked.conversationId.toString(),
+        messageText,
+        instagramAccountId: locked.instagramAccountId.toString(),
+        platform: locked.platform || 'instagram',
+        messageContext,
+      });
+
+      locked.status = result.executed ? 'completed' : 'failed';
+      locked.errorMessage = result.error;
+      await locked.save();
+
+      if (result.executed) {
+        stats.executed++;
+      } else {
+        stats.failed++;
+      }
+    } catch (error: any) {
+      locked.status = 'failed';
+      locked.errorMessage = error?.message || 'Failed to process message buffer';
+      await locked.save();
+      stats.failed++;
+    }
+  }
+
+  return stats;
 }
 
 /**

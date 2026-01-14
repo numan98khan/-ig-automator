@@ -215,6 +215,7 @@ export default function AutomationTemplates() {
   const triggerIntentProvider = resolveAiProvider(selectedTriggerConfig.intentProvider)
   const triggerIntentModelSuggestions = getAiModelSuggestions(triggerIntentProvider)
   const triggerIntentModelValue = selectedTriggerConfig.intentModel || ''
+  const isDmTrigger = (selectedNode?.triggerType || DEFAULT_TRIGGER_TYPE) === 'dm_message'
   const hasCustomTriggerIntentModel = Boolean(triggerIntentModelValue)
     && !triggerIntentModelSuggestions.includes(triggerIntentModelValue)
   const reasoningEffortOptions = REASONING_EFFORT_OPTIONS
@@ -1320,6 +1321,13 @@ export default function AutomationTemplates() {
                         defaultValue: selectedTriggerConfig.intentModel || '',
                         sourcePath: 'triggers[0].config.intentModel',
                       },
+                      {
+                        label: 'Burst buffer seconds',
+                        type: 'number' as const,
+                        defaultValue: selectedTriggerConfig.burstBufferSeconds ?? 0,
+                        helpText: 'Only applies to DM triggers. Use 0 to disable.',
+                        sourcePath: 'triggers[0].config.burstBufferSeconds',
+                      },
                     ].map((option) => {
                       const sourceNodeId = undefined
                       const sourcePath = option.sourcePath
@@ -1402,6 +1410,29 @@ export default function AutomationTemplates() {
                     Choose keyword matching or let AI evaluate intent text.
                   </div>
                 </div>
+                {isDmTrigger && (
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Burst buffer (seconds)</label>
+                    <input
+                      className="input w-full"
+                      type="number"
+                      min="0"
+                      value={selectedTriggerConfig.burstBufferSeconds ?? ''}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          triggerConfig: {
+                            ...(node.triggerConfig || {}),
+                            burstBufferSeconds: parseOptionalNumber(event.target.value),
+                          },
+                        }))
+                      }
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      Buffer DM bursts before running automations. Use 0 to disable.
+                    </div>
+                  </div>
+                )}
                 {selectedTriggerConfig.triggerMode === 'keywords' && (
                   <>
                     <div className="space-y-2">
