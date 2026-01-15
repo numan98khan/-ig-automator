@@ -5,6 +5,7 @@ import InstagramAccount from '../models/InstagramAccount';
 import FollowupTask from '../models/FollowupTask';
 import AutomationInstance from '../models/AutomationInstance';
 import AutomationSession from '../models/AutomationSession';
+import type { IWorkspaceSettings } from '../models/WorkspaceSettings';
 import AutomationMessageBuffer from '../models/AutomationMessageBuffer';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
@@ -955,6 +956,42 @@ const resolveMessageTemplate = (value: string, session?: any): string => {
   const resolved = resolveTemplateString(value, buildRuntimeTemplateContext(session));
   if (typeof resolved === 'string') return resolved;
   return stringifyConfigValue(resolved);
+};
+
+const buildPromptTemplateContext = (params: {
+  session?: any;
+  settings?: IWorkspaceSettings | null;
+}): Record<string, any> => {
+  const vars = params.session?.state?.vars && typeof params.session.state.vars === 'object'
+    ? params.session.state.vars
+    : {};
+  const settings = params.settings || null;
+  const business = {
+    name: settings?.businessName,
+    description: settings?.businessDescription,
+    hours: settings?.businessHours,
+    tone: settings?.businessTone,
+    location: settings?.businessLocation,
+    website: settings?.businessWebsite,
+    catalog: settings?.businessCatalog,
+    documents: settings?.businessDocuments,
+  };
+  return {
+    vars,
+    ...vars,
+    business,
+    businessName: business.name,
+    businessDescription: business.description,
+    businessHours: business.hours,
+    businessTone: business.tone,
+    businessLocation: business.location,
+    businessWebsite: business.website,
+    businessCatalog: business.catalog,
+    businessDocuments: business.documents,
+    assistantName: settings?.assistantName,
+    assistantDescription: settings?.assistantDescription,
+    workspaceSystemPrompt: settings?.systemPrompt,
+  };
 };
 
 const setByPath = (target: any, path: string, value: any) => {
@@ -2419,6 +2456,7 @@ async function executeFlowPlan(params: {
         ...(step.aiSettings || {}),
       };
       const workspaceId = conversation.workspaceId?.toString?.() || conversation.workspaceId;
+      const settings = await getWorkspaceSettings(conversation.workspaceId);
       let usageOwnerId: string | null = null;
       if (!isPreviewMode && workspaceId) {
         const usageCheck = await checkAiMessageAllowance(workspaceId);
@@ -2448,13 +2486,21 @@ async function executeFlowPlan(params: {
         ? step.langchainMaxIterations
         : undefined;
       const maxIterationsReached = typeof maxIterations === 'number' ? iteration >= maxIterations : false;
+      const resolvedSystemPrompt = typeof step.langchainSystemPrompt === 'string'
+        ? resolveTemplateString(step.langchainSystemPrompt, buildPromptTemplateContext({ session, settings }))
+        : step.langchainSystemPrompt;
+      const systemPrompt = typeof resolvedSystemPrompt === 'string'
+        ? resolvedSystemPrompt
+        : resolvedSystemPrompt
+          ? stringifyConfigValue(resolvedSystemPrompt)
+          : undefined;
 
       const agentStart = nowMs();
       const agentResult = await generateLangchainAgentReply({
         conversation,
         workspaceId: conversation.workspaceId,
         latestCustomerMessage: messageText,
-        systemPrompt: step.langchainSystemPrompt,
+        systemPrompt,
         tools: langchainTools,
         endCondition: step.langchainEndCondition,
         stopCondition: step.langchainStopCondition,
