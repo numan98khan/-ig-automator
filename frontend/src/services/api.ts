@@ -1184,19 +1184,24 @@ export const automationAPI = {
     profileId?: string;
     persona?: AutomationPreviewPersona;
     clientSentAt?: string;
+    simulationKey?: string;
   }): Promise<AutomationSimulationResponse> => {
     const { data } = await api.post('/api/automations/simulate/message', payload);
     return data;
   },
-  getSimulationSession: async (workspaceId: string): Promise<AutomationSimulationSessionResponse> => {
+  getSimulationSession: async (
+    workspaceId: string,
+    simulationKey?: string,
+  ): Promise<AutomationSimulationSessionResponse> => {
     const { data } = await api.get('/api/automations/simulate/session', {
-      params: { workspaceId },
+      params: { workspaceId, simulationKey },
     });
     return data;
   },
   resetSimulationSession: async (payload: {
     workspaceId: string;
     sessionId?: string;
+    simulationKey?: string;
   }): Promise<{ success: boolean }> => {
     const { data } = await api.post('/api/automations/simulate/reset', payload);
     return data;

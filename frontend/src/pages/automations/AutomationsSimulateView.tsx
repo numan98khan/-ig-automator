@@ -160,6 +160,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   const [profileBusy, setProfileBusy] = useState(false);
   const [resetPending, setResetPending] = useState(false);
   const refreshTimerRef = useRef<number | null>(null);
+  const simulationKeyRef = useRef<string | null>(null);
   const canViewTimeline = Boolean(canViewExecutionTimeline);
   const profileAutomationId = selectedAutomation?.id
     || automations?.find((automation) => automation.isActive)?._id
@@ -205,10 +206,41 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     }));
   }, []);
 
+  const getSimulationKey = useCallback((options?: { reset?: boolean }) => {
+    if (!workspaceId) return null;
+    const storageKey = `simulateSessionKey:${workspaceId}`;
+    if (options?.reset) {
+      const generated = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `sim-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      localStorage.setItem(storageKey, generated);
+      simulationKeyRef.current = generated;
+      return generated;
+    }
+
+    if (simulationKeyRef.current) {
+      return simulationKeyRef.current;
+    }
+
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      simulationKeyRef.current = stored;
+      return stored;
+    }
+
+    const generated = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `sim-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    localStorage.setItem(storageKey, generated);
+    simulationKeyRef.current = generated;
+    return generated;
+  }, [workspaceId]);
+
   const loadPersistedSimulation = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      const response = await automationAPI.getSimulationSession(workspaceId);
+      const simulationKey = getSimulationKey();
+      const response = await automationAPI.getSimulationSession(workspaceId, simulationKey || undefined);
       if (!response.session) return;
       applyPreviewPayload({ ...response, messages: response.messages });
       setSelectedAutomation(response.selectedAutomation || null);
@@ -224,7 +256,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     } catch (err) {
       console.error('Failed to load simulation session:', err);
     }
-  }, [applyPreviewPayload, workspaceId]);
+  }, [applyPreviewPayload, getSimulationKey, workspaceId]);
 
   const clearRefreshTimer = useCallback(() => {
     if (refreshTimerRef.current !== null) {
@@ -240,7 +272,8 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     }
     refreshTimerRef.current = window.setTimeout(async () => {
       try {
-        const response = await automationAPI.getSimulationSession(workspaceId);
+        const simulationKey = getSimulationKey();
+        const response = await automationAPI.getSimulationSession(workspaceId, simulationKey || undefined);
         applyPreviewPayload({ ...response, messages: response.messages });
         if (response.selectedAutomation) {
           setSelectedAutomation(response.selectedAutomation);
@@ -256,7 +289,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
       }
       scheduleSimulationRefresh(baselineIds, remainingAttempts - 1);
     }, 1000);
-  }, [applyPreviewPayload, clearRefreshTimer, workspaceId]);
+  }, [applyPreviewPayload, clearRefreshTimer, getSimulationKey, workspaceId]);
 
   useEffect(() => () => {
     clearRefreshTimer();
@@ -354,7 +387,9 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     setError(null);
     setResetPending(false);
     clearRefreshTimer();
-  }, [clearRefreshTimer, workspaceId]);
+    simulationKeyRef.current = null;
+    getSimulationKey();
+  }, [clearRefreshTimer, getSimulationKey, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -370,9 +405,11 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     clearRefreshTimer();
     if (workspaceId) {
       try {
+        const simulationKey = getSimulationKey();
         await automationAPI.resetSimulationSession({
           workspaceId,
           sessionId: previewSessionId || undefined,
+          simulationKey: simulationKey || undefined,
         });
       } catch (err) {
         console.error('Failed to reset simulation session:', err);
@@ -393,6 +430,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     setDiagnostics([]);
     setError(null);
     setResetPending(true);
+    getSimulationKey({ reset: true });
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -415,6 +453,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
 
     const resetRequested = resetPending;
     try {
+      const simulationKey = getSimulationKey();
       const response = await automationAPI.simulateMessage({
         workspaceId,
         text: trimmed,
@@ -423,6 +462,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
         profileId: selectedProfileId || undefined,
         persona: selectedProfileId ? undefined : personaDraft,
         clientSentAt,
+        simulationKey: simulationKey || undefined,
       });
       const { messages, ...rest } = response;
       applyPreviewPayload(rest);

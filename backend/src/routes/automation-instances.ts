@@ -547,6 +547,7 @@ const ensurePreviewSession = async (params: {
   persona?: PreviewPersona | null;
   profileId?: string;
   source?: string;
+  simulationKey?: string;
 }) => {
   const {
     instance,
@@ -557,19 +558,23 @@ const ensurePreviewSession = async (params: {
     persona,
     profileId,
     source,
+    simulationKey,
   } = params;
   const sourceFilter = source ? { 'state.previewMeta.source': source } : {};
+  const simulationKeyFilter = simulationKey ? { 'state.previewMeta.simulationKey': simulationKey } : {};
   let session = sessionId
     ? await AutomationSession.findOne({
       _id: sessionId,
       automationInstanceId: instance._id,
       channel: 'preview',
       ...sourceFilter,
+      ...simulationKeyFilter,
     })
     : await AutomationSession.findOne({
       automationInstanceId: instance._id,
       channel: 'preview',
       ...sourceFilter,
+      ...simulationKeyFilter,
     }).sort({ updatedAt: -1 });
 
   const shouldCreate = reset || !session || session.channel !== 'preview';
@@ -593,7 +598,7 @@ const ensurePreviewSession = async (params: {
       message: 'Preview session started',
       createdAt: new Date(),
     });
-    if (persona || profileId || source) {
+    if (persona || profileId || source || simulationKey) {
       const meta = ensurePreviewMeta(session);
       if (persona) {
         meta.persona = persona;
@@ -603,6 +608,9 @@ const ensurePreviewSession = async (params: {
       }
       if (source) {
         meta.source = source;
+      }
+      if (simulationKey) {
+        meta.simulationKey = simulationKey;
       }
       session.markModified('state');
     }
@@ -630,6 +638,7 @@ const ensurePreviewSession = async (params: {
       events: [],
     } as {
       events: PreviewEvent[];
+      simulationKey?: string;
       profileId?: string;
       persona?: PreviewPersona;
       source?: string;
@@ -648,6 +657,9 @@ const ensurePreviewSession = async (params: {
     }
     if (source) {
       nextMeta.source = source;
+    }
+    if (simulationKey) {
+      nextMeta.simulationKey = simulationKey;
     }
     session.status = 'active';
     session.templateVersionId = templateVersionId;
@@ -683,12 +695,23 @@ const ensurePreviewSession = async (params: {
     if (source) {
       meta.source = source;
     }
+    if (simulationKey) {
+      meta.simulationKey = simulationKey;
+    }
     session.markModified('state');
     await session.save();
   } else if (source) {
     const meta = ensurePreviewMeta(session);
+    let shouldSave = false;
     if (meta.source !== source) {
       meta.source = source;
+      shouldSave = true;
+    }
+    if (simulationKey && meta.simulationKey !== simulationKey) {
+      meta.simulationKey = simulationKey;
+      shouldSave = true;
+    }
+    if (shouldSave) {
       session.markModified('state');
       await session.save();
     }
@@ -769,13 +792,26 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
 
 router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { workspaceId, text, triggerType, persona, profileId, sessionId, reset, clientSentAt } = req.body || {};
+    const {
+      workspaceId,
+      text,
+      triggerType,
+      persona,
+      profileId,
+      sessionId,
+      reset,
+      clientSentAt,
+      simulationKey,
+    } = req.body || {};
     if (!workspaceId || typeof workspaceId !== 'string') {
       return res.status(400).json({ error: 'workspaceId is required' });
     }
     if (!text || typeof text !== 'string') {
       return res.status(400).json({ error: 'Message text is required' });
     }
+    const resolvedSimulationKey = typeof simulationKey === 'string' && simulationKey.trim()
+      ? simulationKey.trim()
+      : undefined;
 
     const { hasAccess } = await checkWorkspaceAccess(workspaceId, req.userId!);
     if (!hasAccess) {
@@ -798,6 +834,29 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
         channel: 'preview',
         status: 'active',
       });
+      if (existingSession) {
+        const instance = await AutomationInstance.findById(existingSession.automationInstanceId);
+        if (instance && instance.isActive) {
+          const version = await resolveLatestTemplateVersion({
+            templateId: instance.templateId,
+            fallbackVersionId: existingSession.templateVersionId || instance.templateVersionId,
+          });
+          if (version) {
+            selectedInstance = instance;
+            selectedVersion = version;
+            activePreviewSession = existingSession;
+          }
+        }
+      }
+    }
+
+    if (!activePreviewSession && resolvedSimulationKey && !reset) {
+      const existingSession = await AutomationSession.findOne({
+        workspaceId: new mongoose.Types.ObjectId(workspaceId),
+        channel: 'preview',
+        'state.previewMeta.source': 'simulate',
+        'state.previewMeta.simulationKey': resolvedSimulationKey,
+      }).sort({ updatedAt: -1 });
       if (existingSession) {
         const instance = await AutomationInstance.findById(existingSession.automationInstanceId);
         if (instance && instance.isActive) {
@@ -857,9 +916,13 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
       persona: resolvedPersona,
       profileId: resolvedProfile?._id?.toString(),
       source: 'simulate',
+      simulationKey: resolvedSimulationKey,
     });
     const meta = ensurePreviewMeta(session);
     meta.source = 'simulate';
+    if (resolvedSimulationKey) {
+      meta.simulationKey = resolvedSimulationKey;
+    }
     meta.selectedAutomation = {
       id: selectedInstance._id?.toString(),
       name: selectedInstance.name,
@@ -997,6 +1060,7 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
 router.get('/simulate/session', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const workspaceId = typeof req.query.workspaceId === 'string' ? req.query.workspaceId : '';
+    const simulationKey = typeof req.query.simulationKey === 'string' ? req.query.simulationKey : '';
     if (!workspaceId) {
       return res.status(400).json({ error: 'workspaceId is required' });
     }
@@ -1006,11 +1070,16 @@ router.get('/simulate/session', authenticate, async (req: AuthRequest, res: Resp
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const session = await AutomationSession.findOne({
+    const baseQuery: Record<string, any> = {
       workspaceId: new mongoose.Types.ObjectId(workspaceId),
       channel: 'preview',
       'state.previewMeta.source': 'simulate',
-    }).sort({ updatedAt: -1 });
+    };
+    if (simulationKey) {
+      baseQuery['state.previewMeta.simulationKey'] = simulationKey;
+    }
+
+    const session = await AutomationSession.findOne(baseQuery).sort({ updatedAt: -1 });
 
     if (!session) {
       return res.json({ session: null, conversation: null, currentNode: null, events: [], profile: null, persona: null });
@@ -1039,7 +1108,7 @@ router.get('/simulate/session', authenticate, async (req: AuthRequest, res: Resp
 
 router.post('/simulate/reset', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { workspaceId, sessionId } = req.body || {};
+    const { workspaceId, sessionId, simulationKey } = req.body || {};
     if (!workspaceId || typeof workspaceId !== 'string') {
       return res.status(400).json({ error: 'workspaceId is required' });
     }
@@ -1049,27 +1118,37 @@ router.post('/simulate/reset', authenticate, async (req: AuthRequest, res: Respo
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const session = sessionId
-      ? await AutomationSession.findOne({
-        _id: sessionId,
-        workspaceId: new mongoose.Types.ObjectId(workspaceId),
-        channel: 'preview',
-      })
-      : await AutomationSession.findOne({
-        workspaceId: new mongoose.Types.ObjectId(workspaceId),
-        channel: 'preview',
-        'state.previewMeta.source': 'simulate',
-      }).sort({ updatedAt: -1 });
+    const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
+    const resolvedSimulationKey = typeof simulationKey === 'string' && simulationKey.trim()
+      ? simulationKey.trim()
+      : undefined;
+    const sessionQuery: Record<string, any> = {
+      workspaceId: workspaceObjectId,
+      channel: 'preview',
+    };
+    if (sessionId) {
+      sessionQuery._id = sessionId;
+    } else {
+      sessionQuery['state.previewMeta.source'] = 'simulate';
+      if (resolvedSimulationKey) {
+        sessionQuery['state.previewMeta.simulationKey'] = resolvedSimulationKey;
+      }
+    }
 
-    if (!session) {
+    const sessions = await AutomationSession.find(sessionQuery);
+    if (!sessions.length) {
       return res.json({ success: true });
     }
 
-    const conversationId = session.conversationId;
-    await AutomationSession.deleteOne({ _id: session._id });
-    if (conversationId) {
-      await Message.deleteMany({ conversationId });
-      await Conversation.deleteOne({ _id: conversationId });
+    const sessionIds = sessions.map((item) => item._id);
+    const conversationIds = sessions
+      .map((item) => item.conversationId)
+      .filter(Boolean);
+
+    await AutomationSession.deleteMany({ _id: { $in: sessionIds } });
+    if (conversationIds.length > 0) {
+      await Message.deleteMany({ conversationId: { $in: conversationIds } });
+      await Conversation.deleteMany({ _id: { $in: conversationIds } });
     }
 
     return res.json({ success: true });

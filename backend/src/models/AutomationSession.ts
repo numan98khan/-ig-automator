@@ -35,6 +35,7 @@ export interface IAutomationSession extends Document {
         createdAt: Date;
         details?: Record<string, any>;
       }>;
+      simulationKey?: string;
       profileId?: string;
       persona?: {
         name?: string;

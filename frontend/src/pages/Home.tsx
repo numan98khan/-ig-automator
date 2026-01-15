@@ -124,6 +124,7 @@ const Home: React.FC = () => {
       if (!workspaceId) {
         throw new Error('Missing workspace');
       }
+      const simulationKey = localStorage.getItem(`simulateSessionKey:${workspaceId}`) || undefined;
       const [
         automationData,
         templateData,
@@ -134,7 +135,7 @@ const Home: React.FC = () => {
         automationAPI.getByWorkspace(workspaceId),
         flowTemplateAPI.list(),
         settingsAPI.getByWorkspace(workspaceId),
-        automationAPI.getSimulationSession(workspaceId),
+        automationAPI.getSimulationSession(workspaceId, simulationKey),
         dashboardAPI.getSummary(workspaceId, 'today'),
       ]);
       return {
