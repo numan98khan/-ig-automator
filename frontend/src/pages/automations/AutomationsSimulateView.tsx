@@ -108,6 +108,7 @@ const mergePreviewMessages = (
     message,
     index,
     timestamp: message.createdAt ? new Date(message.createdAt as string).getTime() : null,
+    key: message.id || `idx-${index}`,
   }));
   decorated.sort((a, b) => {
     if (a.timestamp !== null && b.timestamp !== null && a.timestamp !== b.timestamp) {
@@ -115,6 +116,7 @@ const mergePreviewMessages = (
     }
     if (a.timestamp !== null && b.timestamp === null) return -1;
     if (a.timestamp === null && b.timestamp !== null) return 1;
+    if (a.key !== b.key) return a.key.localeCompare(b.key);
     return a.index - b.index;
   });
   return decorated.map((entry) => entry.message);
@@ -401,11 +403,12 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     clearRefreshTimer();
     setError(null);
     const baselineIds = new Set(previewMessages.map((message) => message.id).filter(Boolean));
+    const clientSentAt = new Date().toISOString();
     const optimisticMessage: AutomationPreviewMessage = {
       id: `sim-${Date.now()}`,
       from: 'customer',
       text: trimmed,
-      createdAt: new Date().toISOString(),
+      createdAt: clientSentAt,
     };
     setPreviewMessages((prev) => [...prev, optimisticMessage]);
     setPreviewInputValue('');
@@ -419,6 +422,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
         reset: resetRequested,
         profileId: selectedProfileId || undefined,
         persona: selectedProfileId ? undefined : personaDraft,
+        clientSentAt,
       });
       const { messages, ...rest } = response;
       applyPreviewPayload(rest);

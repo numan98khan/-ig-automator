@@ -2887,7 +2887,7 @@ export async function maybeBufferAutomationMessage(params: {
     {
       conversationId: new mongoose.Types.ObjectId(conversationId),
       triggerType,
-      status: 'pending',
+      status: { $in: ['pending', 'processing'] },
     },
     {
       $set: {
@@ -2896,12 +2896,12 @@ export async function maybeBufferAutomationMessage(params: {
         platform,
         source,
         sessionId: sessionId ? new mongoose.Types.ObjectId(sessionId) : undefined,
+        status: 'pending',
         bufferUntil,
         lastMessageAt: now,
       },
       $setOnInsert: {
         bufferStartedAt: startAt,
-        status: 'pending',
       },
       $inc: { messageCount: 1 },
     },
@@ -3148,6 +3148,22 @@ export async function processDueMessageBuffers(params?: {
     stats.processed++;
 
     try {
+      const windowBase = locked.lastMessageAt || locked.bufferStartedAt;
+      const windowMs = Math.max(0, locked.bufferUntil.getTime() - windowBase.getTime());
+      const latestMessage = await Message.findOne({
+        conversationId: locked.conversationId,
+        from: 'customer',
+        createdAt: { $gt: windowBase },
+      }).sort({ createdAt: -1 });
+      if (latestMessage) {
+        locked.status = 'pending';
+        locked.lastMessageAt = latestMessage.createdAt;
+        locked.bufferUntil = new Date(latestMessage.createdAt.getTime() + windowMs);
+        await locked.save();
+        stats.skipped++;
+        continue;
+      }
+
       const windowEnd = locked.lastMessageAt || locked.bufferUntil;
       const messages = await Message.find({
         conversationId: locked.conversationId,

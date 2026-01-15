@@ -489,18 +489,33 @@ const buildPreviewConversation = async (params: {
   });
 };
 
+const getPreviewSentAt = (message: Record<string, any>) => {
+  const raw = message?.metadata?.previewSentAt;
+  if (raw) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return message.createdAt;
+};
+
 const formatPreviewMessages = (messages: Array<Record<string, any>>) =>
   messages.map((message) => ({
     id: message._id?.toString(),
     text: message.text,
     from: message.from,
-    createdAt: message.createdAt,
+    createdAt: getPreviewSentAt(message),
   }));
 
 const loadPreviewMessages = async (conversationId: mongoose.Types.ObjectId | string) => {
-  const messages = await Message.find({ conversationId })
-    .sort({ createdAt: 1 })
-    .lean();
+  const messages = await Message.find({ conversationId }).lean();
+  messages.sort((a, b) => {
+    const aTime = getPreviewSentAt(a).getTime();
+    const bTime = getPreviewSentAt(b).getTime();
+    if (aTime !== bTime) return aTime - bTime;
+    return String(a._id).localeCompare(String(b._id));
+  });
   return formatPreviewMessages(messages);
 };
 
@@ -735,7 +750,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
 
 router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { workspaceId, text, triggerType, persona, profileId, sessionId, reset } = req.body || {};
+    const { workspaceId, text, triggerType, persona, profileId, sessionId, reset, clientSentAt } = req.body || {};
     if (!workspaceId || typeof workspaceId !== 'string') {
       return res.status(400).json({ error: 'workspaceId is required' });
     }
@@ -835,12 +850,17 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
         : undefined,
     };
 
+    const previewSentAt = typeof clientSentAt === 'string' ? new Date(clientSentAt) : null;
+    const previewMetadata = previewSentAt && !Number.isNaN(previewSentAt.getTime())
+      ? { previewSentAt }
+      : undefined;
     const customerMessage = await Message.create({
       conversationId: conversation._id,
       workspaceId: conversation.workspaceId,
       text: trimmedText,
       from: 'customer',
       platform: 'mock',
+      metadata: previewMetadata,
     });
 
     conversation.lastMessage = customerMessage.text;
