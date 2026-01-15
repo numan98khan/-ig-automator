@@ -24,6 +24,9 @@
 - Follow the conventional style used here (`feat: ...`, `fix: ...`). Keep commits focused and scoped to one concern.
 - PRs should include a short summary, verification steps/commands, any env or config changes, and screenshots or GIFs for UI updates (desktop + mobile when relevant). Link related issues and call out risk areas (auth, webhooks).
 
+## Documentation Updates
+- When changing the flow builder or any node behavior/schema, update `INTERNAL_FLOW_BUILDER.md` to reflect the latest capabilities and runtime behavior.
+
 ## Security & Configuration Tips
 - Never commit `.env`. Backend needs MongoDB URI, JWT secret, OpenAI key, and Ngrok/Railway URLs; `start-dev.sh` writes to `backend/.env` but you can also copy an example file if present.
 - If Ngrok or Railway service names differ, adjust them in `start-dev.sh` before running; ensure the exposed port matches backend (`5001` default).

@@ -181,7 +181,12 @@ const buildNodeSummary = (node: any, options: {
     summary.push({ label, value: trimmed });
   };
 
-  const previewCandidate = node.text ?? node.message ?? node.agentSystemPrompt ?? node.handoff?.message ?? node.handoff?.summary;
+  const previewCandidate = node.text
+    ?? node.message
+    ?? node.agentSystemPrompt
+    ?? node.langchainSystemPrompt
+    ?? node.handoff?.message
+    ?? node.handoff?.summary;
   const preview = truncateText(previewCandidate, 180);
 
   if (typeof node.waitForReply === 'boolean') {
@@ -228,6 +233,20 @@ const buildNodeSummary = (node: any, options: {
       const keys = slots.map((slot: any) => slot?.key).filter(Boolean);
       add('Slots', formatList(keys, 4) || `${slots.length}`);
     }
+    const ai = node.aiSettings || {};
+    add('Model', ai.model);
+    add('Reasoning', ai.reasoningEffort);
+    if (typeof ai.temperature === 'number') add('Temperature', `${ai.temperature}`);
+    if (typeof ai.ragEnabled === 'boolean') add('RAG', ai.ragEnabled ? 'On' : 'Off');
+    const knowledgeItemIds = Array.isArray(node.knowledgeItemIds) ? node.knowledgeItemIds : [];
+    if (knowledgeItemIds.length > 0) add('Knowledge items', `${knowledgeItemIds.length}`);
+  } else if (nodeType === 'langchain_agent') {
+    const tools = Array.isArray(node.langchainTools) ? node.langchainTools.filter((tool: any) => tool?.name) : [];
+    if (tools.length > 0) add('Tools', `${tools.length}`);
+    add('End condition', truncateText(node.langchainEndCondition, 120));
+    add('Stop condition', truncateText(node.langchainStopCondition, 120));
+    if (typeof node.langchainMaxIterations === 'number') add('Max iterations', `${node.langchainMaxIterations}`);
+    if (typeof node.langchainToolChoice === 'string') add('Tool choice', node.langchainToolChoice);
     const ai = node.aiSettings || {};
     add('Model', ai.model);
     add('Reasoning', ai.reasoningEffort);
@@ -352,7 +371,7 @@ const formatPreviewConversation = (conversation: any) => ({
 
 const buildCurrentNodeSummary = (session: any, versionDoc: any) => {
   if (!session || !versionDoc) return null;
-  const nodeId = session.state?.nodeId || session.state?.agent?.nodeId;
+  const nodeId = session.state?.nodeId || session.state?.agent?.nodeId || session.state?.langchainAgent?.nodeId;
   const compiledGraph = versionDoc?.compiled?.graph || versionDoc?.compiled;
   const nodes = Array.isArray(compiledGraph?.nodes) ? compiledGraph.nodes : [];
   let node = nodeId ? nodes.find((candidate: any) => candidate?.id === nodeId) : undefined;

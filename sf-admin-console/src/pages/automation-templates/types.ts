@@ -90,6 +90,7 @@ export type FlowNodeType =
   | 'send_message'
   | 'ai_reply'
   | 'ai_agent'
+  | 'langchain_agent'
   | 'handoff'
   | 'router'
 
@@ -146,6 +147,12 @@ export type FlowAgentSlot = {
   defaultValue?: string
 }
 
+export type FlowLangchainTool = {
+  name: string
+  description?: string
+  inputSchema?: Record<string, any> | string
+}
+
 export type FlowTriggerConfig = {
   keywords?: string[]
   excludeKeywords?: string[]
@@ -187,6 +194,13 @@ export type FlowNode = Node<FlowNodeData> & {
   agentStopCondition?: string
   agentMaxQuestions?: number
   agentSlots?: FlowAgentSlot[]
+  langchainSystemPrompt?: string
+  langchainTools?: FlowLangchainTool[]
+  langchainEndCondition?: string
+  langchainStopCondition?: string
+  langchainMaxIterations?: number
+  langchainToolChoice?: 'auto' | 'required' | 'none'
+  langchainReturnIntermediateSteps?: boolean
   knowledgeItemIds?: string[]
   burstBufferSeconds?: number
   handoff?: {
