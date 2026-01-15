@@ -16,7 +16,6 @@ import type { TriggerType } from '../types/automation';
 import {
   executePreviewFlowForInstance,
   maybeBufferAutomationMessage,
-  resolveBurstBufferSecondsForAutomation,
   resolveNodeBurstBufferSecondsForSession,
   resolveLatestTemplateVersion,
   resolveAutomationSelection,
@@ -957,13 +956,7 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
         version: selectedVersion,
       })
       : 0;
-    const bufferSeconds = nodeBufferSeconds > 0
-      ? nodeBufferSeconds
-      : resolveBurstBufferSecondsForAutomation({
-        instance: selectedInstance,
-        version: selectedVersion,
-        triggerType: resolvedTriggerType as TriggerType,
-      });
+    const bufferSeconds = nodeBufferSeconds > 0 ? nodeBufferSeconds : 0;
     if (resolvedTriggerType === 'dm_message' && bufferSeconds > 0) {
       const bufferResult = await maybeBufferAutomationMessage({
         workspaceId,
