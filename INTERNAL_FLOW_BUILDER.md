@@ -89,6 +89,7 @@ Supported node types:
 - `ai_reply`
 - `ai_agent`
 - `handoff`
+- `router`
 
 ## Node Payloads + Graph Defaults
 
@@ -96,6 +97,8 @@ Common optional fields (all nodes):
 - `logEnabled`: set `false` to suppress per-node runtime logs (defaults to true).
 - `waitForReply`: stop execution after the node and persist the next pointer in session state.
 - `next`: manual pointer for legacy step graphs (still supported).
+- `burstBufferSeconds`: delay reply execution for DM burst buffering.
+- `rateLimit`: per-node rate limit override for AI nodes.
 
 Per-node fields:
 - `trigger`: `triggerType`, `triggerDescription`, `triggerConfig` (keywords, intent text, etc).
@@ -105,10 +108,71 @@ Per-node fields:
 - `ai_agent`: `agentSystemPrompt`, `agentSteps[]`, `agentEndCondition`, `agentStopCondition`, `agentMaxQuestions`,
   `agentSlots[]` (key/question/defaultValue), plus `aiSettings` + `knowledgeItemIds`.
 - `handoff`: `handoff` object with `topic`, `summary`, `recommendedNextAction`, `message`.
+- `router`: `routing` rules (match mode + per-edge rules) resolved from the builder UI.
 
 Graph-level defaults:
 - `aiSettings`: default AI settings applied before per-node overrides.
 - `rateLimit`: rate limit applied per step unless overridden by node-level `rateLimit`.
+
+## Flow Builder Capabilities (Current)
+
+The internal builder is a React Flow canvas with:
+- Node palette, inspector panel, and a DSL panel for visibility into the underlying graph.
+- Start node designation and trigger editing (type, description, keyword/intent matching).
+- Node-level logging toggle, wait-for-reply, and burst buffer controls.
+- AI node configuration: model, temperature, reasoning effort, history limit, max tokens, and knowledge base pinning.
+- AI agent configuration: system prompt, step list, end/stop conditions, max questions, and slot collection fields.
+- Handoff configuration: topic, summary, message, recommended next action.
+- Router configuration: rule-based branching (match mode + route rules).
+- Global automation intentions management for intent detection and router conditions.
+
+These capabilities are surfaced in `sf-admin-console/src/pages/AutomationTemplates.tsx` and wired to the DSL
+structure described in this document.
+
+## Node Reference (Detailed)
+
+### `trigger`
+- Defines how automations are started; the start node’s trigger is used at runtime.
+- `triggerType` defaults to `dm_message` if unset.
+- `triggerConfig` can include keyword and intent matching plus advanced filters.
+
+### `detect_intent`
+- Runs intent detection against the global `AutomationIntent` list.
+- Stores `vars.detectedIntent` and feeds router conditions.
+- Supports `intentSettings` overrides for model, temperature, reasoning effort.
+
+### `send_message`
+- Sends a static message using `text`/`message`.
+- Optional `buttons` and `tags`.
+- Respects `waitForReply` and `burstBufferSeconds`.
+
+### `ai_reply`
+- Generates a single AI response with `aiSettings` overrides + knowledge base pinning.
+- Uses shared AI context (history + summary) across all AI nodes.
+- Respects `rateLimit`, `burstBufferSeconds`, and `waitForReply` behaviors.
+
+### `ai_agent`
+- Multi-turn agent loop with step-by-step progression.
+- `agentSteps` define the checklist; `agentEndCondition` gates completion; `agentStopCondition` can end early.
+- `agentSlots` defines required data to collect; values are stored in session state and `vars`.
+- Respects AI settings and knowledge base pinning.
+- Updates runtime vars (`vars.agentStepIndex`, `vars.agentSlots`, etc.) and persists agent progress.
+
+### `router`
+- Branches execution using routing rules defined in the builder.
+- Uses runtime variables (including `vars.detectedIntent`) for rule evaluation.
+- Edge ordering/positioning is preserved in the compiled graph for UI consistency.
+
+### `handoff`
+- Escalates to a human agent and can optionally send a handoff message.
+- Marks conversations as needing human attention and creates a ticket.
+
+## Runtime Behaviors Worth Noting
+
+- **Burst buffering:** DM burst buffering can delay AI reply execution per node (`burstBufferSeconds`).
+- **Rate limits:** per-node `rateLimit` overrides graph defaults for AI nodes.
+- **Preview mode:** preview runs record meta events for UI display and do not persist side effects.
+- **Logging:** node-level logging can be disabled with `logEnabled=false`.
 
 ## Trigger Handling (Important)
 
