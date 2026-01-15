@@ -12,8 +12,12 @@ import WorkspaceSettings from '../models/WorkspaceSettings';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { getAdminLogEvents } from '../services/adminLogEventService';
+import type { TriggerType } from '../types/automation';
 import {
   executePreviewFlowForInstance,
+  maybeBufferAutomationMessage,
+  resolveBurstBufferSecondsForAutomation,
+  resolveNodeBurstBufferSecondsForSession,
   resolveLatestTemplateVersion,
   resolveAutomationSelection,
 } from '../services/automationService';
@@ -177,7 +181,12 @@ const buildNodeSummary = (node: any, options: {
     summary.push({ label, value: trimmed });
   };
 
-  const previewCandidate = node.text ?? node.message ?? node.agentSystemPrompt ?? node.handoff?.message ?? node.handoff?.summary;
+  const previewCandidate = node.text
+    ?? node.message
+    ?? node.agentSystemPrompt
+    ?? node.langchainSystemPrompt
+    ?? node.handoff?.message
+    ?? node.handoff?.summary;
   const preview = truncateText(previewCandidate, 180);
 
   if (typeof node.waitForReply === 'boolean') {
@@ -201,6 +210,9 @@ const buildNodeSummary = (node: any, options: {
     const ai = node.aiSettings || {};
     add('Model', ai.model);
     add('Reasoning', ai.reasoningEffort);
+    if (typeof node.burstBufferSeconds === 'number' && node.burstBufferSeconds > 0) {
+      add('Reply buffer', `${node.burstBufferSeconds}s`);
+    }
     if (typeof ai.temperature === 'number') add('Temperature', `${ai.temperature}`);
     if (typeof ai.maxOutputTokens === 'number') add('Max tokens', `${ai.maxOutputTokens}`);
     if (typeof ai.historyLimit === 'number') add('History', `${ai.historyLimit}`);
@@ -212,12 +224,29 @@ const buildNodeSummary = (node: any, options: {
     if (steps.length > 0) add('Steps', `${steps.length}`);
     add('End condition', truncateText(node.agentEndCondition, 120));
     add('Stop condition', truncateText(node.agentStopCondition, 120));
+    if (typeof node.burstBufferSeconds === 'number' && node.burstBufferSeconds > 0) {
+      add('Reply buffer', `${node.burstBufferSeconds}s`);
+    }
     if (typeof node.agentMaxQuestions === 'number') add('Max questions', `${node.agentMaxQuestions}`);
     const slots = Array.isArray(node.agentSlots) ? node.agentSlots : [];
     if (slots.length > 0) {
       const keys = slots.map((slot: any) => slot?.key).filter(Boolean);
       add('Slots', formatList(keys, 4) || `${slots.length}`);
     }
+    const ai = node.aiSettings || {};
+    add('Model', ai.model);
+    add('Reasoning', ai.reasoningEffort);
+    if (typeof ai.temperature === 'number') add('Temperature', `${ai.temperature}`);
+    if (typeof ai.ragEnabled === 'boolean') add('RAG', ai.ragEnabled ? 'On' : 'Off');
+    const knowledgeItemIds = Array.isArray(node.knowledgeItemIds) ? node.knowledgeItemIds : [];
+    if (knowledgeItemIds.length > 0) add('Knowledge items', `${knowledgeItemIds.length}`);
+  } else if (nodeType === 'langchain_agent') {
+    const tools = Array.isArray(node.langchainTools) ? node.langchainTools.filter((tool: any) => tool?.name) : [];
+    if (tools.length > 0) add('Tools', `${tools.length}`);
+    add('End condition', truncateText(node.langchainEndCondition, 120));
+    add('Stop condition', truncateText(node.langchainStopCondition, 120));
+    if (typeof node.langchainMaxIterations === 'number') add('Max iterations', `${node.langchainMaxIterations}`);
+    if (typeof node.langchainToolChoice === 'string') add('Tool choice', node.langchainToolChoice);
     const ai = node.aiSettings || {};
     add('Model', ai.model);
     add('Reasoning', ai.reasoningEffort);
@@ -342,7 +371,7 @@ const formatPreviewConversation = (conversation: any) => ({
 
 const buildCurrentNodeSummary = (session: any, versionDoc: any) => {
   if (!session || !versionDoc) return null;
-  const nodeId = session.state?.nodeId || session.state?.agent?.nodeId;
+  const nodeId = session.state?.nodeId || session.state?.agent?.nodeId || session.state?.langchainAgent?.nodeId;
   const compiledGraph = versionDoc?.compiled?.graph || versionDoc?.compiled;
   const nodes = Array.isArray(compiledGraph?.nodes) ? compiledGraph.nodes : [];
   let node = nodeId ? nodes.find((candidate: any) => candidate?.id === nodeId) : undefined;
@@ -479,18 +508,33 @@ const buildPreviewConversation = async (params: {
   });
 };
 
+const getPreviewSentAt = (message: Record<string, any>) => {
+  const raw = message?.metadata?.previewSentAt;
+  if (raw) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return message.createdAt;
+};
+
 const formatPreviewMessages = (messages: Array<Record<string, any>>) =>
   messages.map((message) => ({
     id: message._id?.toString(),
     text: message.text,
     from: message.from,
-    createdAt: message.createdAt,
+    createdAt: getPreviewSentAt(message),
   }));
 
 const loadPreviewMessages = async (conversationId: mongoose.Types.ObjectId | string) => {
-  const messages = await Message.find({ conversationId })
-    .sort({ createdAt: 1 })
-    .lean();
+  const messages = await Message.find({ conversationId }).lean();
+  messages.sort((a, b) => {
+    const aTime = getPreviewSentAt(a).getTime();
+    const bTime = getPreviewSentAt(b).getTime();
+    if (aTime !== bTime) return aTime - bTime;
+    return String(a._id).localeCompare(String(b._id));
+  });
   return formatPreviewMessages(messages);
 };
 
@@ -725,7 +769,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
 
 router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { workspaceId, text, triggerType, persona, profileId, sessionId, reset } = req.body || {};
+    const { workspaceId, text, triggerType, persona, profileId, sessionId, reset, clientSentAt } = req.body || {};
     if (!workspaceId || typeof workspaceId !== 'string') {
       return res.status(400).json({ error: 'workspaceId is required' });
     }
@@ -825,18 +869,84 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
         : undefined,
     };
 
+    const previewSentAt = typeof clientSentAt === 'string' ? new Date(clientSentAt) : null;
+    const previewMetadata = previewSentAt && !Number.isNaN(previewSentAt.getTime())
+      ? { previewSentAt }
+      : undefined;
     const customerMessage = await Message.create({
       conversationId: conversation._id,
       workspaceId: conversation.workspaceId,
       text: trimmedText,
       from: 'customer',
       platform: 'mock',
+      metadata: previewMetadata,
     });
 
     conversation.lastMessage = customerMessage.text;
     conversation.lastMessageAt = customerMessage.createdAt;
     conversation.lastCustomerMessageAt = customerMessage.createdAt;
     await conversation.save();
+
+    const nodeBufferSeconds = activePreviewSession && !reset
+      ? await resolveNodeBurstBufferSecondsForSession({
+        session,
+        instance: selectedInstance,
+        version: selectedVersion,
+      })
+      : 0;
+    const bufferSeconds = nodeBufferSeconds > 0
+      ? nodeBufferSeconds
+      : resolveBurstBufferSecondsForAutomation({
+        instance: selectedInstance,
+        version: selectedVersion,
+        triggerType: resolvedTriggerType as TriggerType,
+      });
+    if (resolvedTriggerType === 'dm_message' && bufferSeconds > 0) {
+      const bufferResult = await maybeBufferAutomationMessage({
+        workspaceId,
+        conversationId: conversation._id.toString(),
+        instagramAccountId: instagramAccountId.toString(),
+        triggerType: 'dm_message',
+        messageText: trimmedText,
+        platform: 'mock',
+        messageContext,
+        source: 'simulate',
+        sessionId: session._id?.toString(),
+        bufferSeconds,
+        bufferStartedAt: customerMessage.createdAt,
+      });
+      if (bufferResult.buffered) {
+        appendPreviewEvent(session, {
+          type: 'info',
+          message: `Buffered DM burst for ${bufferSeconds}s`,
+          createdAt: new Date(),
+          details: {
+            bufferId: bufferResult.bufferId,
+            bufferSeconds,
+          },
+        });
+        session.markModified('state');
+        await session.save();
+        const payload = await buildPreviewSessionPayload(session, conversation, {
+          includeEvents: await canViewExecutionTimeline(workspaceId),
+        });
+        const previewMessages = conversation
+          ? (await loadPreviewMessages(conversation._id)).filter((message) => message.from === 'ai')
+          : [];
+
+        return res.json({
+          success: true,
+          buffered: true,
+          sessionId: session._id,
+          conversationId: conversation._id,
+          status: session.status,
+          messages: previewMessages,
+          ...payload,
+          selectedAutomation: meta.selectedAutomation,
+          diagnostics,
+        });
+      }
+    }
 
     const result = await executePreviewFlowForInstance({
       instance: selectedInstance,

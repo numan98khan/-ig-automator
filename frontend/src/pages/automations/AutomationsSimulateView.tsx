@@ -72,6 +72,18 @@ const mergePreviewMessages = (
   incoming?: AutomationPreviewMessage[],
 ) => {
   if (!incoming || incoming.length === 0) return existing;
+  const optimisticPrefix = 'sim-';
+  const optimisticWindowMs = 4000;
+  const isOptimistic = (message: AutomationPreviewMessage) => message.id?.startsWith(optimisticPrefix);
+  const isLikelyDuplicate = (optimistic: AutomationPreviewMessage, candidate: AutomationPreviewMessage) => {
+    if (optimistic.from !== 'customer' || candidate.from !== 'customer') return false;
+    if (optimistic.text !== candidate.text) return false;
+    if (isOptimistic(candidate)) return false;
+    if (!optimistic.createdAt || !candidate.createdAt) return false;
+    const optimisticTime = new Date(optimistic.createdAt).getTime();
+    const candidateTime = new Date(candidate.createdAt).getTime();
+    return Math.abs(optimisticTime - candidateTime) <= optimisticWindowMs;
+  };
   let tempCounter = 0;
   const order: string[] = [];
   const items = new Map<string, AutomationPreviewMessage>();
@@ -85,11 +97,18 @@ const mergePreviewMessages = (
   existing.forEach(upsert);
   incoming.forEach(upsert);
   const merged = order.map((key) => items.get(key)).filter(Boolean) as AutomationPreviewMessage[];
-  if (merged.length <= 1) return merged;
-  const decorated = merged.map((message, index) => ({
+  const deduped = merged.filter((message) => {
+    if (!isOptimistic(message) || message.from !== 'customer') {
+      return true;
+    }
+    return !merged.some((candidate) => isLikelyDuplicate(message, candidate));
+  });
+  if (deduped.length <= 1) return deduped;
+  const decorated = deduped.map((message, index) => ({
     message,
     index,
     timestamp: message.createdAt ? new Date(message.createdAt as string).getTime() : null,
+    key: message.id || `idx-${index}`,
   }));
   decorated.sort((a, b) => {
     if (a.timestamp !== null && b.timestamp !== null && a.timestamp !== b.timestamp) {
@@ -97,6 +116,7 @@ const mergePreviewMessages = (
     }
     if (a.timestamp !== null && b.timestamp === null) return -1;
     if (a.timestamp === null && b.timestamp !== null) return 1;
+    if (a.key !== b.key) return a.key.localeCompare(b.key);
     return a.index - b.index;
   });
   return decorated.map((entry) => entry.message);
@@ -117,7 +137,6 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   const [previewSessionStatus, setPreviewSessionStatus] = useState<
     'active' | 'paused' | 'completed' | 'handoff' | null
   >(null);
-  const [previewSending, setPreviewSending] = useState(false);
   const [previewState, setPreviewState] = useState<AutomationPreviewSessionState>({
     session: null,
     conversation: null,
@@ -214,7 +233,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     }
   }, []);
 
-  const scheduleSimulationRefresh = useCallback((baselineIds: Set<string>, remainingAttempts = 6) => {
+  const scheduleSimulationRefresh = useCallback((baselineIds: Set<string>, remainingAttempts = 15) => {
     if (!workspaceId || remainingAttempts <= 0) {
       clearRefreshTimer();
       return;
@@ -383,13 +402,13 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
 
     clearRefreshTimer();
     setError(null);
-    setPreviewSending(true);
     const baselineIds = new Set(previewMessages.map((message) => message.id).filter(Boolean));
+    const clientSentAt = new Date().toISOString();
     const optimisticMessage: AutomationPreviewMessage = {
       id: `sim-${Date.now()}`,
       from: 'customer',
       text: trimmed,
-      createdAt: new Date().toISOString(),
+      createdAt: clientSentAt,
     };
     setPreviewMessages((prev) => [...prev, optimisticMessage]);
     setPreviewInputValue('');
@@ -403,6 +422,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
         reset: resetRequested,
         profileId: selectedProfileId || undefined,
         persona: selectedProfileId ? undefined : personaDraft,
+        clientSentAt,
       });
       const { messages, ...rest } = response;
       applyPreviewPayload(rest);
@@ -423,8 +443,6 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
     } catch (err) {
       console.error('Simulator message error:', err);
       setError('Failed to send simulation message.');
-    } finally {
-      setPreviewSending(false);
     }
   };
 
@@ -538,9 +556,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   const triggerLabel = selectedAutomation?.trigger?.label || selectedAutomation?.trigger?.type;
   const diagnosticList = useMemo(() => diagnostics.slice(0, 6), [diagnostics]);
 
-  const sendDisabled =
-    previewSending ||
-    previewInputValue.trim().length === 0;
+  const sendDisabled = previewInputValue.trim().length === 0;
 
   const renderTestConsole = () => (
     <Card className="flex flex-col min-h-0 h-full">

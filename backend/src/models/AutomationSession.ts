@@ -21,6 +21,12 @@ export interface IAutomationSession extends Document {
       slots?: Record<string, string>;
       questionsAsked?: number;
     };
+    langchainAgent?: {
+      nodeId?: string;
+      iteration?: number;
+      lastActionSummary?: string;
+      lastToolCalls?: Array<{ name: string; input?: Record<string, any>; rationale?: string }>;
+    };
     previewMeta?: {
       events?: Array<{
         id?: string;

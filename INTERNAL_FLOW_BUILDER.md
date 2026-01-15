@@ -88,7 +88,9 @@ Supported node types:
 - `send_message`
 - `ai_reply`
 - `ai_agent`
+- `langchain_agent`
 - `handoff`
+- `router`
 
 ## Node Payloads + Graph Defaults
 
@@ -96,6 +98,8 @@ Common optional fields (all nodes):
 - `logEnabled`: set `false` to suppress per-node runtime logs (defaults to true).
 - `waitForReply`: stop execution after the node and persist the next pointer in session state.
 - `next`: manual pointer for legacy step graphs (still supported).
+- `burstBufferSeconds`: delay reply execution for DM burst buffering.
+- `rateLimit`: per-node rate limit override for AI nodes.
 
 Per-node fields:
 - `trigger`: `triggerType`, `triggerDescription`, `triggerConfig` (keywords, intent text, etc).
@@ -104,11 +108,83 @@ Per-node fields:
 - `ai_reply`: `aiSettings`, `knowledgeItemIds` (optional RAG pinning).
 - `ai_agent`: `agentSystemPrompt`, `agentSteps[]`, `agentEndCondition`, `agentStopCondition`, `agentMaxQuestions`,
   `agentSlots[]` (key/question/defaultValue), plus `aiSettings` + `knowledgeItemIds`.
+- `langchain_agent`: `langchainSystemPrompt`, `langchainTools[]`, `langchainEndCondition`, `langchainStopCondition`,
+  `langchainMaxIterations`, `langchainToolChoice`, `langchainReturnIntermediateSteps`, plus `aiSettings` + `knowledgeItemIds`.
 - `handoff`: `handoff` object with `topic`, `summary`, `recommendedNextAction`, `message`.
+- `router`: `routing` rules (match mode + per-edge rules) resolved from the builder UI.
 
 Graph-level defaults:
 - `aiSettings`: default AI settings applied before per-node overrides.
 - `rateLimit`: rate limit applied per step unless overridden by node-level `rateLimit`.
+
+## Flow Builder Capabilities (Current)
+
+The internal builder is a React Flow canvas with:
+- Node palette, inspector panel, and a DSL panel for visibility into the underlying graph.
+- Start node designation and trigger editing (type, description, keyword/intent matching).
+- Node-level logging toggle, wait-for-reply, and burst buffer controls.
+- AI node configuration: model, temperature, reasoning effort, history limit, max tokens, and knowledge base pinning.
+- AI agent configuration: system prompt, step list, end/stop conditions, max questions, and slot collection fields.
+- LangChain agent configuration: system prompt, tools list, end/stop conditions, max iterations, tool choice, and optional intermediate steps.
+- Handoff configuration: topic, summary, message, recommended next action.
+- Router configuration: rule-based branching (match mode + route rules).
+- Global automation intentions management for intent detection and router conditions.
+
+These capabilities are surfaced in `sf-admin-console/src/pages/AutomationTemplates.tsx` and wired to the DSL
+structure described in this document.
+
+## Node Reference (Detailed)
+
+### `trigger`
+- Defines how automations are started; the start node’s trigger is used at runtime.
+- `triggerType` defaults to `dm_message` if unset.
+- `triggerConfig` can include keyword and intent matching plus advanced filters.
+
+### `detect_intent`
+- Runs intent detection against the global `AutomationIntent` list.
+- Stores `vars.detectedIntent` and feeds router conditions.
+- Supports `intentSettings` overrides for model, temperature, reasoning effort.
+
+### `send_message`
+- Sends a static message using `text`/`message`.
+- Optional `buttons` and `tags`.
+- Respects `waitForReply` and `burstBufferSeconds`.
+
+### `ai_reply`
+- Generates a single AI response with `aiSettings` overrides + knowledge base pinning.
+- Uses shared AI context (history + summary) across all AI nodes.
+- Respects `rateLimit`, `burstBufferSeconds`, and `waitForReply` behaviors.
+
+### `ai_agent`
+- Multi-turn agent loop with step-by-step progression.
+- `agentSteps` define the checklist; `agentEndCondition` gates completion; `agentStopCondition` can end early.
+- `agentSlots` defines required data to collect; values are stored in session state and `vars`.
+- Respects AI settings and knowledge base pinning.
+- Updates runtime vars (`vars.agentStepIndex`, `vars.agentSlots`, etc.) and persists agent progress.
+
+### `langchain_agent`
+- Tool-aware agent loop designed for configurable tool use and iterative decisions.
+- `langchainTools` defines tool metadata; inputs are provided via structured JSON.
+- `langchainToolChoice` controls whether tools are optional, required, or disabled.
+- `langchainMaxIterations` bounds multi-turn looping; `langchainEndCondition` and `langchainStopCondition`
+  control completion/early exit.
+- Respects AI settings and knowledge base pinning and stores progress in session state.
+
+### `router`
+- Branches execution using routing rules defined in the builder.
+- Uses runtime variables (including `vars.detectedIntent`) for rule evaluation.
+- Edge ordering/positioning is preserved in the compiled graph for UI consistency.
+
+### `handoff`
+- Escalates to a human agent and can optionally send a handoff message.
+- Marks conversations as needing human attention and creates a ticket.
+
+## Runtime Behaviors Worth Noting
+
+- **Burst buffering:** DM burst buffering can delay AI reply execution per node (`burstBufferSeconds`).
+- **Rate limits:** per-node `rateLimit` overrides graph defaults for AI nodes.
+- **Preview mode:** preview runs record meta events for UI display and do not persist side effects.
+- **Logging:** node-level logging can be disabled with `logEnabled=false`.
 
 ## Trigger Handling (Important)
 
@@ -138,6 +214,7 @@ Trigger config supports:
 - mode (`triggerMode`: `keywords`, `categories`, `any`, `intent`)
 - intent matcher (`intentText`)
 - extra filters (business hours, categories, link/attachment) via DSL only for now
+- DM burst buffer (`burstBufferSeconds`) to delay automation execution and coalesce inbound DM messages
 
 Current UI does not expose advanced trigger config (filter JSON). If needed, add UI + persist into the trigger definition.
 
@@ -154,6 +231,8 @@ Template variables:
 - Runtime variables live under `vars.*` (ex: `{{ vars.detectedIntent }}`) and are resolved per message.
 - AI agent nodes also populate `vars.agentStepIndex`, `vars.agentStep`, `vars.agentDone`, `vars.agentStepSummary`,
   `vars.agentSlots`, `vars.agentMissingSlots`, and `vars.agentQuestionsAsked`.
+- LangChain agent nodes populate `vars.langchainIteration`, `vars.langchainDone`, `vars.langchainToolCalls`,
+  and `vars.langchainActionSummary`.
 
 ## Compilation + Publish
 
@@ -193,6 +272,8 @@ Key points:
 - `detect_intent` runs intent detection against the global AutomationIntent list and stores the output in `session.state.vars.detectedIntent`.
 - `ai_agent` runs a multi-turn agent loop using its own system prompt, steps, end condition, and stop condition. It persists
   progress + slot values in session state and keeps the node active until the end condition or stop condition is met (or max questions is reached).
+- `langchain_agent` runs a tool-aware agent loop, persists iteration state, and keeps the node active until end/stop conditions
+  are met or max iterations is reached.
 - `trigger` nodes are ignored at execution (they only define entry criteria).
 - State persists via `buildNextState` and `AutomationSession`.
 - Node-level logging is supported via `logEnabled` on each node. If `logEnabled` is explicitly `false`, node start/complete logging is suppressed; otherwise logs are emitted.
@@ -203,7 +284,7 @@ Key points:
 ### AI Context (History + Summary)
 
 Automation runs create a shared AI context for the full execution:
-- Message history and summaries are built once per run and reused by `ai_reply` and `ai_agent` nodes.
+- Message history and summaries are built once per run and reused by `ai_reply`, `ai_agent`, and `langchain_agent` nodes.
 - Node-level `messageHistory` is no longer used; AI nodes consume the shared context instead.
 - History window size and summary expiry are configurable via automation config:
   - `aiHistoryWindow` (default: 10, min: 1, max: 50)

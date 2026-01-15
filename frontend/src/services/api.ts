@@ -434,6 +434,7 @@ export interface TriggerConfig {
     link?: boolean;
     attachment?: boolean;
   };
+  burstBufferSeconds?: number;
 }
 
 export interface AutomationStats {
@@ -1182,6 +1183,7 @@ export const automationAPI = {
     reset?: boolean;
     profileId?: string;
     persona?: AutomationPreviewPersona;
+    clientSentAt?: string;
   }): Promise<AutomationSimulationResponse> => {
     const { data } = await api.post('/api/automations/simulate/message', payload);
     return data;

@@ -5,10 +5,12 @@ import InstagramAccount from '../models/InstagramAccount';
 import FollowupTask from '../models/FollowupTask';
 import AutomationInstance from '../models/AutomationInstance';
 import AutomationSession from '../models/AutomationSession';
+import AutomationMessageBuffer from '../models/AutomationMessageBuffer';
 import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import { generateAIReply, generateConversationSummary } from './aiReplyService';
 import { generateAIAgentReply } from './aiAgentService';
+import { generateLangchainAgentReply } from './langchainAgentService';
 import {
   sendMessage as sendInstagramMessage,
   sendButtonMessage,
@@ -90,8 +92,16 @@ type FlowRuntimeStep = {
   agentStopCondition?: string;
   agentMaxQuestions?: number;
   agentSlots?: Array<{ key: string; question?: string; defaultValue?: string }>;
+  langchainSystemPrompt?: string;
+  langchainTools?: Array<{ name: string; description?: string; inputSchema?: Record<string, any> }>;
+  langchainEndCondition?: string;
+  langchainStopCondition?: string;
+  langchainMaxIterations?: number;
+  langchainToolChoice?: 'auto' | 'required' | 'none';
+  langchainReturnIntermediateSteps?: boolean;
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
+  burstBufferSeconds?: number;
   next?: string;
   logEnabled?: boolean;
   handoff?: {
@@ -152,6 +162,7 @@ type AiAutomationContext = {
 
 const DEFAULT_AI_HISTORY_WINDOW = 10;
 const DEFAULT_AI_SUMMARY_EXPIRY_HOURS = 48;
+const MAX_BURST_BUFFER_SECONDS = 120;
 const MAX_AI_SUMMARY_CHARS = 1200;
 const MAX_AI_SUMMARY_ENTRY_CHARS = 240;
 
@@ -685,6 +696,83 @@ const normalizeConfigNumber = (
   return fallback;
 };
 
+const normalizeBurstBufferSeconds = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return clampNumber(value, 0, MAX_BURST_BUFFER_SECONDS);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return clampNumber(parsed, 0, MAX_BURST_BUFFER_SECONDS);
+    }
+  }
+  return 0;
+};
+
+const resolveBurstBufferSeconds = (triggers: FlowTriggerDefinition[] | undefined, triggerType: TriggerType): number => {
+  if (!Array.isArray(triggers)) return 0;
+  const trigger = triggers.find((item) => item.type === triggerType);
+  if (!trigger?.config) return 0;
+  const value = normalizeBurstBufferSeconds(trigger.config.burstBufferSeconds);
+  return value > 0 ? value : 0;
+};
+
+const resolveNodeBurstBufferSeconds = (step?: FlowRuntimeStep): number => {
+  if (!step) return 0;
+  const stepType = normalizeStepType(step);
+  if (stepType !== 'ai_reply' && stepType !== 'ai_agent' && stepType !== 'langchain_agent') return 0;
+  const value = normalizeBurstBufferSeconds(step.burstBufferSeconds);
+  return value > 0 ? value : 0;
+};
+
+const resolveNodeBurstBufferSecondsForSessionState = (
+  session: any,
+  runtime: { graph: FlowRuntimeGraph } | null,
+): number => {
+  if (!session || !runtime?.graph) return 0;
+  const plan = buildExecutionPlan(runtime.graph);
+  if (!plan) return 0;
+  let step: FlowRuntimeStep | undefined;
+  if (plan.mode === 'steps') {
+    const index = typeof session.state?.stepIndex === 'number'
+      ? session.state.stepIndex
+      : (plan.startIndex || 0);
+    step = plan.steps[index];
+  } else {
+    const nodeId = session.state?.nodeId || plan.startNodeId;
+    if (nodeId) {
+      step = plan.nodeMap?.get(nodeId) || plan.steps.find((candidate) => candidate.id === nodeId);
+    } else if (Array.isArray(session.state?.nodeQueue) && session.state.nodeQueue.length > 0) {
+      const queuedId = session.state.nodeQueue[0];
+      if (typeof queuedId === 'string') {
+        step = plan.nodeMap?.get(queuedId) || plan.steps.find((candidate) => candidate.id === queuedId);
+      }
+    }
+  }
+  return resolveNodeBurstBufferSeconds(step);
+};
+
+const buildMessageContextFromMessages = (
+  messages: Array<Pick<IMessage, 'text' | 'attachments' | 'linkPreview'>>,
+) => {
+  const attachmentUrls = messages.flatMap((message) =>
+    Array.isArray(message.attachments)
+      ? message.attachments.map((attachment) => attachment.url).filter(Boolean)
+      : [],
+  );
+  const linkPreviewUrl = messages.find((message) => message.linkPreview?.url)?.linkPreview?.url;
+  const hasLink = Boolean(
+    linkPreviewUrl || messages.some((message) => /https?:\/\/\S+/i.test(message.text || '')),
+  );
+
+  return {
+    hasLink,
+    hasAttachment: attachmentUrls.length > 0,
+    linkUrl: linkPreviewUrl,
+    attachmentUrls: attachmentUrls.length > 0 ? attachmentUrls : undefined,
+  };
+};
+
 const truncateSummaryEntry = (value: string, maxLength: number) => {
   const trimmed = value.trim();
   if (!trimmed) return '';
@@ -756,6 +844,7 @@ export const resolveLatestTemplateVersion = async (params: {
   }
   return null;
 };
+
 
 function buildEffectiveUserConfig(
   exposedFields: FlowExposedField[] | undefined,
@@ -954,6 +1043,43 @@ const resolveFlowRuntime = (version: any, instance: any) => {
   };
 };
 
+const resolveBurstBufferSecondsForMessage = async (params: {
+  workspaceId: string;
+  conversationId: string;
+  triggerType: TriggerType;
+  messageText?: string;
+  messageContext?: AutomationTestContext;
+}): Promise<number> => {
+  const { workspaceId, conversationId, triggerType, messageText, messageContext } = params;
+  const activeSession = await AutomationSession.findOne({
+    conversationId: new mongoose.Types.ObjectId(conversationId),
+    status: 'active',
+  }).sort({ updatedAt: -1 });
+
+  if (activeSession) {
+    const instance = await AutomationInstance.findById(activeSession.automationInstanceId);
+    if (!instance || !instance.isActive) return 0;
+    const version = await resolveLatestTemplateVersion({
+      templateId: instance.templateId,
+      fallbackVersionId: activeSession.templateVersionId || instance.templateVersionId,
+    });
+    if (!version) return 0;
+    const runtime = resolveFlowRuntime(version, instance);
+    const sessionBufferSeconds = resolveNodeBurstBufferSecondsForSessionState(activeSession, runtime);
+    if (sessionBufferSeconds > 0) return sessionBufferSeconds;
+    return resolveBurstBufferSeconds(runtime?.triggers, triggerType);
+  }
+
+  const selection = await resolveAutomationSelection({
+    workspaceId,
+    triggerType,
+    messageText: messageText || '',
+    messageContext,
+  });
+  if (!selection.match) return 0;
+  return resolveBurstBufferSeconds(selection.match.runtime?.triggers, triggerType);
+};
+
 const buildAiAutomationContext = async (params: {
   conversation: any;
   messageText?: string;
@@ -1044,7 +1170,7 @@ const buildExecutionPlan = (graph: FlowRuntimeGraph): ExecutionPlan | null => {
 
 const normalizeStepType = (
   step?: FlowRuntimeStep,
-): 'send_message' | 'ai_reply' | 'ai_agent' | 'handoff' | 'trigger' | 'detect_intent' | 'router' | 'unknown' => {
+): 'send_message' | 'ai_reply' | 'ai_agent' | 'langchain_agent' | 'handoff' | 'trigger' | 'detect_intent' | 'router' | 'unknown' => {
   const raw = (step?.type || '').toLowerCase();
   if (raw === 'send_message' || raw === 'message' || raw === 'send' || raw === 'reply') {
     return 'send_message';
@@ -1054,6 +1180,9 @@ const normalizeStepType = (
   }
   if (raw === 'ai_agent' || raw === 'agent') {
     return 'ai_agent';
+  }
+  if (raw === 'langchain_agent' || raw === 'langchain' || raw === 'lc_agent') {
+    return 'langchain_agent';
   }
   if (raw === 'handoff' || raw === 'escalate') {
     return 'handoff';
@@ -1883,6 +2012,9 @@ async function executeFlowPlan(params: {
     if (!('agent' in base) && session.state?.agent) {
       base.agent = session.state.agent;
     }
+    if (!('langchainAgent' in base) && session.state?.langchainAgent) {
+      base.langchainAgent = session.state.langchainAgent;
+    }
     if (!('previewMeta' in base) && session.state?.previewMeta) {
       base.previewMeta = session.state.previewMeta;
     }
@@ -1904,7 +2036,10 @@ async function executeFlowPlan(params: {
       ? session.state.stepIndex
       : (plan.startIndex || 0);
   } else {
-    nodeId = session.state?.nodeId || plan.startNodeId;
+    nodeId = session.state?.nodeId
+      || session.state?.agent?.nodeId
+      || session.state?.langchainAgent?.nodeId
+      || plan.startNodeId;
   }
 
   for (let i = 0; i < maxSteps; i += 1) {
@@ -2270,6 +2405,190 @@ async function executeFlowPlan(params: {
         forceWaitForReply = true;
         forcedNextNodeId = step.id;
       }
+    } else if (stepType === 'langchain_agent') {
+      if (rateLimit && !updateRateLimit(session, rateLimit)) {
+        return { success: false, error: 'Rate limit exceeded', sentCount, executedSteps };
+      }
+      await markTriggeredOnce();
+      if (!step.id) {
+        return { success: false, error: 'LangChain agent node missing id', sentCount, executedSteps };
+      }
+
+      const aiSettings = {
+        ...(plan.graph.aiSettings || {}),
+        ...(step.aiSettings || {}),
+      };
+      const workspaceId = conversation.workspaceId?.toString?.() || conversation.workspaceId;
+      let usageOwnerId: string | null = null;
+      if (!isPreviewMode && workspaceId) {
+        const usageCheck = await checkAiMessageAllowance(workspaceId);
+        if (!usageCheck.allowed) {
+          logAutomation('⚠️  [AUTOMATION] AI message limit reached', {
+            workspaceId,
+            limit: usageCheck.limit,
+            used: usageCheck.used,
+          });
+          return { success: false, error: 'AI message limit reached for this workspace', sentCount, executedSteps };
+        }
+        usageOwnerId = usageCheck.ownerId;
+      }
+
+      const langchainTools = Array.isArray(step.langchainTools)
+        ? step.langchainTools
+          .map((tool) => ({
+            name: typeof tool?.name === 'string' ? tool.name.trim() : '',
+            description: typeof tool?.description === 'string' ? tool.description.trim() : undefined,
+            inputSchema: tool?.inputSchema && typeof tool.inputSchema === 'object' ? tool.inputSchema : undefined,
+          }))
+          .filter((tool) => tool.name)
+        : [];
+      const storedAgent = session.state?.langchainAgent?.nodeId === step.id ? session.state.langchainAgent : {};
+      const iteration = typeof storedAgent?.iteration === 'number' ? storedAgent.iteration : 0;
+      const maxIterations = typeof step.langchainMaxIterations === 'number'
+        ? step.langchainMaxIterations
+        : undefined;
+      const maxIterationsReached = typeof maxIterations === 'number' ? iteration >= maxIterations : false;
+
+      const agentStart = nowMs();
+      const agentResult = await generateLangchainAgentReply({
+        conversation,
+        workspaceId: conversation.workspaceId,
+        latestCustomerMessage: messageText,
+        systemPrompt: step.langchainSystemPrompt,
+        tools: langchainTools,
+        endCondition: step.langchainEndCondition,
+        stopCondition: step.langchainStopCondition,
+        maxIterations,
+        iteration,
+        maxIterationsReached,
+        toolChoice: step.langchainToolChoice,
+        returnIntermediateSteps: step.langchainReturnIntermediateSteps,
+        aiSettings,
+        knowledgeItemIds: step.knowledgeItemIds,
+        conversationSummary: aiContext?.summaryForPrompt,
+        messageHistory: aiContext?.messageHistory,
+        historyLimit: aiContext?.historyWindow,
+      });
+      const agentDurationMs = Math.max(0, Math.round(nowMs() - agentStart));
+      logAutomationStep('flow_langchain_agent', agentStart, {
+        iteration,
+        shouldContinue: agentResult.shouldContinue,
+        shouldStop: agentResult.shouldStop,
+      });
+      logAdminEvent({
+        category: 'flow_node',
+        message: 'LangChain agent response generated',
+        details: {
+          ...(logContext || {}),
+          nodeId: step.id,
+          type: 'langchain_agent',
+          aiSettings,
+          replyPreview: agentResult.replyText?.slice(0, 500),
+          shouldContinue: agentResult.shouldContinue,
+          shouldStop: agentResult.shouldStop,
+          toolCalls: agentResult.toolCalls,
+          actionSummary: agentResult.actionSummary,
+          iteration,
+        },
+        workspaceId: resolveWorkspaceId(logContext),
+      });
+
+      if (!agentResult.replyText) {
+        return { success: false, error: 'LangChain agent reply missing', sentCount, executedSteps };
+      }
+
+      const adapter = deliveryAdapter || createDeliveryAdapter({ deliveryMode });
+      const message = await adapter.sendMessage({
+        conversation,
+        instance,
+        igAccount,
+        recipientId: conversation.participantInstagramId,
+        text: agentResult.replyText,
+        platform,
+        source: 'ai_reply',
+        trackStats,
+      });
+      if (aiContext) {
+        appendHistoryEntry(aiContext.messageHistory, {
+          from: 'ai',
+          text: agentResult.replyText,
+          attachments: [],
+          createdAt: message.createdAt || new Date(),
+        }, aiContext.historyWindow);
+        aiContext.summaryValue = appendSummaryLine(aiContext.summaryValue, 'AI', agentResult.replyText);
+        aiContext.summaryForPrompt = appendSummaryForPrompt(aiContext, 'AI', agentResult.replyText);
+        aiContext.summaryDirty = true;
+      }
+      if (isPreviewMode && onMessageSent) {
+        onMessageSent({
+          id: message._id?.toString() || '',
+          from: 'ai',
+          text: message.text || agentResult.replyText,
+          source: 'ai_reply',
+          createdAt: message.createdAt || new Date(),
+        });
+      }
+      sentCount += 1;
+      if (!isPreviewMode && usageOwnerId && workspaceId) {
+        await assertUsageLimit(usageOwnerId, 'aiMessages', 1, workspaceId);
+      }
+
+      const toolCalls = Array.isArray(agentResult.toolCalls) ? agentResult.toolCalls : [];
+      const nextIteration = iteration + 1;
+      const agentDone = Boolean(agentResult.shouldStop) || !agentResult.shouldContinue || maxIterationsReached;
+
+      if (deliveryMode === 'preview') {
+        const toolSummary = toolCalls.length > 0
+          ? toolCalls.slice(0, 3).map((call) => call.name).join(', ')
+          : '';
+        const detailParts = [];
+        if (toolSummary) detailParts.push(`tools: ${toolSummary}${toolCalls.length > 3 ? '…' : ''}`);
+        if (agentResult.actionSummary) detailParts.push(agentResult.actionSummary);
+        if (agentDone) detailParts.push('done');
+
+        appendPreviewMetaEvent(session, {
+          type: 'info',
+          message: `LangChain Agent${detailParts.length > 0 ? ` · ${detailParts.join(' · ')}` : ''}`,
+          details: {
+            nodeId: step.id,
+            type: stepType,
+            iteration,
+            toolCalls,
+            shouldContinue: agentResult.shouldContinue,
+            shouldStop: agentResult.shouldStop,
+            durationMs: agentDurationMs,
+          },
+        });
+      }
+
+      const nextVars = {
+        ...(session.state?.vars || {}),
+        langchainAgentNodeId: step.id,
+        langchainIteration: nextIteration,
+        langchainDone: agentDone,
+        langchainToolCalls: toolCalls,
+        langchainActionSummary: agentResult.actionSummary,
+      };
+
+      session.state = {
+        ...(session.state || {}),
+        vars: nextVars,
+      };
+
+      if (agentDone) {
+        if (session.state?.langchainAgent) {
+          delete session.state.langchainAgent;
+        }
+      } else {
+        session.state.langchainAgent = {
+          nodeId: step.id,
+          iteration: nextIteration,
+          lastActionSummary: agentResult.actionSummary,
+          lastToolCalls: toolCalls,
+        };
+        forceWaitForReply = true;
+        forcedNextNodeId = step.id;
+      }
     } else if (stepType === 'handoff') {
       await markTriggeredOnce();
       if (deliveryMode !== 'preview') {
@@ -2400,7 +2719,8 @@ async function executeFlowPlan(params: {
       nextNodeId = forcedNextNodeId;
     }
 
-    const shouldPause = forceWaitForReply || (step.waitForReply && stepType !== 'ai_agent');
+    const shouldPause = forceWaitForReply
+      || (step.waitForReply && stepType !== 'ai_agent' && stepType !== 'langchain_agent');
     if (shouldPause) {
       const hasNext = plan.mode === 'steps'
         ? (nextStepIndex !== undefined && Boolean(plan.steps[nextStepIndex]))
@@ -2689,6 +3009,110 @@ export async function executePreviewFlowForInstance(params: {
     : { success: false, error: result.error || 'Flow execution failed', messages: previewMessages };
 }
 
+export const resolveBurstBufferSecondsForAutomation = (params: {
+  instance: any;
+  version: any;
+  triggerType: TriggerType;
+}): number => {
+  const { instance, version, triggerType } = params;
+  const runtime = resolveFlowRuntime(version, instance);
+  return resolveBurstBufferSeconds(runtime?.triggers, triggerType);
+};
+
+export const resolveNodeBurstBufferSecondsForSession = async (params: {
+  session: any;
+  instance: any;
+  version?: any;
+}): Promise<number> => {
+  const { session, instance, version } = params;
+  if (!session || !instance) return 0;
+  const resolvedVersion = version || await resolveLatestTemplateVersion({
+    templateId: instance.templateId,
+    fallbackVersionId: session.templateVersionId || instance.templateVersionId,
+  });
+  if (!resolvedVersion) return 0;
+  const runtime = resolveFlowRuntime(resolvedVersion, instance);
+  return resolveNodeBurstBufferSecondsForSessionState(session, runtime);
+};
+
+export async function maybeBufferAutomationMessage(params: {
+  workspaceId: string;
+  conversationId: string;
+  instagramAccountId: string;
+  triggerType: TriggerType;
+  messageText?: string;
+  platform?: string;
+  messageContext?: AutomationTestContext;
+  source?: 'live' | 'simulate';
+  sessionId?: string;
+  bufferSeconds?: number;
+  bufferStartedAt?: Date;
+}): Promise<{ buffered: boolean; bufferSeconds?: number; bufferId?: string }> {
+  const {
+    workspaceId,
+    conversationId,
+    instagramAccountId,
+    triggerType,
+    messageText,
+    platform,
+    messageContext,
+    source = 'live',
+    sessionId,
+    bufferSeconds: providedBufferSeconds,
+    bufferStartedAt,
+  } = params;
+
+  if (triggerType !== 'dm_message') {
+    return { buffered: false };
+  }
+
+  const bufferSeconds = typeof providedBufferSeconds === 'number'
+    ? providedBufferSeconds
+    : await resolveBurstBufferSecondsForMessage({
+      workspaceId,
+      conversationId,
+      triggerType,
+      messageText,
+      messageContext,
+    });
+
+  if (!bufferSeconds || bufferSeconds <= 0) {
+    return { buffered: false };
+  }
+
+  const now = new Date();
+  const bufferUntil = new Date(now.getTime() + bufferSeconds * 1000);
+  const startAt = bufferStartedAt && !Number.isNaN(bufferStartedAt.getTime())
+    ? bufferStartedAt
+    : now;
+  const buffer = await AutomationMessageBuffer.findOneAndUpdate(
+    {
+      conversationId: new mongoose.Types.ObjectId(conversationId),
+      triggerType,
+      status: { $in: ['pending', 'processing'] },
+    },
+    {
+      $set: {
+        workspaceId: new mongoose.Types.ObjectId(workspaceId),
+        instagramAccountId: new mongoose.Types.ObjectId(instagramAccountId),
+        platform,
+        source,
+        sessionId: sessionId ? new mongoose.Types.ObjectId(sessionId) : undefined,
+        status: 'pending',
+        bufferUntil,
+        lastMessageAt: now,
+      },
+      $setOnInsert: {
+        bufferStartedAt: startAt,
+      },
+      $inc: { messageCount: 1 },
+    },
+    { new: true, upsert: true },
+  );
+
+  return { buffered: true, bufferSeconds, bufferId: buffer._id?.toString() };
+}
+
 /**
  * Execute an automation based on trigger type
  */
@@ -2890,6 +3314,172 @@ export async function checkAndExecuteAutomations(params: {
     automationName: result.automationExecuted,
     error: result.error,
   };
+}
+
+export async function processDueMessageBuffers(params?: {
+  now?: Date;
+  limit?: number;
+}): Promise<{
+  processed: number;
+  executed: number;
+  failed: number;
+  skipped: number;
+}> {
+  const stats = { processed: 0, executed: 0, failed: 0, skipped: 0 };
+  const now = params?.now || new Date();
+  const limit = params?.limit || 50;
+
+  const dueBuffers = await AutomationMessageBuffer.find({
+    status: 'pending',
+    bufferUntil: { $lte: now },
+  })
+    .sort({ bufferUntil: 1 })
+    .limit(limit);
+
+  for (const buffer of dueBuffers) {
+    const locked = await AutomationMessageBuffer.findOneAndUpdate(
+      { _id: buffer._id, status: 'pending' },
+      { status: 'processing' },
+      { new: true },
+    );
+    if (!locked) {
+      stats.skipped++;
+      continue;
+    }
+
+    stats.processed++;
+
+    try {
+      const windowBase = locked.lastMessageAt || locked.bufferStartedAt;
+      const windowMs = Math.max(0, locked.bufferUntil.getTime() - windowBase.getTime());
+      const latestMessage = await Message.findOne({
+        conversationId: locked.conversationId,
+        from: 'customer',
+        createdAt: { $gt: windowBase },
+      }).sort({ createdAt: -1 });
+      if (latestMessage) {
+        locked.status = 'pending';
+        locked.lastMessageAt = latestMessage.createdAt;
+        locked.bufferUntil = new Date(latestMessage.createdAt.getTime() + windowMs);
+        await locked.save();
+        stats.skipped++;
+        continue;
+      }
+
+      const windowEnd = locked.lastMessageAt || locked.bufferUntil;
+      const messages = await Message.find({
+        conversationId: locked.conversationId,
+        from: 'customer',
+        createdAt: { $gte: locked.bufferStartedAt, $lte: windowEnd },
+      }).sort({ createdAt: 1 });
+
+      if (!messages.length) {
+        locked.status = 'cancelled';
+        locked.errorMessage = 'No buffered messages found';
+        await locked.save();
+        stats.skipped++;
+        continue;
+      }
+
+      const combinedText = messages
+        .map((message) => message.text)
+        .filter((text) => text && text.trim())
+        .join('\n');
+      const messageText = combinedText || messages[messages.length - 1]?.text || '';
+      const messageContext = buildMessageContextFromMessages(messages);
+
+      if (locked.source === 'simulate') {
+        const sessionId = locked.sessionId?.toString();
+        const session = sessionId
+          ? await AutomationSession.findOne({ _id: sessionId, channel: 'preview' })
+          : null;
+        if (!session) {
+          locked.status = 'failed';
+          locked.errorMessage = 'Simulation session not found';
+          await locked.save();
+          stats.failed++;
+          continue;
+        }
+        const instance = await AutomationInstance.findById(session.automationInstanceId);
+        if (!instance || !instance.isActive) {
+          locked.status = 'failed';
+          locked.errorMessage = 'Automation instance not found or inactive';
+          await locked.save();
+          stats.failed++;
+          continue;
+        }
+        const version = await resolveLatestTemplateVersion({
+          templateId: instance.templateId,
+          fallbackVersionId: session.templateVersionId || instance.templateVersionId,
+        });
+        if (!version) {
+          locked.status = 'failed';
+          locked.errorMessage = 'Template version not found';
+          await locked.save();
+          stats.failed++;
+          continue;
+        }
+        const conversation = await Conversation.findById(locked.conversationId);
+        if (!conversation) {
+          locked.status = 'failed';
+          locked.errorMessage = 'Conversation not found';
+          await locked.save();
+          stats.failed++;
+          continue;
+        }
+        const result = await executePreviewFlowForInstance({
+          instance,
+          session,
+          conversation,
+          messageText,
+          messageContext,
+        });
+        if (!result.success) {
+          appendPreviewMetaEvent(session, {
+            type: 'error',
+            message: result.error || 'Flow execution failed',
+          });
+        }
+        session.markModified('state');
+        await session.save();
+        locked.status = result.success ? 'completed' : 'failed';
+        locked.errorMessage = result.error;
+        await locked.save();
+        if (result.success) {
+          stats.executed++;
+        } else {
+          stats.failed++;
+        }
+      } else {
+        const result = await checkAndExecuteAutomations({
+          workspaceId: locked.workspaceId.toString(),
+          triggerType: locked.triggerType,
+          conversationId: locked.conversationId.toString(),
+          messageText,
+          instagramAccountId: locked.instagramAccountId.toString(),
+          platform: locked.platform || 'instagram',
+          messageContext,
+        });
+
+        locked.status = result.executed ? 'completed' : 'failed';
+        locked.errorMessage = result.error;
+        await locked.save();
+
+        if (result.executed) {
+          stats.executed++;
+        } else {
+          stats.failed++;
+        }
+      }
+    } catch (error: any) {
+      locked.status = 'failed';
+      locked.errorMessage = error?.message || 'Failed to process message buffer';
+      await locked.save();
+      stats.failed++;
+    }
+  }
+
+  return stats;
 }
 
 /**

@@ -100,6 +100,9 @@ const formatTriggerConfigSummary = (config?: TriggerConfig) => {
   if (config.businessHours) {
     parts.push('Business hours');
   }
+  if (typeof config.burstBufferSeconds === 'number' && config.burstBufferSeconds > 0) {
+    parts.push(`Burst buffer: ${config.burstBufferSeconds}s`);
+  }
 
   return parts.join(' | ');
 };
@@ -196,6 +199,16 @@ export const AutomationsCreateView: React.FC<AutomationsCreateViewProps> = ({
         return null;
       }
       if (field.source.path.includes('config.intentText') && !isTriggerModeIntent) {
+        return null;
+      }
+    }
+    if (field.source?.nodeId && field.source?.path?.includes('burstBufferSeconds')) {
+      const waitField = exposedFields.find((candidate) => (
+        candidate.source?.nodeId === field.source?.nodeId
+        && typeof candidate.source?.path === 'string'
+        && candidate.source.path.includes('waitForReply')
+      ));
+      if (waitField && !Boolean(configValues[waitField.key])) {
         return null;
       }
     }
