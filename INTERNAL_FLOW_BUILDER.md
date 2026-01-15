@@ -88,6 +88,7 @@ Supported node types:
 - `send_message`
 - `ai_reply`
 - `ai_agent`
+- `langchain_agent`
 - `handoff`
 - `router`
 
@@ -107,6 +108,8 @@ Per-node fields:
 - `ai_reply`: `aiSettings`, `knowledgeItemIds` (optional RAG pinning).
 - `ai_agent`: `agentSystemPrompt`, `agentSteps[]`, `agentEndCondition`, `agentStopCondition`, `agentMaxQuestions`,
   `agentSlots[]` (key/question/defaultValue), plus `aiSettings` + `knowledgeItemIds`.
+- `langchain_agent`: `langchainSystemPrompt`, `langchainTools[]`, `langchainEndCondition`, `langchainStopCondition`,
+  `langchainMaxIterations`, `langchainToolChoice`, `langchainReturnIntermediateSteps`, plus `aiSettings` + `knowledgeItemIds`.
 - `handoff`: `handoff` object with `topic`, `summary`, `recommendedNextAction`, `message`.
 - `router`: `routing` rules (match mode + per-edge rules) resolved from the builder UI.
 
@@ -122,6 +125,7 @@ The internal builder is a React Flow canvas with:
 - Node-level logging toggle, wait-for-reply, and burst buffer controls.
 - AI node configuration: model, temperature, reasoning effort, history limit, max tokens, and knowledge base pinning.
 - AI agent configuration: system prompt, step list, end/stop conditions, max questions, and slot collection fields.
+- LangChain agent configuration: system prompt, tools list, end/stop conditions, max iterations, tool choice, and optional intermediate steps.
 - Handoff configuration: topic, summary, message, recommended next action.
 - Router configuration: rule-based branching (match mode + route rules).
 - Global automation intentions management for intent detection and router conditions.
@@ -157,6 +161,14 @@ structure described in this document.
 - `agentSlots` defines required data to collect; values are stored in session state and `vars`.
 - Respects AI settings and knowledge base pinning.
 - Updates runtime vars (`vars.agentStepIndex`, `vars.agentSlots`, etc.) and persists agent progress.
+
+### `langchain_agent`
+- Tool-aware agent loop designed for configurable tool use and iterative decisions.
+- `langchainTools` defines tool metadata; inputs are provided via structured JSON.
+- `langchainToolChoice` controls whether tools are optional, required, or disabled.
+- `langchainMaxIterations` bounds multi-turn looping; `langchainEndCondition` and `langchainStopCondition`
+  control completion/early exit.
+- Respects AI settings and knowledge base pinning and stores progress in session state.
 
 ### `router`
 - Branches execution using routing rules defined in the builder.
@@ -219,6 +231,8 @@ Template variables:
 - Runtime variables live under `vars.*` (ex: `{{ vars.detectedIntent }}`) and are resolved per message.
 - AI agent nodes also populate `vars.agentStepIndex`, `vars.agentStep`, `vars.agentDone`, `vars.agentStepSummary`,
   `vars.agentSlots`, `vars.agentMissingSlots`, and `vars.agentQuestionsAsked`.
+- LangChain agent nodes populate `vars.langchainIteration`, `vars.langchainDone`, `vars.langchainToolCalls`,
+  and `vars.langchainActionSummary`.
 
 ## Compilation + Publish
 
@@ -258,6 +272,8 @@ Key points:
 - `detect_intent` runs intent detection against the global AutomationIntent list and stores the output in `session.state.vars.detectedIntent`.
 - `ai_agent` runs a multi-turn agent loop using its own system prompt, steps, end condition, and stop condition. It persists
   progress + slot values in session state and keeps the node active until the end condition or stop condition is met (or max questions is reached).
+- `langchain_agent` runs a tool-aware agent loop, persists iteration state, and keeps the node active until end/stop conditions
+  are met or max iterations is reached.
 - `trigger` nodes are ignored at execution (they only define entry criteria).
 - State persists via `buildNextState` and `AutomationSession`.
 - Node-level logging is supported via `logEnabled` on each node. If `logEnabled` is explicitly `false`, node start/complete logging is suppressed; otherwise logs are emitted.
@@ -268,7 +284,7 @@ Key points:
 ### AI Context (History + Summary)
 
 Automation runs create a shared AI context for the full execution:
-- Message history and summaries are built once per run and reused by `ai_reply` and `ai_agent` nodes.
+- Message history and summaries are built once per run and reused by `ai_reply`, `ai_agent`, and `langchain_agent` nodes.
 - Node-level `messageHistory` is no longer used; AI nodes consume the shared context instead.
 - History window size and summary expiry are configurable via automation config:
   - `aiHistoryWindow` (default: 10, min: 1, max: 50)

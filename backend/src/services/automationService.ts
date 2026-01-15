@@ -10,6 +10,7 @@ import FlowTemplate from '../models/FlowTemplate';
 import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import { generateAIReply, generateConversationSummary } from './aiReplyService';
 import { generateAIAgentReply } from './aiAgentService';
+import { generateLangchainAgentReply } from './langchainAgentService';
 import {
   sendMessage as sendInstagramMessage,
   sendButtonMessage,
@@ -91,6 +92,13 @@ type FlowRuntimeStep = {
   agentStopCondition?: string;
   agentMaxQuestions?: number;
   agentSlots?: Array<{ key: string; question?: string; defaultValue?: string }>;
+  langchainSystemPrompt?: string;
+  langchainTools?: Array<{ name: string; description?: string; inputSchema?: Record<string, any> }>;
+  langchainEndCondition?: string;
+  langchainStopCondition?: string;
+  langchainMaxIterations?: number;
+  langchainToolChoice?: 'auto' | 'required' | 'none';
+  langchainReturnIntermediateSteps?: boolean;
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
   burstBufferSeconds?: number;
@@ -712,7 +720,7 @@ const resolveBurstBufferSeconds = (triggers: FlowTriggerDefinition[] | undefined
 const resolveNodeBurstBufferSeconds = (step?: FlowRuntimeStep): number => {
   if (!step) return 0;
   const stepType = normalizeStepType(step);
-  if (stepType !== 'ai_reply' && stepType !== 'ai_agent') return 0;
+  if (stepType !== 'ai_reply' && stepType !== 'ai_agent' && stepType !== 'langchain_agent') return 0;
   const value = normalizeBurstBufferSeconds(step.burstBufferSeconds);
   return value > 0 ? value : 0;
 };
@@ -1162,7 +1170,7 @@ const buildExecutionPlan = (graph: FlowRuntimeGraph): ExecutionPlan | null => {
 
 const normalizeStepType = (
   step?: FlowRuntimeStep,
-): 'send_message' | 'ai_reply' | 'ai_agent' | 'handoff' | 'trigger' | 'detect_intent' | 'router' | 'unknown' => {
+): 'send_message' | 'ai_reply' | 'ai_agent' | 'langchain_agent' | 'handoff' | 'trigger' | 'detect_intent' | 'router' | 'unknown' => {
   const raw = (step?.type || '').toLowerCase();
   if (raw === 'send_message' || raw === 'message' || raw === 'send' || raw === 'reply') {
     return 'send_message';
@@ -1172,6 +1180,9 @@ const normalizeStepType = (
   }
   if (raw === 'ai_agent' || raw === 'agent') {
     return 'ai_agent';
+  }
+  if (raw === 'langchain_agent' || raw === 'langchain' || raw === 'lc_agent') {
+    return 'langchain_agent';
   }
   if (raw === 'handoff' || raw === 'escalate') {
     return 'handoff';
@@ -2001,6 +2012,9 @@ async function executeFlowPlan(params: {
     if (!('agent' in base) && session.state?.agent) {
       base.agent = session.state.agent;
     }
+    if (!('langchainAgent' in base) && session.state?.langchainAgent) {
+      base.langchainAgent = session.state.langchainAgent;
+    }
     if (!('previewMeta' in base) && session.state?.previewMeta) {
       base.previewMeta = session.state.previewMeta;
     }
@@ -2022,7 +2036,10 @@ async function executeFlowPlan(params: {
       ? session.state.stepIndex
       : (plan.startIndex || 0);
   } else {
-    nodeId = session.state?.nodeId || plan.startNodeId;
+    nodeId = session.state?.nodeId
+      || session.state?.agent?.nodeId
+      || session.state?.langchainAgent?.nodeId
+      || plan.startNodeId;
   }
 
   for (let i = 0; i < maxSteps; i += 1) {
@@ -2388,6 +2405,190 @@ async function executeFlowPlan(params: {
         forceWaitForReply = true;
         forcedNextNodeId = step.id;
       }
+    } else if (stepType === 'langchain_agent') {
+      if (rateLimit && !updateRateLimit(session, rateLimit)) {
+        return { success: false, error: 'Rate limit exceeded', sentCount, executedSteps };
+      }
+      await markTriggeredOnce();
+      if (!step.id) {
+        return { success: false, error: 'LangChain agent node missing id', sentCount, executedSteps };
+      }
+
+      const aiSettings = {
+        ...(plan.graph.aiSettings || {}),
+        ...(step.aiSettings || {}),
+      };
+      const workspaceId = conversation.workspaceId?.toString?.() || conversation.workspaceId;
+      let usageOwnerId: string | null = null;
+      if (!isPreviewMode && workspaceId) {
+        const usageCheck = await checkAiMessageAllowance(workspaceId);
+        if (!usageCheck.allowed) {
+          logAutomation('⚠️  [AUTOMATION] AI message limit reached', {
+            workspaceId,
+            limit: usageCheck.limit,
+            used: usageCheck.used,
+          });
+          return { success: false, error: 'AI message limit reached for this workspace', sentCount, executedSteps };
+        }
+        usageOwnerId = usageCheck.ownerId;
+      }
+
+      const langchainTools = Array.isArray(step.langchainTools)
+        ? step.langchainTools
+          .map((tool) => ({
+            name: typeof tool?.name === 'string' ? tool.name.trim() : '',
+            description: typeof tool?.description === 'string' ? tool.description.trim() : undefined,
+            inputSchema: tool?.inputSchema && typeof tool.inputSchema === 'object' ? tool.inputSchema : undefined,
+          }))
+          .filter((tool) => tool.name)
+        : [];
+      const storedAgent = session.state?.langchainAgent?.nodeId === step.id ? session.state.langchainAgent : {};
+      const iteration = typeof storedAgent?.iteration === 'number' ? storedAgent.iteration : 0;
+      const maxIterations = typeof step.langchainMaxIterations === 'number'
+        ? step.langchainMaxIterations
+        : undefined;
+      const maxIterationsReached = typeof maxIterations === 'number' ? iteration >= maxIterations : false;
+
+      const agentStart = nowMs();
+      const agentResult = await generateLangchainAgentReply({
+        conversation,
+        workspaceId: conversation.workspaceId,
+        latestCustomerMessage: messageText,
+        systemPrompt: step.langchainSystemPrompt,
+        tools: langchainTools,
+        endCondition: step.langchainEndCondition,
+        stopCondition: step.langchainStopCondition,
+        maxIterations,
+        iteration,
+        maxIterationsReached,
+        toolChoice: step.langchainToolChoice,
+        returnIntermediateSteps: step.langchainReturnIntermediateSteps,
+        aiSettings,
+        knowledgeItemIds: step.knowledgeItemIds,
+        conversationSummary: aiContext?.summaryForPrompt,
+        messageHistory: aiContext?.messageHistory,
+        historyLimit: aiContext?.historyWindow,
+      });
+      const agentDurationMs = Math.max(0, Math.round(nowMs() - agentStart));
+      logAutomationStep('flow_langchain_agent', agentStart, {
+        iteration,
+        shouldContinue: agentResult.shouldContinue,
+        shouldStop: agentResult.shouldStop,
+      });
+      logAdminEvent({
+        category: 'flow_node',
+        message: 'LangChain agent response generated',
+        details: {
+          ...(logContext || {}),
+          nodeId: step.id,
+          type: 'langchain_agent',
+          aiSettings,
+          replyPreview: agentResult.replyText?.slice(0, 500),
+          shouldContinue: agentResult.shouldContinue,
+          shouldStop: agentResult.shouldStop,
+          toolCalls: agentResult.toolCalls,
+          actionSummary: agentResult.actionSummary,
+          iteration,
+        },
+        workspaceId: resolveWorkspaceId(logContext),
+      });
+
+      if (!agentResult.replyText) {
+        return { success: false, error: 'LangChain agent reply missing', sentCount, executedSteps };
+      }
+
+      const adapter = deliveryAdapter || createDeliveryAdapter({ deliveryMode });
+      const message = await adapter.sendMessage({
+        conversation,
+        instance,
+        igAccount,
+        recipientId: conversation.participantInstagramId,
+        text: agentResult.replyText,
+        platform,
+        source: 'ai_reply',
+        trackStats,
+      });
+      if (aiContext) {
+        appendHistoryEntry(aiContext.messageHistory, {
+          from: 'ai',
+          text: agentResult.replyText,
+          attachments: [],
+          createdAt: message.createdAt || new Date(),
+        }, aiContext.historyWindow);
+        aiContext.summaryValue = appendSummaryLine(aiContext.summaryValue, 'AI', agentResult.replyText);
+        aiContext.summaryForPrompt = appendSummaryForPrompt(aiContext, 'AI', agentResult.replyText);
+        aiContext.summaryDirty = true;
+      }
+      if (isPreviewMode && onMessageSent) {
+        onMessageSent({
+          id: message._id?.toString() || '',
+          from: 'ai',
+          text: message.text || agentResult.replyText,
+          source: 'ai_reply',
+          createdAt: message.createdAt || new Date(),
+        });
+      }
+      sentCount += 1;
+      if (!isPreviewMode && usageOwnerId && workspaceId) {
+        await assertUsageLimit(usageOwnerId, 'aiMessages', 1, workspaceId);
+      }
+
+      const toolCalls = Array.isArray(agentResult.toolCalls) ? agentResult.toolCalls : [];
+      const nextIteration = iteration + 1;
+      const agentDone = Boolean(agentResult.shouldStop) || !agentResult.shouldContinue || maxIterationsReached;
+
+      if (deliveryMode === 'preview') {
+        const toolSummary = toolCalls.length > 0
+          ? toolCalls.slice(0, 3).map((call) => call.name).join(', ')
+          : '';
+        const detailParts = [];
+        if (toolSummary) detailParts.push(`tools: ${toolSummary}${toolCalls.length > 3 ? '…' : ''}`);
+        if (agentResult.actionSummary) detailParts.push(agentResult.actionSummary);
+        if (agentDone) detailParts.push('done');
+
+        appendPreviewMetaEvent(session, {
+          type: 'info',
+          message: `LangChain Agent${detailParts.length > 0 ? ` · ${detailParts.join(' · ')}` : ''}`,
+          details: {
+            nodeId: step.id,
+            type: stepType,
+            iteration,
+            toolCalls,
+            shouldContinue: agentResult.shouldContinue,
+            shouldStop: agentResult.shouldStop,
+            durationMs: agentDurationMs,
+          },
+        });
+      }
+
+      const nextVars = {
+        ...(session.state?.vars || {}),
+        langchainAgentNodeId: step.id,
+        langchainIteration: nextIteration,
+        langchainDone: agentDone,
+        langchainToolCalls: toolCalls,
+        langchainActionSummary: agentResult.actionSummary,
+      };
+
+      session.state = {
+        ...(session.state || {}),
+        vars: nextVars,
+      };
+
+      if (agentDone) {
+        if (session.state?.langchainAgent) {
+          delete session.state.langchainAgent;
+        }
+      } else {
+        session.state.langchainAgent = {
+          nodeId: step.id,
+          iteration: nextIteration,
+          lastActionSummary: agentResult.actionSummary,
+          lastToolCalls: toolCalls,
+        };
+        forceWaitForReply = true;
+        forcedNextNodeId = step.id;
+      }
     } else if (stepType === 'handoff') {
       await markTriggeredOnce();
       if (deliveryMode !== 'preview') {
@@ -2518,7 +2719,8 @@ async function executeFlowPlan(params: {
       nextNodeId = forcedNextNodeId;
     }
 
-    const shouldPause = forceWaitForReply || (step.waitForReply && stepType !== 'ai_agent');
+    const shouldPause = forceWaitForReply
+      || (step.waitForReply && stepType !== 'ai_agent' && stepType !== 'langchain_agent');
     if (shouldPause) {
       const hasNext = plan.mode === 'steps'
         ? (nextStepIndex !== undefined && Boolean(plan.steps[nextStepIndex]))

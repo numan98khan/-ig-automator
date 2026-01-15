@@ -193,6 +193,19 @@ export const buildNodeSubtitle = (node: FlowNode) => {
     if (node.aiSettings?.model) details.push(`Model: ${node.aiSettings.model}`)
     return details.length > 0 ? details.join(' · ') : 'Configure agent steps'
   }
+  if (node.type === 'langchain_agent') {
+    const details = []
+    const toolCount = Array.isArray(node.langchainTools)
+      ? node.langchainTools.filter((tool) => tool?.name).length
+      : 0
+    if (toolCount > 0) details.push(`Tools: ${toolCount}`)
+    if (node.langchainEndCondition?.trim()) details.push('End condition set')
+    if (typeof node.langchainMaxIterations === 'number') {
+      details.push(`Max iterations: ${node.langchainMaxIterations}`)
+    }
+    if (node.aiSettings?.model) details.push(`Model: ${node.aiSettings.model}`)
+    return details.length > 0 ? details.join(' · ') : 'Configure tool-aware agent'
+  }
   if (node.type === 'handoff') {
     return node.handoff?.topic ? `Topic: ${node.handoff.topic}` : 'No topic set'
   }
@@ -248,6 +261,14 @@ export const normalizeFlowNode = (node: any, index: number): FlowNode => {
     agentStopCondition: node?.agentStopCondition ?? node?.data?.agentStopCondition,
     agentMaxQuestions: node?.agentMaxQuestions ?? node?.data?.agentMaxQuestions,
     agentSlots: node?.agentSlots ?? node?.data?.agentSlots,
+    langchainSystemPrompt: node?.langchainSystemPrompt ?? node?.data?.langchainSystemPrompt,
+    langchainTools: node?.langchainTools ?? node?.data?.langchainTools,
+    langchainEndCondition: node?.langchainEndCondition ?? node?.data?.langchainEndCondition,
+    langchainStopCondition: node?.langchainStopCondition ?? node?.data?.langchainStopCondition,
+    langchainMaxIterations: node?.langchainMaxIterations ?? node?.data?.langchainMaxIterations,
+    langchainToolChoice: node?.langchainToolChoice ?? node?.data?.langchainToolChoice,
+    langchainReturnIntermediateSteps: node?.langchainReturnIntermediateSteps
+      ?? node?.data?.langchainReturnIntermediateSteps,
     knowledgeItemIds: node?.knowledgeItemIds,
     handoff: node?.handoff,
     waitForReply: node?.waitForReply,
@@ -310,6 +331,13 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     agentStopCondition: node.agentStopCondition,
     agentMaxQuestions: node.agentMaxQuestions,
     agentSlots: node.agentSlots,
+    langchainSystemPrompt: node.langchainSystemPrompt,
+    langchainTools: node.langchainTools,
+    langchainEndCondition: node.langchainEndCondition,
+    langchainStopCondition: node.langchainStopCondition,
+    langchainMaxIterations: node.langchainMaxIterations,
+    langchainToolChoice: node.langchainToolChoice,
+    langchainReturnIntermediateSteps: node.langchainReturnIntermediateSteps,
     knowledgeItemIds: node.knowledgeItemIds,
     handoff: node.handoff,
     waitForReply: node.waitForReply,
