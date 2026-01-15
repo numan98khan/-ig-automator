@@ -92,6 +92,21 @@ export const MESSAGE_STATE_VARIABLES = [
   { key: 'langchainActionSummary', label: 'LangChain action summary', token: '{{ vars.langchainActionSummary }}' },
 ]
 
+export const LANGCHAIN_SYSTEM_PROMPT_VARIABLES = [
+  { key: 'businessName', label: 'Business name', token: '{{ businessName }}' },
+  { key: 'businessDescription', label: 'Business description', token: '{{ businessDescription }}' },
+  { key: 'businessHours', label: 'Business hours', token: '{{ businessHours }}' },
+  { key: 'businessTone', label: 'Business tone', token: '{{ businessTone }}' },
+  { key: 'businessLocation', label: 'Business location', token: '{{ businessLocation }}' },
+  { key: 'businessWebsite', label: 'Business website', token: '{{ businessWebsite }}' },
+  { key: 'businessCatalog', label: 'Business catalog', token: '{{ businessCatalog }}' },
+  { key: 'businessDocuments', label: 'Business documents', token: '{{ businessDocuments }}' },
+  { key: 'assistantName', label: 'Assistant name', token: '{{ assistantName }}' },
+  { key: 'assistantDescription', label: 'Assistant description', token: '{{ assistantDescription }}' },
+  { key: 'workspaceSystemPrompt', label: 'Workspace system prompt', token: '{{ workspaceSystemPrompt }}' },
+  ...MESSAGE_STATE_VARIABLES,
+]
+
 export const REASONING_EFFORT_OPTIONS: Array<FlowAiSettings['reasoningEffort']> = [
   'none',
   'minimal',

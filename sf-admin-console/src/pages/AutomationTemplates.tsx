@@ -41,6 +41,7 @@ import {
   FLOW_NODE_STYLES,
   GOAL_OPTIONS,
   INDUSTRY_OPTIONS,
+  LANGCHAIN_SYSTEM_PROMPT_VARIABLES,
   MESSAGE_STATE_VARIABLES,
   REASONING_EFFORT_OPTIONS,
   TRIGGER_LIBRARY,
@@ -986,6 +987,21 @@ export default function AutomationTemplates() {
         return {
           ...node,
           text: `${current}${separator}${token}`,
+        }
+      })
+    },
+    [selectedNode, updateNode],
+  )
+
+  const insertLangchainSystemPromptToken = useCallback(
+    (token: string) => {
+      if (!selectedNode || selectedNode.type !== 'langchain_agent') return
+      updateNode(selectedNode.id, (node) => {
+        const current = node.langchainSystemPrompt || ''
+        const separator = current && !current.endsWith(' ') ? ' ' : ''
+        return {
+          ...node,
+          langchainSystemPrompt: `${current}${separator}${token}`,
         }
       })
     },
@@ -3307,6 +3323,27 @@ export default function AutomationTemplates() {
                       }))
                     }
                   />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-muted-foreground">Prompt variables</label>
+                    <span className="text-[11px] text-muted-foreground">Click to insert</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {LANGCHAIN_SYSTEM_PROMPT_VARIABLES.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className="px-2.5 py-1 rounded-full border border-border/70 text-[11px] text-foreground hover:border-primary/50 hover:bg-muted/40 transition"
+                        onClick={() => insertLangchainSystemPromptToken(item.token)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Available from business profile settings or runtime vars.
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
