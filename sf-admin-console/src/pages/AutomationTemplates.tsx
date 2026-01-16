@@ -3528,6 +3528,17 @@ export default function AutomationTemplates() {
                     <option value="required">Required</option>
                     <option value="none">None</option>
                   </select>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {LANGCHAIN_TOOL_NAME_OPTIONS.map((tool) => (
+                      <span
+                        key={tool.value}
+                        title={tool.description}
+                        className="px-2.5 py-1 rounded-full border border-border/70 text-[11px] text-foreground hover:border-primary/50 hover:bg-muted/40 transition"
+                      >
+                        {tool.label}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm text-muted-foreground">

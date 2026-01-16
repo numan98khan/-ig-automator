@@ -108,8 +108,16 @@ export const LANGCHAIN_SYSTEM_PROMPT_VARIABLES = [
 ]
 
 export const LANGCHAIN_TOOL_NAME_OPTIONS = [
-  { label: 'Get business profile', value: 'get_business_profile' },
-  { label: 'Lookup contact', value: 'lookup_contact' },
+  {
+    label: 'Get business profile',
+    value: 'get_business_profile',
+    description: 'Fetches the workspace business profile details and summary.',
+  },
+  {
+    label: 'Lookup contact',
+    value: 'lookup_contact',
+    description: 'Finds a contact by id, handle, email, phone, or name.',
+  },
 ]
 
 export const REASONING_EFFORT_OPTIONS: Array<FlowAiSettings['reasoningEffort']> = [
