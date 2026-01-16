@@ -1,53 +1,59 @@
-import { useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
-import { getSiteUrl } from '../utils/urls'
+import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { requireEnv } from '../utils/env';
 
 type SeoProps = {
-  title: string
-  description?: string
-  canonicalPath?: string
-  image?: string
-  robots?: string
-  type?: 'website' | 'article'
-  structuredData?: Record<string, unknown>
-}
+  title: string;
+  description?: string;
+  canonicalPath?: string;
+  image?: string;
+  robots?: string;
+  type?: 'website' | 'article';
+  structuredData?: Record<string, unknown>;
+};
 
-const DEFAULT_DESCRIPTION = 'SendFx helps teams turn Instagram DMs into revenue with automation and CRM workflows.'
-const DEFAULT_IMAGE = '/sendfx.png'
-const SITE_NAME = 'SendFx'
+const DEFAULT_DESCRIPTION =
+  'SendFx is Instagram DM automation and a lightweight CRM for SMBs.';
+const DEFAULT_IMAGE = '/sendfx.png';
+const SITE_NAME = 'SendFx';
+
+const getBaseUrl = () => {
+  const baseUrl = requireEnv('VITE_SITE_URL');
+  return baseUrl.replace(/\/$/, '');
+};
 
 const resolveUrl = (baseUrl: string, pathOrUrl: string) => {
   if (/^https?:\/\//i.test(pathOrUrl)) {
-    return pathOrUrl
+    return pathOrUrl;
   }
-  return `${baseUrl}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`
-}
+  return `${baseUrl}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`;
+};
 
 const upsertMeta = (attr: 'name' | 'property', key: string, content: string) => {
-  const selector = `meta[${attr}="${key}"]`
-  let element = document.head.querySelector(selector) as HTMLMetaElement | null
+  const selector = `meta[${attr}="${key}"]`;
+  let element = document.head.querySelector(selector) as HTMLMetaElement | null;
 
   if (!element) {
-    element = document.createElement('meta')
-    element.setAttribute(attr, key)
-    document.head.appendChild(element)
+    element = document.createElement('meta');
+    element.setAttribute(attr, key);
+    document.head.appendChild(element);
   }
 
-  element.setAttribute('content', content)
-}
+  element.setAttribute('content', content);
+};
 
 const upsertLink = (rel: string, href: string) => {
-  const selector = `link[rel="${rel}"]`
-  let element = document.head.querySelector(selector) as HTMLLinkElement | null
+  const selector = `link[rel="${rel}"]`;
+  let element = document.head.querySelector(selector) as HTMLLinkElement | null;
 
   if (!element) {
-    element = document.createElement('link')
-    element.setAttribute('rel', rel)
-    document.head.appendChild(element)
+    element = document.createElement('link');
+    element.setAttribute('rel', rel);
+    document.head.appendChild(element);
   }
 
-  element.setAttribute('href', href)
-}
+  element.setAttribute('href', href);
+};
 
 const Seo = ({
   title,
@@ -58,48 +64,48 @@ const Seo = ({
   type = 'website',
   structuredData,
 }: SeoProps) => {
-  const location = useLocation()
+  const location = useLocation();
 
   useEffect(() => {
-    const baseUrl = getSiteUrl()
-    const descriptionContent = description || DEFAULT_DESCRIPTION
+    const baseUrl = getBaseUrl();
+    const descriptionContent = description || DEFAULT_DESCRIPTION;
     const canonicalUrl = canonicalPath
       ? `${baseUrl}${canonicalPath.startsWith('/') ? '' : '/'}${canonicalPath}`
-      : `${baseUrl}${location.pathname}`
-    const imageUrl = resolveUrl(baseUrl, image)
+      : `${baseUrl}${location.pathname}`;
+    const imageUrl = resolveUrl(baseUrl, image);
 
-    document.title = title
+    document.title = title;
 
-    upsertMeta('name', 'description', descriptionContent)
-    upsertMeta('name', 'robots', robots)
+    upsertMeta('name', 'description', descriptionContent);
+    upsertMeta('name', 'robots', robots);
 
-    upsertMeta('property', 'og:title', title)
-    upsertMeta('property', 'og:description', descriptionContent)
-    upsertMeta('property', 'og:type', type)
-    upsertMeta('property', 'og:image', imageUrl)
-    upsertMeta('property', 'og:url', canonicalUrl)
-    upsertMeta('property', 'og:site_name', SITE_NAME)
+    upsertMeta('property', 'og:title', title);
+    upsertMeta('property', 'og:description', descriptionContent);
+    upsertMeta('property', 'og:type', type);
+    upsertMeta('property', 'og:image', imageUrl);
+    upsertMeta('property', 'og:url', canonicalUrl);
+    upsertMeta('property', 'og:site_name', SITE_NAME);
 
-    upsertMeta('name', 'twitter:card', 'summary_large_image')
-    upsertMeta('name', 'twitter:title', title)
-    upsertMeta('name', 'twitter:description', descriptionContent)
-    upsertMeta('name', 'twitter:image', imageUrl)
+    upsertMeta('name', 'twitter:card', 'summary_large_image');
+    upsertMeta('name', 'twitter:title', title);
+    upsertMeta('name', 'twitter:description', descriptionContent);
+    upsertMeta('name', 'twitter:image', imageUrl);
 
-    upsertLink('canonical', canonicalUrl)
+    upsertLink('canonical', canonicalUrl);
 
-    const scriptId = 'seo-jsonld'
-    const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null
+    const scriptId = 'seo-jsonld';
+    const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null;
 
     if (structuredData) {
-      const script = existingScript || document.createElement('script')
-      script.id = scriptId
-      script.type = 'application/ld+json'
-      script.textContent = JSON.stringify(structuredData)
+      const script = existingScript || document.createElement('script');
+      script.id = scriptId;
+      script.type = 'application/ld+json';
+      script.textContent = JSON.stringify(structuredData);
       if (!existingScript) {
-        document.head.appendChild(script)
+        document.head.appendChild(script);
       }
     } else if (existingScript) {
-      existingScript.remove()
+      existingScript.remove();
     }
   }, [
     title,
@@ -110,9 +116,9 @@ const Seo = ({
     type,
     structuredData,
     location.pathname,
-  ])
+  ]);
 
-  return null
-}
+  return null;
+};
 
-export default Seo
+export default Seo;

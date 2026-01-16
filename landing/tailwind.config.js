@@ -1,14 +1,14 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
-    './index.html',
-    './src/**/*.{js,ts,jsx,tsx}',
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
-        display: ['"Fraunces"', 'serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
       },
       colors: {
         background: 'rgb(var(--background) / <alpha-value>)',
@@ -25,29 +25,38 @@ export default {
           DEFAULT: 'rgb(var(--muted) / <alpha-value>)',
           foreground: 'rgb(var(--muted-foreground) / <alpha-value>)',
         },
+        accent: {
+          DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
+          foreground: 'rgb(var(--accent-foreground) / <alpha-value>)',
+        },
         border: 'rgb(var(--border) / <alpha-value>)',
-      },
-      boxShadow: {
-        'soft-xl': '0 24px 70px -40px rgba(15, 23, 42, 0.45)',
-        'soft-lg': '0 18px 40px -28px rgba(15, 23, 42, 0.4)',
+        input: 'rgb(var(--input) / <alpha-value>)',
+        ring: 'rgb(var(--ring) / <alpha-value>)',
       },
       backgroundImage: {
-        'hero-glow': 'radial-gradient(circle at top left, rgba(251, 146, 60, 0.28), transparent 52%), radial-gradient(circle at 80% 20%, rgba(56, 189, 248, 0.22), transparent 45%)',
-        'mesh': 'linear-gradient(135deg, rgba(15, 118, 110, 0.08), transparent 40%), linear-gradient(315deg, rgba(251, 113, 133, 0.12), transparent 55%)',
+        'gradient-primary': 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+        'gradient-surface': 'linear-gradient(180deg, rgba(30, 41, 59, 0.7) 0%, rgba(30, 41, 59, 0.4) 100%)',
+        'glass': 'linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%)',
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
       },
-      keyframes: {
-        floaty: {
-          '0%, 100%': { transform: 'translateY(0px)' },
-          '50%': { transform: 'translateY(-8px)' },
-        },
-        rise: {
-          '0%': { opacity: '0', transform: 'translateY(16px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
+      boxShadow: {
+        'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+        'glow': '0 0 20px rgba(99, 102, 241, 0.5)',
       },
       animation: {
-        floaty: 'floaty 6s ease-in-out infinite',
-        rise: 'rise 0.7s ease-out forwards',
+        'fade-in': 'fadeIn 0.5s ease-out',
+        'slide-up': 'slideUp 0.5s ease-out',
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        slideUp: {
+          '0%': { transform: 'translateY(20px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
       },
     },
   },
