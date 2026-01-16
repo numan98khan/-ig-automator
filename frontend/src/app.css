@@ -167,7 +167,7 @@
   }
 
   :root[data-ui-theme='studio']:not(.dark) {
-    --background: 252 249 245;
+    --background: 255 255 255;
     --foreground: 20 27 33;
 
     --primary: 234 88 12;
@@ -244,7 +244,7 @@
   }
 
   :root[data-ui-theme='studio']:not(.dark) body {
-    background: linear-gradient(160deg, #fbf6ef 0%, #fdf7ef 35%, #f1f4f7 100%);
+    background: linear-gradient(160deg, #ffffff 0%, #ffffff 38%, #f6f8fb 100%);
   }
 
   :root.dark[data-ui-theme='studio'] body {
@@ -371,8 +371,8 @@
 }
 
 :root[data-ui-theme='studio'] .ui-bg-glow {
-  background: radial-gradient(140% 120% at 12% 14%, rgba(251, 146, 60, 0.18), transparent 58%),
-    radial-gradient(120% 120% at 78% 22%, rgba(20, 184, 166, 0.16), transparent 56%);
+  background: radial-gradient(140% 120% at 12% 14%, rgba(251, 146, 60, 0.05), transparent 58%),
+    radial-gradient(120% 120% at 78% 22%, rgba(20, 184, 166, 0.1), transparent 56%);
 }
 
 :root.dark[data-ui-theme='studio'] .ui-bg-glow {
@@ -388,7 +388,7 @@
 }
 
 :root[data-ui-theme='studio'] .ui-bg-wash {
-  background: linear-gradient(180deg, rgba(255, 248, 240, 0.9), rgba(255, 248, 240, 0.7), rgba(246, 243, 238, 0.92));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.78), rgba(248, 250, 253, 0.98));
 }
 
 :root.dark[data-ui-theme='studio'] .ui-bg-wash {
