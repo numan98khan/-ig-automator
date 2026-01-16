@@ -39,11 +39,11 @@ const searchIndex: SearchItem[] = [
     tags: ['dashboard', 'metrics', 'kpis'],
   },
   {
-    title: 'Knowledge Base (Automations)',
-    description: 'Manage AI knowledge articles inside Automations.',
-    path: '/automations?section=knowledge',
+    title: 'Business Profile (Automations)',
+    description: 'Set the business knowledge your AI uses in Automations.',
+    path: '/automations?section=business-profile',
     icon: BookOpen,
-    tags: ['docs', 'articles', 'collections'],
+    tags: ['knowledge', 'profile', 'business'],
   },
   {
     title: 'CRM',

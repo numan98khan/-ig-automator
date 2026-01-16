@@ -50,7 +50,7 @@ function App() {
             <Route path="inbox" element={<Inbox />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="analytics" element={<Dashboard />} />
-            <Route path="knowledge" element={<Navigate to="/automations?section=knowledge" replace />} />
+            <Route path="knowledge" element={<Navigate to="/automations?section=business-profile" replace />} />
             <Route path="settings" element={<Settings />} />
             <Route path="automations" element={<Automations />} />
             <Route path="crm" element={<CRM />} />

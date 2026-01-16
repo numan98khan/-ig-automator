@@ -121,6 +121,11 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
         ? `${aiRemaining} AI messages left in this billing period.`
         : `${aiRemaining} AI messages remaining this period.`
     : 'Unlimited AI messages for this plan.';
+  const aiMessageShort = hasAiLimit
+    ? aiUsed >= (aiLimit || 0)
+      ? 'Limit reached'
+      : `${aiRemaining ?? 0} left`
+    : 'Unlimited';
 
   return (
     <>
@@ -167,31 +172,40 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
           </Button>
         </div>
       </div>
-      {showAiUsage && (
-        <div className={`rounded-xl border p-3 ${aiContainerClass}`}>
-          <div className="flex items-center justify-between gap-3">
-            <div className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wide ${aiAccentClass}`}>
-              <Sparkles className="w-4 h-4" />
-              AI messages
+      <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/70 px-4 py-2 text-xs text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">Triggers</span>
+            <span className="text-base font-semibold text-foreground">{summaryStats.totalTriggered}</span>
+          </div>
+          <span className="h-4 w-px bg-border/70" />
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">Replies</span>
+            <span className="text-base font-semibold text-foreground">{summaryStats.totalRepliesSent}</span>
+          </div>
+        </div>
+        {showAiUsage && (
+          <div className={`w-full rounded-lg border px-3 py-2 text-xs lg:w-[260px] lg:shrink-0 ${aiContainerClass}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div className={`flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide ${aiAccentClass}`}>
+                <Sparkles className="w-3.5 h-3.5" />
+                AI messages
+              </div>
+              <div className="text-sm font-semibold text-foreground">{aiUsageLabel}</div>
             </div>
-            <div className="text-sm font-semibold text-foreground">{aiUsageLabel}</div>
+            <div className="mt-2 flex items-center gap-2">
+              <div className="h-2 flex-1 rounded-full bg-background/50 overflow-hidden">
+                <div className={`h-full ${aiBarClass}`} style={{ width: `${aiPercent}%` }} />
+              </div>
+              <div
+                className={`text-[11px] ${aiMessageClass} whitespace-nowrap`}
+                title={aiMessage}
+              >
+                {aiMessageShort}
+              </div>
+            </div>
           </div>
-          <div className="mt-2 h-2 w-full rounded-full bg-background/50 overflow-hidden">
-            <div className={`h-full ${aiBarClass}`} style={{ width: `${aiPercent}%` }} />
-          </div>
-          <div className={`mt-2 text-xs ${aiMessageClass}`}>{aiMessage}</div>
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Triggers</span>
-          <span className="text-base font-semibold text-foreground">{summaryStats.totalTriggered}</span>
-        </div>
-        <span className="h-4 w-px bg-border/70" />
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Replies</span>
-          <span className="text-base font-semibold text-foreground">{summaryStats.totalRepliesSent}</span>
-        </div>
+        )}
       </div>
     </div>
 
