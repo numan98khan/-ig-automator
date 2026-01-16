@@ -809,7 +809,7 @@ const Home: React.FC = () => {
         </div>
 
         <div className="space-y-6 h-full overflow-y-auto pr-1">
-          <Card>
+          <Card className="hidden sm:block">
             <CardHeader>
               <CardTitle className="text-sm">Workspace status</CardTitle>
             </CardHeader>
