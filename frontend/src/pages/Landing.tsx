@@ -33,12 +33,13 @@ const Landing: React.FC = () => {
   const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { user, currentWorkspace, login, signup, refreshUser } = useAuth();
+  const { user, currentWorkspace } = useAuth();
   const { theme, setTheme, uiTheme } = useTheme();
   const navigate = useNavigate();
   const seoDescription =
     'SendFx is Instagram DM automation and a lightweight CRM for SMBs. Route and qualify DMs, reply with guardrails and approvals, and sync leads to Google Sheets.';
   const siteUrl = requireEnv('VITE_SITE_URL').replace(/\/$/, '');
+  const appUrl = requireEnv('VITE_APP_URL').replace(/\/$/, '');
   const demoVideoUrl = (import.meta.env.VITE_DEMO_VIDEO_URL as string | undefined)?.trim();
   const hasDemoVideo = Boolean(demoVideoUrl);
   const structuredData = {
@@ -56,10 +57,12 @@ const Landing: React.FC = () => {
       demoSection.scrollIntoView({ behavior: 'smooth' });
     }
   };
+  const redirectToApp = (mode: 'login' | 'signup') => {
+    window.location.href = `${appUrl}/${mode}`;
+  };
   const openAuthModal = (mode: 'login' | 'signup') => {
     setError(null);
-    setAuthMode(mode);
-    setShowEmailModal(true);
+    redirectToApp(mode);
   };
   const closeEmailModal = () => {
     setShowEmailModal(false);
@@ -156,42 +159,16 @@ const Landing: React.FC = () => {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      setAuthLoading(true);
-      setError(null);
-
-      await login(email, password);
-      console.log('✅ Login successful, fetching user data...');
-
-      // Refresh user data to get workspaces
-      await refreshUser();
-      console.log('✅ User data refreshed, navigating to home...');
-
-      // Navigate to Home
-      navigate('/app/home', { replace: true });
-    } catch (error: any) {
-      console.error('Login error:', error);
-      setError(error.response?.data?.error || 'Invalid email or password');
-    } finally {
-      setAuthLoading(false);
-    }
+    setAuthLoading(true);
+    setError(null);
+    redirectToApp('login');
   };
 
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      setAuthLoading(true);
-      setError(null);
-
-      await signup(email, password);
-      await refreshUser();
-      navigate('/app/home', { replace: true });
-    } catch (error: any) {
-      console.error('Signup error:', error);
-      setError(error.response?.data?.error || 'Unable to create your account');
-    } finally {
-      setAuthLoading(false);
-    }
+    setAuthLoading(true);
+    setError(null);
+    redirectToApp('signup');
   };
 
   return (
