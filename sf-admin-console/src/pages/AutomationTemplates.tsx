@@ -3364,6 +3364,38 @@ export default function AutomationTemplates() {
                       + Add tool
                     </button>
                   </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Preferred tool</label>
+                    <select
+                      className="input h-9 text-sm"
+                      value={selectedNode.langchainPreferredTool || ''}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          langchainPreferredTool: event.target.value || undefined,
+                        }))
+                      }
+                    >
+                      <option value="">No preference</option>
+                      {(selectedNode.langchainTools || [])
+                        .filter((tool) => tool?.name)
+                        .map((tool, index) => (
+                          <option key={`${selectedNode.id}-langchain-tool-option-${index}`} value={tool.name}>
+                            {tool.name}
+                          </option>
+                        ))}
+                      {selectedNode.langchainPreferredTool
+                        && !(selectedNode.langchainTools || []).some((tool) => tool?.name === selectedNode.langchainPreferredTool)
+                        && (
+                          <option value={selectedNode.langchainPreferredTool}>
+                            Custom: {selectedNode.langchainPreferredTool}
+                          </option>
+                        )}
+                    </select>
+                    <div className="text-[11px] text-muted-foreground">
+                      Picks a tool for the agent to prioritize when deciding tool calls.
+                    </div>
+                  </div>
                   {Array.isArray(selectedNode.langchainTools) && selectedNode.langchainTools.length > 0 ? (
                     <div className="space-y-3">
                       {selectedNode.langchainTools.map((tool, index) => (

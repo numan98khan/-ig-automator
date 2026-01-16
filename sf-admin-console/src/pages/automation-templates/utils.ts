@@ -267,6 +267,7 @@ export const normalizeFlowNode = (node: any, index: number): FlowNode => {
     langchainStopCondition: node?.langchainStopCondition ?? node?.data?.langchainStopCondition,
     langchainMaxIterations: node?.langchainMaxIterations ?? node?.data?.langchainMaxIterations,
     langchainToolChoice: node?.langchainToolChoice ?? node?.data?.langchainToolChoice,
+    langchainPreferredTool: node?.langchainPreferredTool ?? node?.data?.langchainPreferredTool,
     langchainReturnIntermediateSteps: node?.langchainReturnIntermediateSteps
       ?? node?.data?.langchainReturnIntermediateSteps,
     knowledgeItemIds: node?.knowledgeItemIds,
@@ -337,6 +338,7 @@ export const buildFlowDsl = (nodes: FlowNode[], edges: FlowEdge[], startNodeId?:
     langchainStopCondition: node.langchainStopCondition,
     langchainMaxIterations: node.langchainMaxIterations,
     langchainToolChoice: node.langchainToolChoice,
+    langchainPreferredTool: node.langchainPreferredTool,
     langchainReturnIntermediateSteps: node.langchainReturnIntermediateSteps,
     knowledgeItemIds: node.knowledgeItemIds,
     handoff: node.handoff,

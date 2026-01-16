@@ -38,6 +38,7 @@ export type LangchainAgentOptions = {
   historyLimit?: number;
   systemPrompt?: string;
   tools?: LangchainAgentTool[];
+  preferredTool?: string;
   endCondition?: string;
   stopCondition?: string;
   maxIterations?: number;
@@ -96,6 +97,7 @@ export async function generateLangchainAgentReply(
     historyLimit,
     systemPrompt,
     tools,
+    preferredTool,
     endCondition,
     stopCondition,
     maxIterations,
@@ -134,6 +136,10 @@ export async function generateLangchainAgentReply(
       .filter((tool) => tool.name)
     : [];
   const toolChoiceValue = toolChoice === 'required' || toolChoice === 'none' ? toolChoice : 'auto';
+  const preferredToolName = typeof preferredTool === 'string' ? preferredTool.trim() : '';
+  const resolvedPreferredTool = preferredToolName && safeTools.some((tool) => tool.name === preferredToolName)
+    ? preferredToolName
+    : '';
 
   const messages = messageHistory
     ? [...messageHistory].slice(-historyLimitValue)
@@ -226,7 +232,7 @@ TOOLS:
 ${formatToolList(safeTools)}
 
 TOOL CHOICE:
-${toolChoiceValue}
+${toolChoiceValue}${resolvedPreferredTool ? ` (preferred: ${resolvedPreferredTool})` : ''}
 
 INTERMEDIATE STEPS:
 ${returnIntermediateSteps ? 'Include actionSummary and tool rationale for observability.' : 'Keep actionSummary brief.'}
