@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Mail, Lock } from 'lucide-react';
+import { Mail, Lock, Moon, Sun } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import Seo from '../components/Seo';
 
 const Auth: React.FC = () => {
@@ -11,6 +12,7 @@ const Auth: React.FC = () => {
   const location = useLocation();
   const isSignup = location.pathname === '/signup';
   const { login, signup, user, loading } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -66,10 +68,20 @@ const Auth: React.FC = () => {
   return (
     <div className="min-h-screen bg-background">
       <Seo title={isSignup ? 'Sign up | SendFx' : 'Log in | SendFx'} robots="noindex, nofollow" />
-      <div className="min-h-screen grid grid-cols-1 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <div className="min-h-screen grid grid-cols-1 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] relative">
+        <button
+          type="button"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          className="absolute right-6 top-6 z-20 inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/70 px-3 py-2 text-xs font-semibold text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground"
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+        </button>
         <div className="auth-brand-panel hidden md:flex">
           <div className="auth-brand-content">
-            <img src="/sendfx-studio.png" alt="SendFx" className="auth-brand-logo" />
+            <img src="/sendfx-studio.png" alt="SendFx" className="auth-brand-logo block dark:hidden" />
+            <img src="/sendfx-studio-dark.png" alt="SendFx" className="auth-brand-logo hidden dark:block" />
             <span className="auth-brand-badge">Automation studio</span>
             <h2 className="auth-brand-title">Automate DMs. Close faster.</h2>
             <p className="auth-brand-subtitle">
@@ -83,7 +95,7 @@ const Auth: React.FC = () => {
             </ul>
           </div>
         </div>
-        <div className="relative flex items-center justify-center px-6 py-16 bg-[radial-gradient(800px_500px_at_60%_20%,rgba(255,122,0,0.10),transparent_60%)]">
+        <div className="auth-form-panel relative flex items-center justify-center px-6 py-16">
           <div className="auth-card w-full max-w-md rounded-2xl border border-border/60 bg-card/80 p-8 shadow-[0_20px_60px_rgba(0,0,0,0.18)] backdrop-blur">
             <div className="space-y-3 text-center">
               <span className="inline-flex items-center rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
