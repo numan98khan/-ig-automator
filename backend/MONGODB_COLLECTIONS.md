@@ -127,11 +127,6 @@ utils). Collection names follow Mongoose's default pluralization of the model na
     `backend/src/routes/tiers.ts`, `backend/src/services/aiReplyService.ts`,
     `backend/src/services/aiAgentService.ts`, `backend/src/services/vectorStore.ts`
 
-- **LeadCapture**
-  - Status: used
-  - Purpose: goal-driven lead capture details (name/phone/email).
-  - Used by: `backend/src/services/reportingService.ts` (analytics)
-
 - **Message**
   - Status: used
   - Purpose: individual messages in conversations (attachments, AI metadata, receipts).
@@ -144,7 +139,7 @@ utils). Collection names follow Mongoose's default pluralization of the model na
 
 - **ReportDailyWorkspace**
   - Status: used
-  - Purpose: daily aggregated metrics for dashboards (messages, escalations, goal counts).
+  - Purpose: daily aggregated metrics for dashboards (messages, escalations, response times).
   - Used by: `backend/src/routes/dashboard.ts`, `backend/src/services/reportingService.ts`
 
 - **SupportTicket**
@@ -157,11 +152,6 @@ utils). Collection names follow Mongoose's default pluralization of the model na
   - Purpose: comments/updates on support tickets.
   - Used by: `backend/src/routes/supportTickets.ts`
 
-- **SupportTicketStub**
-  - Status: used
-  - Purpose: placeholder capture for support goal flow (order ID/photo/summary).
-  - Used by: `backend/src/services/reportingService.ts` (analytics)
-
 - **WorkspaceInvite**
   - Status: used
   - Purpose: workspace membership invitations (token, role, expiry).
@@ -169,7 +159,7 @@ utils). Collection names follow Mongoose's default pluralization of the model na
 
 - **WorkspaceSettings**
   - Status: used
-  - Purpose: per-workspace assistant and automation settings (prompts, goals, followups, etc).
+  - Purpose: per-workspace assistant and automation settings (prompts, followups, etc).
   - Used by: `backend/src/routes/settings.ts`, `backend/src/routes/messages.ts`,
     `backend/src/routes/integrations.ts`, `backend/src/routes/admin.ts`,
     `backend/src/services/aiReplyService.ts`, `backend/src/services/workspaceSettingsService.ts`

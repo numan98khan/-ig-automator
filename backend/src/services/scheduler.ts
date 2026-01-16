@@ -1,4 +1,4 @@
-import { processDueFollowups } from './automationService';
+import { processDueFollowups, processDueMessageBuffers } from './automationService';
 import { rebuildYesterdayReports } from './reportingService';
 
 /**
@@ -35,6 +35,18 @@ class Scheduler {
       }
     });
 
+    // Schedule message buffer processing every 15 seconds
+    this.scheduleJob('message-buffer-processor', 15 * 1000, async () => {
+      try {
+        const stats = await processDueMessageBuffers();
+        if (stats.processed > 0 || stats.failed > 0) {
+          console.log(`🧺 Message buffer stats: ${JSON.stringify(stats)}`);
+        }
+      } catch (error) {
+        console.error('❌ Error in message buffer processor:', error);
+      }
+    });
+
     // Rebuild daily reports once per day as a safety net
     this.scheduleJob('daily-report-rebuild', 24 * 60 * 60 * 1000, async () => {
       console.log('🧹 Rebuilding yesterday dashboard reports...');
@@ -48,6 +60,7 @@ class Scheduler {
 
     console.log('✅ Scheduler started with the following jobs:');
     console.log('   - Follow-up processor: every 5 minutes');
+    console.log('   - Message buffer processor: every 15 seconds');
     console.log('   - Daily report rebuild: every 24 hours');
   }
 

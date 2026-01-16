@@ -13,46 +13,77 @@ export type AutomationIntentRecord = AutomationIntentDefinition & {
 
 export const DEFAULT_AUTOMATION_INTENTS: AutomationIntentDefinition[] = [
   {
+    value: 'greeting',
+    description:
+      'Hello/hi/emoji-only or opening message with no clear request yet.',
+  },
+  {
+    value: 'faq',
+    description:
+      'General store/service info: hours, location, services offered, pricing basics, policies, or how it works.',
+  },
+  {
     value: 'product_inquiry',
-    description: 'Asking about price, availability, sizes, colors, or variants.',
+    description:
+      'Asking about products/services: price, availability, sizes, colors, variants, materials, or options.',
   },
   {
-    value: 'delivery',
-    description: 'Shipping, COD, delivery time, ETA, or logistics questions.',
-  },
-  {
-    value: 'order_now',
-    description: 'Ready to buy now, proceed to checkout, or place an order.',
-  },
-  {
-    value: 'order_status',
-    description: 'Order tracking, status, where is my order, or past order update.',
-  },
-  {
-    value: 'refund_exchange',
-    description: 'Refund, exchange, return, or replacement requests.',
-  },
-  {
-    value: 'human',
-    description: 'Asking for a human agent, representative, or handoff.',
-  },
-  {
-    value: 'handle_support',
-    description: 'Problems, complaints, cancellations, or support requests not covered above.',
-  },
-  {
-    value: 'capture_lead',
-    description: 'Asking for a quote, requesting a call/email, or leaving contact details.',
+    value: 'quote_request',
+    description:
+      'Requesting a quote/estimate for a specific job or custom requirement (often needs photos/sizes/scope).',
   },
   {
     value: 'book_appointment',
-    description: 'Scheduling or booking a service, appointment, or reservation.',
+    description:
+      'Scheduling or booking a service, appointment, visit, or measurement.',
   },
   {
-    value: 'none',
-    description: 'Greeting, unclear, or does not match any intent.',
+    value: 'order_request',
+    description:
+      'Ready to buy now: proceed to checkout, place an order, reserve an item, confirm quantity/payment.',
+  },
+  {
+    value: 'delivery_shipping',
+    description:
+      'Delivery/shipping questions: fees, areas covered, COD, delivery time/ETA, tracking method, logistics.',
+  },
+  {
+    value: 'order_status',
+    description:
+      'Order tracking/status: where is my order, delivery updates, past order follow-up.',
+  },
+  {
+    value: 'refund_return',
+    description:
+      'Refund, exchange, return, cancellation, replacement, or warranty requests.',
+  },
+  {
+    value: 'support_issue',
+    description:
+      'Problems or complaints not covered above: damaged item, wrong item, service issue, payment issue, general support.',
+  },
+  {
+    value: 'lead_capture',
+    description:
+      'Asking to be contacted or leaving contact details: request a call/WhatsApp/email, “contact me”, “call me”.',
+  },
+  {
+    value: 'human_handoff',
+    description:
+      'Explicitly requesting a human/agent/representative or asking to switch to WhatsApp/call.',
+  },
+  {
+    value: 'spam',
+    description:
+      'Spam/abuse/irrelevant promos, suspicious links, or attempts to exploit the bot.',
+  },
+  {
+    value: 'other',
+    description:
+      'Does not clearly match any intent above; ambiguous or mixed message needing a clarifying question.',
   },
 ];
+
 
 export async function listAutomationIntents(): Promise<AutomationIntentRecord[]> {
   let intents = await AutomationIntent.find({}).sort({ value: 1 }).lean();

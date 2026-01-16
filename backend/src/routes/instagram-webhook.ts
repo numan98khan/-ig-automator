@@ -2,12 +2,19 @@ import express, { Request, Response } from 'express';
 import InstagramAccount from '../models/InstagramAccount';
 import Contact from '../models/Contact';
 import Conversation from '../models/Conversation';
+import ContactNote from '../models/ContactNote';
+import CrmTask from '../models/CrmTask';
+import Escalation from '../models/Escalation';
+import FollowupTask from '../models/FollowupTask';
 import Message from '../models/Message';
+import AutomationSession from '../models/AutomationSession';
+import AutomationMessageBuffer from '../models/AutomationMessageBuffer';
 import { fetchMessagingUserProfile } from '../utils/instagram-api';
 import { webhookLogger } from '../utils/webhook-logger';
 import {
   cancelFollowupOnCustomerReply,
   checkAndExecuteAutomations,
+  maybeBufferAutomationMessage,
 } from '../services/automationService';
 import { transcribeAudioFromUrl } from '../services/transcriptionService';
 import { trackDailyMetric } from '../services/reportingService';
@@ -68,6 +75,69 @@ const resolveMessagingTriggerTypes = (storyTrigger: StoryTriggerInfo | null): Tr
   if (!storyTrigger) return ['dm_message'];
   if (storyTrigger.triggerType === 'story_mention') return ['story_mention', 'dm_message'];
   return ['story_reply', 'dm_message'];
+};
+
+const mergeDuplicateConversations = async (conversations: any[]) => {
+  if (!Array.isArray(conversations) || conversations.length === 0) {
+    return null;
+  }
+  if (conversations.length === 1) return conversations[0];
+
+  const sorted = [...conversations].sort((a, b) => {
+    const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime();
+    const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime();
+    return bTime - aTime;
+  });
+  const [primary, ...duplicates] = sorted;
+  const duplicateIds = duplicates.map((conversation) => conversation._id);
+
+  const latestConversation = sorted.reduce((latest, current) => {
+    const latestTime = new Date(latest.lastMessageAt || latest.updatedAt || 0).getTime();
+    const currentTime = new Date(current.lastMessageAt || current.updatedAt || 0).getTime();
+    return currentTime > latestTime ? current : latest;
+  }, primary);
+
+  if (!primary.contactId) {
+    const fallbackContact = duplicates.find((conversation) => conversation.contactId)?.contactId;
+    if (fallbackContact) {
+      primary.contactId = fallbackContact;
+    }
+  }
+  if (!primary.participantName && latestConversation.participantName) {
+    primary.participantName = latestConversation.participantName;
+  }
+  if (!primary.participantHandle && latestConversation.participantHandle) {
+    primary.participantHandle = latestConversation.participantHandle;
+  }
+  if (!primary.participantProfilePictureUrl && latestConversation.participantProfilePictureUrl) {
+    primary.participantProfilePictureUrl = latestConversation.participantProfilePictureUrl;
+  }
+  if (latestConversation.lastMessageAt) {
+    primary.lastMessageAt = latestConversation.lastMessageAt;
+    primary.lastMessage = latestConversation.lastMessage;
+  }
+  if (latestConversation.lastCustomerMessageAt) {
+    primary.lastCustomerMessageAt = latestConversation.lastCustomerMessageAt;
+  }
+  if (latestConversation.lastBusinessMessageAt) {
+    primary.lastBusinessMessageAt = latestConversation.lastBusinessMessageAt;
+  }
+
+  await primary.save();
+
+  await Promise.all([
+    Message.updateMany({ conversationId: { $in: duplicateIds } }, { $set: { conversationId: primary._id } }),
+    AutomationSession.updateMany({ conversationId: { $in: duplicateIds } }, { $set: { conversationId: primary._id } }),
+    FollowupTask.updateMany({ conversationId: { $in: duplicateIds } }, { $set: { conversationId: primary._id } }),
+    Escalation.updateMany({ conversationId: { $in: duplicateIds } }, { $set: { conversationId: primary._id } }),
+    CrmTask.updateMany({ conversationId: { $in: duplicateIds } }, { $set: { conversationId: primary._id } }),
+    ContactNote.updateMany({ conversationId: { $in: duplicateIds } }, { $set: { conversationId: primary._id } }),
+    AutomationMessageBuffer.updateMany({ conversationId: { $in: duplicateIds } }, { $set: { conversationId: primary._id } }),
+  ]);
+
+  await Conversation.deleteMany({ _id: { $in: duplicateIds } });
+
+  return primary;
 };
 
 const WEBHOOK_VERIFY_TOKEN = requireEnv('INSTAGRAM_WEBHOOK_VERIFY_TOKEN');
@@ -203,11 +273,15 @@ async function handleMessagingEvent(messaging: any) {
     }
 
     // Get or create conversation
-    let conversation = await Conversation.findOne({
+    let conversation = null;
+    const existingConversations = await Conversation.find({
       instagramAccountId: igAccount._id,
       participantInstagramId: senderId,
       platform: 'instagram',
     });
+    if (existingConversations.length > 0) {
+      conversation = await mergeDuplicateConversations(existingConversations);
+    }
 
     const fetchSenderDetails = async () => {
       if (!profileToken) {
@@ -263,6 +337,16 @@ async function handleMessagingEvent(messaging: any) {
       });
 
       isNewConversation = true;
+      const mergedConversation = await mergeDuplicateConversations(
+        await Conversation.find({
+          instagramAccountId: igAccount._id,
+          participantInstagramId: senderId,
+          platform: 'instagram',
+        }),
+      );
+      if (mergedConversation) {
+        conversation = mergedConversation;
+      }
       console.log(`✨ Created new conversation with ${conversation.participantHandle}`);
     } else {
       // Update existing conversation
@@ -552,6 +636,29 @@ async function processMessageAutomations(
         ? savedMessage.attachments.map((attachment: any) => attachment.url).filter(Boolean)
         : undefined,
     };
+
+    const shouldBufferDm = triggerTypes.length === 1 && triggerTypes[0] === 'dm_message';
+    if (shouldBufferDm) {
+      const bufferResult = await maybeBufferAutomationMessage({
+        workspaceId,
+        conversationId: conversation._id.toString(),
+        instagramAccountId: conversation.instagramAccountId.toString(),
+        triggerType: 'dm_message',
+        messageText,
+        platform: conversation.platform || 'instagram',
+        messageContext,
+        source: 'live',
+        bufferStartedAt: savedMessage.createdAt,
+      });
+      if (bufferResult.buffered) {
+        logAutomation('🧺 Buffered DM burst message', {
+          conversationId: conversation._id?.toString(),
+          bufferId: bufferResult.bufferId,
+          bufferSeconds: bufferResult.bufferSeconds,
+        });
+        return;
+      }
+    }
 
     const fallbackErrors = new Set([
       'No active automations found for this trigger',

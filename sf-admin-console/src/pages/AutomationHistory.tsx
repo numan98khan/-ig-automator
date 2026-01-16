@@ -122,7 +122,10 @@ export default function AutomationHistory() {
   })
 
   const version = unwrapData<FlowTemplateVersion>(versionData)
-  const logEvents = unwrapData<AdminLogEvent[]>(logEventsData) || []
+  const logEventsPayload = unwrapData<AdminLogEvent[] | { events?: AdminLogEvent[] }>(logEventsData)
+  const logEvents = Array.isArray(logEventsPayload)
+    ? logEventsPayload
+    : logEventsPayload?.events || []
 
   const flowData = useMemo(() => {
     const dsl = extractDsl(version)

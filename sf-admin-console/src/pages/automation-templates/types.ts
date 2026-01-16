@@ -51,6 +51,17 @@ export type FlowDisplay = {
   previewConversation?: Array<{ from: 'bot' | 'customer'; message: string }>
 }
 
+export type FlowSummarySettings = {
+  enabled?: boolean
+  generateOnFlowEnd?: boolean
+  provider?: AiProvider
+  model?: string
+  temperature?: number
+  maxOutputTokens?: number
+  historyLimit?: number
+  systemPrompt?: string
+}
+
 export type FlowDraft = {
   _id: string
   name: string
@@ -61,6 +72,7 @@ export type FlowDraft = {
   triggers?: FlowTrigger[]
   exposedFields?: FlowField[]
   display?: FlowDisplay
+  aiSummarySettings?: FlowSummarySettings
   updatedAt?: string
 }
 
@@ -78,6 +90,7 @@ export type FlowNodeType =
   | 'send_message'
   | 'ai_reply'
   | 'ai_agent'
+  | 'langchain_agent'
   | 'handoff'
   | 'router'
 
@@ -134,6 +147,12 @@ export type FlowAgentSlot = {
   defaultValue?: string
 }
 
+export type FlowLangchainTool = {
+  name: string
+  description?: string
+  inputSchema?: Record<string, any> | string
+}
+
 export type FlowTriggerConfig = {
   keywords?: string[]
   excludeKeywords?: string[]
@@ -142,6 +161,7 @@ export type FlowTriggerConfig = {
   intentText?: string
   intentProvider?: AiProvider
   intentModel?: string
+  burstBufferSeconds?: number
 }
 
 export type FlowButton = {
@@ -174,7 +194,15 @@ export type FlowNode = Node<FlowNodeData> & {
   agentStopCondition?: string
   agentMaxQuestions?: number
   agentSlots?: FlowAgentSlot[]
+  langchainSystemPrompt?: string
+  langchainTools?: FlowLangchainTool[]
+  langchainEndCondition?: string
+  langchainStopCondition?: string
+  langchainMaxIterations?: number
+  langchainToolChoice?: 'auto' | 'required' | 'none'
+  langchainReturnIntermediateSteps?: boolean
   knowledgeItemIds?: string[]
+  burstBufferSeconds?: number
   handoff?: {
     topic?: string
     summary?: string
@@ -234,5 +262,15 @@ export type DraftForm = {
     collectsText: string
     icon: string
     previewText: string
+  }
+  summarySettings: {
+    enabled: boolean
+    generateOnFlowEnd: boolean
+    provider: AiProvider
+    model: string
+    temperature: string
+    maxOutputTokens: string
+    historyLimit: string
+    systemPrompt: string
   }
 }

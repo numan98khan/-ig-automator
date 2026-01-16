@@ -1,5 +1,26 @@
 # Railway Deployment Setup Guide
 
+## Split Frontend Services (Landing + App)
+
+The marketing site and the authenticated app now deploy separately:
+
+- `landing/` → `sendfx.ai` and `www.sendfx.ai`
+- `frontend/` → `app.sendfx.ai`
+
+### Landing service env vars
+
+```bash
+VITE_SITE_URL=https://sendfx.ai
+VITE_APP_URL=https://app.sendfx.ai
+```
+
+### App service env vars
+
+```bash
+VITE_SITE_URL=https://app.sendfx.ai
+VITE_API_URL=https://your-backend-service.railway.app
+```
+
 ## Critical Environment Variables
 
 Based on your deployment URL: `https://frontend-production-2fe82.up.railway.app`
@@ -86,15 +107,15 @@ The Instagram callback URL **MUST** match exactly:
 
 ### Testing OAuth Flow
 
-1. Visit: `https://frontend-production-2fe82.up.railway.app/landing`
+1. Visit: `https://frontend-production-2fe82.up.railway.app/login`
 2. Click "Sign in with Instagram"
 3. Watch Railway logs for the complete flow
 4. After Instagram authorization, you should see:
    - "Created new user via Instagram OAuth"
    - "Created new workspace"
    - "Created new Instagram account"
-   - Redirect to `/landing?token=...&instagram_connected=true`
-   - Auto-redirect to `/inbox`
+   - Redirect to `/login?token=...&instagram_connected=true`
+   - Auto-redirect to `/app/inbox`
 
 ### MongoDB Verification
 

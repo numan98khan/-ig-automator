@@ -2,10 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import Layout from './components/Layout';
-import Landing from './pages/Landing';
 import Inbox from './pages/Inbox';
 import Settings from './pages/Settings';
-import PrivacyPolicy from './pages/PrivacyPolicy';
 import VerifyEmail from './pages/VerifyEmail';
 import AcceptInvite from './pages/AcceptInvite';
 import RequestPasswordReset from './pages/RequestPasswordReset';
@@ -16,16 +14,17 @@ import Support from './pages/Support';
 import Automations from './pages/Automations';
 import CRM from './pages/CRM';
 import Home from './pages/Home';
+import Auth from './pages/Auth';
+import AppEntry from './components/AppEntry';
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/landing" element={<Landing />} />
-          <Route path="/login" element={<Navigate to="/" replace />} />
-          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/" element={<AppEntry />} />
+          <Route path="/login" element={<Auth />} />
+          <Route path="/signup" element={<Auth />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/request-password-reset" element={<RequestPasswordReset />} />
@@ -54,7 +53,7 @@ function App() {
             <Route path="escalations" element={<Navigate to="/app/automations?section=alerts" replace />} />
             <Route path="team" element={<Navigate to="/app/settings?tab=team" replace />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

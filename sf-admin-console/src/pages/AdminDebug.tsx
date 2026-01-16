@@ -23,7 +23,7 @@ export default function AdminDebug() {
     openaiApiLogsEnabled: false,
     consoleLogsEnabled: false,
   })
-  const [uiTheme, setUiTheme] = useState<'legacy' | 'comic'>('legacy')
+  const [uiTheme, setUiTheme] = useState<'legacy' | 'comic' | 'studio'>('legacy')
 
   const { data: workspaces } = useQuery({
     queryKey: ['debug-workspaces'],
@@ -64,7 +64,7 @@ export default function AdminDebug() {
 
   useEffect(() => {
     const payload = unwrapData<any>(uiSettingsData)
-    if (payload?.uiTheme === 'comic' || payload?.uiTheme === 'legacy') {
+    if (payload?.uiTheme === 'comic' || payload?.uiTheme === 'legacy' || payload?.uiTheme === 'studio') {
       setUiTheme(payload.uiTheme)
     }
   }, [uiSettingsData])
@@ -76,7 +76,7 @@ export default function AdminDebug() {
     },
   })
   const updateUiMutation = useMutation({
-    mutationFn: (payload: { uiTheme: 'legacy' | 'comic' }) => adminApi.updateUiSettings(payload),
+    mutationFn: (payload: { uiTheme: 'legacy' | 'comic' | 'studio' }) => adminApi.updateUiSettings(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-ui-settings'] })
     },
@@ -88,7 +88,7 @@ export default function AdminDebug() {
     updateLogsMutation.mutate({ [key]: nextValue })
   }
 
-  const handleUiThemeChange = (nextTheme: 'legacy' | 'comic') => {
+  const handleUiThemeChange = (nextTheme: 'legacy' | 'comic' | 'studio') => {
     setUiTheme(nextTheme)
     updateUiMutation.mutate({ uiTheme: nextTheme })
   }
@@ -243,10 +243,11 @@ export default function AdminDebug() {
             id="ui-theme-select"
             className="input-field max-w-xs bg-background"
             value={uiTheme}
-            onChange={(event) => handleUiThemeChange(event.target.value as 'legacy' | 'comic')}
+            onChange={(event) => handleUiThemeChange(event.target.value as 'legacy' | 'comic' | 'studio')}
             disabled={isSavingUiSettings}
           >
             <option value="legacy">Legacy (current)</option>
+            <option value="studio">Studio editorial</option>
             <option value="comic">Comic pop-art</option>
           </select>
           {isSavingUiSettings && (

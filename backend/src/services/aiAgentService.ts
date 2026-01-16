@@ -1,13 +1,15 @@
 import mongoose from 'mongoose';
 import { IConversation } from '../models/Conversation';
-import Message from '../models/Message';
+import Message, { IMessage } from '../models/Message';
 import KnowledgeItem from '../models/KnowledgeItem';
+import WorkspaceSettings from '../models/WorkspaceSettings';
 import { AutomationAiSettings } from '../types/automation';
 import { searchWorkspaceKnowledge, RetrievedContext } from './vectorStore';
 import { getLogSettingsSnapshot } from './adminLogSettingsService';
 import { logOpenAiUsage } from './openAiUsageService';
 import { normalizeReasoningEffort } from '../utils/aiReasoning';
 import { AiProvider, getAiClient, normalizeAiProvider } from '../utils/aiProvider';
+import { buildBusinessProfileContext } from './businessProfileKnowledge';
 
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b';
@@ -27,6 +29,9 @@ export type AIAgentOptions = {
   conversation: IConversation;
   workspaceId: mongoose.Types.ObjectId | string;
   latestCustomerMessage?: string;
+  conversationSummary?: string;
+  messageHistory?: Pick<IMessage, 'from' | 'text' | 'attachments' | 'createdAt'>[];
+  historyLimit?: number;
   systemPrompt?: string;
   steps?: string[];
   stepIndex?: number;
@@ -67,6 +72,9 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     conversation,
     workspaceId,
     latestCustomerMessage,
+    conversationSummary,
+    messageHistory,
+    historyLimit,
     systemPrompt,
     steps,
     stepIndex,
@@ -81,7 +89,11 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     knowledgeItemIds,
   } = options;
 
-  const historyLimit = typeof aiSettings?.historyLimit === 'number' ? aiSettings?.historyLimit : 10;
+  const historyLimitValue = typeof historyLimit === 'number'
+    ? historyLimit
+    : typeof aiSettings?.historyLimit === 'number'
+      ? aiSettings?.historyLimit
+      : 10;
   const ragEnabled = aiSettings?.ragEnabled !== false;
   const provider = normalizeAiProvider(aiSettings?.provider);
   const model = aiSettings?.model || (provider === 'groq' ? DEFAULT_GROQ_MODEL : DEFAULT_OPENAI_MODEL);
@@ -119,14 +131,16 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
       }, {} as Record<string, string>)
     : {};
 
-  const messages = await Message.find({ conversationId: conversation._id })
-    .sort({ createdAt: -1 })
-    .limit(historyLimit)
-    .then(found => {
-      const ordered = [...found];
-      ordered.reverse();
-      return ordered;
-    });
+  const messages = messageHistory
+    ? [...messageHistory].slice(-historyLimitValue)
+    : await Message.find({ conversationId: conversation._id })
+        .sort({ createdAt: -1 })
+        .limit(historyLimitValue)
+        .then(found => {
+          const ordered = [...found];
+          ordered.reverse();
+          return ordered;
+        });
 
   const recentCustomerMessage = [...messages].reverse().find((msg: any) => msg.from === 'customer');
   const recentCustomerText =
@@ -137,6 +151,14 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
   // Build knowledge context (Mongo + optional vector RAG)
   let knowledgeContext = '';
   let vectorContexts: RetrievedContext[] = [];
+  const appendKnowledgeBlock = (label: string, content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    if (knowledgeContext) {
+      knowledgeContext += '\n\n';
+    }
+    knowledgeContext += `${label}:\n${trimmed}`;
+  };
 
   const knowledgeBaseQuery = {
     workspaceId,
@@ -147,6 +169,8 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     : knowledgeBaseQuery;
 
   const knowledgeItems = await KnowledgeItem.find(knowledgeQuery);
+  const workspaceSettings = await WorkspaceSettings.findOne({ workspaceId }).lean();
+  const businessProfile = buildBusinessProfileContext(workspaceSettings);
 
   if (recentCustomerText && ragEnabled) {
     try {
@@ -156,16 +180,22 @@ export async function generateAIAgentReply(options: AIAgentOptions): Promise<AIA
     }
   }
 
+  if (businessProfile) {
+    appendKnowledgeBlock('Business Profile', businessProfile.content);
+  }
+
   if (knowledgeItems.length > 0) {
-    knowledgeContext += '\nKnowledge Base:\n';
-    knowledgeContext += knowledgeItems.map((item: any) => `- ${item.title}: ${item.content}`).join('\n');
+    appendKnowledgeBlock(
+      'Knowledge Base',
+      knowledgeItems.map((item: any) => `- ${item.title}: ${item.content}`).join('\n'),
+    );
   }
 
   if (vectorContexts.length > 0) {
-    knowledgeContext += '\n\nVector RAG Matches:\n';
-    knowledgeContext += vectorContexts
-      .map((ctx) => `- ${ctx.title}: ${ctx.content}`)
-      .join('\n');
+    appendKnowledgeBlock(
+      'Vector RAG Matches',
+      vectorContexts.map((ctx) => `- ${ctx.title}: ${ctx.content}`).join('\n'),
+    );
   }
 
   const conversationHistory = messages.map((msg: any) => {
@@ -228,6 +258,9 @@ ${knowledgeContext || 'No knowledge provided.'}
 
 CONVERSATION HISTORY:
 ${conversationHistory || 'No prior messages.'}
+
+CONVERSATION SUMMARY:
+${conversationSummary?.trim() || 'No summary available.'}
 
 LATEST CUSTOMER MESSAGE:
 "${recentCustomerText}"

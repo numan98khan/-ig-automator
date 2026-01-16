@@ -23,12 +23,10 @@ import FlowTemplateVersion from '../models/FlowTemplateVersion';
 import FollowupTask from '../models/FollowupTask';
 import InstagramAccount from '../models/InstagramAccount';
 import KnowledgeItem from '../models/KnowledgeItem';
-import LeadCapture from '../models/LeadCapture';
 import Message from '../models/Message';
 import ReportDailyWorkspace from '../models/ReportDailyWorkspace';
 import SupportTicket from '../models/SupportTicket';
 import SupportTicketComment from '../models/SupportTicketComment';
-import SupportTicketStub from '../models/SupportTicketStub';
 import { WorkspaceInvite } from '../models/WorkspaceInvite';
 import WorkspaceSettings from '../models/WorkspaceSettings';
 import {
@@ -509,11 +507,9 @@ router.delete('/account', authenticate, async (req: AuthRequest, res: Response) 
         FollowupTask.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
         InstagramAccount.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
         KnowledgeItem.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
-        LeadCapture.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
         Message.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
         ReportDailyWorkspace.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
         SupportTicket.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
-        SupportTicketStub.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
         WorkspaceInvite.deleteMany({ workspaceId: { $in: workspaceObjectIds } }),
         WorkspaceSettings.deleteMany({ workspaceId: { $in: workspaceObjectIds } })
       );

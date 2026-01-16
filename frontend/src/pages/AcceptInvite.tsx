@@ -245,7 +245,7 @@ const AcceptInvite: React.FC = () => {
           {/* Error Actions */}
           {status === 'error' && (
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/login')}
               className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
             >
               Go to Login

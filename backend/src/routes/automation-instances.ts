@@ -12,8 +12,12 @@ import WorkspaceSettings from '../models/WorkspaceSettings';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { checkWorkspaceAccess } from '../middleware/workspaceAccess';
 import { getAdminLogEvents } from '../services/adminLogEventService';
+import type { TriggerType } from '../types/automation';
 import {
   executePreviewFlowForInstance,
+  maybeBufferAutomationMessage,
+  resolveBurstBufferSecondsForAutomation,
+  resolveNodeBurstBufferSecondsForSession,
   resolveLatestTemplateVersion,
   resolveAutomationSelection,
 } from '../services/automationService';
@@ -121,10 +125,16 @@ const ensurePreviewMeta = (session: any) => {
 
 const markOnboardingTimestamp = async (workspaceId: string, field: string) => {
   const workspaceObjectId = new mongoose.Types.ObjectId(workspaceId);
-  await WorkspaceSettings.updateOne(
+  const timestamp = new Date();
+  const updateResult = await WorkspaceSettings.updateOne(
     { workspaceId: workspaceObjectId, [field]: { $exists: false } },
-    { $set: { [field]: new Date() }, $setOnInsert: { workspaceId: workspaceObjectId } },
-    { upsert: true }
+    { $set: { [field]: timestamp } },
+  );
+  if (updateResult.matchedCount > 0) return;
+  await WorkspaceSettings.updateOne(
+    { workspaceId: workspaceObjectId },
+    { $setOnInsert: { workspaceId: workspaceObjectId, [field]: timestamp } },
+    { upsert: true },
   );
 };
 
@@ -171,7 +181,12 @@ const buildNodeSummary = (node: any, options: {
     summary.push({ label, value: trimmed });
   };
 
-  const previewCandidate = node.text ?? node.message ?? node.agentSystemPrompt ?? node.handoff?.message ?? node.handoff?.summary;
+  const previewCandidate = node.text
+    ?? node.message
+    ?? node.agentSystemPrompt
+    ?? node.langchainSystemPrompt
+    ?? node.handoff?.message
+    ?? node.handoff?.summary;
   const preview = truncateText(previewCandidate, 180);
 
   if (typeof node.waitForReply === 'boolean') {
@@ -195,6 +210,9 @@ const buildNodeSummary = (node: any, options: {
     const ai = node.aiSettings || {};
     add('Model', ai.model);
     add('Reasoning', ai.reasoningEffort);
+    if (typeof node.burstBufferSeconds === 'number' && node.burstBufferSeconds > 0) {
+      add('Reply buffer', `${node.burstBufferSeconds}s`);
+    }
     if (typeof ai.temperature === 'number') add('Temperature', `${ai.temperature}`);
     if (typeof ai.maxOutputTokens === 'number') add('Max tokens', `${ai.maxOutputTokens}`);
     if (typeof ai.historyLimit === 'number') add('History', `${ai.historyLimit}`);
@@ -206,12 +224,29 @@ const buildNodeSummary = (node: any, options: {
     if (steps.length > 0) add('Steps', `${steps.length}`);
     add('End condition', truncateText(node.agentEndCondition, 120));
     add('Stop condition', truncateText(node.agentStopCondition, 120));
+    if (typeof node.burstBufferSeconds === 'number' && node.burstBufferSeconds > 0) {
+      add('Reply buffer', `${node.burstBufferSeconds}s`);
+    }
     if (typeof node.agentMaxQuestions === 'number') add('Max questions', `${node.agentMaxQuestions}`);
     const slots = Array.isArray(node.agentSlots) ? node.agentSlots : [];
     if (slots.length > 0) {
       const keys = slots.map((slot: any) => slot?.key).filter(Boolean);
       add('Slots', formatList(keys, 4) || `${slots.length}`);
     }
+    const ai = node.aiSettings || {};
+    add('Model', ai.model);
+    add('Reasoning', ai.reasoningEffort);
+    if (typeof ai.temperature === 'number') add('Temperature', `${ai.temperature}`);
+    if (typeof ai.ragEnabled === 'boolean') add('RAG', ai.ragEnabled ? 'On' : 'Off');
+    const knowledgeItemIds = Array.isArray(node.knowledgeItemIds) ? node.knowledgeItemIds : [];
+    if (knowledgeItemIds.length > 0) add('Knowledge items', `${knowledgeItemIds.length}`);
+  } else if (nodeType === 'langchain_agent') {
+    const tools = Array.isArray(node.langchainTools) ? node.langchainTools.filter((tool: any) => tool?.name) : [];
+    if (tools.length > 0) add('Tools', `${tools.length}`);
+    add('End condition', truncateText(node.langchainEndCondition, 120));
+    add('Stop condition', truncateText(node.langchainStopCondition, 120));
+    if (typeof node.langchainMaxIterations === 'number') add('Max iterations', `${node.langchainMaxIterations}`);
+    if (typeof node.langchainToolChoice === 'string') add('Tool choice', node.langchainToolChoice);
     const ai = node.aiSettings || {};
     add('Model', ai.model);
     add('Reasoning', ai.reasoningEffort);
@@ -330,11 +365,13 @@ const formatPreviewConversation = (conversation: any) => ({
   participantProfilePictureUrl: conversation.participantProfilePictureUrl,
   tags: Array.isArray(conversation.tags) ? conversation.tags : [],
   lastMessageAt: conversation.lastMessageAt,
+  aiSummary: conversation.aiSummary,
+  aiSummaryUpdatedAt: conversation.aiSummaryUpdatedAt,
 });
 
 const buildCurrentNodeSummary = (session: any, versionDoc: any) => {
   if (!session || !versionDoc) return null;
-  const nodeId = session.state?.nodeId || session.state?.agent?.nodeId;
+  const nodeId = session.state?.nodeId || session.state?.agent?.nodeId || session.state?.langchainAgent?.nodeId;
   const compiledGraph = versionDoc?.compiled?.graph || versionDoc?.compiled;
   const nodes = Array.isArray(compiledGraph?.nodes) ? compiledGraph.nodes : [];
   let node = nodeId ? nodes.find((candidate: any) => candidate?.id === nodeId) : undefined;
@@ -471,18 +508,33 @@ const buildPreviewConversation = async (params: {
   });
 };
 
+const getPreviewSentAt = (message: Record<string, any>) => {
+  const raw = message?.metadata?.previewSentAt;
+  if (raw) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return message.createdAt;
+};
+
 const formatPreviewMessages = (messages: Array<Record<string, any>>) =>
   messages.map((message) => ({
     id: message._id?.toString(),
     text: message.text,
     from: message.from,
-    createdAt: message.createdAt,
+    createdAt: getPreviewSentAt(message),
   }));
 
 const loadPreviewMessages = async (conversationId: mongoose.Types.ObjectId | string) => {
-  const messages = await Message.find({ conversationId })
-    .sort({ createdAt: 1 })
-    .lean();
+  const messages = await Message.find({ conversationId }).lean();
+  messages.sort((a, b) => {
+    const aTime = getPreviewSentAt(a).getTime();
+    const bTime = getPreviewSentAt(b).getTime();
+    if (aTime !== bTime) return aTime - bTime;
+    return String(a._id).localeCompare(String(b._id));
+  });
   return formatPreviewMessages(messages);
 };
 
@@ -494,6 +546,7 @@ const ensurePreviewSession = async (params: {
   sessionId?: string;
   persona?: PreviewPersona | null;
   profileId?: string;
+  source?: string;
 }) => {
   const {
     instance,
@@ -503,17 +556,28 @@ const ensurePreviewSession = async (params: {
     sessionId,
     persona,
     profileId,
+    source,
   } = params;
+  const sourceFilter = source ? { 'state.previewMeta.source': source } : {};
   let session = sessionId
-    ? await AutomationSession.findById(sessionId)
+    ? await AutomationSession.findOne({
+      _id: sessionId,
+      automationInstanceId: instance._id,
+      channel: 'preview',
+      ...sourceFilter,
+    })
     : await AutomationSession.findOne({
-        automationInstanceId: instance._id,
-        channel: 'preview',
-      }).sort({ updatedAt: -1 });
+      automationInstanceId: instance._id,
+      channel: 'preview',
+      ...sourceFilter,
+    }).sort({ updatedAt: -1 });
 
-  const shouldReset = reset || !session || session.status !== 'active' || session.channel !== 'preview';
-  if (shouldReset) {
-    const conversation = await buildPreviewConversation({ instance, instagramAccountId, persona });
+  const shouldCreate = reset || !session || session.channel !== 'preview';
+  let conversation = session?.conversationId
+    ? await Conversation.findById(session.conversationId)
+    : null;
+  if (shouldCreate) {
+    conversation = await buildPreviewConversation({ instance, instagramAccountId, persona });
     session = await AutomationSession.create({
       workspaceId: instance.workspaceId,
       conversationId: conversation._id,
@@ -529,12 +593,18 @@ const ensurePreviewSession = async (params: {
       message: 'Preview session started',
       createdAt: new Date(),
     });
-    if (persona) {
+    if (persona || profileId || source) {
       const meta = ensurePreviewMeta(session);
-      meta.persona = persona;
+      if (persona) {
+        meta.persona = persona;
+      }
       if (profileId) {
         meta.profileId = profileId;
       }
+      if (source) {
+        meta.source = source;
+      }
+      session.markModified('state');
     }
     await session.save();
     return { session, conversation };
@@ -544,17 +614,54 @@ const ensurePreviewSession = async (params: {
     throw new Error('Preview session missing');
   }
 
-  if (session.templateVersionId?.toString() !== templateVersionId.toString()) {
-    session.templateVersionId = templateVersionId;
+  if (!conversation) {
+    conversation = await buildPreviewConversation({ instance, instagramAccountId, persona });
+    session.conversationId = conversation._id;
     await session.save();
+    return { session, conversation };
   }
 
-  const conversation = await Conversation.findById(session.conversationId);
-  if (!conversation) {
-    const newConversation = await buildPreviewConversation({ instance, instagramAccountId, persona });
-    session.conversationId = newConversation._id;
+  if (session.status === 'completed' || session.status === 'handoff') {
+    const existingMeta = session.state?.previewMeta && typeof session.state.previewMeta === 'object'
+      ? { ...session.state.previewMeta }
+      : {};
+    const nextMeta = {
+      ...existingMeta,
+      events: [],
+    } as {
+      events: PreviewEvent[];
+      profileId?: string;
+      persona?: PreviewPersona;
+      source?: string;
+      selectedAutomation?: {
+        id?: string;
+        name?: string;
+        templateId?: string;
+        trigger?: { type?: string; label?: string; description?: string };
+      };
+    };
+    if (persona) {
+      nextMeta.persona = persona;
+    }
+    if (profileId) {
+      nextMeta.profileId = profileId;
+    }
+    if (source) {
+      nextMeta.source = source;
+    }
+    session.status = 'active';
+    session.templateVersionId = templateVersionId;
+    session.state = { previewMeta: nextMeta };
+    appendPreviewEvent(session, {
+      type: 'info',
+      message: 'Preview session restarted',
+      createdAt: new Date(),
+    });
+    session.markModified('state');
     await session.save();
-    return { session, conversation: newConversation };
+  } else if (session.templateVersionId?.toString() !== templateVersionId.toString()) {
+    session.templateVersionId = templateVersionId;
+    await session.save();
   }
 
   if (persona) {
@@ -573,8 +680,18 @@ const ensurePreviewSession = async (params: {
     if (profileId) {
       meta.profileId = profileId;
     }
+    if (source) {
+      meta.source = source;
+    }
     session.markModified('state');
     await session.save();
+  } else if (source) {
+    const meta = ensurePreviewMeta(session);
+    if (meta.source !== source) {
+      meta.source = source;
+      session.markModified('state');
+      await session.save();
+    }
   }
 
   return { session, conversation };
@@ -652,7 +769,7 @@ router.get('/workspace/:workspaceId', authenticate, async (req: AuthRequest, res
 
 router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { workspaceId, text, triggerType, persona, profileId, sessionId, reset } = req.body || {};
+    const { workspaceId, text, triggerType, persona, profileId, sessionId, reset, clientSentAt } = req.body || {};
     if (!workspaceId || typeof workspaceId !== 'string') {
       return res.status(400).json({ error: 'workspaceId is required' });
     }
@@ -739,6 +856,7 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
       sessionId: activePreviewSession?._id?.toString(),
       persona: resolvedPersona,
       profileId: resolvedProfile?._id?.toString(),
+      source: 'simulate',
     });
     const meta = ensurePreviewMeta(session);
     meta.source = 'simulate';
@@ -751,18 +869,84 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
         : undefined,
     };
 
+    const previewSentAt = typeof clientSentAt === 'string' ? new Date(clientSentAt) : null;
+    const previewMetadata = previewSentAt && !Number.isNaN(previewSentAt.getTime())
+      ? { previewSentAt }
+      : undefined;
     const customerMessage = await Message.create({
       conversationId: conversation._id,
       workspaceId: conversation.workspaceId,
       text: trimmedText,
       from: 'customer',
       platform: 'mock',
+      metadata: previewMetadata,
     });
 
     conversation.lastMessage = customerMessage.text;
     conversation.lastMessageAt = customerMessage.createdAt;
     conversation.lastCustomerMessageAt = customerMessage.createdAt;
     await conversation.save();
+
+    const nodeBufferSeconds = activePreviewSession && !reset
+      ? await resolveNodeBurstBufferSecondsForSession({
+        session,
+        instance: selectedInstance,
+        version: selectedVersion,
+      })
+      : 0;
+    const bufferSeconds = nodeBufferSeconds > 0
+      ? nodeBufferSeconds
+      : resolveBurstBufferSecondsForAutomation({
+        instance: selectedInstance,
+        version: selectedVersion,
+        triggerType: resolvedTriggerType as TriggerType,
+      });
+    if (resolvedTriggerType === 'dm_message' && bufferSeconds > 0) {
+      const bufferResult = await maybeBufferAutomationMessage({
+        workspaceId,
+        conversationId: conversation._id.toString(),
+        instagramAccountId: instagramAccountId.toString(),
+        triggerType: 'dm_message',
+        messageText: trimmedText,
+        platform: 'mock',
+        messageContext,
+        source: 'simulate',
+        sessionId: session._id?.toString(),
+        bufferSeconds,
+        bufferStartedAt: customerMessage.createdAt,
+      });
+      if (bufferResult.buffered) {
+        appendPreviewEvent(session, {
+          type: 'info',
+          message: `Buffered DM burst for ${bufferSeconds}s`,
+          createdAt: new Date(),
+          details: {
+            bufferId: bufferResult.bufferId,
+            bufferSeconds,
+          },
+        });
+        session.markModified('state');
+        await session.save();
+        const payload = await buildPreviewSessionPayload(session, conversation, {
+          includeEvents: await canViewExecutionTimeline(workspaceId),
+        });
+        const previewMessages = conversation
+          ? (await loadPreviewMessages(conversation._id)).filter((message) => message.from === 'ai')
+          : [];
+
+        return res.json({
+          success: true,
+          buffered: true,
+          sessionId: session._id,
+          conversationId: conversation._id,
+          status: session.status,
+          messages: previewMessages,
+          ...payload,
+          selectedAutomation: meta.selectedAutomation,
+          diagnostics,
+        });
+      }
+    }
 
     const result = await executePreviewFlowForInstance({
       instance: selectedInstance,
@@ -789,6 +973,9 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
     const payload = await buildPreviewSessionPayload(session, conversation, {
       includeEvents: await canViewExecutionTimeline(workspaceId),
     });
+    const previewMessages = conversation
+      ? (await loadPreviewMessages(conversation._id)).filter((message) => message.from === 'ai')
+      : [];
 
     return res.json({
       success: result.success,
@@ -796,7 +983,7 @@ router.post('/simulate/message', authenticate, async (req: AuthRequest, res: Res
       sessionId: session._id,
       conversationId: conversation._id,
       status: session.status,
-      messages: result.messages,
+      messages: previewMessages,
       ...payload,
       selectedAutomation: meta.selectedAutomation,
       diagnostics,
@@ -1350,6 +1537,7 @@ router.post('/:id/preview-session', authenticate, async (req: AuthRequest, res: 
       sessionId,
       persona: resolvedPersona,
       profileId: resolvedProfile?._id?.toString(),
+      source: 'preview',
     });
     const meta = ensurePreviewMeta(session);
     if (!meta.source) {
@@ -1373,6 +1561,52 @@ router.post('/:id/preview-session', authenticate, async (req: AuthRequest, res: 
   }
 });
 
+router.post('/:id/preview-session/reset', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { sessionId } = req.body || {};
+    const instance = await AutomationInstance.findById(id);
+    if (!instance) {
+      return res.status(404).json({ error: 'Automation instance not found' });
+    }
+
+    const { hasAccess } = await checkWorkspaceAccess(instance.workspaceId.toString(), req.userId!);
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const sessionQuery: Record<string, any> = {
+      automationInstanceId: instance._id,
+      channel: 'preview',
+      'state.previewMeta.source': 'preview',
+    };
+    if (sessionId) {
+      sessionQuery._id = sessionId;
+    }
+
+    const sessions = await AutomationSession.find(sessionQuery).lean();
+    if (!sessions.length) {
+      return res.json({ success: true });
+    }
+
+    const sessionIds = sessions.map((session) => session._id);
+    const conversationIds = sessions
+      .map((session) => session.conversationId)
+      .filter(Boolean);
+
+    await AutomationSession.deleteMany({ _id: { $in: sessionIds } });
+    if (conversationIds.length > 0) {
+      await Message.deleteMany({ conversationId: { $in: conversationIds } });
+      await Conversation.deleteMany({ _id: { $in: conversationIds } });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Reset preview session error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.get('/:id/preview-session/status', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const access = await loadInstanceWithAccess(req.params.id, req.userId!, res);
@@ -1381,9 +1615,17 @@ router.get('/:id/preview-session/status', authenticate, async (req: AuthRequest,
 
     const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
     const session = sessionId
-      ? await AutomationSession.findOne({ _id: sessionId, automationInstanceId: instance._id, channel: 'preview' })
-      : await AutomationSession.findOne({ automationInstanceId: instance._id, channel: 'preview' })
-        .sort({ updatedAt: -1 });
+      ? await AutomationSession.findOne({
+        _id: sessionId,
+        automationInstanceId: instance._id,
+        channel: 'preview',
+        'state.previewMeta.source': 'preview',
+      })
+      : await AutomationSession.findOne({
+        automationInstanceId: instance._id,
+        channel: 'preview',
+        'state.previewMeta.source': 'preview',
+      }).sort({ updatedAt: -1 });
 
     if (!session) {
       return res.json({ session: null, conversation: null, currentNode: null, events: [], profile: null, persona: null });
@@ -1532,6 +1774,7 @@ router.post('/:id/preview-session/message', authenticate, async (req: AuthReques
       sessionId,
       persona: resolvedPersona,
       profileId: resolvedProfileId,
+      source: 'preview',
     });
     const meta = ensurePreviewMeta(session);
     if (!meta.source) {

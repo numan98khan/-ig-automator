@@ -95,6 +95,20 @@ const resolveAiProvider = (value?: string): AiProvider =>
 const getAiModelSuggestions = (provider: AiProvider) =>
   AI_MODEL_SUGGESTIONS_BY_PROVIDER[provider] || AI_MODEL_SUGGESTIONS_BY_PROVIDER[DEFAULT_AI_PROVIDER]
 
+const formatToolSchema = (schema?: Record<string, any> | string) => {
+  if (!schema) return ''
+  return typeof schema === 'string' ? schema : formatJson(schema)
+}
+
+const parseToolSchema = (value: string): Record<string, any> | string | undefined => {
+  if (!value.trim()) return undefined
+  try {
+    return JSON.parse(value)
+  } catch {
+    return value
+  }
+}
+
 const ROUTER_SOURCE_OPTIONS: Array<{ value: RouterRuleSource; label: string }> = [
   { value: 'vars', label: 'Vars (session)' },
   { value: 'message', label: 'Message text' },
@@ -209,10 +223,13 @@ export default function AutomationTemplates() {
   const hasCustomAiModel = Boolean(aiModelValue) && !aiModelSuggestions.includes(aiModelValue)
   const intentProvider = resolveAiProvider(selectedNode?.intentSettings?.provider)
   const intentModelSuggestions = getAiModelSuggestions(intentProvider)
+  const summaryProvider = resolveAiProvider(draftForm.summarySettings.provider)
+  const summaryModelSuggestions = getAiModelSuggestions(summaryProvider)
   const selectedTriggerConfig: FlowTriggerConfig = selectedNode?.triggerConfig || {}
   const triggerIntentProvider = resolveAiProvider(selectedTriggerConfig.intentProvider)
   const triggerIntentModelSuggestions = getAiModelSuggestions(triggerIntentProvider)
   const triggerIntentModelValue = selectedTriggerConfig.intentModel || ''
+  const isDmTrigger = (selectedNode?.triggerType || DEFAULT_TRIGGER_TYPE) === 'dm_message'
   const hasCustomTriggerIntentModel = Boolean(triggerIntentModelValue)
     && !triggerIntentModelSuggestions.includes(triggerIntentModelValue)
   const reasoningEffortOptions = REASONING_EFFORT_OPTIONS
@@ -440,6 +457,22 @@ export default function AutomationTemplates() {
         collectsText: (selectedDraft.display?.collects || []).join(', '),
         icon: selectedDraft.display?.icon || '',
         previewText: formatJson(selectedDraft.display?.previewConversation || []),
+      },
+      summarySettings: {
+        enabled: selectedDraft.aiSummarySettings?.enabled ?? false,
+        generateOnFlowEnd: selectedDraft.aiSummarySettings?.generateOnFlowEnd ?? true,
+        provider: resolveAiProvider(selectedDraft.aiSummarySettings?.provider),
+        model: selectedDraft.aiSummarySettings?.model || '',
+        temperature: selectedDraft.aiSummarySettings?.temperature !== undefined
+          ? String(selectedDraft.aiSummarySettings?.temperature)
+          : '',
+        maxOutputTokens: selectedDraft.aiSummarySettings?.maxOutputTokens !== undefined
+          ? String(selectedDraft.aiSummarySettings?.maxOutputTokens)
+          : '',
+        historyLimit: selectedDraft.aiSummarySettings?.historyLimit !== undefined
+          ? String(selectedDraft.aiSummarySettings?.historyLimit)
+          : '',
+        systemPrompt: selectedDraft.aiSummarySettings?.systemPrompt || '',
       },
     })
     syncingRef.current = true
@@ -688,6 +721,17 @@ export default function AutomationTemplates() {
       previewConversation,
     }
 
+    const summarySettings = {
+      enabled: draftForm.summarySettings.enabled,
+      generateOnFlowEnd: draftForm.summarySettings.generateOnFlowEnd,
+      provider: draftForm.summarySettings.provider || undefined,
+      model: draftForm.summarySettings.model.trim() || undefined,
+      temperature: parseOptionalNumber(draftForm.summarySettings.temperature),
+      maxOutputTokens: parseOptionalNumber(draftForm.summarySettings.maxOutputTokens),
+      historyLimit: parseOptionalNumber(draftForm.summarySettings.historyLimit),
+      systemPrompt: draftForm.summarySettings.systemPrompt.trim() || undefined,
+    }
+
     return {
       payload: {
         name: draftForm.name.trim(),
@@ -698,6 +742,7 @@ export default function AutomationTemplates() {
         triggers,
         exposedFields,
         display,
+        aiSummarySettings: summarySettings,
       },
     }
   }
@@ -773,6 +818,16 @@ export default function AutomationTemplates() {
         node.agentStopCondition = ''
         node.agentMaxQuestions = undefined
         node.agentSlots = []
+      }
+      if (type === 'langchain_agent') {
+        node.aiSettings = {}
+        node.langchainSystemPrompt = ''
+        node.langchainEndCondition = ''
+        node.langchainStopCondition = ''
+        node.langchainMaxIterations = undefined
+        node.langchainToolChoice = 'auto'
+        node.langchainReturnIntermediateSteps = false
+        node.langchainTools = []
       }
       if (type === 'handoff') {
         node.handoff = {
@@ -1290,6 +1345,13 @@ export default function AutomationTemplates() {
                         defaultValue: selectedTriggerConfig.intentModel || '',
                         sourcePath: 'triggers[0].config.intentModel',
                       },
+                      {
+                        label: 'Burst buffer seconds',
+                        type: 'number' as const,
+                        defaultValue: selectedTriggerConfig.burstBufferSeconds ?? 0,
+                        helpText: 'Only applies to DM triggers. Use 0 to disable.',
+                        sourcePath: 'triggers[0].config.burstBufferSeconds',
+                      },
                     ].map((option) => {
                       const sourceNodeId = undefined
                       const sourcePath = option.sourcePath
@@ -1372,6 +1434,29 @@ export default function AutomationTemplates() {
                     Choose keyword matching or let AI evaluate intent text.
                   </div>
                 </div>
+                {isDmTrigger && (
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Burst buffer (seconds)</label>
+                    <input
+                      className="input w-full"
+                      type="number"
+                      min="0"
+                      value={selectedTriggerConfig.burstBufferSeconds ?? ''}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          triggerConfig: {
+                            ...(node.triggerConfig || {}),
+                            burstBufferSeconds: parseOptionalNumber(event.target.value),
+                          },
+                        }))
+                      }
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      Buffer DM bursts before running automations. Use 0 to disable.
+                    </div>
+                  </div>
+                )}
                 {selectedTriggerConfig.triggerMode === 'keywords' && (
                   <>
                     <div className="space-y-2">
@@ -1864,7 +1949,9 @@ export default function AutomationTemplates() {
             )}
             {selectedNode.type !== 'trigger'
               && selectedNode.type !== 'detect_intent'
-              && selectedNode.type !== 'router' && (
+              && selectedNode.type !== 'router'
+              && selectedNode.type !== 'ai_agent'
+              && selectedNode.type !== 'langchain_agent' && (
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Wait for reply</label>
                 <select
@@ -1880,6 +1967,28 @@ export default function AutomationTemplates() {
                   <option value="no">No</option>
                   <option value="yes">Pause after this step</option>
                 </select>
+              </div>
+            )}
+            {((selectedNode.type === 'ai_reply' && selectedNode.waitForReply)
+              || selectedNode.type === 'ai_agent'
+              || selectedNode.type === 'langchain_agent') && (
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Reply buffer (seconds)</label>
+                <input
+                  className="input w-full"
+                  type="number"
+                  min="0"
+                  value={selectedNode.burstBufferSeconds ?? ''}
+                  onChange={(event) =>
+                    updateNode(selectedNode.id, (node) => ({
+                      ...node,
+                      burstBufferSeconds: parseOptionalNumber(event.target.value),
+                    }))
+                  }
+                />
+                <div className="text-xs text-muted-foreground">
+                  Buffer inbound messages while waiting for reply. Use 0 to disable.
+                </div>
               </div>
             )}
             {selectedNode.type === 'detect_intent' && (
@@ -2073,7 +2182,7 @@ export default function AutomationTemplates() {
                     ))}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    Available after a Detect intent or AI Agent step runs.
+                    Available after a Detect intent or Agent step runs.
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -3041,6 +3150,505 @@ export default function AutomationTemplates() {
               </>
             )}
 
+            {selectedNode.type === 'langchain_agent' && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Expose to users</label>
+                  <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {[
+                      {
+                        label: 'System prompt',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.langchainSystemPrompt || '',
+                        sourcePath: 'langchainSystemPrompt',
+                      },
+                      {
+                        label: 'Tools (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedNode.langchainTools || [],
+                        helpText: 'Example: [{"name":"lookup","description":"Fetch data"}]',
+                        sourcePath: 'langchainTools',
+                      },
+                      {
+                        label: 'End condition',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.langchainEndCondition || '',
+                        sourcePath: 'langchainEndCondition',
+                      },
+                      {
+                        label: 'Stop condition',
+                        type: 'text' as const,
+                        defaultValue: selectedNode.langchainStopCondition || '',
+                        sourcePath: 'langchainStopCondition',
+                      },
+                      {
+                        label: 'Max iterations',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.langchainMaxIterations ?? '',
+                        sourcePath: 'langchainMaxIterations',
+                      },
+                      {
+                        label: 'Tool choice',
+                        type: 'select' as const,
+                        options: [
+                          { label: 'Auto', value: 'auto' },
+                          { label: 'Required', value: 'required' },
+                          { label: 'None', value: 'none' },
+                        ],
+                        defaultValue: selectedNode.langchainToolChoice || 'auto',
+                        sourcePath: 'langchainToolChoice',
+                      },
+                      {
+                        label: 'Return intermediate steps',
+                        type: 'boolean' as const,
+                        defaultValue: selectedNode.langchainReturnIntermediateSteps ?? false,
+                        sourcePath: 'langchainReturnIntermediateSteps',
+                      },
+                      {
+                        label: 'Provider',
+                        type: 'select' as const,
+                        options: AI_PROVIDER_OPTIONS.map((option) => ({
+                          label: option.label,
+                          value: option.value,
+                        })),
+                        defaultValue: selectedNode.aiSettings?.provider || DEFAULT_AI_PROVIDER,
+                        sourcePath: 'aiSettings.provider',
+                      },
+                      {
+                        label: 'Model',
+                        type: 'string' as const,
+                        defaultValue: selectedNode.aiSettings?.model || '',
+                        sourcePath: 'aiSettings.model',
+                      },
+                      {
+                        label: 'Temperature',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.temperature ?? '',
+                        sourcePath: 'aiSettings.temperature',
+                      },
+                      {
+                        label: 'Reasoning effort',
+                        type: 'select' as const,
+                        options: reasoningEffortOptions,
+                        defaultValue: selectedNode.aiSettings?.reasoningEffort || '',
+                        sourcePath: 'aiSettings.reasoningEffort',
+                      },
+                      {
+                        label: 'Max output tokens',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.maxOutputTokens ?? '',
+                        sourcePath: 'aiSettings.maxOutputTokens',
+                      },
+                      {
+                        label: 'History limit',
+                        type: 'number' as const,
+                        defaultValue: selectedNode.aiSettings?.historyLimit ?? '',
+                        sourcePath: 'aiSettings.historyLimit',
+                      },
+                      {
+                        label: 'RAG enabled',
+                        type: 'boolean' as const,
+                        defaultValue: selectedNode.aiSettings?.ragEnabled ?? true,
+                        sourcePath: 'aiSettings.ragEnabled',
+                      },
+                      {
+                        label: 'Knowledge item IDs (JSON array)',
+                        type: 'json' as const,
+                        defaultValue: selectedNode.knowledgeItemIds || [],
+                        helpText: 'Example: ["64f...","65a..."]',
+                        sourcePath: 'knowledgeItemIds',
+                      },
+                    ].map((option) => {
+                      const sourceNodeId = selectedNode.id
+                      const sourcePath = option.sourcePath
+                      const isExposed = isFieldExposed(sourceNodeId, sourcePath)
+                      return (
+                        <label key={option.sourcePath} className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-3.5 w-3.5"
+                            checked={isExposed}
+                            onChange={() =>
+                              toggleExposedField({
+                                key: buildExposedKey(sourceNodeId, option.sourcePath),
+                                label: option.label,
+                                type: option.type,
+                                defaultValue: option.defaultValue,
+                                options: option.options,
+                                ui: {
+                                  group: 'LangChain Agent',
+                                  helpText: option.helpText,
+                                },
+                                source: {
+                                  nodeId: sourceNodeId,
+                                  path: option.sourcePath,
+                                },
+                              })
+                            }
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      )
+                    })}
+                    <div className="text-[11px] text-muted-foreground">
+                      These options appear in the end-user template setup when enabled.
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">System prompt</label>
+                  <textarea
+                    className="input w-full h-28 text-sm"
+                    value={selectedNode.langchainSystemPrompt || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        langchainSystemPrompt: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-muted-foreground">Tools</label>
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:text-primary/80"
+                      onClick={() =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          langchainTools: [
+                            ...(node.langchainTools || []),
+                            { name: '', description: '', inputSchema: '' },
+                          ],
+                        }))
+                      }
+                    >
+                      + Add tool
+                    </button>
+                  </div>
+                  {Array.isArray(selectedNode.langchainTools) && selectedNode.langchainTools.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedNode.langchainTools.map((tool, index) => (
+                        <div
+                          key={`${selectedNode.id}-langchain-tool-${index}`}
+                          className="rounded-lg border border-border p-3 space-y-2"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">Tool {index + 1}</span>
+                            <button
+                              type="button"
+                              className="text-xs text-rose-400 hover:text-rose-300"
+                              onClick={() =>
+                                updateNode(selectedNode.id, (node) => ({
+                                  ...node,
+                                  langchainTools: (node.langchainTools || []).filter((_, i) => i !== index),
+                                }))
+                              }
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          <input
+                            className="input w-full"
+                            placeholder="Tool name (e.g., lookupCustomer)"
+                            value={tool.name}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextTools = Array.isArray(node.langchainTools)
+                                  ? [...node.langchainTools]
+                                  : []
+                                nextTools[index] = { ...nextTools[index], name: event.target.value }
+                                return { ...node, langchainTools: nextTools }
+                              })
+                            }
+                          />
+                          <input
+                            className="input w-full"
+                            placeholder="Description (optional)"
+                            value={tool.description || ''}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextTools = Array.isArray(node.langchainTools)
+                                  ? [...node.langchainTools]
+                                  : []
+                                nextTools[index] = { ...nextTools[index], description: event.target.value }
+                                return { ...node, langchainTools: nextTools }
+                              })
+                            }
+                          />
+                          <textarea
+                            className="input w-full h-24 text-xs font-mono"
+                            placeholder='Input schema JSON (optional)'
+                            value={formatToolSchema(tool.inputSchema)}
+                            onChange={(event) =>
+                              updateNode(selectedNode.id, (node) => {
+                                const nextTools = Array.isArray(node.langchainTools)
+                                  ? [...node.langchainTools]
+                                  : []
+                                nextTools[index] = {
+                                  ...nextTools[index],
+                                  inputSchema: parseToolSchema(event.target.value),
+                                }
+                                return { ...node, langchainTools: nextTools }
+                              })
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">No tools yet.</div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">End condition prompt</label>
+                  <textarea
+                    className="input w-full h-20 text-sm"
+                    value={selectedNode.langchainEndCondition || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        langchainEndCondition: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Stop condition prompt</label>
+                  <textarea
+                    className="input w-full h-20 text-sm"
+                    value={selectedNode.langchainStopCondition || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        langchainStopCondition: event.target.value,
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    When this condition is met, the agent ends immediately and continues the flow.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Max iterations</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={selectedNode.langchainMaxIterations ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        langchainMaxIterations: parseOptionalNumber(event.target.value),
+                      }))
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Leave blank for unlimited iterations.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Tool choice</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.langchainToolChoice || 'auto'}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        langchainToolChoice: event.target.value as FlowNode['langchainToolChoice'],
+                      }))
+                    }
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="required">Required</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={selectedNode.langchainReturnIntermediateSteps ?? false}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          langchainReturnIntermediateSteps: event.target.checked,
+                        }))
+                      }
+                    />
+                    Return intermediate steps (logs only)
+                  </label>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Provider</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.provider || DEFAULT_AI_PROVIDER}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          provider: event.target.value as AiProvider,
+                        },
+                      }))
+                    }
+                  >
+                    {AI_PROVIDER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Model</label>
+                  <select
+                    className="input w-full"
+                    value={aiModelValue}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          model: event.target.value,
+                        },
+                      }))
+                    }
+                  >
+                    <option value="">Auto (workspace default)</option>
+                    {aiModelSuggestions.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                    {hasCustomAiModel && (
+                      <option value={aiModelValue}>Custom: {aiModelValue}</option>
+                    )}
+                  </select>
+                  <div className="text-[11px] text-muted-foreground">
+                    Leave blank to use the workspace default model.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Reasoning effort</label>
+                  <select
+                    className="input w-full"
+                    value={selectedNode.aiSettings?.reasoningEffort || ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          reasoningEffort: event.target.value
+                            ? (event.target.value as FlowAiSettings['reasoningEffort'])
+                            : undefined,
+                        },
+                      }))
+                    }
+                  >
+                    <option value="">Auto (model default)</option>
+                    {REASONING_EFFORT_OPTIONS.map((effort) => (
+                      <option key={effort} value={effort}>
+                        {effort}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Temperature</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    step="0.1"
+                    value={selectedNode.aiSettings?.temperature ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          temperature: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">History limit</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={selectedNode.aiSettings?.historyLimit ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          historyLimit: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={selectedNode.aiSettings?.ragEnabled !== false}
+                      onChange={(event) =>
+                        updateNode(selectedNode.id, (node) => ({
+                          ...node,
+                          aiSettings: {
+                            ...(node.aiSettings || {}),
+                            ragEnabled: event.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    Enable semantic RAG (vector search)
+                  </label>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Max output tokens</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={selectedNode.aiSettings?.maxOutputTokens ?? ''}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        aiSettings: {
+                          ...(node.aiSettings || {}),
+                          maxOutputTokens: parseOptionalNumber(event.target.value),
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Knowledge item IDs</label>
+                  <input
+                    className="input w-full"
+                    value={formatKnowledgeIds(selectedNode.knowledgeItemIds)}
+                    onChange={(event) =>
+                      updateNode(selectedNode.id, (node) => ({
+                        ...node,
+                        knowledgeItemIds: parseKnowledgeIds(event.target.value),
+                      }))
+                    }
+                  />
+                </div>
+              </>
+            )}
+
             {selectedNode.type === 'handoff' && (
               <>
                 <div className="space-y-2">
@@ -3174,6 +3782,7 @@ export default function AutomationTemplates() {
     ? 'Live'
     : 'Draft'
   const canEditFlow = Boolean(selectedDraftId) && !isLive
+  const canViewFlow = Boolean(selectedDraftId)
 
   return (
     <>
@@ -3299,11 +3908,11 @@ export default function AutomationTemplates() {
                     <button
                       className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={handleOpenBuilder}
-                      disabled={!canEditFlow}
-                      title={isLive ? 'Switch to Draft to edit this flow.' : undefined}
+                      disabled={!canViewFlow}
+                      title={isLive ? 'Viewing only. Switch to Draft to edit this flow.' : undefined}
                     >
                       <Maximize2 className="w-4 h-4" />
-                      Edit flow
+                      {isLive ? 'View flow' : 'Edit flow'}
                     </button>
                     <button
                       className="btn btn-secondary flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3517,6 +4126,182 @@ export default function AutomationTemplates() {
                         }))
                       }
                       disabled={isLive}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-6 space-y-4">
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">Conversation summary</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Configure the LLM summary stored on conversations for this flow.
+                  </p>
+                </div>
+                <datalist id="summary-model-options">
+                  {summaryModelSuggestions.map((model) => (
+                    <option key={model} value={model} />
+                  ))}
+                </datalist>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        checked={draftForm.summarySettings.enabled}
+                        onChange={(event) =>
+                          setDraftForm((prev) => ({
+                            ...prev,
+                            summarySettings: {
+                              ...prev.summarySettings,
+                              enabled: event.target.checked,
+                            },
+                          }))
+                        }
+                        disabled={isLive}
+                      />
+                      Enable LLM summary
+                    </label>
+                    <div className="text-[11px] text-muted-foreground">
+                      Generates a concise summary for the conversation.
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        checked={draftForm.summarySettings.generateOnFlowEnd}
+                        onChange={(event) =>
+                          setDraftForm((prev) => ({
+                            ...prev,
+                            summarySettings: {
+                              ...prev.summarySettings,
+                              generateOnFlowEnd: event.target.checked,
+                            },
+                          }))
+                        }
+                        disabled={isLive}
+                      />
+                      Generate summary on flow end
+                    </label>
+                    <div className="text-[11px] text-muted-foreground">
+                      Runs a summary even if the history limit is not met.
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Provider</label>
+                    <select
+                      className="input w-full"
+                      value={draftForm.summarySettings.provider}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            provider: event.target.value as AiProvider,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                    >
+                      {AI_PROVIDER_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Model</label>
+                    <input
+                      className="input w-full"
+                      list="summary-model-options"
+                      value={draftForm.summarySettings.model}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            model: event.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                      placeholder="Auto (provider default)"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Temperature</label>
+                    <input
+                      className="input w-full"
+                      value={draftForm.summarySettings.temperature}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            temperature: event.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                      placeholder="0.2"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Max output tokens</label>
+                    <input
+                      className="input w-full"
+                      value={draftForm.summarySettings.maxOutputTokens}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            maxOutputTokens: event.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                      placeholder="240"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">History limit</label>
+                    <input
+                      className="input w-full"
+                      value={draftForm.summarySettings.historyLimit}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            historyLimit: event.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                      placeholder="20"
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm text-muted-foreground">System prompt</label>
+                    <textarea
+                      className="input w-full h-28 font-mono text-xs"
+                      value={draftForm.summarySettings.systemPrompt}
+                      onChange={(event) =>
+                        setDraftForm((prev) => ({
+                          ...prev,
+                          summarySettings: {
+                            ...prev.summarySettings,
+                            systemPrompt: event.target.value,
+                          },
+                        }))
+                      }
+                      disabled={isLive}
+                      placeholder="Optional: customize how the summary is written."
                     />
                   </div>
                 </div>

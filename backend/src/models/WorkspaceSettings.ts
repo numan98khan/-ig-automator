@@ -1,13 +1,4 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import {
-  BookingGoalConfig,
-  DriveGoalConfig,
-  GoalConfigurations,
-  GoalType,
-  OrderGoalConfig,
-  SupportGoalConfig,
-  LeadCaptureConfig,
-} from '../types/automationGoals';
 
 export interface IWorkspaceSettings extends Document {
   workspaceId: mongoose.Types.ObjectId;
@@ -51,10 +42,6 @@ export interface IWorkspaceSettings extends Document {
   humanEscalationBehavior?: 'ai_silent' | 'ai_allowed';
   humanHoldMinutes?: number;
 
-  // Conversation goals
-  primaryGoal?: GoalType;
-  secondaryGoal?: GoalType;
-  goalConfigs?: GoalConfigurations;
   googleSheets?: {
     enabled?: boolean;
     spreadsheetId?: string;
@@ -84,37 +71,6 @@ export interface IWorkspaceSettings extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
-
-const leadCaptureConfigSchema = new Schema<LeadCaptureConfig>({
-  collectName: { type: Boolean, default: true },
-  collectPhone: { type: Boolean, default: true },
-  collectEmail: { type: Boolean, default: false },
-  collectCustomNote: { type: Boolean, default: false },
-}, { _id: false });
-
-const bookingGoalConfigSchema = new Schema<BookingGoalConfig>({
-  bookingLink: { type: String, trim: true },
-  collectDate: { type: Boolean, default: true },
-  collectTime: { type: Boolean, default: true },
-  collectServiceType: { type: Boolean, default: false },
-}, { _id: false });
-
-const orderGoalConfigSchema = new Schema<OrderGoalConfig>({
-  catalogUrl: { type: String, trim: true },
-  collectProductName: { type: Boolean, default: true },
-  collectQuantity: { type: Boolean, default: true },
-  collectVariant: { type: Boolean, default: false },
-}, { _id: false });
-
-const supportGoalConfigSchema = new Schema<SupportGoalConfig>({
-  askForOrderId: { type: Boolean, default: true },
-  askForPhoto: { type: Boolean, default: false },
-}, { _id: false });
-
-const driveGoalConfigSchema = new Schema<DriveGoalConfig>({
-  targetType: { type: String, enum: ['website', 'WhatsApp', 'store', 'app'], default: 'website' },
-  targetLink: { type: String, trim: true },
-}, { _id: false });
 
 const googleSheetsConfigSchema = new Schema({
   enabled: { type: Boolean, default: false },
@@ -272,53 +228,6 @@ const workspaceSettingsSchema = new Schema<IWorkspaceSettings>({
     max: 720,
   },
 
-  // Conversation goals
-  primaryGoal: {
-    type: String,
-    enum: [
-      'none',
-      'capture_lead',
-      'book_appointment',
-      'order_now',
-      'product_inquiry',
-      'delivery',
-      'order_status',
-      'refund_exchange',
-      'human',
-      'handle_support',
-      'start_order',
-      'drive_to_channel',
-    ],
-    default: 'none',
-  },
-  secondaryGoal: {
-    type: String,
-    enum: [
-      'none',
-      'capture_lead',
-      'book_appointment',
-      'order_now',
-      'product_inquiry',
-      'delivery',
-      'order_status',
-      'refund_exchange',
-      'human',
-      'handle_support',
-      'start_order',
-      'drive_to_channel',
-    ],
-    default: 'none',
-  },
-  goalConfigs: {
-    type: new Schema<GoalConfigurations>({
-      leadCapture: { type: leadCaptureConfigSchema, default: () => ({}) },
-      booking: { type: bookingGoalConfigSchema, default: () => ({}) },
-      order: { type: orderGoalConfigSchema, default: () => ({}) },
-      support: { type: supportGoalConfigSchema, default: () => ({}) },
-      drive: { type: driveGoalConfigSchema, default: () => ({}) },
-    }, { _id: false }),
-    default: undefined,
-  },
   googleSheets: {
     type: googleSheetsConfigSchema,
     default: undefined,

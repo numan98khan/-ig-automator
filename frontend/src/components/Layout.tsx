@@ -35,7 +35,7 @@ const Layout: React.FC = () => {
   const navigate = useNavigate();
   const { user, currentWorkspace, logout } = useAuth();
   const { accounts, activeAccount, setActiveAccount } = useAccountContext();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, uiTheme } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -76,7 +76,7 @@ const Layout: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/';
+    window.location.href = '/login';
   };
 
   useEffect(() => {
@@ -103,11 +103,11 @@ const Layout: React.FC = () => {
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute inset-0 bg-contour-lines" aria-hidden />
         <div
-          className="absolute inset-0 bg-[radial-gradient(140%_130%_at_18%_18%,rgba(15,23,42,0.06),transparent_60%)] dark:bg-[radial-gradient(140%_130%_at_18%_18%,rgba(72,175,240,0.12),transparent_48%)]"
+          className="absolute inset-0 ui-bg-glow"
           aria-hidden
         />
         <div
-          className="absolute inset-0 bg-gradient-to-b from-white/90 via-white/70 to-[#f8fafc]/90 dark:from-[#0e1a22]/85 dark:via-transparent dark:to-[#0c141c]/90"
+          className="absolute inset-0 ui-bg-wash"
           aria-hidden
         />
       </div>
@@ -120,11 +120,33 @@ const Layout: React.FC = () => {
               to="/app/home"
               className="flex items-center gap-2 rounded-md px-2 py-1 transition"
             >
-              <img
-                src="/sendfx.png"
-                alt="SendFx logo"
-                className="h-9 md:h-11 w-auto shrink-0 object-contain"
-              />
+              {uiTheme === 'studio' ? (
+                <>
+                  <img
+                    src="/sendfx-studio.png"
+                    alt="SendFx logo"
+                    className="h-7 md:h-9 w-auto shrink-0 object-contain -translate-y-[3.5px] dark:hidden"
+                  />
+                  <img
+                    src="/sendfx-studio-dark.png"
+                    alt="SendFx logo"
+                    className="hidden h-7 md:h-9 w-auto shrink-0 object-contain -translate-y-[3.5px] dark:block"
+                  />
+                </>
+              ) : (
+                <>
+                  <img
+                    src="/sendfx.png"
+                    alt="SendFx logo"
+                    className="h-9 md:h-11 w-auto shrink-0 object-contain dark:hidden"
+                  />
+                  <img
+                    src="/sendfx-dark.png"
+                    alt="SendFx logo"
+                    className="hidden h-9 md:h-11 w-auto shrink-0 object-contain dark:block"
+                  />
+                </>
+              )}
             </Link>
             <div className="relative" ref={accountMenuRef}>
               <button

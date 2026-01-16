@@ -14,13 +14,19 @@ type FlowRuntimeStep = {
   buttons?: Array<{ title: string; payload?: string } | string>;
   tags?: string[];
   aiSettings?: AutomationAiSettings;
-  messageHistory?: Array<{ from: string; text?: string; attachments?: any[]; createdAt?: string | Date }>;
   agentSystemPrompt?: string;
   agentSteps?: string[];
   agentEndCondition?: string;
   agentStopCondition?: string;
   agentMaxQuestions?: number;
   agentSlots?: Array<{ key: string; question?: string; defaultValue?: string }>;
+  langchainSystemPrompt?: string;
+  langchainTools?: Array<{ name: string; description?: string; inputSchema?: Record<string, any> }>;
+  langchainEndCondition?: string;
+  langchainStopCondition?: string;
+  langchainMaxIterations?: number;
+  langchainToolChoice?: 'auto' | 'required' | 'none';
+  langchainReturnIntermediateSteps?: boolean;
   intentSettings?: {
     provider?: 'openai' | 'groq';
     model?: string;
@@ -29,6 +35,7 @@ type FlowRuntimeStep = {
   };
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
+  burstBufferSeconds?: number;
   next?: string;
   logEnabled?: boolean;
   handoff?: {
@@ -95,14 +102,53 @@ const normalizeAgentMaxQuestions = (node: Record<string, any>) =>
   node.agentMaxQuestions ?? node.data?.agentMaxQuestions;
 const normalizeAgentSlots = (node: Record<string, any>) =>
   node.agentSlots ?? node.data?.agentSlots;
+const normalizeLangchainSystemPrompt = (node: Record<string, any>) =>
+  node.langchainSystemPrompt ?? node.data?.langchainSystemPrompt;
+const normalizeLangchainTools = (node: Record<string, any>) =>
+  node.langchainTools ?? node.data?.langchainTools;
+const normalizeLangchainEndCondition = (node: Record<string, any>) =>
+  node.langchainEndCondition ?? node.data?.langchainEndCondition;
+const normalizeLangchainStopCondition = (node: Record<string, any>) =>
+  node.langchainStopCondition ?? node.data?.langchainStopCondition;
+const normalizeLangchainMaxIterations = (node: Record<string, any>) =>
+  node.langchainMaxIterations ?? node.data?.langchainMaxIterations;
+const normalizeLangchainToolChoice = (node: Record<string, any>) =>
+  node.langchainToolChoice ?? node.data?.langchainToolChoice;
+const normalizeLangchainReturnIntermediateSteps = (node: Record<string, any>) =>
+  node.langchainReturnIntermediateSteps ?? node.data?.langchainReturnIntermediateSteps;
+
+const normalizeToolInputSchema = (value: unknown): Record<string, any> | undefined => {
+  if (value && typeof value === 'object') return value as Record<string, any>;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' ? parsed : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+};
 
 const normalizeKnowledgeItemIds = (node: Record<string, any>) =>
   node.knowledgeItemIds ?? node.data?.knowledgeItemIds;
-const normalizeMessageHistory = (node: Record<string, any>) =>
-  node.messageHistory ?? node.data?.messageHistory;
-
 const normalizeWaitForReply = (node: Record<string, any>) =>
   node.waitForReply ?? node.data?.waitForReply;
+const normalizeBurstBufferSeconds = (node: Record<string, any>) =>
+  node.burstBufferSeconds ?? node.data?.burstBufferSeconds;
+
+const normalizeBufferSecondsValue = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+};
 
 const normalizeHandoff = (node: Record<string, any>) => node.handoff ?? node.data?.handoff;
 
@@ -229,10 +275,17 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const agentStopCondition = normalizeAgentStopCondition(node);
     const agentMaxQuestions = normalizeAgentMaxQuestions(node);
     const agentSlots = normalizeAgentSlots(node);
+    const langchainSystemPrompt = normalizeLangchainSystemPrompt(node);
+    const langchainTools = normalizeLangchainTools(node);
+    const langchainEndCondition = normalizeLangchainEndCondition(node);
+    const langchainStopCondition = normalizeLangchainStopCondition(node);
+    const langchainMaxIterations = normalizeLangchainMaxIterations(node);
+    const langchainToolChoice = normalizeLangchainToolChoice(node);
+    const langchainReturnIntermediateSteps = normalizeLangchainReturnIntermediateSteps(node);
     const intentSettings = normalizeIntentSettings(node);
     const knowledgeItemIds = normalizeKnowledgeItemIds(node);
-    const messageHistory = normalizeMessageHistory(node);
     const waitForReply = normalizeWaitForReply(node);
+    const burstBufferSeconds = normalizeBufferSecondsValue(normalizeBurstBufferSeconds(node));
     const handoff = normalizeHandoff(node);
     const rateLimit = normalizeRateLimit(node);
     const next = normalizeNext(node);
@@ -261,7 +314,6 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
       buttons,
       tags,
       aiSettings,
-      messageHistory: Array.isArray(messageHistory) ? messageHistory : undefined,
       agentSystemPrompt: typeof agentSystemPrompt === 'string' ? agentSystemPrompt : undefined,
       agentSteps: Array.isArray(agentSteps)
         ? agentSteps.filter((step) => typeof step === 'string' && step.trim())
@@ -278,9 +330,31 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
           }))
           .filter((slot: any) => slot.key)
         : undefined,
+      langchainSystemPrompt: typeof langchainSystemPrompt === 'string' ? langchainSystemPrompt : undefined,
+      langchainTools: Array.isArray(langchainTools)
+        ? langchainTools
+          .map((tool: any) => ({
+            name: typeof tool?.name === 'string' ? tool.name.trim() : '',
+            description: typeof tool?.description === 'string' ? tool.description.trim() : undefined,
+            inputSchema: normalizeToolInputSchema(tool?.inputSchema),
+          }))
+          .filter((tool: any) => tool.name)
+        : undefined,
+      langchainEndCondition: typeof langchainEndCondition === 'string' ? langchainEndCondition : undefined,
+      langchainStopCondition: typeof langchainStopCondition === 'string' ? langchainStopCondition : undefined,
+      langchainMaxIterations: typeof langchainMaxIterations === 'number' ? langchainMaxIterations : undefined,
+      langchainToolChoice: langchainToolChoice === 'required' || langchainToolChoice === 'none'
+        ? langchainToolChoice
+        : langchainToolChoice === 'auto'
+          ? 'auto'
+          : undefined,
+      langchainReturnIntermediateSteps: typeof langchainReturnIntermediateSteps === 'boolean'
+        ? langchainReturnIntermediateSteps
+        : undefined,
       intentSettings,
       knowledgeItemIds,
       waitForReply,
+      burstBufferSeconds,
       next,
       logEnabled,
       handoff,

@@ -3,6 +3,7 @@ import { Copy, Loader2, Save, Star, Trash2, UserCircle2 } from 'lucide-react';
 import {
   AutomationPreviewConversation,
   AutomationPreviewEvent,
+  AutomationPreviewMessage,
   AutomationPreviewPersona,
   AutomationPreviewProfile,
   AutomationSession,
@@ -34,6 +35,9 @@ type StatePanelProps = {
   currentNode?: AutomationSessionNodeSummary | null;
   session?: AutomationSession | null;
   conversation?: AutomationPreviewConversation | null;
+  messages?: AutomationPreviewMessage[];
+  showConversationHistory?: boolean;
+  canViewHistory?: boolean;
   prepend?: React.ReactNode;
 };
 
@@ -268,6 +272,9 @@ export const AutomationPreviewStatePanel: React.FC<StatePanelProps> = ({
   currentNode,
   session,
   conversation,
+  messages,
+  showConversationHistory = false,
+  canViewHistory = false,
   prepend,
 }) => {
   const fieldEntries = useMemo(() => {
@@ -290,6 +297,25 @@ export const AutomationPreviewStatePanel: React.FC<StatePanelProps> = ({
   }, [session?.state?.vars?.agentMissingSlots]);
 
   const tags = conversation?.tags || [];
+  const summaryText = conversation?.aiSummary?.trim() || '';
+  const summaryUpdatedAt = formatTime(conversation?.aiSummaryUpdatedAt);
+  const sortedMessages = useMemo(() => {
+    if (!messages || messages.length === 0) return [];
+    const decorated = messages.map((message, index) => ({
+      message,
+      index,
+      timestamp: message.createdAt ? new Date(message.createdAt as string).getTime() : null,
+    }));
+    decorated.sort((a, b) => {
+      if (a.timestamp !== null && b.timestamp !== null && a.timestamp !== b.timestamp) {
+        return a.timestamp - b.timestamp;
+      }
+      if (a.timestamp !== null && b.timestamp === null) return -1;
+      if (a.timestamp === null && b.timestamp !== null) return 1;
+      return a.index - b.index;
+    });
+    return decorated.map((entry) => entry.message);
+  }, [messages]);
 
   return (
     <Card className="flex flex-col min-h-0 flex-1 w-full">
@@ -369,6 +395,57 @@ export const AutomationPreviewStatePanel: React.FC<StatePanelProps> = ({
             <div className="mt-2 text-xs text-muted-foreground">No tags applied yet.</div>
           )}
         </div>
+
+        {showConversationHistory && !canViewHistory && (
+          <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+            <div className="text-xs font-semibold uppercase text-muted-foreground">Conversation insights</div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              Upgrade to view message history and the conversation summary.
+            </div>
+          </div>
+        )}
+
+        {showConversationHistory && canViewHistory && (
+          <>
+            <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">Conversation summary</div>
+              {summaryText ? (
+                <div className="mt-2 text-sm text-foreground">{summaryText}</div>
+              ) : (
+                <div className="mt-2 text-xs text-muted-foreground">No summary yet.</div>
+              )}
+              {summaryUpdatedAt && (
+                <div className="mt-2 text-[11px] text-muted-foreground">Updated {summaryUpdatedAt}</div>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">Message history</div>
+              {sortedMessages.length > 0 ? (
+                <div className="mt-2 space-y-2">
+                  {sortedMessages.map((message, index) => {
+                    const label = message.from === 'customer' ? 'Customer' : 'AI';
+                    const timeLabel = formatTime(message.createdAt);
+                    return (
+                      <div
+                        key={`${message.id || 'message'}-${index}`}
+                        className="rounded-md border border-border/60 bg-background/80 px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                          <span>{label}</span>
+                          {timeLabel && <span>{timeLabel}</span>}
+                        </div>
+                        <div className="mt-1 text-sm text-foreground">{message.text}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-2 text-xs text-muted-foreground">No messages yet.</div>
+              )}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );

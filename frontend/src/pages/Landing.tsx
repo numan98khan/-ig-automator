@@ -33,12 +33,13 @@ const Landing: React.FC = () => {
   const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { user, currentWorkspace, login, signup, refreshUser } = useAuth();
+  const { user, currentWorkspace } = useAuth();
   const { theme, setTheme, uiTheme } = useTheme();
   const navigate = useNavigate();
   const seoDescription =
     'SendFx is Instagram DM automation and a lightweight CRM for SMBs. Route and qualify DMs, reply with guardrails and approvals, and sync leads to Google Sheets.';
   const siteUrl = requireEnv('VITE_SITE_URL').replace(/\/$/, '');
+  const appUrl = requireEnv('VITE_APP_URL').replace(/\/$/, '');
   const demoVideoUrl = (import.meta.env.VITE_DEMO_VIDEO_URL as string | undefined)?.trim();
   const hasDemoVideo = Boolean(demoVideoUrl);
   const structuredData = {
@@ -56,10 +57,12 @@ const Landing: React.FC = () => {
       demoSection.scrollIntoView({ behavior: 'smooth' });
     }
   };
+  const redirectToApp = (mode: 'login' | 'signup') => {
+    window.location.href = `${appUrl}/${mode}`;
+  };
   const openAuthModal = (mode: 'login' | 'signup') => {
     setError(null);
-    setAuthMode(mode);
-    setShowEmailModal(true);
+    redirectToApp(mode);
   };
   const closeEmailModal = () => {
     setShowEmailModal(false);
@@ -69,24 +72,25 @@ const Landing: React.FC = () => {
   const location = useLocation();
   const isLight = theme === 'light';
   const isComic = uiTheme === 'comic';
+  const isStudio = uiTheme === 'studio';
   const surfaceMain = isLight
     ? (isComic
       ? 'comic-panel bg-white'
-      : 'bg-white/90 border border-black/5 shadow-[0_22px_70px_-40px_rgba(0,0,0,0.35)]')
+      : 'bg-card/90 border border-border/70 shadow-[0_22px_70px_-40px_rgba(0,0,0,0.35)]')
     : 'bg-card/70 border border-border/60 backdrop-blur-xl shadow-2xl';
   const surfaceSoft = isLight
     ? (isComic
       ? 'comic-panel-soft bg-white'
-      : 'bg-white/85 border border-black/5 shadow-[0_18px_60px_-38px_rgba(0,0,0,0.35)]')
+      : 'bg-card/85 border border-border/70 shadow-[0_18px_60px_-38px_rgba(0,0,0,0.35)]')
     : 'bg-background/60 border border-border/60 backdrop-blur-md';
   const modalCardClass = isLight
-    ? 'bg-white border border-black/10 shadow-2xl'
-    : 'bg-[#0f1117] border border-white/10 shadow-2xl';
+    ? 'bg-card border border-border/70 shadow-2xl'
+    : 'bg-card border border-border/60 shadow-2xl';
   const modalInputClass = isLight
-    ? 'bg-white border-black/10 focus:ring-primary/40'
-    : 'bg-[#0b0e14] border-white/10 focus:ring-primary/40';
+    ? 'bg-background border-border/60 focus:ring-primary/40'
+    : 'bg-background border-border/60 focus:ring-primary/40';
   const pageBackground = isLight
-    ? (isComic ? 'bg-[#fffbe6]' : 'bg-[#f7f8fb]')
+    ? (isComic ? 'bg-[#fffbe6]' : isStudio ? 'bg-[#fbf6ef]' : 'bg-[#f7f8fb]')
     : 'bg-background';
   const sectionHeadingClass = isComic ? 'comic-display' : '';
   const heroOverlayClass =
@@ -155,42 +159,16 @@ const Landing: React.FC = () => {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      setAuthLoading(true);
-      setError(null);
-
-      await login(email, password);
-      console.log('✅ Login successful, fetching user data...');
-
-      // Refresh user data to get workspaces
-      await refreshUser();
-      console.log('✅ User data refreshed, navigating to home...');
-
-      // Navigate to Home
-      navigate('/app/home', { replace: true });
-    } catch (error: any) {
-      console.error('Login error:', error);
-      setError(error.response?.data?.error || 'Invalid email or password');
-    } finally {
-      setAuthLoading(false);
-    }
+    setAuthLoading(true);
+    setError(null);
+    redirectToApp('login');
   };
 
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      setAuthLoading(true);
-      setError(null);
-
-      await signup(email, password);
-      await refreshUser();
-      navigate('/app/home', { replace: true });
-    } catch (error: any) {
-      console.error('Signup error:', error);
-      setError(error.response?.data?.error || 'Unable to create your account');
-    } finally {
-      setAuthLoading(false);
-    }
+    setAuthLoading(true);
+    setError(null);
+    redirectToApp('signup');
   };
 
   return (
@@ -210,9 +188,9 @@ const Landing: React.FC = () => {
         {!isLight && (
           <>
             {/* Mesh gradient blobs */}
-            <div className={`absolute ${isComic && isLight ? 'top-[-20%] left-[-20%] w-[50%] h-[50%]' : 'top-[-10%] left-[-10%] w-[45%] h-[45%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,79,216,0.28),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.14),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.2),_transparent_60%)] blur-3xl'}`} />
-            <div className={`absolute ${isComic && isLight ? 'top-[5%] right-[-20%] w-[55%] h-[55%]' : 'top-[10%] right-[-12%] w-[50%] h-[50%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(0,212,255,0.25),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.1),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.18),_transparent_60%)] blur-3xl'}`} />
-            <div className={`absolute ${isComic && isLight ? 'bottom-[-18%] left-[0%] w-[65%] h-[65%]' : 'bottom-[-12%] left-[5%] w-[60%] h-[60%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,226,74,0.25),_transparent_65%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.08),_transparent_65%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(94,234,212,0.16),_transparent_65%)] blur-3xl'}`} />
+            <div className={`absolute ${isComic && isLight ? 'top-[-20%] left-[-20%] w-[50%] h-[50%]' : 'top-[-10%] left-[-10%] w-[45%] h-[45%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,79,216,0.28),_transparent_60%)] blur-2xl' : isStudio ? 'bg-[radial-gradient(circle_at_center,_rgba(251,146,60,0.18),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.14),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.2),_transparent_60%)] blur-3xl'}`} />
+            <div className={`absolute ${isComic && isLight ? 'top-[5%] right-[-20%] w-[55%] h-[55%]' : 'top-[10%] right-[-12%] w-[50%] h-[50%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(0,212,255,0.25),_transparent_60%)] blur-2xl' : isStudio ? 'bg-[radial-gradient(circle_at_center,_rgba(20,184,166,0.18),_transparent_60%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.1),_transparent_55%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.18),_transparent_60%)] blur-3xl'}`} />
+            <div className={`absolute ${isComic && isLight ? 'bottom-[-18%] left-[0%] w-[65%] h-[65%]' : 'bottom-[-12%] left-[5%] w-[60%] h-[60%]'} rounded-full ${isLight ? (isComic ? 'bg-[radial-gradient(circle_at_center,_rgba(255,226,74,0.25),_transparent_65%)] blur-2xl' : isStudio ? 'bg-[radial-gradient(circle_at_center,_rgba(251,191,36,0.14),_transparent_65%)] blur-2xl' : 'bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.08),_transparent_65%)] blur-2xl') : 'bg-[radial-gradient(circle_at_center,_rgba(94,234,212,0.16),_transparent_65%)] blur-3xl'}`} />
 
             {/* Grid overlay */}
             <div
@@ -244,12 +222,34 @@ const Landing: React.FC = () => {
           <div
             className={`p-2 rounded-xl ${isLight ? (isComic ? 'comic-panel-soft' : 'bg-card border border-border') : 'bg-card border border-border'} dark:bg-white/90 dark:border-white/10`}
           >
-              <img src="/sendfx.png" alt="SendFx logo" 
-              
-              // className="w-7 h-7"
-              
-              className="h-8 w-auto shrink-0 object-contain"/>
-            </div>
+            {isStudio ? (
+              <>
+                <img
+                  src="/sendfx-studio.png"
+                  alt="SendFx logo"
+                  className="h-7 w-auto shrink-0 object-contain dark:hidden"
+                />
+                <img
+                  src="/sendfx-studio-dark.png"
+                  alt="SendFx logo"
+                  className="hidden h-7 w-auto shrink-0 object-contain dark:block"
+                />
+              </>
+            ) : (
+              <>
+                <img
+                  src="/sendfx.png"
+                  alt="SendFx logo"
+                  className="h-8 w-auto shrink-0 object-contain dark:hidden"
+                />
+                <img
+                  src="/sendfx-dark.png"
+                  alt="SendFx logo"
+                  className="hidden h-8 w-auto shrink-0 object-contain dark:block"
+                />
+              </>
+            )}
+          </div>
 
           </div>
 

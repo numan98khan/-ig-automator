@@ -213,7 +213,7 @@ export default function Settings() {
     try {
       await authAPI.deleteAccount();
       logout();
-      navigate('/');
+      navigate('/login');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to delete account');
     } finally {

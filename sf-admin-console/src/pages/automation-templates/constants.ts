@@ -3,6 +3,7 @@ import {
   Flag,
   GitBranch,
   MessageSquare,
+  Network,
   Search,
   Sparkles,
   Zap,
@@ -85,6 +86,10 @@ export const MESSAGE_STATE_VARIABLES = [
   { key: 'agentSlots', label: 'Agent slots', token: '{{ vars.agentSlots }}' },
   { key: 'agentMissingSlots', label: 'Agent missing slots', token: '{{ vars.agentMissingSlots }}' },
   { key: 'agentQuestionsAsked', label: 'Agent questions asked', token: '{{ vars.agentQuestionsAsked }}' },
+  { key: 'langchainIteration', label: 'LangChain iteration', token: '{{ vars.langchainIteration }}' },
+  { key: 'langchainDone', label: 'LangChain done', token: '{{ vars.langchainDone }}' },
+  { key: 'langchainToolCalls', label: 'LangChain tool calls', token: '{{ vars.langchainToolCalls }}' },
+  { key: 'langchainActionSummary', label: 'LangChain action summary', token: '{{ vars.langchainActionSummary }}' },
 ]
 
 export const REASONING_EFFORT_OPTIONS: Array<FlowAiSettings['reasoningEffort']> = [
@@ -166,6 +171,12 @@ export const FLOW_NODE_LIBRARY: Array<{
     icon: Bot,
   },
   {
+    type: 'langchain_agent',
+    label: 'LangChain Agent',
+    description: 'Tool-aware agent with configurable controls.',
+    icon: Network,
+  },
+  {
     type: 'handoff',
     label: 'Handoff',
     description: 'Escalate to a human teammate.',
@@ -180,6 +191,7 @@ export const FLOW_NODE_LABELS: Record<FlowNodeType, string> = {
   router: 'Router',
   ai_reply: 'AI Reply',
   ai_agent: 'AI Agent',
+  langchain_agent: 'LangChain Agent',
   handoff: 'Handoff',
 }
 
@@ -240,6 +252,14 @@ export const FLOW_NODE_STYLES: Record<FlowNodeType, FlowNodeStyle> = {
     handle: '!bg-purple-400/80 !border-purple-500/70',
     ring: 'ring-purple-200/70 border-purple-200/70',
     miniMap: '#7B6CB6',
+  },
+  langchain_agent: {
+    badge: 'bg-cyan-500/10',
+    border: 'border-l-cyan-400/80',
+    dot: 'bg-cyan-400',
+    handle: '!bg-cyan-400/80 !border-cyan-500/70',
+    ring: 'ring-cyan-200/70 border-cyan-200/70',
+    miniMap: '#4BA7B0',
   },
   handoff: {
     badge: 'bg-rose-500/10',

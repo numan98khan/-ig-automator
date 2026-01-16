@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle, RefreshCw, FileSpreadsheet, ExternalLink, L
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { Skeleton } from '../../components/ui/Skeleton';
 import {
   GoogleSheetsIntegration,
   InventoryMapping,
@@ -61,6 +62,28 @@ const normalizeMapping = (mapping?: InventoryMapping): NormalizedInventoryMappin
     fields: base.fields,
   };
 };
+
+const IntegrationsSkeleton: React.FC = () => (
+  <div className="space-y-6">
+    <div className="space-y-2">
+      <Skeleton className="h-8 w-56" />
+      <Skeleton className="h-4 w-80" />
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={`integration-skeleton-${index}`} className="rounded-xl border border-border/60 bg-card/60 p-5 space-y-4">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <div className="flex gap-2">
+            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-8 w-24" />
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 export const AutomationsIntegrationsView: React.FC = () => {
   const { currentWorkspace } = useAuth();
@@ -338,11 +361,7 @@ export const AutomationsIntegrationsView: React.FC = () => {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <IntegrationsSkeleton />;
   }
 
   return (

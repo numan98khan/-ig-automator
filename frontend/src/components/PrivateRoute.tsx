@@ -53,21 +53,21 @@ const PrivateRoute: React.FC<Props> = ({
   }
 
   if (!user) {
-    return <Navigate to="/" state={{ from: location }} replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (requireAdmin && user.role !== 'admin') {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   if (requireWorkspace && !currentWorkspace) {
     // User should have workspace created automatically via Instagram OAuth
-    return <Navigate to="/" state={{ from: location }} replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (requireInstagram && !hasInstagram) {
     // User should have Instagram connected via OAuth login
-    return <Navigate to="/" state={{ from: location }} replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;

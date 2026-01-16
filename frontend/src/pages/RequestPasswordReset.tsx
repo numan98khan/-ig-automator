@@ -58,7 +58,7 @@ const RequestPasswordReset: React.FC = () => {
               </div>
 
               <Link
-                to="/"
+                to="/login"
                 className="inline-flex items-center gap-2 text-purple-600 hover:text-purple-700 font-medium"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -121,7 +121,7 @@ const RequestPasswordReset: React.FC = () => {
 
           <div className="text-center">
             <Link
-              to="/"
+              to="/login"
               className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
             >
               <ArrowLeft className="w-4 h-4" />

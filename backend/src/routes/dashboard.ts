@@ -34,9 +34,6 @@ router.get('/summary', authenticate, async (req: AuthRequest, res: Response) => 
       .lean();
 
     const totals = docs.reduce((acc, doc) => {
-      const attempts = mapToRecord(doc.goalAttempts);
-      const completions = mapToRecord(doc.goalCompletions);
-
       acc.newConversations += doc.newConversations || 0;
       acc.inboundMessages += doc.inboundMessages || 0;
       acc.aiReplies += doc.aiReplies || 0;
@@ -44,8 +41,6 @@ router.get('/summary', authenticate, async (req: AuthRequest, res: Response) => 
       acc.kbBackedReplies += doc.kbBackedReplies || 0;
       acc.firstResponseTimeSumMs += doc.firstResponseTimeSumMs || 0;
       acc.firstResponseTimeCount += doc.firstResponseTimeCount || 0;
-      acc.goalAttempts = combineMap(acc.goalAttempts, attempts);
-      acc.goalCompletions = combineMap(acc.goalCompletions, completions);
       return acc;
     }, {
       newConversations: 0,
@@ -55,8 +50,6 @@ router.get('/summary', authenticate, async (req: AuthRequest, res: Response) => 
       kbBackedReplies: 0,
       firstResponseTimeSumMs: 0,
       firstResponseTimeCount: 0,
-      goalAttempts: {} as Record<string, number>,
-      goalCompletions: {} as Record<string, number>,
     });
 
     const humanAlerts = await Escalation.aggregate([
@@ -98,19 +91,7 @@ router.get('/summary', authenticate, async (req: AuthRequest, res: Response) => 
         : 0,
     };
 
-    const outcomes = {
-      leads: totals.goalCompletions.capture_lead || 0,
-      bookings: totals.goalCompletions.book_appointment || 0,
-      orders: totals.goalCompletions.order_now || totals.goalCompletions.start_order || 0,
-      support: totals.goalCompletions.handle_support || 0,
-      escalated: totals.escalationsOpened,
-      goal: {
-        attempts: Object.values(totals.goalAttempts).reduce((sum, val) => sum + val, 0),
-        completions: Object.values(totals.goalCompletions).reduce((sum, val) => sum + val, 0),
-      },
-    };
-
-    res.json({ range, kpis, outcomes, trend });
+    res.json({ range, kpis, trend });
   } catch (error) {
     console.error('Error building dashboard summary', error);
     res.status(500).json({ error: 'Failed to load dashboard summary' });

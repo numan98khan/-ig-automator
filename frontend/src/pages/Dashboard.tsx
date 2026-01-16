@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowUpRight,
-  BarChart3,
   Clock3,
   LayoutDashboard,
   MessageSquare,
@@ -77,15 +75,6 @@ const Dashboard: React.FC = () => {
     medianFirstResponseMs: 0,
   }, [summary]);
 
-  const outcomes = useMemo(() => summary?.outcomes || {
-    leads: 0,
-    bookings: 0,
-    orders: 0,
-    support: 0,
-    escalated: 0,
-    goal: { attempts: 0, completions: 0 },
-  }, [summary]);
-
   const aiMetrics = useMemo(() => insights?.aiPerformance || {
     escalationRate: 0,
     topReasons: [],
@@ -115,7 +104,7 @@ const Dashboard: React.FC = () => {
             Analytics
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Instant snapshot of inbox health, outcomes, and where humans need to jump in.
+            Instant snapshot of inbox health and where humans need to jump in.
           </p>
         </div>
         <div className="flex items-center gap-2 glass-panel rounded-xl p-1 shadow-sm w-full md:w-auto">
@@ -191,48 +180,6 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="glass-panel rounded-2xl shadow-sm p-5 space-y-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">Outcomes</p>
-            <h2 className="text-xl font-bold text-foreground">Conversions & resolution</h2>
-            <p className="text-sm text-muted-foreground">Counts for {timeframeOptions.find((t) => t.value === range)?.label}.</p>
-          </div>
-          <BarChart3 className="w-6 h-6 text-primary" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-            <div className="p-4 bg-muted/40 rounded-xl border border-border/50">
-              <p className="text-xs text-muted-foreground">Leads captured</p>
-              <div className="text-2xl font-semibold text-foreground">{formatNumber(outcomes.leads)}</div>
-            </div>
-            <div className="p-4 bg-muted/40 rounded-xl border border-border/50">
-              <p className="text-xs text-muted-foreground">Booking intent</p>
-              <div className="text-2xl font-semibold text-foreground">{formatNumber(outcomes.bookings)}</div>
-            </div>
-            <div className="p-4 bg-muted/40 rounded-xl border border-border/50">
-              <p className="text-xs text-muted-foreground">Order started</p>
-              <div className="text-2xl font-semibold text-foreground">{formatNumber(outcomes.orders)}</div>
-            </div>
-            <div className="p-4 bg-muted/40 rounded-xl border border-border/50">
-              <p className="text-xs text-muted-foreground">Support resolved</p>
-              <div className="text-2xl font-semibold text-foreground">{formatNumber(outcomes.support)}</div>
-            </div>
-            <div className="p-4 bg-muted/40 rounded-xl border border-border/50">
-              <p className="text-xs text-muted-foreground">Escalated to human</p>
-              <div className="text-2xl font-semibold text-foreground">{formatNumber(outcomes.escalated)}</div>
-            </div>
-            <div className="p-4 bg-primary/5 rounded-xl border border-primary/20">
-              <p className="text-xs text-muted-foreground">Goal attempts → completions</p>
-              <div className="text-lg font-semibold text-foreground flex items-center gap-2">
-                {formatNumber(outcomes.goal.attempts)}
-                <ArrowUpRight className="w-4 h-4 text-primary" />
-                {formatNumber(outcomes.goal.completions)}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Primary/secondary goal conversions.</p>
-            </div>
-          </div>
-        </div>
       {/* AI & Knowledge */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="glass-panel rounded-2xl shadow-sm p-5 space-y-3">

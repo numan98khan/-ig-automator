@@ -104,7 +104,7 @@ fi
 
 
 echo "VITE_SITE_URL=https://sendfx.ai" >> backend/.env
-echo "ALLOWED_ORIGINS=http://localhost:3000,https://sf-admin-console-dev.up.railway.app,https://frontend-dev-e92a.up.railway.app" >> backend/.env
+echo "ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:3002,https://sf-admin-console-dev.up.railway.app,https://frontend-dev-e92a.up.railway.app" >> backend/.env
 
 # Update/Add INSTAGRAM_REDIRECT_URI (Critical for OAuth)
 export INSTAGRAM_REDIRECT_URI="$NGROK_URL/api/instagram/callback"
@@ -136,7 +136,7 @@ BACKEND_PID=$!
 
 
 echo "VITE_SITE_URL=https://sendfx.ai" >> backend/.env
-echo "ALLOWED_ORIGINS=http://localhost:3000,https://sf-admin-console-dev.up.railway.app,https://frontend-dev-e92a.up.railway.app" >> backend/.env
+echo "ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:3002,https://sf-admin-console-dev.up.railway.app,https://frontend-dev-e92a.up.railway.app" >> backend/.env
 echo "VITE_API_URL=$NGROK_URL" >> backend/.env
 echo "POSTGRES_URL=postgres://postgres:8TazTljrKS3kZiK9Kyffq4E5Kr-RDMVR@nozomi.proxy.rlwy.net:13594/railway" >> backend/.env
 echo "MONGODB_URI=mongodb://mongo:XykBhRsSuvQBxvmekdnCkLdjpaWdZJRj@shuttle.proxy.rlwy.net:31562" >> backend/.env
@@ -145,13 +145,19 @@ echo "MONGODB_URI=mongodb://mongo:XykBhRsSuvQBxvmekdnCkLdjpaWdZJRj@shuttle.proxy
 (cd frontend && VITE_API_URL=$NGROK_URL npm run dev) &
 FRONTEND_PID=$!
 
+# Start Landing (public site)
+(cd landing && VITE_API_URL=$NGROK_URL VITE_SITE_URL=http://localhost:3002 VITE_APP_URL=http://localhost:3000 npm run dev -- --port 3002) &
+LANDING_PID=$!
+
 # Start admin-console (telling it API is on Ngrok URL)
-(cd sf-admin-console && VITE_API_URL=$NGROK_URL npm run dev) &
+(cd sf-admin-console && VITE_API_URL=$NGROK_URL npm run dev -- --port 3001) &
 ADMIN_PID=$!
 
 echo -e "${GREEN}✨ Development environment is running!${NC}"
-echo -e "   Backend: $NGROK_URL (Public)"
-echo -e "   Frontend: http://localhost:3000"
+echo -e "   Backend (public): $NGROK_URL"
+echo -e "   App (frontend): http://localhost:3000"
+echo -e "   Admin console: http://localhost:3001"
+echo -e "   Landing: http://localhost:3002"
 echo -e "   Webhook: $WEBHOOK_URL"
 echo -e "   OAuth Callback: $NGROK_URL/api/instagram/callback"
 echo -e "${BLUE}👉 Keep this terminal open.${NC}"

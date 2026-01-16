@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Loader2, Pencil, Plus, Power, PowerOff, Sparkles, Target, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Power, PowerOff, Sparkles, Target, Trash2 } from 'lucide-react';
 import { AutomationInstance, ResourceUsage } from '../../services/api';
 import { Button } from '../../components/ui/Button';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { TRIGGER_METADATA } from './constants';
 
 type SummaryStats = {
@@ -10,6 +11,30 @@ type SummaryStats = {
   totalTriggered: number;
   totalRepliesSent: number;
 };
+
+const AutomationsListSkeleton: React.FC = () => (
+  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+    {Array.from({ length: 6 }).map((_, index) => (
+      <div
+        key={`automation-skeleton-${index}`}
+        className="rounded-2xl border border-border/60 bg-background/70 p-5 shadow-sm space-y-4"
+      >
+        <div className="flex items-start gap-3">
+          <Skeleton className="h-10 w-10 rounded-xl" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-full" />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-6 w-20" />
+          <Skeleton className="h-6 w-16" />
+        </div>
+        <Skeleton className="h-9 w-full" />
+      </div>
+    ))}
+  </div>
+);
 
 type AutomationsListViewProps = {
   automations: AutomationInstance[];
@@ -171,9 +196,7 @@ export const AutomationsListView: React.FC<AutomationsListViewProps> = ({
     </div>
 
     {loading ? (
-      <div className="flex justify-center items-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
+      <AutomationsListSkeleton />
     ) : filteredAutomations.length === 0 ? (
       <div className="text-center py-12 border-2 border-dashed border-border/70 dark:border-white/10 rounded-xl bg-muted/40 dark:bg-white/5">
         <Target className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
