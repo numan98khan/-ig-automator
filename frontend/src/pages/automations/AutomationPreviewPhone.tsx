@@ -126,7 +126,7 @@ export const AutomationPreviewPhone: React.FC<AutomationPreviewPhoneProps> = ({
             onBlur={() => onInputBlur?.()}
             placeholder="Message..."
             disabled={inputDisabled}
-            className="flex-1 bg-transparent text-sm text-white/90 placeholder:text-white/40 focus:outline-none"
+            className="flex-1 bg-transparent text-base text-white/90 placeholder:text-white/40 focus:outline-none"
           />
           <button type="button" className="text-white/70 hover:text-white">
             <Mic className="w-4 h-4" />
@@ -149,7 +149,7 @@ export const AutomationPreviewPhone: React.FC<AutomationPreviewPhoneProps> = ({
           <input
             disabled
             placeholder="Message..."
-            className="flex-1 bg-transparent text-sm text-white/80 placeholder:text-white/40 focus:outline-none"
+            className="flex-1 bg-transparent text-base text-white/80 placeholder:text-white/40 focus:outline-none"
           />
           <Mic className="w-4 h-4" />
           <ImageIcon className="w-4 h-4" />
