@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "seed:tiers": "tsx src/utils/runSeedTiers.ts",
     "migrate:core": "tsx src/utils/migrateCoreData.ts",
-    "reset:factory": "tsx src/utils/resetFactoryData.ts"
+    "reset:factory": "tsx src/utils/resetFactoryData.ts",
+    "simulate:tests": "tsx src/test/runAutomationSimTests.ts"
   },
   "dependencies": {
     "axios": "^1.7.7",

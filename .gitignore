@@ -3,6 +3,9 @@
 .env.local
 .env.production
 .env.development
+backend/.env.simulate-tests
+backend/src/test/.env.simulate-tests
+backend/src/test/output/
 
 # Google Drive credentials
 credentials.json

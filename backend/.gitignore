@@ -1,5 +1,8 @@
 node_modules/
 dist/
 .env
+.env.simulate-tests
+src/test/.env.simulate-tests
+src/test/output/
 *.log
 .DS_Store
