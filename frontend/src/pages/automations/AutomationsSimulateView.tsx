@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
-  Maximize2,
-  Minimize2,
   RefreshCcw,
   Sparkles,
 } from 'lucide-react';
@@ -153,7 +151,6 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   const [error, setError] = useState<string | null>(null);
   const [rightPaneTab, setRightPaneTab] = useState<RightPaneTab>('persona');
   const [mobileView, setMobileView] = useState<'preview' | 'details'>('preview');
-  const [isPhoneFullscreen, setIsPhoneFullscreen] = useState(false);
 
   const [profiles, setProfiles] = useState<AutomationPreviewProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -580,7 +577,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
         <div className="hidden sm:block" />
       </CardHeader>
       <CardContent className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden pt-4 sm:pt-6">
-        <div className="flex items-center justify-end gap-2 sm:hidden">
+        <div className="flex items-center justify-end sm:hidden">
           <Button
             variant="outline"
             size="sm"
@@ -589,41 +586,9 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
           >
             Reset
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={isPhoneFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            onClick={() => setIsPhoneFullscreen((prev) => !prev)}
-          >
-            {isPhoneFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-          </Button>
         </div>
-        <div
-          className={
-            isPhoneFullscreen
-              ? 'fixed inset-0 z-50 flex flex-col bg-background p-4'
-              : 'flex-1 min-h-0 flex items-center justify-center'
-          }
-        >
-          {isPhoneFullscreen && (
-            <div className="flex items-center justify-end pb-4">
-              <Button
-                variant="outline"
-                size="sm"
-                leftIcon={<Minimize2 className="w-4 h-4" />}
-                onClick={() => setIsPhoneFullscreen(false)}
-              >
-                Exit fullscreen
-              </Button>
-            </div>
-          )}
-          <div
-            className={
-              isPhoneFullscreen
-                ? 'flex-1 min-h-0 flex items-center justify-center'
-                : 'h-full max-h-full aspect-[9/19.5] w-auto max-w-full min-h-0'
-            }
-          >
+        <div className="flex-1 min-h-0 flex items-center justify-center">
+          <div className="h-full max-h-full aspect-[9/19.5] w-auto max-w-full min-h-0">
             <AutomationPreviewPhone
               accountDisplayName={accountDisplayName}
               accountHandle={accountHandle}
