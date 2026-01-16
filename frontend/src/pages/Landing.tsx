@@ -245,12 +245,27 @@ const Landing: React.FC = () => {
           <div
             className={`p-2 rounded-xl ${isLight ? (isComic ? 'comic-panel-soft' : 'bg-card border border-border') : 'bg-card border border-border'} dark:bg-white/90 dark:border-white/10`}
           >
-              <img src="/sendfx.png" alt="SendFx logo" 
-              
-              // className="w-7 h-7"
-              
-              className="h-8 w-auto shrink-0 object-contain"/>
-            </div>
+            {isStudio ? (
+              <img
+                src="/sendfx-studio.png"
+                alt="SendFx logo"
+                className="h-7 w-auto shrink-0 object-contain"
+              />
+            ) : (
+              <>
+                <img
+                  src="/sendfx.png"
+                  alt="SendFx logo"
+                  className="h-8 w-auto shrink-0 object-contain dark:hidden"
+                />
+                <img
+                  src="/sendfx-dark.png"
+                  alt="SendFx logo"
+                  className="hidden h-8 w-auto shrink-0 object-contain dark:block"
+                />
+              </>
+            )}
+          </div>
 
           </div>
 
