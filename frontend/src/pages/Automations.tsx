@@ -556,7 +556,7 @@ const Automations: React.FC = () => {
 
       handleCloseCreateView();
       if (isOnboardingCreate) {
-        navigate('/app/home');
+        navigate('/home');
       }
     } catch (err: any) {
       const status = err?.response?.status;
@@ -768,7 +768,7 @@ const Automations: React.FC = () => {
             </div>
             <div className="flex flex-col md:flex-row items-center justify-center gap-3">
               <Button
-                onClick={() => navigate('/app/settings?tab=plan')}
+                onClick={() => navigate('/settings?tab=plan')}
                 className="w-full md:w-auto"
               >
                 View upgrade options

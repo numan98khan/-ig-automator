@@ -21,12 +21,12 @@ const Auth: React.FC = () => {
     if (state?.from?.pathname) {
       return `${state.from.pathname}${state.from.search ?? ''}`;
     }
-    return '/app/home';
+    return '/home';
   }, [location.state]);
 
   useEffect(() => {
     if (!loading && user) {
-      navigate('/app/home', { replace: true });
+      navigate('/home', { replace: true });
     }
   }, [loading, user, navigate]);
 
