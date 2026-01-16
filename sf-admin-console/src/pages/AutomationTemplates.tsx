@@ -42,6 +42,7 @@ import {
   GOAL_OPTIONS,
   INDUSTRY_OPTIONS,
   LANGCHAIN_SYSTEM_PROMPT_VARIABLES,
+  LANGCHAIN_TOOL_NAME_OPTIONS,
   MESSAGE_STATE_VARIABLES,
   REASONING_EFFORT_OPTIONS,
   TRIGGER_LIBRARY,
@@ -3364,107 +3365,112 @@ export default function AutomationTemplates() {
                       + Add tool
                     </button>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Preferred tool</label>
-                    <select
-                      className="input h-9 text-sm"
-                      value={selectedNode.langchainPreferredTool || ''}
-                      onChange={(event) =>
-                        updateNode(selectedNode.id, (node) => ({
-                          ...node,
-                          langchainPreferredTool: event.target.value || undefined,
-                        }))
-                      }
-                    >
-                      <option value="">No preference</option>
-                      {(selectedNode.langchainTools || [])
-                        .filter((tool) => tool?.name)
-                        .map((tool, index) => (
-                          <option key={`${selectedNode.id}-langchain-tool-option-${index}`} value={tool.name}>
-                            {tool.name}
-                          </option>
-                        ))}
-                      {selectedNode.langchainPreferredTool
-                        && !(selectedNode.langchainTools || []).some((tool) => tool?.name === selectedNode.langchainPreferredTool)
-                        && (
-                          <option value={selectedNode.langchainPreferredTool}>
-                            Custom: {selectedNode.langchainPreferredTool}
-                          </option>
-                        )}
-                    </select>
-                    <div className="text-[11px] text-muted-foreground">
-                      Picks a tool for the agent to prioritize when deciding tool calls.
-                    </div>
-                  </div>
                   {Array.isArray(selectedNode.langchainTools) && selectedNode.langchainTools.length > 0 ? (
                     <div className="space-y-3">
-                      {selectedNode.langchainTools.map((tool, index) => (
-                        <div
-                          key={`${selectedNode.id}-langchain-tool-${index}`}
-                          className="rounded-lg border border-border p-3 space-y-2"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground">Tool {index + 1}</span>
-                            <button
-                              type="button"
-                              className="text-xs text-rose-400 hover:text-rose-300"
-                              onClick={() =>
-                                updateNode(selectedNode.id, (node) => ({
-                                  ...node,
-                                  langchainTools: (node.langchainTools || []).filter((_, i) => i !== index),
-                                }))
-                              }
-                            >
-                              Remove
-                            </button>
-                          </div>
-                          <input
-                            className="input w-full"
-                            placeholder="Tool name (e.g., lookupCustomer)"
-                            value={tool.name}
-                            onChange={(event) =>
-                              updateNode(selectedNode.id, (node) => {
-                                const nextTools = Array.isArray(node.langchainTools)
-                                  ? [...node.langchainTools]
-                                  : []
-                                nextTools[index] = { ...nextTools[index], name: event.target.value }
-                                return { ...node, langchainTools: nextTools }
-                              })
-                            }
-                          />
-                          <input
-                            className="input w-full"
-                            placeholder="Description (optional)"
-                            value={tool.description || ''}
-                            onChange={(event) =>
-                              updateNode(selectedNode.id, (node) => {
-                                const nextTools = Array.isArray(node.langchainTools)
-                                  ? [...node.langchainTools]
-                                  : []
-                                nextTools[index] = { ...nextTools[index], description: event.target.value }
-                                return { ...node, langchainTools: nextTools }
-                              })
-                            }
-                          />
-                          <textarea
-                            className="input w-full h-24 text-xs font-mono"
-                            placeholder='Input schema JSON (optional)'
-                            value={formatToolSchema(tool.inputSchema)}
-                            onChange={(event) =>
-                              updateNode(selectedNode.id, (node) => {
-                                const nextTools = Array.isArray(node.langchainTools)
-                                  ? [...node.langchainTools]
-                                  : []
-                                nextTools[index] = {
-                                  ...nextTools[index],
-                                  inputSchema: parseToolSchema(event.target.value),
+                      {selectedNode.langchainTools.map((tool, index) => {
+                        const toolName = tool?.name || ''
+                        const toolNameOption = LANGCHAIN_TOOL_NAME_OPTIONS.some((option) => option.value === toolName)
+                          ? toolName
+                          : '__custom__'
+                        return (
+                          <div
+                            key={`${selectedNode.id}-langchain-tool-${index}`}
+                            className="rounded-lg border border-border p-3 space-y-2"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">Tool {index + 1}</span>
+                              <button
+                                type="button"
+                                className="text-xs text-rose-400 hover:text-rose-300"
+                                onClick={() =>
+                                  updateNode(selectedNode.id, (node) => ({
+                                    ...node,
+                                    langchainTools: (node.langchainTools || []).filter((_, i) => i !== index),
+                                  }))
                                 }
-                                return { ...node, langchainTools: nextTools }
-                              })
-                            }
-                          />
-                        </div>
-                      ))}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-xs text-muted-foreground">Name</label>
+                              <select
+                                className="input w-full text-sm"
+                                value={toolNameOption}
+                                onChange={(event) => {
+                                  const selected = event.target.value
+                                  updateNode(selectedNode.id, (node) => {
+                                    const nextTools = Array.isArray(node.langchainTools)
+                                      ? [...node.langchainTools]
+                                      : []
+                                    nextTools[index] = {
+                                      ...nextTools[index],
+                                      name: selected === '__custom__' ? '' : selected,
+                                    }
+                                    return { ...node, langchainTools: nextTools }
+                                  })
+                                }}
+                              >
+                                {LANGCHAIN_TOOL_NAME_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              {toolNameOption === '__custom__' && (
+                                <input
+                                  className="input w-full text-sm"
+                                  placeholder="Custom tool name"
+                                  value={toolName}
+                                  onChange={(event) =>
+                                    updateNode(selectedNode.id, (node) => {
+                                      const nextTools = Array.isArray(node.langchainTools)
+                                        ? [...node.langchainTools]
+                                        : []
+                                      nextTools[index] = {
+                                        ...nextTools[index],
+                                        name: event.target.value,
+                                      }
+                                      return { ...node, langchainTools: nextTools }
+                                    })
+                                  }
+                                />
+                              )}
+                            </div>
+                            <input
+                              className="input w-full"
+                              placeholder="Description (optional)"
+                              value={tool.description || ''}
+                              onChange={(event) =>
+                                updateNode(selectedNode.id, (node) => {
+                                  const nextTools = Array.isArray(node.langchainTools)
+                                    ? [...node.langchainTools]
+                                    : []
+                                  nextTools[index] = { ...nextTools[index], description: event.target.value }
+                                  return { ...node, langchainTools: nextTools }
+                                })
+                              }
+                            />
+                            <textarea
+                              className="input w-full h-24 text-xs font-mono"
+                              placeholder="Input schema JSON (optional)"
+                              value={formatToolSchema(tool.inputSchema)}
+                              onChange={(event) =>
+                                updateNode(selectedNode.id, (node) => {
+                                  const nextTools = Array.isArray(node.langchainTools)
+                                    ? [...node.langchainTools]
+                                    : []
+                                  nextTools[index] = {
+                                    ...nextTools[index],
+                                    inputSchema: parseToolSchema(event.target.value),
+                                  }
+                                  return { ...node, langchainTools: nextTools }
+                                })
+                              }
+                            />
+                          </div>
+                        )
+                      })}
                     </div>
                   ) : (
                     <div className="text-xs text-muted-foreground">No tools yet.</div>

@@ -26,7 +26,6 @@ type FlowRuntimeStep = {
   langchainStopCondition?: string;
   langchainMaxIterations?: number;
   langchainToolChoice?: 'auto' | 'required' | 'none';
-  langchainPreferredTool?: string;
   langchainReturnIntermediateSteps?: boolean;
   intentSettings?: {
     provider?: 'openai' | 'groq';
@@ -115,8 +114,6 @@ const normalizeLangchainMaxIterations = (node: Record<string, any>) =>
   node.langchainMaxIterations ?? node.data?.langchainMaxIterations;
 const normalizeLangchainToolChoice = (node: Record<string, any>) =>
   node.langchainToolChoice ?? node.data?.langchainToolChoice;
-const normalizeLangchainPreferredTool = (node: Record<string, any>) =>
-  node.langchainPreferredTool ?? node.data?.langchainPreferredTool;
 const normalizeLangchainReturnIntermediateSteps = (node: Record<string, any>) =>
   node.langchainReturnIntermediateSteps ?? node.data?.langchainReturnIntermediateSteps;
 
@@ -284,7 +281,6 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
     const langchainStopCondition = normalizeLangchainStopCondition(node);
     const langchainMaxIterations = normalizeLangchainMaxIterations(node);
     const langchainToolChoice = normalizeLangchainToolChoice(node);
-    const langchainPreferredTool = normalizeLangchainPreferredTool(node);
     const langchainReturnIntermediateSteps = normalizeLangchainReturnIntermediateSteps(node);
     const intentSettings = normalizeIntentSettings(node);
     const knowledgeItemIds = normalizeKnowledgeItemIds(node);
@@ -352,7 +348,6 @@ export function compileFlow(dsl: FlowDsl): CompiledFlow {
         : langchainToolChoice === 'auto'
           ? 'auto'
           : undefined,
-      langchainPreferredTool: typeof langchainPreferredTool === 'string' ? langchainPreferredTool : undefined,
       langchainReturnIntermediateSteps: typeof langchainReturnIntermediateSteps === 'boolean'
         ? langchainReturnIntermediateSteps
         : undefined,

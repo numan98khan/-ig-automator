@@ -200,7 +200,6 @@ export type FlowNode = Node<FlowNodeData> & {
   langchainStopCondition?: string
   langchainMaxIterations?: number
   langchainToolChoice?: 'auto' | 'required' | 'none'
-  langchainPreferredTool?: string
   langchainReturnIntermediateSteps?: boolean
   knowledgeItemIds?: string[]
   burstBufferSeconds?: number

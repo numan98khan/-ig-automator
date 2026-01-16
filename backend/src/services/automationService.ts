@@ -99,7 +99,6 @@ type FlowRuntimeStep = {
   langchainStopCondition?: string;
   langchainMaxIterations?: number;
   langchainToolChoice?: 'auto' | 'required' | 'none';
-  langchainPreferredTool?: string;
   langchainReturnIntermediateSteps?: boolean;
   knowledgeItemIds?: string[];
   waitForReply?: boolean;
@@ -2503,7 +2502,6 @@ async function executeFlowPlan(params: {
         latestCustomerMessage: messageText,
         systemPrompt,
         tools: langchainTools,
-        preferredTool: step.langchainPreferredTool,
         endCondition: step.langchainEndCondition,
         stopCondition: step.langchainStopCondition,
         maxIterations,
