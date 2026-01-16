@@ -14,7 +14,7 @@ import {
   tierAPI,
   WorkspaceTierResponse,
 } from '../services/api';
-import { AlertTriangle, CheckCircle2, Clock, PlayCircle, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Menu, PlayCircle, X } from 'lucide-react';
 import { AutomationsSidebar } from './automations/AutomationsSidebar';
 import { AutomationsListView } from './automations/AutomationsListView';
 import { AutomationsCreateView } from './automations/AutomationsCreateView';
@@ -182,6 +182,7 @@ const Automations: React.FC = () => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewSending, setPreviewSending] = useState(false);
   const [showAutomationUpgrade, setShowAutomationUpgrade] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const workspaceId = currentWorkspace?._id;
   const queryClient = useQueryClient();
   const automationsQuery = useQuery<AutomationsQueryData>({
@@ -733,10 +734,53 @@ const Automations: React.FC = () => {
     setPreviewStatus('Preview reset.');
   };
 
+  const handleMobileSectionChange = (
+    section: 'automations' | 'business-profile' | 'simulate' | 'alerts' | 'routing' | 'followups' | 'integrations',
+  ) => {
+    handleSectionChange(section);
+    setIsMobileMenuOpen(false);
+  };
+
+  const mobileSectionLabel = {
+    automations: 'Automations',
+    'business-profile': 'Business Profile',
+    simulate: 'Simulate',
+    alerts: 'Human Alerts',
+    routing: 'Routing & Handoffs',
+    followups: 'Follow-ups',
+    integrations: 'Integrations',
+  }[activeSection];
+
   if (!currentWorkspace) return null;
 
   return (
     <div className={`relative h-full flex flex-col ${isCreateSetupView || isDetailsView ? 'overflow-hidden' : ''}`}>
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            aria-label="Close automations menu"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          <div className="relative h-full w-full max-w-[320px] bg-background p-4 shadow-xl">
+            <div className="flex items-center justify-between pb-4">
+              <div className="text-sm font-semibold text-foreground">Automations Menu</div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
+            <AutomationsSidebar
+              activeSection={activeSection}
+              onChange={handleMobileSectionChange}
+            />
+          </div>
+        </div>
+      )}
       {showAutomationUpgrade && (
         <div
           className={`absolute inset-0 z-40 flex items-center justify-center rounded-2xl p-6 ${isLightTheme ? 'bg-slate-200/70' : 'bg-black/60'} backdrop-blur-sm`}
@@ -799,6 +843,17 @@ const Automations: React.FC = () => {
             isCreateSetupView || isDetailsView || isSimulateView ? 'flex flex-col gap-6 overflow-hidden' : 'space-y-6'
           }`}
         >
+          <div className="flex items-center justify-between lg:hidden">
+            <div className="text-sm font-semibold text-foreground">{mobileSectionLabel}</div>
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Menu className="w-4 h-4" />}
+              onClick={() => setIsMobileMenuOpen(true)}
+            >
+              Menu
+            </Button>
+          </div>
           {error && (
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 animate-fade-in">
               <AlertTriangle className="w-5 h-5 flex-shrink-0" />
