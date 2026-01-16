@@ -121,11 +121,18 @@ const Layout: React.FC = () => {
               className="flex items-center gap-2 rounded-md px-2 py-1 transition"
             >
               {uiTheme === 'studio' ? (
-                <img
-                  src="/sendfx-studio.png"
-                  alt="SendFx logo"
-                  className="h-7 md:h-9 w-auto shrink-0 object-contain -translate-y-[3.5px]"
-                />
+                <>
+                  <img
+                    src="/sendfx-studio.png"
+                    alt="SendFx logo"
+                    className="h-7 md:h-9 w-auto shrink-0 object-contain -translate-y-[3.5px] dark:hidden"
+                  />
+                  <img
+                    src="/sendfx-studio-dark.png"
+                    alt="SendFx logo"
+                    className="hidden h-7 md:h-9 w-auto shrink-0 object-contain -translate-y-[3.5px] dark:block"
+                  />
+                </>
               ) : (
                 <>
                   <img
