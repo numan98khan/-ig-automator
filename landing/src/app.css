@@ -199,7 +199,7 @@
   }
 
   :root.dark[data-ui-theme='studio'] {
-    --background: 17 24 32;
+    --background: 16 16 18;
     --foreground: 248 250 252;
 
     --primary: 251 146 60;
@@ -208,19 +208,19 @@
     --secondary: 45 212 191;
     --secondary-foreground: 15 23 42;
 
-    --muted: 30 41 59;
+    --muted: 28 29 32;
     --muted-foreground: 148 163 184;
 
-    --accent: 51 65 85;
+    --accent: 45 43 40;
     --accent-foreground: 226 232 240;
 
-    --border: 51 65 85;
-    --input: 51 65 85;
+    --border: 45 43 40;
+    --input: 45 43 40;
     --ring: 251 146 60;
 
     --radius: 0.75rem;
 
-    --card: 30 41 59;
+    --card: 24 24 26;
     --card-foreground: 248 250 252;
 
     --glass-blur: 12px;
@@ -248,9 +248,7 @@
   }
 
   :root.dark[data-ui-theme='studio'] body {
-    background: radial-gradient(140% 120% at 15% 10%, rgba(251, 146, 60, 0.12), transparent 55%),
-      radial-gradient(120% 120% at 80% 15%, rgba(45, 212, 191, 0.1), transparent 55%),
-      #0b1118;
+    background: #0e0f12;
   }
 
   h1,
@@ -299,6 +297,10 @@
 
   .bg-radial-at-t {
     background: radial-gradient(140% 110% at 18% 18%, rgba(255, 255, 255, 0.24), transparent 55%);
+  }
+
+  .font-instagram {
+    font-family: "Instagram Sans", "SF Pro Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
 }
 
@@ -373,8 +375,7 @@
 }
 
 :root.dark[data-ui-theme='studio'] .ui-bg-glow {
-  background: radial-gradient(140% 120% at 12% 14%, rgba(251, 146, 60, 0.22), transparent 58%),
-    radial-gradient(120% 120% at 78% 22%, rgba(45, 212, 191, 0.16), transparent 56%);
+  background: none;
 }
 
 .ui-bg-wash {
@@ -390,7 +391,7 @@
 }
 
 :root.dark[data-ui-theme='studio'] .ui-bg-wash {
-  background: linear-gradient(180deg, rgba(11, 17, 24, 0.92), rgba(11, 17, 24, 0.45), rgba(8, 12, 18, 0.96));
+  background: linear-gradient(180deg, rgba(14, 15, 18, 0.94), rgba(14, 15, 18, 0.5), rgba(10, 11, 14, 0.97));
 }
 
 #root {
