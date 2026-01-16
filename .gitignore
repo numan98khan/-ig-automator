@@ -6,6 +6,7 @@
 backend/.env.simulate-tests
 backend/src/test/.env.simulate-tests
 backend/src/test/output/
+backend/src/test/results/
 
 # Google Drive credentials
 credentials.json

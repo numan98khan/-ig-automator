@@ -20,6 +20,7 @@ type Expectation = {
   replyExcludes?: string[];
   maxSentences?: number;
   maxQuestions?: number;
+  allowNoReply?: boolean;
 };
 
 type ScenarioMessage = {
@@ -184,7 +185,12 @@ const extractAiMessages = (messages: PreviewMessage[] | undefined, seenIds: Set<
   return next;
 };
 
-const pollForNewAiMessages = async (client: AxiosInstance, workspaceId: string, baselineIds: Set<string>) => {
+const pollForNewAiMessages = async (
+  client: AxiosInstance,
+  workspaceId: string,
+  baselineIds: Set<string>,
+  expectedSessionId?: string,
+) => {
   const timeoutMs = Number(process.env.SIM_TEST_TIMEOUT_MS || 30000);
   const intervalMs = Number(process.env.SIM_TEST_POLL_MS || 1500);
   const start = Date.now();
@@ -194,6 +200,11 @@ const pollForNewAiMessages = async (client: AxiosInstance, workspaceId: string, 
     const { data } = await client.get<SimulationResponse>('/api/automations/simulate/session', {
       params: { workspaceId },
     });
+    if (expectedSessionId && data.sessionId && data.sessionId !== expectedSessionId) {
+      await sleep(intervalMs);
+      continue;
+    }
+
     lastSession = data;
     const messages = (data.messages || []).filter((message) => message.from === 'ai');
     const newMessages = messages.filter((message) => message.id && !baselineIds.has(message.id));
@@ -266,7 +277,7 @@ async function run() {
   const outputDirEnv = process.env.OUTPUT_DIR;
   const outputPathEnv = process.env.OUTPUT_PATH;
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const defaultOutputDir = path.join(process.cwd(), 'src', 'test', 'output');
+  const defaultOutputDir = path.join(process.cwd(), 'src', 'test', 'results');
   const outputDir = outputDirEnv || defaultOutputDir;
   let outputPath = '';
 
@@ -394,12 +405,16 @@ async function run() {
       let latestSession = response;
 
       if (aiMessages.length === 0) {
-        const polled = await pollForNewAiMessages(client, resolvedWorkspaceId, baselineIds);
+        const polled = await pollForNewAiMessages(client, resolvedWorkspaceId, baselineIds, sessionId);
         latestSession = polled.session || response;
         aiMessages = extractAiMessages(polled.messages, seenAiIds);
         if (polled.timedOut && aiMessages.length === 0) {
-          warnings.push('Timed out waiting for AI response.');
-          logInfo('Timed out waiting for AI response.');
+          if (entry.expect?.allowNoReply) {
+            logInfo('No reply received (allowed for this step).');
+          } else {
+            warnings.push('Timed out waiting for AI response.');
+            logInfo('Timed out waiting for AI response.');
+          }
         }
       }
 

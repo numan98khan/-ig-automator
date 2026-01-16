@@ -4,5 +4,6 @@ dist/
 .env.simulate-tests
 src/test/.env.simulate-tests
 src/test/output/
+src/test/results/
 *.log
 .DS_Store
