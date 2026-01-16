@@ -125,10 +125,10 @@ const Landing: React.FC = () => {
     // If user is already logged in with workspace, redirect to Home or original destination
     if (user && currentWorkspace) {
       console.log('✅ User authenticated, redirecting...');
-      const from = location.state?.from?.pathname || '/app/home';
+      const from = location.state?.from?.pathname || '/home';
       // If the destination is the public landing, go to Home
-      const target = (from === '/' || from === '/landing' || from === '/app')
-        ? '/app/home'
+      const target = (from === '/' || from === '/landing')
+        ? '/home'
         : from;
       navigate(target, { replace: true });
     }

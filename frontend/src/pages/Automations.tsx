@@ -22,7 +22,6 @@ import { AutomationDetailsView } from './automations/AutomationDetailsView';
 import { AutomationPlaceholderSection } from './automations/AutomationPlaceholderSection';
 import { AutomationsHumanAlerts } from './automations/AutomationsHumanAlerts';
 import { AutomationsSimulateView } from './automations/AutomationsSimulateView';
-import Knowledge from './Knowledge';
 import { AutomationsIntegrationsView } from './automations/AutomationsIntegrationsView';
 import { AutomationsBusinessProfileView } from './automations/AutomationsBusinessProfileView';
 import { FLOW_GOAL_FILTERS } from './automations/constants';
@@ -164,7 +163,7 @@ const Automations: React.FC = () => {
   const { activeAccount } = useAccountContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeSection, setActiveSection] = useState<
-    'automations' | 'business-profile' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
+    'automations' | 'business-profile' | 'simulate' | 'alerts' | 'routing' | 'followups' | 'integrations'
   >('automations');
   const [automationView, setAutomationView] = useState<'list' | 'create' | 'edit' | 'details'>('list');
   const [error, setError] = useState<string | null>(null);
@@ -327,10 +326,17 @@ const Automations: React.FC = () => {
 
   useEffect(() => {
     const section = searchParams.get('section');
-    if (section === 'knowledge' || section === 'alerts' || section === 'simulate' || section === 'business-profile') {
+    if (section === 'knowledge') {
+      setActiveSection('business-profile');
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set('section', 'business-profile');
+      setSearchParams(nextParams);
+      return;
+    }
+    if (section === 'alerts' || section === 'simulate' || section === 'business-profile') {
       setActiveSection(section);
     }
-  }, [searchParams]);
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     const templateId = searchParams.get('templateId');
@@ -436,10 +442,10 @@ const Automations: React.FC = () => {
   };
 
   const handleSectionChange = (
-    section: 'automations' | 'business-profile' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
+    section: 'automations' | 'business-profile' | 'simulate' | 'alerts' | 'routing' | 'followups' | 'integrations'
   ) => {
     setActiveSection(section);
-    if (section === 'knowledge' || section === 'alerts' || section === 'simulate' || section === 'business-profile') {
+    if (section === 'alerts' || section === 'simulate' || section === 'business-profile') {
       setSearchParams({ section });
     } else if (searchParams.get('section')) {
       setSearchParams({});
@@ -556,7 +562,7 @@ const Automations: React.FC = () => {
 
       handleCloseCreateView();
       if (isOnboardingCreate) {
-        navigate('/app/home');
+        navigate('/home');
       }
     } catch (err: any) {
       const status = err?.response?.status;
@@ -768,7 +774,7 @@ const Automations: React.FC = () => {
             </div>
             <div className="flex flex-col md:flex-row items-center justify-center gap-3">
               <Button
-                onClick={() => navigate('/app/settings?tab=plan')}
+                onClick={() => navigate('/settings?tab=plan')}
                 className="w-full md:w-auto"
               >
                 View upgrade options
@@ -882,10 +888,6 @@ const Automations: React.FC = () => {
 
           {activeSection === 'business-profile' && (
             <AutomationsBusinessProfileView />
-          )}
-
-          {activeSection === 'knowledge' && (
-            <Knowledge />
           )}
 
           {activeSection === 'simulate' && (

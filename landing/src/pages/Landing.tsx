@@ -220,7 +220,8 @@ const Landing: React.FC = () => {
           <div className="flex items-center gap-3">
  
           <div
-            className={`p-2 rounded-xl ${isLight ? (isComic ? 'comic-panel-soft' : 'bg-card border border-border') : 'bg-card border border-border'} dark:bg-white/90 dark:border-white/10`}
+            // className={`p-2 rounded-xl ${isLight ? (isComic ? 'comic-panel-soft' : 'bg-card border border-border') : 'bg-card border border-border'} dark:bg-white/90 dark:border-white/10`}
+            className={`p-2 rounded-xl  `}
           >
             {isStudio ? (
               <>
@@ -232,6 +233,7 @@ const Landing: React.FC = () => {
                 <img
                   src="/sendfx-studio-dark.png"
                   alt="SendFx logo"
+                  // className="hidden h-7 w-auto shrink-0 object-contain dark:block"
                   className="hidden h-7 w-auto shrink-0 object-contain dark:block"
                 />
               </>

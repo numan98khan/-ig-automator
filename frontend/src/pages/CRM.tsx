@@ -1011,7 +1011,7 @@ const CRM: React.FC = () => {
               type="button"
               onClick={() => {
                 if (selectedContact.primaryConversationId) {
-                  navigate(`/app/inbox?conversationId=${selectedContact.primaryConversationId}`);
+                  navigate(`/inbox?conversationId=${selectedContact.primaryConversationId}`);
                 }
               }}
               disabled={!selectedContact.primaryConversationId}
@@ -1302,7 +1302,7 @@ const CRM: React.FC = () => {
                 type="button"
                 onClick={() => {
                   if (selectedContact.primaryConversationId) {
-                    navigate(`/app/inbox?conversationId=${selectedContact.primaryConversationId}`);
+                    navigate(`/inbox?conversationId=${selectedContact.primaryConversationId}`);
                   }
                 }}
                 disabled={!selectedContact.primaryConversationId}
@@ -1420,7 +1420,7 @@ const CRM: React.FC = () => {
             </div>
             <div className="flex flex-col md:flex-row items-center justify-center gap-3">
               <Button
-                onClick={() => navigate('/app/settings?tab=plan')}
+                onClick={() => navigate('/settings?tab=plan')}
                 className="w-full md:w-auto"
               >
                 View upgrade options

@@ -660,7 +660,7 @@ const Inbox: React.FC = () => {
                   </div>
                   <Button
                     size="sm"
-                    onClick={() => navigate('/app/home')}
+                    onClick={() => navigate('/home')}
                   >
                     Go to Home to finish setup
                   </Button>

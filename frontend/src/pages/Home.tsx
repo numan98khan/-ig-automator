@@ -356,7 +356,7 @@ const Home: React.FC = () => {
   };
 
   const handleTemplateSelect = (templateId: string) => {
-    navigate(`/app/automations?templateId=${templateId}&source=onboarding`);
+    navigate(`/automations?templateId=${templateId}&source=onboarding`);
   };
 
   const showSecurityPrompt = Boolean(user?.isProvisional || !user?.emailVerified);
@@ -516,11 +516,11 @@ const Home: React.FC = () => {
                             className="text-xs"
                             onClick={(event) => {
                               event.stopPropagation();
-                              if (step.id === 'connect') navigate('/app/settings');
-                              if (step.id === 'template') navigate('/app/automations');
-                              if (step.id === 'basics') navigate('/app/automations?section=business-profile');
-                              if (step.id === 'publish') navigate('/app/automations');
-                              if (step.id === 'simulate') navigate('/app/automations?section=simulate');
+                              if (step.id === 'connect') navigate('/settings');
+                              if (step.id === 'template') navigate('/automations');
+                              if (step.id === 'basics') navigate('/automations?section=business-profile');
+                              if (step.id === 'publish') navigate('/automations');
+                              if (step.id === 'simulate') navigate('/automations?section=simulate');
                             }}
                           >
                             {step.id === 'connect' && 'Manage'}
@@ -534,7 +534,7 @@ const Home: React.FC = () => {
 
                       {step.id === 'connect' && !connectStepComplete && (
                         <div className="flex flex-col md:flex-row md:items-center gap-3">
-                          <Button onClick={() => navigate('/app/settings')} leftIcon={<Instagram className="w-4 h-4" />}>
+                          <Button onClick={() => navigate('/settings')} leftIcon={<Instagram className="w-4 h-4" />}>
                             Connect Instagram
                           </Button>
                           <Button
@@ -580,7 +580,7 @@ const Home: React.FC = () => {
                             variant="ghost"
                             size="sm"
                             className="justify-start"
-                            onClick={() => navigate('/app/automations')}
+                            onClick={() => navigate('/automations')}
                             rightIcon={<ChevronRight className="w-4 h-4" />}
                           >
                             Browse all templates
@@ -631,7 +631,7 @@ const Home: React.FC = () => {
                             onClick={
                               isDemoMode
                                 ? (hasInstagram ? handleGoLive : handleConnectInstagram)
-                                : () => navigate('/app/automations')
+                                : () => navigate('/automations')
                             }
                             isLoading={demoModeUpdating}
                           >
@@ -653,19 +653,19 @@ const Home: React.FC = () => {
                                 Test complete{simulationTimestamp ? ` · ${simulationTimestamp}` : ''}
                               </div>
                               <div className="flex flex-wrap gap-2">
-                                <Button size="sm" variant="outline" onClick={() => navigate('/app/inbox')}>
+                                <Button size="sm" variant="outline" onClick={() => navigate('/inbox')}>
                                   Open Inbox
                                 </Button>
-                                <Button size="sm" variant="outline" onClick={() => navigate('/app/automations')}>
+                                <Button size="sm" variant="outline" onClick={() => navigate('/automations')}>
                                   View automation
                                 </Button>
-                                <Button size="sm" onClick={() => navigate('/app/automations?section=simulate')}>
+                                <Button size="sm" onClick={() => navigate('/automations?section=simulate')}>
                                   Run again
                                 </Button>
                               </div>
                             </div>
                           ) : (
-                            <Button onClick={() => navigate('/app/automations?section=simulate')} leftIcon={<TestTube2 className="w-4 h-4" />}>
+                            <Button onClick={() => navigate('/automations?section=simulate')} leftIcon={<TestTube2 className="w-4 h-4" />}>
                               Test in simulator
                             </Button>
                           )}
@@ -816,7 +816,7 @@ const Home: React.FC = () => {
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Instagram</span>
-                <Button variant="ghost" size="sm" onClick={() => navigate('/app/settings')}>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
                   <Badge variant={hasInstagram ? 'success' : 'secondary'}>
                     {hasInstagram ? 'Connected' : 'Not connected'}
                   </Badge>
@@ -837,7 +837,7 @@ const Home: React.FC = () => {
               )}
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Automations published</span>
-                  <Button variant="ghost" size="sm" onClick={() => navigate('/app/automations?filter=active')}>
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/automations?filter=active')}>
                     <span className="text-foreground font-semibold">{publishedCount}</span>
                   </Button>
               </div>
@@ -860,20 +860,20 @@ const Home: React.FC = () => {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => navigate(`/app/automations?automationId=${liveAutomation._id}`)}
+                    onClick={() => navigate(`/automations?automationId=${liveAutomation._id}`)}
                   >
                     View
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => navigate(`/app/automations?automationId=${liveAutomation._id}&mode=edit`)}
+                    onClick={() => navigate(`/automations?automationId=${liveAutomation._id}&mode=edit`)}
                   >
                     Edit
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => navigate('/app/automations?section=simulate')}
+                    onClick={() => navigate('/automations?section=simulate')}
                   >
                     Test
                   </Button>
@@ -896,7 +896,7 @@ const Home: React.FC = () => {
                   <p className="text-xs text-muted-foreground">
                     Verify your email to protect your workspace and enable team access.
                   </p>
-                  <Button size="sm" onClick={() => navigate('/app/settings')}>
+                  <Button size="sm" onClick={() => navigate('/settings')}>
                     Secure My Account
                   </Button>
                 </>
@@ -914,13 +914,13 @@ const Home: React.FC = () => {
               <CardTitle className="text-sm">Help</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <Button variant="ghost" className="w-full justify-start" onClick={() => navigate('/app/support')} leftIcon={<HelpCircle className="w-4 h-4" />}>
+              <Button variant="ghost" className="w-full justify-start" onClick={() => navigate('/support')} leftIcon={<HelpCircle className="w-4 h-4" />}>
                 Read getting started
               </Button>
-              <Button variant="ghost" className="w-full justify-start" onClick={() => navigate('/app/support')} leftIcon={<Wrench className="w-4 h-4" />}>
+              <Button variant="ghost" className="w-full justify-start" onClick={() => navigate('/support')} leftIcon={<Wrench className="w-4 h-4" />}>
                 Common IG connection issues
               </Button>
-              <Button variant="ghost" className="w-full justify-start" onClick={() => navigate('/app/support')} leftIcon={<LayoutDashboard className="w-4 h-4" />}>
+              <Button variant="ghost" className="w-full justify-start" onClick={() => navigate('/support')} leftIcon={<LayoutDashboard className="w-4 h-4" />}>
                 Contact support
               </Button>
             </CardContent>

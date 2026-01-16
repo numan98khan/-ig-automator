@@ -87,7 +87,7 @@ const AcceptInvite: React.FC = () => {
       // Redirect to inbox after 2 seconds
       setTimeout(() => {
         console.log('🔄 Redirecting to inbox...');
-        navigate('/app/inbox', { replace: true });
+        navigate('/inbox', { replace: true });
       }, 2000);
     } catch (error: any) {
       console.error('❌ Failed to accept invite:', error);

@@ -1,10 +1,10 @@
 import React from 'react';
-import { Target, PlayCircle, Clock, Link as LinkIcon, AlertTriangle, BookOpen, Sparkles, Building2 } from 'lucide-react';
+import { Target, PlayCircle, Clock, Link as LinkIcon, AlertTriangle, Sparkles, Building2 } from 'lucide-react';
 
 type AutomationsSidebarProps = {
-  activeSection: 'automations' | 'business-profile' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations';
+  activeSection: 'automations' | 'business-profile' | 'simulate' | 'alerts' | 'routing' | 'followups' | 'integrations';
   onChange: (
-    section: 'automations' | 'business-profile' | 'simulate' | 'knowledge' | 'alerts' | 'routing' | 'followups' | 'integrations'
+    section: 'automations' | 'business-profile' | 'simulate' | 'alerts' | 'routing' | 'followups' | 'integrations'
   ) => void;
 };
 
@@ -33,17 +33,6 @@ export const AutomationsSidebar: React.FC<AutomationsSidebarProps> = ({ activeSe
       >
         <Building2 className="w-4 h-4" />
         <span className="flex-1 text-sm font-medium">Business Profile</span>
-      </button>
-      <button
-        onClick={() => onChange('knowledge')}
-        className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors text-left ${
-          activeSection === 'knowledge'
-            ? 'bg-primary/12 text-foreground border border-primary/30 shadow-sm'
-            : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 dark:hover:bg-white/5 border border-transparent'
-        }`}
-      >
-        <BookOpen className="w-4 h-4" />
-        <span className="flex-1 text-sm font-medium">Knowledge Base</span>
       </button>
       <button
         onClick={() => onChange('simulate')}

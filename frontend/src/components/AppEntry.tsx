@@ -15,7 +15,7 @@ const AppEntry: React.FC = () => {
   }
 
   if (user) {
-    return <Navigate to="/app/home" replace />;
+    return <Navigate to="/home" replace />;
   }
 
   return <Navigate to="/login" replace />;

@@ -28,12 +28,18 @@ const VerifyEmail: React.FC = () => {
         setStatus('success');
         setMessage(response.message || 'Email verified successfully!');
 
-        // Refresh user data to update emailVerified status
-        await refreshUser();
+        if (response.token) {
+          localStorage.setItem('token', response.token);
+        }
+
+        if (localStorage.getItem('token')) {
+          // Refresh user data to update emailVerified status
+          await refreshUser();
+        }
 
         // Redirect to inbox after 3 seconds
         setTimeout(() => {
-          navigate('/app/inbox', { replace: true });
+          navigate('/inbox', { replace: true });
         }, 3000);
       } catch (error: any) {
         console.error('❌ Verification failed:', error);
@@ -94,7 +100,7 @@ const VerifyEmail: React.FC = () => {
                   Go to Login
                 </button>
                 <button
-                  onClick={() => navigate('/app/inbox')}
+                  onClick={() => navigate('/inbox')}
                   className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium"
                 >
                   Go to Inbox
