@@ -345,6 +345,140 @@
   min-height: 44px;
 }
 
+.auth-brand-panel {
+  position: relative;
+  overflow: hidden;
+  padding: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  isolation: isolate;
+  border-right: 1px solid rgb(var(--border));
+  background:
+    radial-gradient(800px 500px at 20% 20%, rgba(255, 122, 0, 0.14), transparent 60%),
+    radial-gradient(900px 600px at 80% 25%, rgba(56, 189, 248, 0.16), transparent 62%),
+    radial-gradient(900px 700px at 55% 85%, rgba(167, 139, 250, 0.12), transparent 60%),
+    linear-gradient(135deg, rgba(255, 244, 236, 0.9), rgba(238, 246, 255, 0.9));
+}
+
+.auth-brand-panel::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background:
+    repeating-linear-gradient(
+      115deg,
+      rgba(0, 0, 0, 0.045) 0px,
+      rgba(0, 0, 0, 0.045) 1px,
+      transparent 1px,
+      transparent 22px
+    );
+  transform: rotate(8deg);
+  opacity: 0.35;
+  mask-image: radial-gradient(circle at 30% 30%, black 0%, transparent 60%);
+}
+
+.auth-brand-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27220%27%20height%3D%27220%27%3E%3Cfilter%20id%3D%27n%27%3E%3CfeTurbulence%20type%3D%27fractalNoise%27%20baseFrequency%3D%27.9%27%20numOctaves%3D%273%27%20stitchTiles%3D%27stitch%27/%3E%3C/filter%3E%3Crect%20width%3D%27220%27%20height%3D%27220%27%20filter%3D%27url(%23n)%27%20opacity%3D%27.45%27/%3E%3C/svg%3E");
+}
+
+.auth-brand-content {
+  position: relative;
+  z-index: 1;
+  max-width: 520px;
+  text-align: left;
+}
+
+.auth-brand-logo {
+  height: 34px;
+  width: auto;
+  display: block;
+  margin-bottom: 18px;
+}
+
+.auth-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: rgba(15, 23, 42, 0.7);
+  margin-bottom: 14px;
+}
+
+.auth-brand-title {
+  font-family: var(--font-display);
+  font-size: 46px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: rgb(var(--foreground));
+  margin: 0 0 14px 0;
+}
+
+.auth-brand-subtitle {
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 420px;
+  color: rgba(15, 23, 42, 0.75);
+}
+
+.auth-brand-bullets {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0 0 0;
+  display: grid;
+  gap: 10px;
+  color: rgba(15, 23, 42, 0.78);
+  font-size: 14px;
+}
+
+.auth-brand-bullets li {
+  position: relative;
+  padding-left: 18px;
+}
+
+.auth-brand-bullets li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(var(--primary));
+}
+
+.auth-card {
+  position: relative;
+}
+
+.auth-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.12));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.dark .auth-card::before {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.02));
+}
+
 
 /* Topographic / Contour Line Texture */
 .bg-contour-lines {
