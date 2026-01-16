@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 252 249 245;
+    --foreground: 20 27 33;
+    --primary: 234 88 12;
+    --primary-foreground: 255 255 255;
+    --secondary: 15 118 110;
+    --secondary-foreground: 255 255 255;
+    --muted: 241 234 224;
+    --muted-foreground: 71 85 105;
+    --border: 226 215 205;
+  }
+
+  * {
+    border-color: rgb(var(--border));
+  }
+
+  body {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    background: linear-gradient(160deg, #faf6f1 0%, #fdf7ef 35%, #f2f5f7 100%);
+    color: rgb(var(--foreground));
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Fraunces', serif;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  .glass-surface {
+    background: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 18px 40px -30px rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(14px);
+  }
+
+  .accent-pill {
+    background: rgba(15, 118, 110, 0.08);
+    color: rgb(var(--secondary));
+  }
+}

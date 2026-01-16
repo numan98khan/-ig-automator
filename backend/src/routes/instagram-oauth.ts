@@ -107,12 +107,12 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     if (error) {
       console.error('❌ Instagram OAuth error from Instagram:', error);
-      return res.redirect(`${FRONTEND_URL}/landing?error=${error}`);
+      return res.redirect(`${FRONTEND_URL}/login?error=${error}`);
     }
 
     if (!code || !state) {
       console.error('❌ Missing code or state in callback');
-      return res.redirect(`${FRONTEND_URL}/landing?error=missing_code_or_state`);
+      return res.redirect(`${FRONTEND_URL}/login?error=missing_code_or_state`);
     }
 
     console.log('✅ Code and state received');
@@ -175,7 +175,7 @@ router.get('/callback', async (req: Request, res: Response) => {
 
       if (user && !user.isProvisional && user.email) {
         console.log('⚠️  User has secured account, redirecting to email login');
-        return res.redirect(`${FRONTEND_URL}/landing?error=account_secured&message=You have already secured your account. Please log in with your email and password.`);
+        return res.redirect(`${FRONTEND_URL}/login?error=account_secured&message=You have already secured your account. Please log in with your email and password.`);
       }
 
       if (!user) {
@@ -270,7 +270,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       } else {
         const limitCheck = await assertInstagramAccountLimit(workspace._id.toString());
         if (!limitCheck.allowed) {
-          return res.redirect(`${FRONTEND_URL}/landing?error=instagram_limit_reached&message=${encodeURIComponent(
+          return res.redirect(`${FRONTEND_URL}/login?error=instagram_limit_reached&message=${encodeURIComponent(
             `Instagram account limit reached (limit: ${limitCheck.limit})`,
           )}`);
         }
@@ -316,7 +316,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
       console.log('✅ JWT token generated');
 
-      const redirectUrl = `${FRONTEND_URL}/landing?token=${token}&instagram_connected=true`;
+      const redirectUrl = `${FRONTEND_URL}/login?token=${token}&instagram_connected=true`;
       console.log('🎉 OAuth flow complete! Redirecting to:', redirectUrl);
       console.log('=== Instagram OAuth Callback Completed Successfully ===\n');
       return res.redirect(redirectUrl);
@@ -324,7 +324,7 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     const workspace = await getWorkspaceById(workspaceId);
     if (!workspace || workspace.userId !== userId) {
-      return res.redirect(`${FRONTEND_URL}/landing?error=workspace_not_found`);
+      return res.redirect(`${FRONTEND_URL}/login?error=workspace_not_found`);
     }
 
     const existingAccount = await InstagramAccount.findOne({
@@ -354,7 +354,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     } else {
       const limitCheck = await assertInstagramAccountLimit(workspaceId);
       if (!limitCheck.allowed) {
-        return res.redirect(`${FRONTEND_URL}/landing?error=instagram_limit_reached&message=${encodeURIComponent(
+        return res.redirect(`${FRONTEND_URL}/login?error=instagram_limit_reached&message=${encodeURIComponent(
           `Instagram account limit reached (limit: ${limitCheck.limit})`,
         )}`);
       }
@@ -388,7 +388,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     }
 
     console.log('Redirecting to frontend with success');
-    res.redirect(`${FRONTEND_URL}/landing?instagram_connected=true`);
+    res.redirect(`${FRONTEND_URL}/login?instagram_connected=true`);
   } catch (error: any) {
     console.error('❌ Instagram callback error:', error);
     console.error('Error details:', {
@@ -399,7 +399,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     console.log('=== Instagram OAuth Callback Failed ===\n');
 
     const errorMessage = error.response?.data?.error_message || error.message || 'connection_failed';
-    res.redirect(`${FRONTEND_URL}/landing?error=${encodeURIComponent(errorMessage)}`);
+    res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(errorMessage)}`);
   }
 });
 

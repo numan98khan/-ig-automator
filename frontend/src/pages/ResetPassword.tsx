@@ -49,7 +49,7 @@ const ResetPassword: React.FC = () => {
 
       // Redirect to login after 3 seconds
       setTimeout(() => {
-        navigate('/');
+        navigate('/login');
       }, 3000);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to reset password. The link may have expired.');
@@ -108,7 +108,7 @@ const ResetPassword: React.FC = () => {
               </div>
 
             <Link
-              to="/"
+              to="/login"
               className="inline-block bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition font-medium"
             >
                 Go to Login Now
