@@ -13,10 +13,7 @@ const baseUrl = rawSiteUrl.replace(/\/$/, '');
 
 const indexablePages = [
   { path: '/', changefreq: 'weekly', priority: 1.0 },
-  { path: '/pricing', changefreq: 'monthly', priority: 0.8 },
-  { path: '/templates', changefreq: 'weekly', priority: 0.8 },
-  { path: '/use-cases', changefreq: 'monthly', priority: 0.7 },
-  { path: '/legal', changefreq: 'yearly', priority: 0.2 },
+  { path: '/privacy-policy', changefreq: 'yearly', priority: 0.2 },
 ];
 
 const lastmod = new Date().toISOString();
