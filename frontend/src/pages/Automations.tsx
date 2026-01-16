@@ -857,11 +857,6 @@ const Automations: React.FC = () => {
               ) : isDetailsView && selectedAutomation ? (
                 <AutomationDetailsView
                   automation={selectedAutomation}
-                  accountDisplayName={accountDisplayName}
-                  accountHandle={accountHandle}
-                  accountAvatarUrl={accountAvatarUrl}
-                  accountInitial={accountInitial}
-                  canViewExecutionTimeline={canViewExecutionTimeline}
                   onBack={() => {
                     setAutomationView('list');
                     setSelectedAutomation(null);
