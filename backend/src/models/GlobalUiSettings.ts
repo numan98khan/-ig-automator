@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export type UiTheme = 'legacy' | 'comic';
+export type UiTheme = 'legacy' | 'comic' | 'studio';
 
 export interface IGlobalUiSettings extends Document {
   key?: string;
@@ -22,7 +22,7 @@ const globalUiSettingsSchema = new Schema<IGlobalUiSettings>(
       type: String,
       trim: true,
       default: 'legacy',
-      enum: ['legacy', 'comic'],
+      enum: ['legacy', 'comic', 'studio'],
     },
   },
   { timestamps: true },

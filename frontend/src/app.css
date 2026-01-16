@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Fraunces:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -45,6 +45,8 @@
 
     --glass-blur: 14px;
     --glass-opacity: 0.45;
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-display: 'Inter', system-ui, sans-serif;
   }
 
   .dark {
@@ -164,6 +166,70 @@
     --card-foreground: 248 250 252;
   }
 
+  :root[data-ui-theme='studio']:not(.dark) {
+    --background: 252 249 245;
+    --foreground: 20 27 33;
+
+    --primary: 234 88 12;
+    --primary-foreground: 255 255 255;
+
+    --secondary: 15 118 110;
+    --secondary-foreground: 255 255 255;
+
+    --muted: 243 235 225;
+    --muted-foreground: 71 85 105;
+
+    --accent: 252 238 220;
+    --accent-foreground: 20 27 33;
+
+    --border: 226 215 205;
+    --input: 226 215 205;
+    --ring: 234 88 12;
+
+    --radius: 0.75rem;
+
+    --card: 255 255 255;
+    --card-foreground: 20 27 33;
+
+    --glass-blur: 18px;
+    --glass-opacity: 0.6;
+
+    --font-sans: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+    --font-display: 'Fraunces', 'Inter', serif;
+  }
+
+  :root.dark[data-ui-theme='studio'] {
+    --background: 17 24 32;
+    --foreground: 248 250 252;
+
+    --primary: 251 146 60;
+    --primary-foreground: 15 23 42;
+
+    --secondary: 45 212 191;
+    --secondary-foreground: 15 23 42;
+
+    --muted: 30 41 59;
+    --muted-foreground: 148 163 184;
+
+    --accent: 51 65 85;
+    --accent-foreground: 226 232 240;
+
+    --border: 51 65 85;
+    --input: 51 65 85;
+    --ring: 251 146 60;
+
+    --radius: 0.75rem;
+
+    --card: 30 41 59;
+    --card-foreground: 248 250 252;
+
+    --glass-blur: 12px;
+    --glass-opacity: 0.18;
+
+    --font-sans: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+    --font-display: 'Fraunces', 'Inter', serif;
+  }
+
   * {
     border-color: rgb(var(--border));
   }
@@ -171,9 +237,23 @@
   body {
     background-color: rgb(var(--background));
     color: rgb(var(--foreground));
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  :root[data-ui-theme='studio']:not(.dark) body {
+    background: linear-gradient(160deg, #fbf6ef 0%, #fdf7ef 35%, #f1f4f7 100%);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
   }
 }
 

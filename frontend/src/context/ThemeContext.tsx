@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getApiBaseUrl } from '../utils/apiBaseUrl';
 
 type Theme = 'dark' | 'light' | 'system';
-type UiTheme = 'legacy' | 'comic';
+type UiTheme = 'legacy' | 'comic' | 'studio';
 
 interface ThemeProviderProps {
   children: React.ReactNode;
@@ -72,7 +72,7 @@ export function ThemeProvider({
         if (!response.ok) return;
         const payload = await response.json();
         const nextTheme = payload?.data?.uiTheme || payload?.uiTheme;
-        if (nextTheme === 'legacy' || nextTheme === 'comic') {
+        if (nextTheme === 'legacy' || nextTheme === 'comic' || nextTheme === 'studio') {
           localStorage.setItem(uiThemeStorageKey, nextTheme);
           setUiThemeState(nextTheme);
         }
