@@ -18,6 +18,7 @@ import {
   Atom,
   Users,
   Home as HomeIcon,
+  ChevronRight,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
@@ -38,6 +39,7 @@ const Layout: React.FC = () => {
   const { theme, setTheme, uiTheme } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showAutomationsMenu, setShowAutomationsMenu] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
@@ -57,6 +59,22 @@ const Layout: React.FC = () => {
 
     return links;
   }, [location.pathname]);
+
+  const automationSection = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('section');
+  }, [location.search]);
+
+  const automationsMenuItems = useMemo(() => ([
+    { label: 'Overview', to: '/app/automations' },
+    { label: 'Business Profile', to: '/app/automations?section=business-profile' },
+    { label: 'Knowledge Base', to: '/app/automations?section=knowledge' },
+    { label: 'Simulate', to: '/app/automations?section=simulate' },
+    { label: 'Human Alerts', to: '/app/automations?section=alerts' },
+    { label: 'Routing & Handoffs', to: '/app/automations?section=routing' },
+    { label: 'Follow-ups', to: '/app/automations?section=followups' },
+    { label: 'Integrations', to: '/app/automations?section=integrations' },
+  ]), []);
 
   const pageTitle = useMemo(() => {
     const path = location.pathname;
@@ -82,6 +100,18 @@ const Layout: React.FC = () => {
   useEffect(() => {
     recordBreadcrumb({ type: 'route', label: location.pathname, meta: { path: location.pathname } });
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (showMobileMenu && isActive('/app/automations')) {
+      setShowAutomationsMenu(true);
+    }
+  }, [showMobileMenu, location.pathname]);
+
+  useEffect(() => {
+    if (!showMobileMenu) {
+      setShowAutomationsMenu(false);
+    }
+  }, [showMobileMenu]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -340,20 +370,67 @@ const Layout: React.FC = () => {
             <nav className="p-4 space-y-2">
               <div className="space-y-1">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">Main</p>
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.to}
-                    to={link.to}
-                    onClick={() => setShowMobileMenu(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${link.isActive
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                      }`}
-                  >
-                    <link.icon className="w-5 h-5" />
-                    {link.label}
-                  </Link>
-                ))}
+                {navLinks.map((link) => {
+                  if (link.to !== '/app/automations') {
+                    return (
+                      <Link
+                        key={link.to}
+                        to={link.to}
+                        onClick={() => setShowMobileMenu(false)}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${link.isActive
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                          }`}
+                      >
+                        <link.icon className="w-5 h-5" />
+                        {link.label}
+                      </Link>
+                    );
+                  }
+
+                  return (
+                    <div key={link.to} className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAutomationsMenu((prev) => !prev)}
+                        className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg font-medium transition ${link.isActive
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                          }`}
+                        aria-expanded={showAutomationsMenu}
+                      >
+                        <span className="flex items-center gap-3">
+                          <link.icon className="w-5 h-5" />
+                          {link.label}
+                        </span>
+                        <ChevronRight className={`w-4 h-4 transition-transform ${showAutomationsMenu ? 'rotate-90' : ''}`} />
+                      </button>
+                      {showAutomationsMenu && (
+                        <div className="ml-4 space-y-1 rounded-lg border border-border/50 bg-card/70 p-2">
+                          {automationsMenuItems.map((item) => {
+                            const isItemActive = isActive('/app/automations')
+                              && ((item.to.includes('section=') && automationSection === item.to.split('section=')[1])
+                                || (!item.to.includes('section=') && !automationSection));
+                            return (
+                              <Link
+                                key={item.to}
+                                to={item.to}
+                                onClick={() => setShowMobileMenu(false)}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition ${isItemActive
+                                  ? 'bg-primary/10 text-primary'
+                                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                                  }`}
+                              >
+                                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                {item.label}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="space-y-3 pt-3 border-t border-border/50">

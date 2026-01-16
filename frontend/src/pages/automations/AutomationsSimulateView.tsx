@@ -560,7 +560,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
 
   const renderTestConsole = () => (
     <Card className="flex flex-col min-h-0 h-full">
-      <CardHeader className="grid grid-cols-1 gap-2 border-b border-border/60 px-4 py-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+      <CardHeader className="hidden sm:grid grid-cols-1 gap-2 border-b border-border/60 px-4 py-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
         <div className="flex flex-wrap items-center gap-2 sm:justify-start">
           <Badge variant="neutral" className="hidden sm:inline-flex">Preview</Badge>
         </div>
@@ -576,7 +576,17 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
         </div>
         <div className="hidden sm:block" />
       </CardHeader>
-      <CardContent className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden pt-6">
+      <CardContent className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden pt-4 sm:pt-6">
+        <div className="flex items-center justify-end sm:hidden">
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<RefreshCcw className="w-4 h-4" />}
+            onClick={handleReset}
+          >
+            Reset
+          </Button>
+        </div>
         <div className="flex-1 min-h-0 flex items-center justify-center">
           <div className="h-full max-h-full aspect-[9/19.5] w-auto max-w-full min-h-0">
             <AutomationPreviewPhone
@@ -699,21 +709,21 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
   );
 
   return (
-    <div className="h-full flex flex-col min-h-0 gap-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between flex-shrink-0">
+    <div className="h-full flex flex-col min-h-0 gap-3 sm:gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between flex-shrink-0">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:text-sm">
           <span className="font-medium text-foreground">Simulate</span>
           <Badge variant={statusConfig.variant} className="ml-1">
             {statusConfig.label}
           </Badge>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
           <Sparkles className="w-4 h-4" />
           Realistic inbound automation simulator
         </div>
       </div>
 
-      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-2 py-1 sm:hidden">
+      <div className="flex items-center gap-1 rounded-full border border-border/60 bg-background/70 px-1.5 py-1 sm:hidden">
         {([
           { id: 'preview', label: 'Test Preview' },
           { id: 'details', label: 'Automation State' },
@@ -722,7 +732,7 @@ export const AutomationsSimulateView: React.FC<AutomationsSimulateViewProps> = (
             key={tab.id}
             type="button"
             onClick={() => setMobileView(tab.id)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
               mobileView === tab.id
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:text-foreground'

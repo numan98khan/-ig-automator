@@ -781,7 +781,7 @@ const Automations: React.FC = () => {
         </div>
       )}
       <div className={`flex flex-col lg:flex-row gap-6 ${isCreateSetupView || isDetailsView || isSimulateView ? 'flex-1 min-h-0' : ''}`}>
-        <div className={isDetailsView ? 'hidden lg:block' : ''}>
+        <div className="hidden lg:block">
           <AutomationsSidebar
             activeSection={activeSection}
             onChange={handleSectionChange}
@@ -857,11 +857,6 @@ const Automations: React.FC = () => {
               ) : isDetailsView && selectedAutomation ? (
                 <AutomationDetailsView
                   automation={selectedAutomation}
-                  accountDisplayName={accountDisplayName}
-                  accountHandle={accountHandle}
-                  accountAvatarUrl={accountAvatarUrl}
-                  accountInitial={accountInitial}
-                  canViewExecutionTimeline={canViewExecutionTimeline}
                   onBack={() => {
                     setAutomationView('list');
                     setSelectedAutomation(null);
