@@ -5,6 +5,7 @@ import InstagramAccount from '../models/InstagramAccount';
 import FollowupTask from '../models/FollowupTask';
 import AutomationInstance from '../models/AutomationInstance';
 import AutomationSession from '../models/AutomationSession';
+import Contact from '../models/Contact';
 import type { IWorkspaceSettings } from '../models/WorkspaceSettings';
 import AutomationMessageBuffer from '../models/AutomationMessageBuffer';
 import FlowTemplate from '../models/FlowTemplate';
@@ -20,6 +21,7 @@ import { addTicketUpdate, createTicket, getActiveTicket } from './escalationServ
 import { addCountIncrement, trackDailyMetric } from './reportingService';
 import { assertUsageLimit } from './tierService';
 import { detectAutomationIntentDetailed, getWorkspaceSettings } from './workspaceSettingsService';
+import { buildBusinessProfileContext } from './businessProfileKnowledge';
 import { pauseForTypingIfNeeded } from './automation/typing';
 import { matchTriggerConfigDetailed } from './automation/triggerMatcher';
 import { matchesIntent } from './automation/intentMatcher';
@@ -992,6 +994,96 @@ const buildPromptTemplateContext = (params: {
     assistantDescription: settings?.assistantDescription,
     workspaceSystemPrompt: settings?.systemPrompt,
   };
+};
+
+const executeLangchainToolCalls = async (params: {
+  toolCalls: Array<{ name?: string; input?: Record<string, any> }>;
+  conversation: any;
+}): Promise<Array<{ name: string; input?: Record<string, any>; result?: Record<string, any>; error?: string }>> => {
+  const { toolCalls, conversation } = params;
+  const workspaceId = conversation.workspaceId;
+  const results: Array<{ name: string; input?: Record<string, any>; result?: Record<string, any>; error?: string }> = [];
+
+  for (const call of toolCalls) {
+    const name = typeof call?.name === 'string' ? call.name : '';
+    const input = call?.input && typeof call.input === 'object' ? call.input : undefined;
+    if (!name) {
+      results.push({ name: '', input, error: 'Missing tool name' });
+      continue;
+    }
+
+    try {
+      if (name === 'get_business_profile') {
+        const settings = await getWorkspaceSettings(workspaceId);
+        const profile = buildBusinessProfileContext(settings || undefined);
+        results.push({
+          name,
+          input,
+          result: {
+            businessName: settings?.businessName || '',
+            businessDescription: settings?.businessDescription || '',
+            businessHours: settings?.businessHours || '',
+            businessTone: settings?.businessTone || '',
+            businessLocation: settings?.businessLocation || '',
+            businessWebsite: settings?.businessWebsite || '',
+            businessCatalog: settings?.businessCatalog || [],
+            businessDocuments: settings?.businessDocuments || [],
+            summary: profile?.content || '',
+          },
+        });
+        continue;
+      }
+
+      if (name === 'lookup_contact') {
+        const contactId = typeof input?.contactId === 'string' ? input.contactId : '';
+        const handle = typeof input?.handle === 'string' ? input.handle : '';
+        const email = typeof input?.email === 'string' ? input.email : '';
+        const phone = typeof input?.phone === 'string' ? input.phone : '';
+        const nameQuery = typeof input?.name === 'string' ? input.name : '';
+        const conversationContactId = conversation?.contactId;
+
+        let contact = null;
+        if (contactId && mongoose.Types.ObjectId.isValid(contactId)) {
+          contact = await Contact.findOne({ _id: contactId, workspaceId }).lean();
+        } else if (conversationContactId) {
+          contact = await Contact.findOne({ _id: conversationContactId, workspaceId }).lean();
+        } else if (email) {
+          contact = await Contact.findOne({ workspaceId, contactEmail: email.toLowerCase() }).lean();
+        } else if (phone) {
+          contact = await Contact.findOne({ workspaceId, contactPhone: phone }).lean();
+        } else if (handle) {
+          contact = await Contact.findOne({ workspaceId, participantHandle: handle }).lean();
+        } else if (nameQuery) {
+          contact = await Contact.findOne({ workspaceId, participantName: nameQuery }).lean();
+        }
+
+        results.push({
+          name,
+          input,
+          result: contact
+            ? {
+              id: contact._id?.toString(),
+              participantName: contact.participantName,
+              participantHandle: contact.participantHandle,
+              contactEmail: contact.contactEmail,
+              contactPhone: contact.contactPhone,
+              tags: contact.tags || [],
+              stage: contact.stage,
+              ownerId: contact.ownerId?.toString(),
+              profilePictureUrl: contact.profilePictureUrl,
+            }
+            : { found: false },
+        });
+        continue;
+      }
+
+      results.push({ name, input, error: 'Unsupported tool' });
+    } catch (error: any) {
+      results.push({ name, input, error: error?.message || 'Tool execution failed' });
+    }
+  }
+
+  return results;
 };
 
 const setByPath = (target: any, path: string, value: any) => {
@@ -2580,6 +2672,9 @@ async function executeFlowPlan(params: {
       }
 
       const toolCalls = Array.isArray(agentResult.toolCalls) ? agentResult.toolCalls : [];
+      const toolResults = toolCalls.length > 0
+        ? await executeLangchainToolCalls({ toolCalls, conversation })
+        : [];
       const nextIteration = iteration + 1;
       const agentDone = Boolean(agentResult.shouldStop) || !agentResult.shouldContinue || maxIterationsReached;
 
@@ -2600,6 +2695,7 @@ async function executeFlowPlan(params: {
             type: stepType,
             iteration,
             toolCalls,
+            toolResults,
             shouldContinue: agentResult.shouldContinue,
             shouldStop: agentResult.shouldStop,
             durationMs: agentDurationMs,
@@ -2613,6 +2709,7 @@ async function executeFlowPlan(params: {
         langchainIteration: nextIteration,
         langchainDone: agentDone,
         langchainToolCalls: toolCalls,
+        langchainToolResults: toolResults,
         langchainActionSummary: agentResult.actionSummary,
       };
 

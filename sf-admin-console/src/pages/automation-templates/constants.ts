@@ -108,15 +108,8 @@ export const LANGCHAIN_SYSTEM_PROMPT_VARIABLES = [
 ]
 
 export const LANGCHAIN_TOOL_NAME_OPTIONS = [
-  { label: 'Search knowledge', value: 'search_knowledge' },
   { label: 'Get business profile', value: 'get_business_profile' },
   { label: 'Lookup contact', value: 'lookup_contact' },
-  { label: 'Create lead', value: 'create_lead' },
-  { label: 'Update contact', value: 'update_contact' },
-  { label: 'Create task', value: 'create_task' },
-  { label: 'Schedule follow-up', value: 'schedule_followup' },
-  { label: 'Send message', value: 'send_message' },
-  { label: 'Custom', value: '__custom__' },
 ]
 
 export const REASONING_EFFORT_OPTIONS: Array<FlowAiSettings['reasoningEffort']> = [

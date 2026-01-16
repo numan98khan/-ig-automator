@@ -3369,9 +3369,7 @@ export default function AutomationTemplates() {
                     <div className="space-y-3">
                       {selectedNode.langchainTools.map((tool, index) => {
                         const toolName = tool?.name || ''
-                        const toolNameOption = LANGCHAIN_TOOL_NAME_OPTIONS.some((option) => option.value === toolName)
-                          ? toolName
-                          : '__custom__'
+                        const hasToolOption = LANGCHAIN_TOOL_NAME_OPTIONS.some((option) => option.value === toolName)
                         return (
                           <div
                             key={`${selectedNode.id}-langchain-tool-${index}`}
@@ -3396,7 +3394,7 @@ export default function AutomationTemplates() {
                               <label className="text-xs text-muted-foreground">Name</label>
                               <select
                                 className="input w-full text-sm"
-                                value={toolNameOption}
+                                value={hasToolOption ? toolName : ''}
                                 onChange={(event) => {
                                   const selected = event.target.value
                                   updateNode(selectedNode.id, (node) => {
@@ -3405,36 +3403,26 @@ export default function AutomationTemplates() {
                                       : []
                                     nextTools[index] = {
                                       ...nextTools[index],
-                                      name: selected === '__custom__' ? '' : selected,
+                                      name: selected,
                                     }
                                     return { ...node, langchainTools: nextTools }
                                   })
                                 }}
                               >
+                                <option value="">Select a tool</option>
                                 {LANGCHAIN_TOOL_NAME_OPTIONS.map((option) => (
                                   <option key={option.value} value={option.value}>
                                     {option.label}
                                   </option>
                                 ))}
+                                {!hasToolOption && toolName && (
+                                  <option value={toolName}>Legacy: {toolName}</option>
+                                )}
                               </select>
-                              {toolNameOption === '__custom__' && (
-                                <input
-                                  className="input w-full text-sm"
-                                  placeholder="Custom tool name"
-                                  value={toolName}
-                                  onChange={(event) =>
-                                    updateNode(selectedNode.id, (node) => {
-                                      const nextTools = Array.isArray(node.langchainTools)
-                                        ? [...node.langchainTools]
-                                        : []
-                                      nextTools[index] = {
-                                        ...nextTools[index],
-                                        name: event.target.value,
-                                      }
-                                      return { ...node, langchainTools: nextTools }
-                                    })
-                                  }
-                                />
+                              {!hasToolOption && toolName && (
+                                <div className="text-[11px] text-amber-400">
+                                  Legacy tool name detected. Only supported tools will execute.
+                                </div>
                               )}
                             </div>
                             <input

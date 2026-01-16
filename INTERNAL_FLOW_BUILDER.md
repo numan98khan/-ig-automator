@@ -165,10 +165,12 @@ structure described in this document.
 ### `langchain_agent`
 - Tool-aware agent loop designed for configurable tool use and iterative decisions.
 - `langchainTools` defines tool metadata; inputs are provided via structured JSON.
+- Supported tool names: `get_business_profile`, `lookup_contact` (others are ignored).
 - `langchainToolChoice` controls whether tools are optional, required, or disabled.
 - `langchainMaxIterations` bounds multi-turn looping; `langchainEndCondition` and `langchainStopCondition`
   control completion/early exit.
 - Respects AI settings and knowledge base pinning and stores progress in session state.
+- Tool results are stored in `vars.langchainToolResults` alongside `vars.langchainToolCalls`.
 
 ### `router`
 - Branches execution using routing rules defined in the builder.
