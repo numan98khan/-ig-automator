@@ -321,13 +321,27 @@ router.get('/verify-email', async (req: Request, res: Response) => {
 
     if (user.emailVerified) {
       console.log('ℹ️ Email already verified');
-      return res.status(200).json({ message: 'Email already verified' });
+      const authToken = generateToken(user._id);
+      return res.status(200).json({
+        message: 'Email already verified',
+        token: authToken,
+        user: {
+          id: user._id,
+          email: user.email,
+          emailVerified: user.emailVerified,
+          isProvisional: user.isProvisional,
+        },
+      });
     }
 
     const updatedUser = await updateUser(user._id, {
       emailVerified: true,
       isProvisional: false,
     });
+
+    if (!updatedUser) {
+      return res.status(500).json({ error: 'Failed to verify user' });
+    }
 
     console.log('✅ Email verified successfully:', {
       id: updatedUser?._id,
@@ -336,8 +350,11 @@ router.get('/verify-email', async (req: Request, res: Response) => {
       isProvisional: updatedUser?.isProvisional,
     });
 
+    const authToken = generateToken(updatedUser._id);
+
     res.json({
       message: 'Email verified successfully!',
+      token: authToken,
       user: {
         id: updatedUser?._id,
         email: updatedUser?.email,

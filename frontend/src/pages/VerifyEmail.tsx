@@ -28,8 +28,14 @@ const VerifyEmail: React.FC = () => {
         setStatus('success');
         setMessage(response.message || 'Email verified successfully!');
 
-        // Refresh user data to update emailVerified status
-        await refreshUser();
+        if (response.token) {
+          localStorage.setItem('token', response.token);
+        }
+
+        if (localStorage.getItem('token')) {
+          // Refresh user data to update emailVerified status
+          await refreshUser();
+        }
 
         // Redirect to inbox after 3 seconds
         setTimeout(() => {
