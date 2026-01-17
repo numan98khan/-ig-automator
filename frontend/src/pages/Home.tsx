@@ -23,6 +23,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
 import { useDemoMode } from '../hooks/useDemoMode';
+import { useTheme } from '../context/ThemeContext';
 import {
   automationAPI,
   AutomationInstance,
@@ -116,6 +117,7 @@ const Home: React.FC = () => {
   const queryClient = useQueryClient();
   const { currentWorkspace, user } = useAuth();
   const { accounts, activeAccount } = useAccountContext();
+  const { uiTheme } = useTheme();
   const workspaceId = currentWorkspace?._id;
   const [attentionFilter, setAttentionFilter] = useState<AttentionFilter>('escalations');
   const homeQuery = useQuery<HomeQueryData>({
@@ -371,12 +373,348 @@ const Home: React.FC = () => {
     }
   }, [simulation]);
 
+  const onboardingLogo = useMemo(() => {
+    if (uiTheme === 'studio') {
+      return {
+        light: '/sendfx-studio.png',
+        dark: '/sendfx-studio-dark.png',
+      };
+    }
+    return {
+      light: '/sendfx.png',
+      dark: '/sendfx-dark.png',
+    };
+  }, [uiTheme]);
+
+  const selectedAutomation = useMemo(
+    () => automations.find((automation) => automation.template?.status !== 'archived') || automations[0] || null,
+    [automations],
+  );
+  const selectedTemplateName = selectedAutomation?.template?.name || selectedAutomation?.name;
+  const connectedUsername = activeAccount?.username || accounts[0]?.username;
+  const currentStepIndex = Math.max(0, SETUP_STEPS.findIndex((step) => step.id === currentStepId)) + 1;
+  const currentStep = SETUP_STEPS.find((step) => step.id === currentStepId) || SETUP_STEPS[0];
+
   const toggleStep = (stepId: SetupStep['id']) => {
     setExpandedStepId((prev) => (prev === stepId ? null : stepId));
   };
 
+  const renderCurrentStepContent = () => {
+    switch (currentStepId) {
+      case 'connect':
+        return (
+          <div className="space-y-6">
+            <p className="text-sm text-muted-foreground">
+              Connect your Instagram account to route real DMs or keep exploring in demo mode.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button onClick={() => navigate('/settings')} leftIcon={<Instagram className="w-4 h-4" />}>
+                Connect Instagram
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleConnectDecision}
+                isLoading={demoModeUpdating}
+              >
+                Continue with demo mode
+              </Button>
+            </div>
+            {isDemoMode && (
+              <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                Demo mode keeps you safe while you build — switch to live anytime after connecting.
+              </div>
+            )}
+          </div>
+        );
+      case 'template':
+        return (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {recommendedTemplates.length > 0 ? (
+                recommendedTemplates.map((template) => {
+                  const previewSnippet = template.currentVersion?.display?.previewConversation?.[0]?.message;
+                  return (
+                    <div key={template._id} className="border border-border/60 rounded-xl p-3 space-y-2">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{template.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {template.currentVersion?.display?.outcome || template.description || 'Automation template'}
+                        </p>
+                      </div>
+                      {previewSnippet && (
+                        <p className="text-[11px] text-muted-foreground italic line-clamp-2">“{previewSnippet}”</p>
+                      )}
+                      <Button size="sm" onClick={() => handleTemplateSelect(template._id)}>
+                        Use this template
+                      </Button>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="col-span-full text-xs text-muted-foreground border border-dashed border-border/60 rounded-xl p-3">
+                  No templates are available yet.
+                </div>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="justify-start"
+              onClick={() => navigate('/automations')}
+              rightIcon={<ChevronRight className="w-4 h-4" />}
+            >
+              Browse all templates
+            </Button>
+          </div>
+        );
+      case 'basics':
+        return (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Input
+                value={basicsForm.businessName}
+                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessName: event.target.value }))}
+                placeholder="Business name"
+              />
+              <Input
+                value={basicsForm.businessHours}
+                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessHours: event.target.value }))}
+                placeholder="Working hours"
+              />
+              <Input
+                value={basicsForm.businessTone}
+                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessTone: event.target.value }))}
+                placeholder="Tone (optional)"
+              />
+              <Input
+                value={basicsForm.businessLocation}
+                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessLocation: event.target.value }))}
+                placeholder="Location (optional)"
+              />
+            </div>
+            <Button onClick={handleSaveBasics} disabled={savingBasics}>
+              {savingBasics ? 'Saving...' : 'Save business basics'}
+            </Button>
+          </div>
+        );
+      case 'publish':
+        return (
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              {isDemoMode
+                ? (hasInstagram
+                  ? 'Demo mode is on • Switch to live to start sending messages.'
+                  : 'Connect Instagram to go live.')
+                : 'Safe defaults enabled • You can pause anytime'}
+            </div>
+            <Button
+              onClick={
+                isDemoMode
+                  ? (hasInstagram ? handleGoLive : handleConnectInstagram)
+                  : () => navigate('/automations')
+              }
+              isLoading={demoModeUpdating}
+            >
+              {isDemoMode
+                ? (hasInstagram ? 'Go live' : 'Connect Instagram to go live')
+                : 'Publish now'}
+            </Button>
+          </div>
+        );
+      case 'simulate':
+        return (
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              What you’ll see: captured fields, tags, and the current step as it runs.
+            </div>
+            {hasSimulation ? (
+              <div className="space-y-3">
+                <div className="text-sm text-emerald-500 font-semibold">
+                  Test complete{simulationTimestamp ? ` · ${simulationTimestamp}` : ''}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => navigate('/inbox')}>
+                    Open Inbox
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => navigate('/automations')}>
+                    View automation
+                  </Button>
+                  <Button size="sm" onClick={() => navigate('/automations?section=simulate')}>
+                    Run again
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button onClick={() => navigate('/automations?section=simulate')} leftIcon={<TestTube2 className="w-4 h-4" />}>
+                Test in simulator
+              </Button>
+            )}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   if (isInitialLoading) {
     return <HomeSkeleton />;
+  }
+
+  if (!isActivated) {
+    return (
+      <div className="flex h-full flex-col gap-6 overflow-hidden">
+        <div className="onboarding-shell flex-1 min-h-0">
+          <aside className="auth-brand-panel onboarding-steps-panel">
+            <div className="onboarding-steps-content">
+              <img src={onboardingLogo.light} alt="SendFx" className="auth-brand-logo onboarding-logo block dark:hidden" />
+              <img src={onboardingLogo.dark} alt="SendFx" className="auth-brand-logo onboarding-logo hidden dark:block" />
+              <span className="auth-brand-badge">Onboarding</span>
+              <h1 className="onboarding-steps-title">Get your first automation live</h1>
+              <p className="onboarding-steps-subtitle">Complete each step to activate your workspace and start routing DMs.</p>
+              <div className="onboarding-progress">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Setup progress</span>
+                  <span>{progressPercent}%</span>
+                </div>
+                <div className="onboarding-progress-track">
+                  <div className="onboarding-progress-fill" style={{ width: `${progressPercent}%` }} />
+                </div>
+              </div>
+              <div className="onboarding-step-list">
+                {SETUP_STEPS.map((step, index) => {
+                  const isComplete = [
+                    connectStepComplete,
+                    hasTemplateChoice,
+                    hasBusinessBasics,
+                    hasSimulation,
+                    hasPublishedAutomation,
+                  ][index];
+                  const isCurrent = step.id === currentStepId;
+                  const isExpanded = isComplete && expandedStepId === step.id;
+                  const isConnectPartial = step.id === 'connect' && connectStepComplete && !hasInstagram;
+                  const statusLabel = isComplete
+                    ? (isConnectPartial ? 'Demo mode' : 'Done')
+                    : isCurrent
+                      ? 'In progress'
+                      : 'Not started';
+                  return (
+                    <div
+                      key={step.id}
+                      className={`onboarding-step-card ${isCurrent ? 'is-current' : ''} ${isComplete ? 'is-complete' : 'is-pending'}`}
+                      onClick={() => {
+                        if (isComplete) toggleStep(step.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (!isComplete) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          toggleStep(step.id);
+                        }
+                      }}
+                      role={isComplete ? 'button' : undefined}
+                      tabIndex={isComplete ? 0 : undefined}
+                      aria-expanded={isComplete ? isExpanded : undefined}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          {isComplete ? (
+                            <BadgeCheck className={`w-5 h-5 mt-0.5 ${isConnectPartial ? 'text-amber-500' : 'text-emerald-500'}`} />
+                          ) : (
+                            <CircleDot className={`w-5 h-5 mt-0.5 ${isCurrent ? 'text-primary' : 'text-muted-foreground'}`} />
+                          )}
+                          <div>
+                            <p className="onboarding-step-title">{step.title}</p>
+                            <p className="onboarding-step-why">{step.why}</p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant={isComplete ? (isConnectPartial ? 'warning' : 'secondary') : isCurrent ? 'primary' : 'secondary'}
+                          className={isComplete ? 'text-muted-foreground' : undefined}
+                        >
+                          {statusLabel}
+                        </Badge>
+                      </div>
+
+                      {isComplete && isExpanded && (
+                        <div className="onboarding-step-detail">
+                          {step.id === 'connect' && (
+                            <p>
+                              {hasInstagram
+                                ? `Connected account: @${connectedUsername || 'instagram'}`
+                                : isDemoMode
+                                  ? 'Demo mode active for this workspace.'
+                                  : 'Connection decision saved.'}
+                            </p>
+                          )}
+                          {step.id === 'template' && (
+                            <p>
+                              {selectedTemplateName
+                                ? `Selected template: ${selectedTemplateName}`
+                                : `Templates created: ${automations.length}`}
+                            </p>
+                          )}
+                          {step.id === 'basics' && (
+                            <p>
+                              {settings?.businessName
+                                ? `Business: ${settings.businessName}`
+                                : 'Business basics saved.'}
+                            </p>
+                          )}
+                          {step.id === 'simulate' && (
+                            <p>
+                              {simulationTimestamp
+                                ? `Last simulator run: ${simulationTimestamp}`
+                                : 'Simulator run recorded.'}
+                            </p>
+                          )}
+                          {step.id === 'publish' && (
+                            <p>
+                              {publishedCount > 0
+                                ? `${publishedCount} automation${publishedCount === 1 ? '' : 's'} published`
+                                : 'Publish settings saved.'}
+                            </p>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (step.id === 'connect') navigate('/settings');
+                              if (step.id === 'template') navigate('/automations');
+                              if (step.id === 'basics') navigate('/automations?section=business-profile');
+                              if (step.id === 'publish') navigate('/automations');
+                              if (step.id === 'simulate') navigate('/automations?section=simulate');
+                            }}
+                          >
+                            {step.id === 'connect' && 'Manage'}
+                            {step.id === 'template' && 'Change'}
+                            {step.id === 'basics' && 'Edit'}
+                            {step.id === 'publish' && 'View settings'}
+                            {step.id === 'simulate' && 'Run again'}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
+
+          <section className="onboarding-main-panel">
+            <div className="onboarding-main-card">
+              <div className="onboarding-main-header">
+                <span className="onboarding-step-kicker">Step {currentStepIndex} of {SETUP_STEPS.length}</span>
+                <h2 className="onboarding-step-heading">{currentStep.title}</h2>
+                <p className="onboarding-step-subtitle">{currentStep.why}</p>
+              </div>
+              {renderCurrentStepContent()}
+            </div>
+          </section>
+        </div>
+      </div>
+    );
   }
 
   return (

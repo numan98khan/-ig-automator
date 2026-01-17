@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
+import { Link, useLocation, Outlet, useNavigate, Navigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import {
   Instagram,
@@ -19,6 +20,7 @@ import {
   Users,
   Home as HomeIcon,
   ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import ProvisionalUserBanner from './ProvisionalUserBanner';
 import { Button } from './ui/Button';
@@ -30,6 +32,7 @@ import SupportTicketModal from './SupportTicketModal';
 import { recordBreadcrumb } from '../services/diagnostics';
 import AssistantWidget from './AssistantWidget';
 import Seo from './Seo';
+import { automationAPI, settingsAPI } from '../services/api';
 
 const Layout: React.FC = () => {
   const location = useLocation();
@@ -45,6 +48,26 @@ const Layout: React.FC = () => {
   const [supportOpen, setSupportOpen] = useState(false);
   const accountMenuRef = useOverlayClose({ isOpen: accountMenuOpen, onClose: () => setAccountMenuOpen(false) });
   const userMenuRef = useOverlayClose({ isOpen: showUserMenu, onClose: () => setShowUserMenu(false) });
+  const workspaceId = currentWorkspace?._id;
+  const onboardingQuery = useQuery({
+    queryKey: ['layout-onboarding', workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) {
+        throw new Error('Missing workspace');
+      }
+      const [workspaceSettings, automationData, simulationSession] = await Promise.all([
+        settingsAPI.getByWorkspace(workspaceId),
+        automationAPI.getByWorkspace(workspaceId),
+        automationAPI.getSimulationSession(workspaceId),
+      ]);
+      return {
+        settings: workspaceSettings,
+        automations: automationData,
+        simulation: simulationSession,
+      };
+    },
+    enabled: Boolean(workspaceId),
+  });
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
 
@@ -97,6 +120,41 @@ const Layout: React.FC = () => {
     window.location.href = '/login';
   };
 
+  const onboardingSettings = onboardingQuery.data?.settings ?? null;
+  const onboardingAutomations = onboardingQuery.data?.automations ?? [];
+  const onboardingSimulation = onboardingQuery.data?.simulation ?? null;
+  const hasInstagram = accounts.length > 0;
+  const connectStepComplete = hasInstagram || Boolean(
+    onboardingSettings?.onboarding?.connectCompletedAt
+      || onboardingSettings?.onboarding?.templateSelectedAt
+      || onboardingSettings?.onboarding?.basicsCompletedAt
+      || onboardingSettings?.onboarding?.simulatorCompletedAt
+      || onboardingSettings?.onboarding?.publishCompletedAt
+  );
+  const hasTemplateChoice = onboardingAutomations.length > 0;
+  const hasBusinessBasics = Boolean(onboardingSettings?.businessName && onboardingSettings?.businessHours);
+  const hasSimulation = Boolean(
+    onboardingSimulation?.sessionId
+      || onboardingSimulation?.session?.status
+      || onboardingSettings?.onboarding?.simulatorCompletedAt
+  );
+  const publishedCount = onboardingAutomations.filter(
+    (automation) => automation.isActive && automation.template?.status !== 'archived'
+  ).length;
+  const hasPublishedAutomation = Boolean(onboardingSettings?.onboarding?.publishCompletedAt)
+    || (!onboardingSettings?.demoModeEnabled && publishedCount > 0);
+  const onboardingComplete = Boolean(
+    onboardingSettings?.onboarding?.connectCompletedAt
+      && onboardingSettings?.onboarding?.templateSelectedAt
+      && onboardingSettings?.onboarding?.basicsCompletedAt
+      && onboardingSettings?.onboarding?.simulatorCompletedAt
+      && onboardingSettings?.onboarding?.publishCompletedAt
+  );
+  const isActivated = onboardingComplete
+    || (connectStepComplete && hasTemplateChoice && hasBusinessBasics && hasSimulation && hasPublishedAutomation);
+  const isOnboardingActive = Boolean(onboardingQuery.data) && !isActivated;
+  const isHomeRoute = location.pathname === '/home' || location.pathname === '/';
+
   useEffect(() => {
     recordBreadcrumb({ type: 'route', label: location.pathname, meta: { path: location.pathname } });
   }, [location.pathname]);
@@ -114,6 +172,11 @@ const Layout: React.FC = () => {
   }, [showMobileMenu]);
 
   useEffect(() => {
+    if (isOnboardingActive) {
+      setSearchOpen(false);
+      return;
+    }
+
     const handleShortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
@@ -123,7 +186,19 @@ const Layout: React.FC = () => {
 
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
-  }, []);
+  }, [isOnboardingActive]);
+
+  if (onboardingQuery.isLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background text-foreground">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (isOnboardingActive && !isHomeRoute) {
+    return <Navigate to="/home" replace />;
+  }
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground relative selection:bg-primary/30 transition-colors duration-300">
@@ -142,103 +217,116 @@ const Layout: React.FC = () => {
         />
       </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0 h-16">
-        <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full grid grid-cols-[auto,1fr,auto] items-center gap-4">
-          <div className="flex items-center gap-2 min-w-0">
-            <Link
-              to="/home"
-              className="flex items-center gap-2 rounded-md px-2 py-1 transition"
-            >
-              {uiTheme === 'studio' ? (
-                <>
-                  <img
-                    src="/sendfx-studio.png"
-                    alt="SendFx logo"
-                    className="h-7 md:h-9 w-auto shrink-0 object-contain -translate-y-[3.5px] dark:hidden"
-                  />
-                  <img
-                    src="/sendfx-studio-dark.png"
-                    alt="SendFx logo"
-                    className="hidden h-7 md:h-9 w-auto shrink-0 object-contain -translate-y-[3.5px] dark:block"
-                  />
-                </>
-              ) : (
-                <>
-                  <img
-                    src="/sendfx.png"
-                    alt="SendFx logo"
-                    className="h-9 md:h-11 w-auto shrink-0 object-contain dark:hidden"
-                  />
-                  <img
-                    src="/sendfx-dark.png"
-                    alt="SendFx logo"
-                    className="hidden h-9 md:h-11 w-auto shrink-0 object-contain dark:block"
-                  />
-                </>
-              )}
-            </Link>
-            <div className="relative" ref={accountMenuRef}>
-              <button
-                onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                className="flex items-center p-0.5 rounded-full border border-border bg-card hover:border-primary/50 transition shadow-sm"
-                aria-label="Switch Instagram account"
-              >
-                <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border border-border bg-muted flex items-center justify-center overflow-hidden text-foreground">
-                  {accountAvatar ? (
-                    <img src={accountAvatar} alt="Account avatar" className="w-full h-full object-cover" />
-                  ) : (
-                    <Instagram className="w-4 h-4 text-primary" />
-                  )}
-                </div>
-                <span className="sr-only">
-                  Workspace {currentWorkspace?.name || 'not selected'}
-                </span>
-              </button>
+      {isOnboardingActive && (
+        <button
+          type="button"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          className="absolute right-6 top-6 z-20 inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/70 px-3 py-2 text-xs font-semibold text-muted-foreground shadow-sm backdrop-blur transition hover:text-foreground"
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+        </button>
+      )}
 
-              {accountMenuOpen && (
-                <div className="absolute top-14 left-0 w-[320px] bg-background border border-border rounded-xl shadow-2xl z-20 p-3 space-y-2 animate-fade-in">
-                  <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">Accounts</p>
-                      <p className="text-sm text-foreground">Switch Instagram accounts</p>
-                    </div>
-                    <span className="text-[11px] text-muted-foreground">{accounts.length} connected</span>
+      {/* Header */}
+      {!isOnboardingActive && (
+        <header className="sticky top-0 z-30 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 bg-background/80 border-b border-border/60 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.45)] flex-shrink-0 h-16">
+          <div className="relative w-full mx-auto max-w-[1500px] px-4 md:px-6 h-full grid grid-cols-[auto,1fr,auto] items-center gap-4">
+            <div className="flex items-center gap-2 min-w-0">
+              <Link
+                to="/home"
+                className="flex items-center gap-2 rounded-md px-2 py-1 transition"
+              >
+                {uiTheme === 'studio' ? (
+                  <>
+                    <img
+                      src="/sendfx-studio.png"
+                      alt="SendFx logo"
+                      className="h-7 md:h-9 w-auto shrink-0 object-contain -translate-y-[3.5px] dark:hidden"
+                    />
+                    <img
+                      src="/sendfx-studio-dark.png"
+                      alt="SendFx logo"
+                      className="hidden h-7 md:h-9 w-auto shrink-0 object-contain -translate-y-[3.5px] dark:block"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <img
+                      src="/sendfx.png"
+                      alt="SendFx logo"
+                      className="h-9 md:h-11 w-auto shrink-0 object-contain dark:hidden"
+                    />
+                    <img
+                      src="/sendfx-dark.png"
+                      alt="SendFx logo"
+                      className="hidden h-9 md:h-11 w-auto shrink-0 object-contain dark:block"
+                    />
+                  </>
+                )}
+              </Link>
+              <div className="relative" ref={accountMenuRef}>
+                <button
+                  onClick={() => setAccountMenuOpen(!accountMenuOpen)}
+                  className="flex items-center p-0.5 rounded-full border border-border bg-card hover:border-primary/50 transition shadow-sm"
+                  aria-label="Switch Instagram account"
+                >
+                  <div className="w-9 h-9 md:w-10 md:h-10 rounded-full border border-border bg-muted flex items-center justify-center overflow-hidden text-foreground">
+                    {accountAvatar ? (
+                      <img src={accountAvatar} alt="Account avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <Instagram className="w-4 h-4 text-primary" />
+                    )}
                   </div>
-                  {accounts.map((account) => (
-                    <button
-                      key={account._id}
-                      onClick={() => {
-                        setActiveAccount(account);
-                        setAccountMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition ${activeAccount?._id === account._id
-                        ? 'bg-primary/10 border border-primary/30'
-                        : 'hover:bg-muted text-foreground border border-transparent'
-                        }`}
-                    >
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm truncate">@{account.username}</p>
-                        <p className="text-xs text-muted-foreground">{account.status === 'connected' ? 'Connected' : 'Mock'}</p>
+                  <span className="sr-only">
+                    Workspace {currentWorkspace?.name || 'not selected'}
+                  </span>
+                </button>
+
+                {accountMenuOpen && (
+                  <div className="absolute top-14 left-0 w-[320px] bg-background border border-border rounded-xl shadow-2xl z-20 p-3 space-y-2 animate-fade-in">
+                    <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">Accounts</p>
+                        <p className="text-sm text-foreground">Switch Instagram accounts</p>
                       </div>
-                      {activeAccount?._id === account._id && <Check className="w-4 h-4 text-primary" />}
-                    </button>
-                  ))}
-                  <div className="border-t border-border/50 pt-2 space-y-1">
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start px-2 h-10"
-                      onClick={() => {
-                        setAccountMenuOpen(false);
-                        navigate('/settings');
-                      }}
-                      leftIcon={<Plus className="w-4 h-4" />}
-                    >
-                      Connect another Instagram account
-                    </Button>
+                      <span className="text-[11px] text-muted-foreground">{accounts.length} connected</span>
+                    </div>
+                    {accounts.map((account) => (
+                      <button
+                        key={account._id}
+                        onClick={() => {
+                          setActiveAccount(account);
+                          setAccountMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition ${activeAccount?._id === account._id
+                          ? 'bg-primary/10 border border-primary/30'
+                          : 'hover:bg-muted text-foreground border border-transparent'
+                          }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm truncate">@{account.username}</p>
+                          <p className="text-xs text-muted-foreground">{account.status === 'connected' ? 'Connected' : 'Mock'}</p>
+                        </div>
+                        {activeAccount?._id === account._id && <Check className="w-4 h-4 text-primary" />}
+                      </button>
+                    ))}
+                    <div className="border-t border-border/50 pt-2 space-y-1">
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start px-2 h-10"
+                        onClick={() => {
+                          setAccountMenuOpen(false);
+                          navigate('/settings');
+                        }}
+                        leftIcon={<Plus className="w-4 h-4" />}
+                      >
+                        Connect another Instagram account
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           </div>
 
@@ -356,8 +444,9 @@ const Layout: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
-      </header>
+          </div>
+        </header>
+      )}
 
       {/* Mobile Menu Overlay */}
       {showMobileMenu && (
@@ -522,15 +611,24 @@ const Layout: React.FC = () => {
       )}
 
       {/* Provisional User Banner */}
-      <div className="relative z-10">
-        <ProvisionalUserBanner />
-      </div>
+      {!isOnboardingActive && (
+        <div className="relative z-10">
+          <ProvisionalUserBanner />
+        </div>
+      )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto min-h-0 relative z-0 p-4 md:p-6" style={{ background: 'transparent' }}>
-        <div className="max-w-[1400px] mx-auto h-full">
+      <main
+        className={`flex-1 overflow-y-auto min-h-0 relative z-0 ${isOnboardingActive ? 'p-0' : 'p-4 md:p-6'}`}
+        style={{ background: 'transparent' }}
+      >
+        {isOnboardingActive ? (
           <Outlet />
-        </div>
+        ) : (
+          <div className="max-w-[1400px] mx-auto h-full">
+            <Outlet />
+          </div>
+        )}
       </main>
 
       <AssistantWidget
@@ -540,14 +638,16 @@ const Layout: React.FC = () => {
       />
 
       <SupportTicketModal open={supportOpen} onClose={() => setSupportOpen(false)} />
-      <GlobalSearchModal
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onNavigate={(path) => {
-          setSearchOpen(false);
-          navigate(path);
-        }}
-      />
+      {!isOnboardingActive && (
+        <GlobalSearchModal
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          onNavigate={(path) => {
+            setSearchOpen(false);
+            navigate(path);
+          }}
+        />
+      )}
     </div>
   );
 };
