@@ -543,6 +543,18 @@
   background: rgb(var(--background));
 }
 
+:root[data-ui-theme='studio'] .onboarding-shell {
+  background: radial-gradient(120% 120% at 12% 18%, rgba(251, 146, 60, 0.08), transparent 55%),
+    radial-gradient(120% 120% at 80% 12%, rgba(20, 184, 166, 0.1), transparent 60%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(246, 248, 251, 0.92));
+}
+
+:root.dark[data-ui-theme='studio'] .onboarding-shell {
+  background: radial-gradient(120% 120% at 18% 18%, rgba(251, 146, 60, 0.16), transparent 60%),
+    radial-gradient(120% 120% at 82% 10%, rgba(45, 212, 191, 0.14), transparent 62%),
+    linear-gradient(180deg, #0f1115 0%, #0b0d11 100%);
+}
+
 .onboarding-steps-panel {
   align-items: flex-start;
   justify-content: flex-start;
@@ -633,6 +645,7 @@
   background: rgba(255, 255, 255, 0.7);
   text-align: left;
   cursor: pointer;
+  position: relative;
   transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
@@ -644,6 +657,41 @@
 .onboarding-stepper-item.is-active {
   border-color: rgba(15, 23, 42, 0.4);
   background: rgba(255, 255, 255, 0.9);
+}
+
+.onboarding-stepper-item.is-active::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  width: 3px;
+  height: 70%;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: rgb(var(--primary));
+}
+
+.onboarding-stepper-item::after {
+  content: "";
+  position: absolute;
+  left: 26px;
+  top: 100%;
+  width: 2px;
+  height: 16px;
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.onboarding-stepper-item.is-last::after {
+  display: none;
+}
+
+.onboarding-stepper-item.is-active::after {
+  background: rgb(var(--primary));
+  opacity: 0.8;
+}
+
+.onboarding-stepper-item.is-locked::after {
+  background: rgba(148, 163, 184, 0.25);
 }
 
 .onboarding-stepper-item.is-locked {
@@ -677,14 +725,17 @@
   justify-content: center;
   background: rgba(15, 23, 42, 0.08);
   color: rgba(15, 23, 42, 0.65);
+  border: 2px solid transparent;
 }
 
 .onboarding-stepper-icon.is-active {
   color: rgb(var(--primary));
+  border-color: rgb(var(--primary));
 }
 
 .onboarding-stepper-icon.is-done {
   color: rgb(16 185 129);
+  border-color: rgb(16 185 129);
 }
 
 .onboarding-stepper-icon.is-locked {
@@ -698,6 +749,14 @@
 
 .dark .onboarding-stepper-icon.is-locked {
   color: rgba(226, 232, 240, 0.45);
+}
+
+.dark .onboarding-stepper-item::after {
+  background: rgba(148, 163, 184, 0.35);
+}
+
+.dark .onboarding-stepper-item.is-locked::after {
+  background: rgba(148, 163, 184, 0.18);
 }
 
 .onboarding-stepper-title {
@@ -790,9 +849,9 @@
 
 .onboarding-main-panel {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: 48px 48px;
+  padding: 48px 40px;
   background: linear-gradient(135deg, rgba(248, 250, 252, 0.9), rgba(255, 255, 255, 0.95));
 }
 
@@ -800,8 +859,16 @@
   background: linear-gradient(135deg, rgba(11, 15, 22, 0.98), rgba(16, 23, 34, 0.96));
 }
 
+:root[data-ui-theme='studio'] .onboarding-main-panel {
+  background: rgb(var(--background));
+}
+
+:root.dark[data-ui-theme='studio'] .onboarding-main-panel {
+  background: rgb(var(--background));
+}
+
 .onboarding-main-card {
-  width: min(620px, 100%);
+  width: min(640px, 100%);
   border-radius: 24px;
   border: 1px solid rgb(var(--border));
   padding: 40px;
@@ -851,6 +918,29 @@
 .onboarding-workspace {
   display: grid;
   gap: 18px;
+}
+
+.onboarding-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  font-size: 12px;
+}
+
+.onboarding-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.onboarding-skip-disabled {
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.45);
+}
+
+.dark .onboarding-skip-disabled {
+  color: rgba(226, 232, 240, 0.45);
 }
 
 .onboarding-template-picker {
@@ -972,6 +1062,16 @@
 
 .dark .onboarding-next-list {
   color: rgba(226, 232, 240, 0.72);
+}
+
+.onboarding-next-empty {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(15, 23, 42, 0.6);
+}
+
+.dark .onboarding-next-empty {
+  color: rgba(226, 232, 240, 0.68);
 }
 
 @media (max-width: 1024px) {

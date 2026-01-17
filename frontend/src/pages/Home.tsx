@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   BadgeCheck,
+  ChevronRight,
   CircleDot,
   Clock,
   Clock3,
@@ -401,7 +402,7 @@ const Home: React.FC = () => {
         }
         : displayStepId === 'basics'
           ? {
-            label: 'Set business basics',
+            label: 'Continue',
             onClick: () => navigate('/automations?section=business-profile'),
           }
           : displayStepId === 'simulate'
@@ -418,8 +419,41 @@ const Home: React.FC = () => {
                 : () => navigate('/automations'),
             };
 
+    const stepOrder = SETUP_STEPS.map((step) => step.id);
+    const displayIndex = stepOrder.indexOf(displayStepId);
+    const nextSteps = stepOrder
+      .slice(displayIndex + 1)
+      .map((stepId) => stepTitleMap[stepId])
+      .slice(0, 2);
+    const backStepId = displayIndex > 0 ? stepOrder[displayIndex - 1] : null;
+    const canGoBack = Boolean(backStepId && (backStepId === currentStepId || stepCompletion[backStepId]));
+    const isSkippable = displayStepId === 'simulate';
+
     return (
       <div className="onboarding-workspace">
+        <div className="onboarding-card-actions">
+          <button
+            type="button"
+            className="onboarding-link"
+            onClick={() => {
+              if (backStepId && canGoBack) setSelectedStepId(backStepId);
+            }}
+            disabled={!canGoBack}
+          >
+            Back
+          </button>
+          {isSkippable ? (
+            <button
+              type="button"
+              className="onboarding-link"
+              onClick={() => navigate('/automations')}
+            >
+              Skip for now
+            </button>
+          ) : (
+            <span className="onboarding-skip-disabled">Skip for now (required)</span>
+          )}
+        </div>
         <div>
           <h2 className="onboarding-step-heading">{stepTitleMap[displayStepId]}</h2>
           <p className="onboarding-step-subtitle">{stepSubtitleMap[displayStepId]}</p>
@@ -469,10 +503,15 @@ const Home: React.FC = () => {
         <p className="onboarding-trust-line">Nothing messages real customers until you publish.</p>
         <div className="onboarding-next-steps">
           <p className="onboarding-next-title">What happens next</p>
-          <ul className="onboarding-next-list">
-            <li>Choose a template that fits your workflow.</li>
-            <li>Test in the simulator, then publish when ready.</li>
-          </ul>
+          {nextSteps.length > 0 ? (
+            <ul className="onboarding-next-list">
+              {nextSteps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="onboarding-next-empty">You are ready to publish when you are set.</p>
+          )}
         </div>
       </div>
     );
@@ -492,23 +531,23 @@ const Home: React.FC = () => {
               <img src={onboardingLogo.dark} alt="SendFx" className="auth-brand-logo onboarding-logo hidden dark:block" />
               <h1 className="onboarding-steps-title">Get live in ~3 minutes</h1>
               <p className="onboarding-steps-subtitle">
-                Complete the steps below. You can build safely in demo mode.
+                Complete the steps below. Demo mode keeps you safe.
               </p>
               <p className="onboarding-steps-summary">
                 {completedSteps}/{SETUP_STEPS.length} completed • ~3 min
               </p>
               <div className="onboarding-stepper">
-                {SETUP_STEPS.map((step) => {
+                {SETUP_STEPS.map((step, index) => {
                   const isComplete = stepCompletion[step.id];
                   const isCurrent = step.id === currentStepId;
                   const isActive = step.id === displayStepId;
                   const isLocked = !isComplete && !isCurrent;
-                  const statusLabel = isActive ? 'Active' : isComplete ? 'Done' : 'Locked';
+                  const isLast = index === SETUP_STEPS.length - 1;
                   return (
                     <button
                       key={step.id}
                       type="button"
-                      className={`onboarding-stepper-item ${isActive ? 'is-active' : ''} ${isLocked ? 'is-locked' : ''}`}
+                      className={`onboarding-stepper-item  ${isLocked ? 'is-locked' : ''} ${isLast ? 'is-last' : ''}`}
                       onClick={() => {
                         if (!isLocked) setSelectedStepId(step.id);
                       }}
@@ -524,7 +563,7 @@ const Home: React.FC = () => {
                           <p className="onboarding-stepper-subtitle">{stepNavSubtitleMap[step.id]}</p>
                         </div>
                       </div>
-                      <span className="onboarding-stepper-status">{statusLabel}</span>
+                      {isActive && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                     </button>
                   );
                 })}
