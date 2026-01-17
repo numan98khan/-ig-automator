@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { adminApi, instagramAdminApi, unwrapData } from '../services/api'
-import { useState } from 'react'
+import { adminApi, automationSimApi, instagramAdminApi, unwrapData } from '../services/api'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   Building2,
@@ -12,9 +12,132 @@ import {
   TrendingUp,
   AlertCircle,
   RefreshCw,
+  FlaskConical,
 } from 'lucide-react'
+import {
+  SIMULATION_SCENARIO_GROUPS,
+  SimulationExpectation,
+  SimulationScenario,
+} from './workspaceSimulateScenarios'
 
-type TabType = 'overview' | 'conversations' | 'members'
+type TabType = 'overview' | 'conversations' | 'members' | 'simulate'
+
+type SimulationStepResult = {
+  customerText: string
+  aiMessages: Array<{ id?: string; text: string; createdAt?: string }>
+  inferredIntent?: string | null
+  status?: string | null
+  warnings: string[]
+}
+
+type SimulationResult = {
+  scenarioId: string
+  name: string
+  startedAt: string
+  finishedAt?: string
+  selectedAutomation?: { id?: string; name?: string; templateId?: string }
+  steps: SimulationStepResult[]
+  transcript: Array<{ from: 'customer' | 'ai'; text: string; createdAt?: string }>
+  warnings: string[]
+}
+
+const INTENTS = new Set([
+  'greeting',
+  'faq',
+  'product_inquiry',
+  'quote_request',
+  'book_appointment',
+  'order_request',
+  'delivery_shipping',
+  'order_status',
+  'refund_return',
+  'support_issue',
+  'lead_capture',
+  'human_handoff',
+  'spam',
+  'other',
+  'none',
+])
+
+const countSentences = (text: string) => {
+  const matches = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)
+  return matches ? matches.filter(Boolean).length : 0
+}
+
+const countQuestions = (text: string) => (text.match(/\?/g) || []).length
+
+const inferIntentFromReply = (text?: string) => {
+  if (!text) return null
+  const trimmed = text.trim().toLowerCase()
+  if (!trimmed) return null
+  const handoffMatch = trimmed.match(/human required\s+([^\s]+)/i)
+  if (handoffMatch?.[1]) {
+    return handoffMatch[1].trim().toLowerCase()
+  }
+  return INTENTS.has(trimmed) ? trimmed : null
+}
+
+const evaluateExpectations = (
+  expect: SimulationExpectation | undefined,
+  aiText: string | undefined,
+  actualIntent: string | null,
+) => {
+  if (!expect) return [] as string[]
+  const warnings: string[] = []
+
+  if (expect.intent && actualIntent && expect.intent !== actualIntent) {
+    warnings.push(`Expected intent "${expect.intent}", got "${actualIntent}".`)
+  }
+
+  if (expect.replyIncludes && aiText) {
+    expect.replyIncludes.forEach((fragment) => {
+      if (!aiText.toLowerCase().includes(fragment.toLowerCase())) {
+        warnings.push(`Reply missing expected fragment "${fragment}".`)
+      }
+    })
+  }
+
+  if (expect.replyExcludes && aiText) {
+    expect.replyExcludes.forEach((fragment) => {
+      if (aiText.toLowerCase().includes(fragment.toLowerCase())) {
+        warnings.push(`Reply includes excluded fragment "${fragment}".`)
+      }
+    })
+  }
+
+  if (aiText && typeof expect.maxSentences === 'number') {
+    const sentenceCount = countSentences(aiText)
+    if (sentenceCount > expect.maxSentences) {
+      warnings.push(`Reply has ${sentenceCount} sentences (max ${expect.maxSentences}).`)
+    }
+  }
+
+  if (aiText && typeof expect.maxQuestions === 'number') {
+    const questionCount = countQuestions(aiText)
+    if (questionCount > expect.maxQuestions) {
+      warnings.push(`Reply has ${questionCount} questions (max ${expect.maxQuestions}).`)
+    }
+  }
+
+  return warnings
+}
+
+const extractAiMessages = (
+  messages: Array<{ id?: string; from?: string; text?: string; createdAt?: string }> | undefined,
+  seenIds: Set<string>,
+) => {
+  const next: Array<{ id?: string; text: string; createdAt?: string }> = []
+  ;(messages || []).forEach((message) => {
+    if (message.from !== 'ai') return
+    if (!message.id) return
+    if (seenIds.has(message.id)) return
+    seenIds.add(message.id)
+    next.push({ id: message.id, text: message.text || '', createdAt: message.createdAt })
+  })
+  return next
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export default function WorkspaceDetail() {
   const { id } = useParams<{ id: string }>()
@@ -72,6 +195,12 @@ export default function WorkspaceDetail() {
   const [syncError, setSyncError] = useState<string | null>(null)
   const [deletingWorkspace, setDeletingWorkspace] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [activeSimGroupId, setActiveSimGroupId] = useState<string>('branches')
+  const [simResults, setSimResults] = useState<Record<string, SimulationResult>>({})
+  const [simRunningScenarioId, setSimRunningScenarioId] = useState<string | null>(null)
+  const [simRunningGroupId, setSimRunningGroupId] = useState<string | null>(null)
+  const [simError, setSimError] = useState<string | null>(null)
+  const [simResultsLoaded, setSimResultsLoaded] = useState(false)
 
   const handleDeleteWorkspace = async () => {
     if (!id || deletingWorkspace) return
@@ -96,6 +225,178 @@ export default function WorkspaceDetail() {
     new Intl.NumberFormat('en-US').format(value || 0)
   const formatCost = (cents?: number) =>
     `$${((cents || 0) / 100).toFixed(2)}`
+
+  const activeSimGroup = useMemo(() => {
+    return SIMULATION_SCENARIO_GROUPS.find((group) => group.id === activeSimGroupId)
+      || SIMULATION_SCENARIO_GROUPS[0]
+  }, [activeSimGroupId])
+
+  useEffect(() => {
+    if (!id) return
+    setSimResultsLoaded(false)
+    const storageKey = `sf-admin-sim-results:${id}`
+    const raw = localStorage.getItem(storageKey)
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object') {
+          setSimResults(parsed)
+        }
+      } catch (error) {
+        console.warn('Failed to restore simulation results:', error)
+      }
+    }
+    setSimResultsLoaded(true)
+  }, [id])
+
+  useEffect(() => {
+    if (!id || !simResultsLoaded) return
+    const storageKey = `sf-admin-sim-results:${id}`
+    localStorage.setItem(storageKey, JSON.stringify(simResults))
+  }, [id, simResults, simResultsLoaded])
+
+  const isSimBusy = Boolean(simRunningScenarioId || simRunningGroupId)
+
+  const pollForNewAiMessages = async (workspaceId: string, baselineIds: Set<string>, sessionId?: string) => {
+    const timeoutMs = 30000
+    const intervalMs = 1500
+    const start = Date.now()
+    let lastSession: any = null
+
+    while (Date.now() - start < timeoutMs) {
+      const data = await automationSimApi.getSimulationSession(workspaceId)
+      if (sessionId && data?.sessionId && data.sessionId !== sessionId) {
+        await sleep(intervalMs)
+        continue
+      }
+      lastSession = data
+      const messages = (data?.messages || []).filter((message: any) => message.from === 'ai')
+      const newMessages = messages.filter((message: any) => message.id && !baselineIds.has(message.id))
+      if (newMessages.length > 0) {
+        return { messages: newMessages, session: data, timedOut: false }
+      }
+      await sleep(intervalMs)
+    }
+
+    return { messages: [], session: lastSession, timedOut: true }
+  }
+
+  const runScenario = async (scenario: SimulationScenario) => {
+    if (!id) return
+    const steps: SimulationStepResult[] = []
+    const transcript: SimulationResult['transcript'] = []
+    const warnings: string[] = []
+    let sessionId: string | undefined
+    let selectedAutomation: SimulationResult['selectedAutomation']
+    const seenAiIds = new Set<string>()
+    const startedAt = new Date().toISOString()
+
+    for (let index = 0; index < scenario.messages.length; index += 1) {
+      const message = scenario.messages[index]
+      const baselineIds = new Set(seenAiIds)
+      const clientSentAt = new Date().toISOString()
+      transcript.push({ from: 'customer', text: message.text, createdAt: clientSentAt })
+
+      let response: any = null
+      try {
+        response = await automationSimApi.simulateMessage({
+          workspaceId: id,
+          text: message.text,
+          sessionId,
+          reset: index === 0,
+          persona: index === 0 ? scenario.persona : undefined,
+          clientSentAt,
+        })
+      } catch (error: any) {
+        const errorMessage = error?.response?.data?.error || error?.message || 'Simulation request failed'
+        warnings.push(errorMessage)
+        steps.push({
+          customerText: message.text,
+          aiMessages: [],
+          warnings: [errorMessage],
+          status: null,
+          inferredIntent: null,
+        })
+        break
+      }
+
+      sessionId = response.sessionId || sessionId
+      selectedAutomation = response.selectedAutomation || selectedAutomation
+
+      let aiMessages = extractAiMessages(response.messages, seenAiIds)
+      let latestSession = response
+
+      if (aiMessages.length === 0) {
+        const polled = await pollForNewAiMessages(id, baselineIds, sessionId)
+        latestSession = polled.session || response
+        aiMessages = extractAiMessages(polled.messages, seenAiIds)
+        if (polled.timedOut && aiMessages.length === 0 && !message.expect?.allowNoReply) {
+          warnings.push('Timed out waiting for AI response.')
+        }
+      }
+
+      aiMessages.forEach((entry) => {
+        transcript.push({ from: 'ai', text: entry.text, createdAt: entry.createdAt })
+      })
+
+      const latestAi = aiMessages[aiMessages.length - 1]
+      const inferredIntent = inferIntentFromReply(latestAi?.text)
+      const stepWarnings = evaluateExpectations(message.expect, latestAi?.text, inferredIntent)
+
+      steps.push({
+        customerText: message.text,
+        aiMessages,
+        inferredIntent,
+        status: latestSession?.status || null,
+        warnings: stepWarnings,
+      })
+      warnings.push(...stepWarnings)
+    }
+
+    const finishedAt = new Date().toISOString()
+    const result: SimulationResult = {
+      scenarioId: scenario.id,
+      name: scenario.name,
+      startedAt,
+      finishedAt,
+      selectedAutomation,
+      steps,
+      transcript,
+      warnings,
+    }
+
+    setSimResults((prev) => ({ ...prev, [scenario.id]: result }))
+  }
+
+  const handleRunScenario = async (scenario: SimulationScenario) => {
+    if (!id || isSimBusy) return
+    setSimError(null)
+    setSimRunningScenarioId(scenario.id)
+    try {
+      await runScenario(scenario)
+    } catch (error: any) {
+      console.error('Simulation run error:', error)
+      setSimError('Failed to run scenario. Check server logs for details.')
+    } finally {
+      setSimRunningScenarioId(null)
+    }
+  }
+
+  const handleRunGroup = async () => {
+    if (!id || isSimBusy || !activeSimGroup) return
+    setSimError(null)
+    setSimRunningGroupId(activeSimGroup.id)
+    try {
+      for (const scenario of activeSimGroup.scenarios) {
+        await runScenario(scenario)
+      }
+    } catch (error: any) {
+      console.error('Simulation group run error:', error)
+      setSimError('Failed to run all scenarios. Check server logs for details.')
+    } finally {
+      setSimRunningGroupId(null)
+    }
+  }
 
   const handleSyncConversation = async (conversationId: string) => {
     if (!id) return
@@ -133,6 +434,7 @@ export default function WorkspaceDetail() {
     { id: 'overview', label: 'Overview', icon: Building2 },
     { id: 'conversations', label: 'Conversations', icon: MessageSquare },
     { id: 'members', label: 'Members', icon: Users },
+    { id: 'simulate', label: 'Simulate', icon: FlaskConical },
   ]
 
   return (
@@ -524,6 +826,143 @@ export default function WorkspaceDetail() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'simulate' && activeSimGroup && (
+          <div className="space-y-6">
+            <div className="card">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">Simulation Runner</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Run automation simulations for this workspace. Each scenario resets the preview session.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setSimResults({})}
+                    disabled={isSimBusy}
+                  >
+                    Clear results
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleRunGroup}
+                    disabled={isSimBusy}
+                  >
+                    {simRunningGroupId === activeSimGroup.id ? 'Running...' : `Run ${activeSimGroup.label}`}
+                  </button>
+                </div>
+              </div>
+              {simError && (
+                <div className="mt-3 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                  {simError}
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="flex flex-wrap gap-2">
+                {SIMULATION_SCENARIO_GROUPS.map((group) => (
+                  <button
+                    key={group.id}
+                    className={`btn ${activeSimGroupId === group.id ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setActiveSimGroupId(group.id)}
+                    disabled={isSimBusy}
+                  >
+                    {group.label}
+                  </button>
+                ))}
+              </div>
+              {activeSimGroup.description && (
+                <p className="mt-3 text-xs text-muted-foreground">{activeSimGroup.description}</p>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              {activeSimGroup.scenarios.map((scenario) => {
+                const result = simResults[scenario.id]
+                const warningCount = result?.warnings?.length || 0
+                const lastRun = result?.finishedAt ? new Date(result.finishedAt).toLocaleString() : null
+                return (
+                  <div key={scenario.id} className="card space-y-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <h4 className="text-base font-semibold text-foreground">{scenario.name}</h4>
+                        <p className="text-xs text-muted-foreground">
+                          {scenario.messages.length} message{scenario.messages.length === 1 ? '' : 's'}
+                        </p>
+                        {lastRun && (
+                          <p className="text-xs text-muted-foreground">Last run: {lastRun}</p>
+                        )}
+                        {result?.selectedAutomation?.name && (
+                          <p className="text-xs text-muted-foreground">
+                            Automation: {result.selectedAutomation.name}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {result ? (
+                          <span className={`badge ${warningCount > 0 ? 'badge-warning' : 'badge-success'}`}>
+                            {warningCount > 0 ? `${warningCount} warning${warningCount === 1 ? '' : 's'}` : 'OK'}
+                          </span>
+                        ) : (
+                          <span className="badge badge-secondary">Idle</span>
+                        )}
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => handleRunScenario(scenario)}
+                          disabled={isSimBusy}
+                        >
+                          {simRunningScenarioId === scenario.id ? 'Running...' : 'Run'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {result && (
+                      <div className="space-y-3">
+                        {result.steps.map((step, index) => (
+                          <div key={`${scenario.id}-step-${index}`} className="rounded-lg border border-border/60 p-3">
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              Message {index + 1}
+                            </p>
+                            <p className="mt-2 text-sm text-foreground">
+                              <span className="text-muted-foreground">Customer:</span> {step.customerText}
+                            </p>
+                            {step.aiMessages.length > 0 ? (
+                              step.aiMessages.map((message, aiIndex) => (
+                                <p key={`${scenario.id}-ai-${index}-${aiIndex}`} className="mt-2 text-sm text-foreground">
+                                  <span className="text-muted-foreground">AI:</span> {message.text}
+                                </p>
+                              ))
+                            ) : (
+                              <p className="mt-2 text-xs text-muted-foreground">No AI reply captured.</p>
+                            )}
+                            {step.warnings.length > 0 && (
+                              <div className="mt-2 space-y-1 text-xs text-rose-500">
+                                {step.warnings.map((warning, warningIndex) => (
+                                  <div key={`${scenario.id}-warn-${index}-${warningIndex}`}>{warning}</div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {result.transcript.length > 0 && (
+                          <div className="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
+                            {result.transcript
+                              .map((entry) => `${entry.from === 'customer' ? 'Customer' : 'AI'}: ${entry.text}`)
+                              .join('\n')}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 

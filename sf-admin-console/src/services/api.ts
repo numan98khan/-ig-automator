@@ -175,3 +175,18 @@ export const instagramAdminApi = {
   syncConversation: (workspaceId: string, conversationId: string) =>
     coreApi.post('/instagram/sync-messages', { workspaceId, conversationId }),
 }
+
+export const automationSimApi = {
+  simulateMessage: (payload: {
+    workspaceId: string
+    text: string
+    sessionId?: string
+    reset?: boolean
+    persona?: { name: string; handle?: string; userId?: string; avatarUrl?: string }
+    clientSentAt?: string
+  }) => coreApi.post('/automations/simulate/message', payload).then((response) => response.data),
+  getSimulationSession: (workspaceId: string) =>
+    coreApi.get('/automations/simulate/session', { params: { workspaceId } }).then((response) => response.data),
+  resetSimulationSession: (payload: { workspaceId: string; sessionId?: string }) =>
+    coreApi.post('/automations/simulate/reset', payload).then((response) => response.data),
+}
