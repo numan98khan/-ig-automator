@@ -5,8 +5,6 @@ import {
   AlertTriangle,
   ArrowUpRight,
   BadgeCheck,
-  Bolt,
-  ChevronRight,
   CircleDot,
   Clock,
   Clock3,
@@ -16,9 +14,9 @@ import {
   Instagram,
   LayoutDashboard,
   ShieldCheck,
-  TestTube2,
   UserPlus,
   Wrench,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useAccountContext } from '../context/AccountContext';
@@ -40,7 +38,6 @@ import {
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 
 type SetupStep = {
@@ -116,7 +113,7 @@ const Home: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { currentWorkspace, user } = useAuth();
-  const { accounts, activeAccount } = useAccountContext();
+  const { accounts } = useAccountContext();
   const { uiTheme } = useTheme();
   const workspaceId = currentWorkspace?._id;
   const [attentionFilter, setAttentionFilter] = useState<AttentionFilter>('escalations');
@@ -171,25 +168,9 @@ const Home: React.FC = () => {
   const isSyncing = homeQuery.isFetching && !homeQuery.isLoading;
   const isAttentionLoading = attentionQuery.isLoading && !attentionQuery.data;
   const { isDemoMode, enableDemoMode, disableDemoMode } = useDemoMode(settings?.demoModeEnabled);
-  const [savingBasics, setSavingBasics] = useState(false);
   const [demoModeUpdating, setDemoModeUpdating] = useState(false);
-  const [expandedStepId, setExpandedStepId] = useState<SetupStep['id'] | null>(null);
-  const [basicsForm, setBasicsForm] = useState({
-    businessName: '',
-    businessHours: '',
-    businessTone: '',
-    businessLocation: '',
-  });
-
-  useEffect(() => {
-    if (!settings) return;
-    setBasicsForm({
-      businessName: settings.businessName || '',
-      businessHours: settings.businessHours || '',
-      businessTone: settings.businessTone || '',
-      businessLocation: settings.businessLocation || '',
-    });
-  }, [settings]);
+  const [selectedStepId, setSelectedStepId] = useState<SetupStep['id'] | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   useEffect(() => {
     if (homeQuery.error) {
@@ -270,26 +251,11 @@ const Home: React.FC = () => {
     ].filter(Boolean).length;
   }, [connectStepComplete, hasTemplateChoice, hasBusinessBasics, hasPublishedAutomation, hasSimulation]);
 
-  const progressPercent = Math.round((completedSteps / SETUP_STEPS.length) * 100);
-
   const recommendedTemplates = useMemo(() => {
     return templates
       .filter((template) => template.currentVersion && template.status === 'active')
-      .slice(0, 3);
+      .slice(0, 4);
   }, [templates]);
-
-  const handleSaveBasics = async () => {
-    if (!currentWorkspace) return;
-    setSavingBasics(true);
-    try {
-      const updated = await settingsAPI.update(currentWorkspace._id, basicsForm);
-      updateSettingsCache(updated);
-    } catch (error) {
-      console.error('Failed to update business basics', error);
-    } finally {
-      setSavingBasics(false);
-    }
-  };
 
   const handleDemoModeUpdate = async (nextValue: boolean) => {
     if (!currentWorkspace || nextValue === isDemoMode) return;
@@ -363,16 +329,6 @@ const Home: React.FC = () => {
 
   const showSecurityPrompt = Boolean(user?.isProvisional || !user?.emailVerified);
   const kpiSummary = dashboard?.kpis;
-  const simulationTimestamp = useMemo(() => {
-    const timestamp = simulation?.session?.updatedAt || simulation?.session?.createdAt || null;
-    if (!timestamp) return null;
-    try {
-      return new Date(timestamp).toLocaleString();
-    } catch {
-      return null;
-    }
-  }, [simulation]);
-
   const onboardingLogo = useMemo(() => {
     if (uiTheme === 'studio') {
       return {
@@ -386,174 +342,140 @@ const Home: React.FC = () => {
     };
   }, [uiTheme]);
 
-  const selectedAutomation = useMemo(
-    () => automations.find((automation) => automation.template?.status !== 'archived') || automations[0] || null,
-    [automations],
-  );
-  const selectedTemplateName = selectedAutomation?.template?.name || selectedAutomation?.name;
-  const connectedUsername = activeAccount?.username || accounts[0]?.username;
-  const currentStepIndex = Math.max(0, SETUP_STEPS.findIndex((step) => step.id === currentStepId)) + 1;
-  const currentStep = SETUP_STEPS.find((step) => step.id === currentStepId) || SETUP_STEPS[0];
-
-  const toggleStep = (stepId: SetupStep['id']) => {
-    setExpandedStepId((prev) => (prev === stepId ? null : stepId));
+  const stepCompletion = useMemo(() => ({
+    connect: connectStepComplete,
+    template: hasTemplateChoice,
+    basics: hasBusinessBasics,
+    simulate: hasSimulation,
+    publish: hasPublishedAutomation,
+  }), [connectStepComplete, hasTemplateChoice, hasBusinessBasics, hasSimulation, hasPublishedAutomation]);
+  const displayStepId = selectedStepId ?? currentStepId;
+  const displayStepIndex = Math.max(0, SETUP_STEPS.findIndex((step) => step.id === displayStepId)) + 1;
+  const stepSubtitleMap: Record<SetupStep['id'], string> = {
+    connect: 'Required for live routing. Prefer to explore first? Use demo mode.',
+    template: 'Start with a proven flow so you can go live fast.',
+    basics: 'Add a few essentials so replies sound like your brand.',
+    simulate: 'Test the automation before going live.',
+    publish: 'Activate your automation when you are ready.',
+  };
+  const stepTitleMap: Record<SetupStep['id'], string> = {
+    connect: 'Connect Instagram',
+    template: 'Choose a template',
+    basics: 'Set business basics',
+    simulate: 'Test in simulator',
+    publish: 'Publish',
+  };
+  const stepNavSubtitleMap: Record<SetupStep['id'], string> = {
+    connect: 'Required to route live DMs.',
+    template: 'Pick a proven flow.',
+    basics: 'Add brand essentials.',
+    simulate: 'Test before going live.',
+    publish: 'Activate safely.',
   };
 
+  useEffect(() => {
+    if (!selectedStepId) return;
+    const isAvailable = selectedStepId === currentStepId || stepCompletion[selectedStepId];
+    if (!isAvailable) {
+      setSelectedStepId(null);
+    }
+  }, [selectedStepId, currentStepId, stepCompletion]);
+
+  useEffect(() => {
+    if (displayStepId !== 'template' && selectedTemplateId) {
+      setSelectedTemplateId(null);
+    }
+  }, [displayStepId, selectedTemplateId]);
+
   const renderCurrentStepContent = () => {
-    switch (currentStepId) {
-      case 'connect':
-        return (
-          <div className="space-y-6">
-            <p className="text-sm text-muted-foreground">
-              Connect your Instagram account to route real DMs or keep exploring in demo mode.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button onClick={() => navigate('/settings')} leftIcon={<Instagram className="w-4 h-4" />}>
-                Connect Instagram
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleConnectDecision}
-                isLoading={demoModeUpdating}
-              >
-                Continue with demo mode
-              </Button>
-            </div>
-            {isDemoMode && (
-              <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
-                Demo mode keeps you safe while you build — switch to live anytime after connecting.
-              </div>
-            )}
-          </div>
-        );
-      case 'template':
-        return (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {recommendedTemplates.length > 0 ? (
-                recommendedTemplates.map((template) => {
-                  const previewSnippet = template.currentVersion?.display?.previewConversation?.[0]?.message;
-                  return (
-                    <div key={template._id} className="border border-border/60 rounded-xl p-3 space-y-2">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{template.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {template.currentVersion?.display?.outcome || template.description || 'Automation template'}
-                        </p>
-                      </div>
-                      {previewSnippet && (
-                        <p className="text-[11px] text-muted-foreground italic line-clamp-2">“{previewSnippet}”</p>
-                      )}
-                      <Button size="sm" onClick={() => handleTemplateSelect(template._id)}>
-                        Use this template
-                      </Button>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="col-span-full text-xs text-muted-foreground border border-dashed border-border/60 rounded-xl p-3">
-                  No templates are available yet.
-                </div>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="justify-start"
-              onClick={() => navigate('/automations')}
-              rightIcon={<ChevronRight className="w-4 h-4" />}
-            >
-              Browse all templates
-            </Button>
-          </div>
-        );
-      case 'basics':
-        return (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Input
-                value={basicsForm.businessName}
-                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessName: event.target.value }))}
-                placeholder="Business name"
-              />
-              <Input
-                value={basicsForm.businessHours}
-                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessHours: event.target.value }))}
-                placeholder="Working hours"
-              />
-              <Input
-                value={basicsForm.businessTone}
-                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessTone: event.target.value }))}
-                placeholder="Tone (optional)"
-              />
-              <Input
-                value={basicsForm.businessLocation}
-                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessLocation: event.target.value }))}
-                placeholder="Location (optional)"
-              />
-            </div>
-            <Button onClick={handleSaveBasics} disabled={savingBasics}>
-              {savingBasics ? 'Saving...' : 'Save business basics'}
-            </Button>
-          </div>
-        );
-      case 'publish':
-        return (
-          <div className="space-y-4">
-            <div className="text-sm text-muted-foreground">
-              {isDemoMode
-                ? (hasInstagram
-                  ? 'Demo mode is on • Switch to live to start sending messages.'
-                  : 'Connect Instagram to go live.')
-                : 'Safe defaults enabled • You can pause anytime'}
-            </div>
-            <Button
-              onClick={
-                isDemoMode
-                  ? (hasInstagram ? handleGoLive : handleConnectInstagram)
-                  : () => navigate('/automations')
-              }
-              isLoading={demoModeUpdating}
-            >
-              {isDemoMode
+    const primaryAction: { label: string; onClick: () => void; disabled?: boolean } = displayStepId === 'connect'
+      ? {
+        label: 'Connect Instagram',
+        onClick: () => navigate('/settings'),
+      }
+      : displayStepId === 'template'
+        ? {
+          label: selectedTemplateId ? 'Use selected template' : 'Select a template',
+          onClick: () => selectedTemplateId && handleTemplateSelect(selectedTemplateId),
+          disabled: !selectedTemplateId,
+        }
+        : displayStepId === 'basics'
+          ? {
+            label: 'Set business basics',
+            onClick: () => navigate('/automations?section=business-profile'),
+          }
+          : displayStepId === 'simulate'
+            ? {
+              label: 'Run simulator',
+              onClick: () => navigate('/automations?section=simulate'),
+            }
+            : {
+              label: isDemoMode
                 ? (hasInstagram ? 'Go live' : 'Connect Instagram to go live')
-                : 'Publish now'}
-            </Button>
-          </div>
-        );
-      case 'simulate':
-        return (
-          <div className="space-y-4">
-            <div className="text-sm text-muted-foreground">
-              What you’ll see: captured fields, tags, and the current step as it runs.
-            </div>
-            {hasSimulation ? (
-              <div className="space-y-3">
-                <div className="text-sm text-emerald-500 font-semibold">
-                  Test complete{simulationTimestamp ? ` · ${simulationTimestamp}` : ''}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" onClick={() => navigate('/inbox')}>
-                    Open Inbox
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => navigate('/automations')}>
-                    View automation
-                  </Button>
-                  <Button size="sm" onClick={() => navigate('/automations?section=simulate')}>
-                    Run again
-                  </Button>
-                </div>
+                : 'Publish now',
+              onClick: isDemoMode
+                ? (hasInstagram ? handleGoLive : handleConnectInstagram)
+                : () => navigate('/automations'),
+            };
+
+    return (
+      <div className="onboarding-workspace">
+        <div>
+          <h2 className="onboarding-step-heading">{stepTitleMap[displayStepId]}</h2>
+          <p className="onboarding-step-subtitle">{stepSubtitleMap[displayStepId]}</p>
+        </div>
+        {displayStepId === 'template' && (
+          <div className="onboarding-template-picker">
+            {recommendedTemplates.length > 0 ? (
+              <div className="onboarding-template-grid">
+                {recommendedTemplates.map((template) => (
+                  <button
+                    key={template._id}
+                    type="button"
+                    className={`onboarding-template-card ${selectedTemplateId === template._id ? 'is-selected' : ''}`}
+                    onClick={() => setSelectedTemplateId(template._id)}
+                  >
+                    <span className="onboarding-template-title">{template.name}</span>
+                    <span className="onboarding-template-subtitle">
+                      {template.currentVersion?.display?.outcome || template.description || 'Automation template'}
+                    </span>
+                  </button>
+                ))}
               </div>
             ) : (
-              <Button onClick={() => navigate('/automations?section=simulate')} leftIcon={<TestTube2 className="w-4 h-4" />}>
-                Test in simulator
-              </Button>
+              <p className="text-sm text-muted-foreground">No templates available yet.</p>
             )}
           </div>
-        );
-      default:
-        return null;
-    }
+        )}
+        <div className="onboarding-cta-group">
+          <Button
+            onClick={primaryAction.onClick}
+            leftIcon={displayStepId === 'connect' ? <Instagram className="w-4 h-4" /> : undefined}
+            isLoading={displayStepId === 'publish' ? demoModeUpdating : false}
+            disabled={primaryAction.disabled}
+          >
+            {primaryAction.label}
+          </Button>
+          {displayStepId === 'connect' && (
+            <button
+              type="button"
+              className="onboarding-link"
+              onClick={handleConnectDecision}
+            >
+              Try demo mode
+            </button>
+          )}
+        </div>
+        <p className="onboarding-trust-line">Nothing messages real customers until you publish.</p>
+        <div className="onboarding-next-steps">
+          <p className="onboarding-next-title">What happens next</p>
+          <ul className="onboarding-next-list">
+            <li>Choose a template that fits your workflow.</li>
+            <li>Test in the simulator, then publish when ready.</li>
+          </ul>
+        </div>
+      </div>
+    );
   };
 
   if (isInitialLoading) {
@@ -568,134 +490,42 @@ const Home: React.FC = () => {
             <div className="onboarding-steps-content">
               <img src={onboardingLogo.light} alt="SendFx" className="auth-brand-logo onboarding-logo block dark:hidden" />
               <img src={onboardingLogo.dark} alt="SendFx" className="auth-brand-logo onboarding-logo hidden dark:block" />
-              <span className="auth-brand-badge">Onboarding</span>
-              <h1 className="onboarding-steps-title">Get your first automation live</h1>
-              <p className="onboarding-steps-subtitle">Complete each step to activate your workspace and start routing DMs.</p>
-              <div className="onboarding-progress">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Setup progress</span>
-                  <span>{progressPercent}%</span>
-                </div>
-                <div className="onboarding-progress-track">
-                  <div className="onboarding-progress-fill" style={{ width: `${progressPercent}%` }} />
-                </div>
-              </div>
-              <div className="onboarding-step-list">
-                {SETUP_STEPS.map((step, index) => {
-                  const isComplete = [
-                    connectStepComplete,
-                    hasTemplateChoice,
-                    hasBusinessBasics,
-                    hasSimulation,
-                    hasPublishedAutomation,
-                  ][index];
+              <h1 className="onboarding-steps-title">Get live in ~3 minutes</h1>
+              <p className="onboarding-steps-subtitle">
+                Complete the steps below. You can build safely in demo mode.
+              </p>
+              <p className="onboarding-steps-summary">
+                {completedSteps}/{SETUP_STEPS.length} completed • ~3 min
+              </p>
+              <div className="onboarding-stepper">
+                {SETUP_STEPS.map((step) => {
+                  const isComplete = stepCompletion[step.id];
                   const isCurrent = step.id === currentStepId;
-                  const isExpanded = isComplete && expandedStepId === step.id;
-                  const isConnectPartial = step.id === 'connect' && connectStepComplete && !hasInstagram;
-                  const statusLabel = isComplete
-                    ? (isConnectPartial ? 'Demo mode' : 'Done')
-                    : isCurrent
-                      ? 'In progress'
-                      : 'Not started';
+                  const isActive = step.id === displayStepId;
+                  const isLocked = !isComplete && !isCurrent;
+                  const statusLabel = isActive ? 'Active' : isComplete ? 'Done' : 'Locked';
                   return (
-                    <div
+                    <button
                       key={step.id}
-                      className={`onboarding-step-card ${isCurrent ? 'is-current' : ''} ${isComplete ? 'is-complete' : 'is-pending'}`}
+                      type="button"
+                      className={`onboarding-stepper-item ${isActive ? 'is-active' : ''} ${isLocked ? 'is-locked' : ''}`}
                       onClick={() => {
-                        if (isComplete) toggleStep(step.id);
+                        if (!isLocked) setSelectedStepId(step.id);
                       }}
-                      onKeyDown={(event) => {
-                        if (!isComplete) return;
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          toggleStep(step.id);
-                        }
-                      }}
-                      role={isComplete ? 'button' : undefined}
-                      tabIndex={isComplete ? 0 : undefined}
-                      aria-expanded={isComplete ? isExpanded : undefined}
+                      disabled={isLocked}
+                      aria-current={isActive ? 'step' : undefined}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3">
-                          {isComplete ? (
-                            <BadgeCheck className={`w-5 h-5 mt-0.5 ${isConnectPartial ? 'text-amber-500' : 'text-emerald-500'}`} />
-                          ) : (
-                            <CircleDot className={`w-5 h-5 mt-0.5 ${isCurrent ? 'text-primary' : 'text-muted-foreground'}`} />
-                          )}
-                          <div>
-                            <p className="onboarding-step-title">{step.title}</p>
-                            <p className="onboarding-step-why">{step.why}</p>
-                          </div>
+                      <div className="onboarding-stepper-main">
+                        <span className={`onboarding-stepper-icon ${isLocked ? 'is-locked' : isComplete ? 'is-done' : 'is-active'}`}>
+                          {isLocked ? <Lock className="w-4 h-4" /> : isComplete ? <BadgeCheck className="w-4 h-4" /> : <CircleDot className="w-4 h-4" />}
+                        </span>
+                        <div>
+                          <p className="onboarding-stepper-title">{stepTitleMap[step.id]}</p>
+                          <p className="onboarding-stepper-subtitle">{stepNavSubtitleMap[step.id]}</p>
                         </div>
-                        <Badge
-                          variant={isComplete ? (isConnectPartial ? 'warning' : 'secondary') : isCurrent ? 'primary' : 'secondary'}
-                          className={isComplete ? 'text-muted-foreground' : undefined}
-                        >
-                          {statusLabel}
-                        </Badge>
                       </div>
-
-                      {isComplete && isExpanded && (
-                        <div className="onboarding-step-detail">
-                          {step.id === 'connect' && (
-                            <p>
-                              {hasInstagram
-                                ? `Connected account: @${connectedUsername || 'instagram'}`
-                                : isDemoMode
-                                  ? 'Demo mode active for this workspace.'
-                                  : 'Connection decision saved.'}
-                            </p>
-                          )}
-                          {step.id === 'template' && (
-                            <p>
-                              {selectedTemplateName
-                                ? `Selected template: ${selectedTemplateName}`
-                                : `Templates created: ${automations.length}`}
-                            </p>
-                          )}
-                          {step.id === 'basics' && (
-                            <p>
-                              {settings?.businessName
-                                ? `Business: ${settings.businessName}`
-                                : 'Business basics saved.'}
-                            </p>
-                          )}
-                          {step.id === 'simulate' && (
-                            <p>
-                              {simulationTimestamp
-                                ? `Last simulator run: ${simulationTimestamp}`
-                                : 'Simulator run recorded.'}
-                            </p>
-                          )}
-                          {step.id === 'publish' && (
-                            <p>
-                              {publishedCount > 0
-                                ? `${publishedCount} automation${publishedCount === 1 ? '' : 's'} published`
-                                : 'Publish settings saved.'}
-                            </p>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              if (step.id === 'connect') navigate('/settings');
-                              if (step.id === 'template') navigate('/automations');
-                              if (step.id === 'basics') navigate('/automations?section=business-profile');
-                              if (step.id === 'publish') navigate('/automations');
-                              if (step.id === 'simulate') navigate('/automations?section=simulate');
-                            }}
-                          >
-                            {step.id === 'connect' && 'Manage'}
-                            {step.id === 'template' && 'Change'}
-                            {step.id === 'basics' && 'Edit'}
-                            {step.id === 'publish' && 'View settings'}
-                            {step.id === 'simulate' && 'Run again'}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
+                      <span className="onboarding-stepper-status">{statusLabel}</span>
+                    </button>
                   );
                 })}
               </div>
@@ -705,9 +535,9 @@ const Home: React.FC = () => {
           <section className="onboarding-main-panel">
             <div className="onboarding-main-card">
               <div className="onboarding-main-header">
-                <span className="onboarding-step-kicker">Step {currentStepIndex} of {SETUP_STEPS.length}</span>
-                <h2 className="onboarding-step-heading">{currentStep.title}</h2>
-                <p className="onboarding-step-subtitle">{currentStep.why}</p>
+                <span className="onboarding-step-kicker">
+                  Step {displayStepIndex} of {SETUP_STEPS.length} • {completedSteps}/{SETUP_STEPS.length} completed
+                </span>
               </div>
               {renderCurrentStepContent()}
             </div>
@@ -730,292 +560,6 @@ const Home: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6 flex-1 min-h-0 overflow-hidden">
         <div className="hidden lg:flex lg:flex-col space-y-6 h-full overflow-y-auto pr-1">
-          {!isActivated && (
-            <Card className="border border-border/70">
-              <CardHeader className="space-y-2">
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <Bolt className="w-5 h-5 text-primary" />
-                  Get your first automation live
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">Complete setup to go live with confidence.</p>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{progressPercent}% complete</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-muted/60">
-                  <div className="h-2 rounded-full bg-primary" style={{ width: `${progressPercent}%` }} />
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {SETUP_STEPS.map((step, index) => {
-                  const isComplete = [
-                    connectStepComplete,
-                    hasTemplateChoice,
-                    hasBusinessBasics,
-                    hasSimulation,
-                    hasPublishedAutomation,
-                  ][index];
-                  const isCurrent = step.id === currentStepId;
-                  const isExpanded = isComplete && expandedStepId === step.id;
-                  const isConnectPartial = step.id === 'connect' && connectStepComplete && !hasInstagram;
-                  const connectedUsername = activeAccount?.username || accounts[0]?.username;
-                  const selectedAutomation = automations.find((automation) => automation.template?.status !== 'archived') || automations[0];
-                  const selectedTemplateName = selectedAutomation?.template?.name || selectedAutomation?.name;
-                  return (
-                    <div
-                      key={step.id}
-                      className={`border border-border/60 rounded-xl p-4 space-y-3 transition ${
-                        isComplete ? 'cursor-pointer hover:border-border/90' : ''
-                      }`}
-                      onClick={() => {
-                        if (isComplete) toggleStep(step.id);
-                      }}
-                      onKeyDown={(event) => {
-                        if (!isComplete) return;
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          toggleStep(step.id);
-                        }
-                      }}
-                      role={isComplete ? 'button' : undefined}
-                      tabIndex={isComplete ? 0 : undefined}
-                      aria-expanded={isComplete ? isExpanded : undefined}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          {isComplete ? (
-                            <BadgeCheck className={`w-5 h-5 mt-0.5 ${isConnectPartial ? 'text-amber-500' : 'text-emerald-500'}`} />
-                          ) : (
-                            <CircleDot className={`w-5 h-5 mt-0.5 ${isCurrent ? 'text-primary' : 'text-muted-foreground'}`} />
-                          )}
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">{step.title}</p>
-                            <p className="text-xs text-muted-foreground">{step.why}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant={isComplete ? (isConnectPartial ? 'warning' : 'secondary') : isCurrent ? 'primary' : 'secondary'}
-                            className={isComplete ? 'text-muted-foreground' : undefined}
-                          >
-                            {isComplete
-                              ? (isConnectPartial ? 'Demo mode' : 'Done')
-                              : isCurrent
-                                ? 'In progress'
-                                : 'Not started'}
-                          </Badge>
-                          {isComplete && (
-                            <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                          )}
-                        </div>
-                      </div>
-
-                      {isComplete && isExpanded && (
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                          {step.id === 'connect' && (
-                            <p>
-                              {hasInstagram
-                                ? `Connected account: @${connectedUsername || 'instagram'}`
-                                : isDemoMode
-                                  ? 'Demo mode active for this workspace.'
-                                  : 'Connection decision saved.'}
-                            </p>
-                          )}
-                          {step.id === 'template' && (
-                            <p>
-                              {selectedTemplateName
-                                ? `Selected template: ${selectedTemplateName}`
-                                : `Templates created: ${automations.length}`}
-                            </p>
-                          )}
-                          {step.id === 'basics' && (
-                            <p>
-                              {settings?.businessName
-                                ? `Business: ${settings.businessName}`
-                                : 'Business basics saved.'}
-                            </p>
-                          )}
-                          {step.id === 'simulate' && (
-                            <p>
-                              {simulationTimestamp
-                                ? `Last simulator run: ${simulationTimestamp}`
-                                : 'Simulator run recorded.'}
-                            </p>
-                          )}
-                          {step.id === 'publish' && (
-                            <p>
-                              {publishedCount > 0
-                                ? `${publishedCount} automation${publishedCount === 1 ? '' : 's'} published`
-                                : 'Publish settings saved.'}
-                            </p>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              if (step.id === 'connect') navigate('/settings');
-                              if (step.id === 'template') navigate('/automations');
-                              if (step.id === 'basics') navigate('/automations?section=business-profile');
-                              if (step.id === 'publish') navigate('/automations');
-                              if (step.id === 'simulate') navigate('/automations?section=simulate');
-                            }}
-                          >
-                            {step.id === 'connect' && 'Manage'}
-                            {step.id === 'template' && 'Change'}
-                            {step.id === 'basics' && 'Edit'}
-                            {step.id === 'publish' && 'View settings'}
-                            {step.id === 'simulate' && 'Run again'}
-                          </Button>
-                        </div>
-                      )}
-
-                      {step.id === 'connect' && !connectStepComplete && (
-                        <div className="flex flex-col md:flex-row md:items-center gap-3">
-                          <Button onClick={() => navigate('/settings')} leftIcon={<Instagram className="w-4 h-4" />}>
-                            Connect Instagram
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={handleConnectDecision}
-                            isLoading={demoModeUpdating}
-                          >
-                            {isDemoMode ? 'Continue with demo mode' : 'Continue with demo mode'}
-                          </Button>
-                        </div>
-                      )}
-
-                      {isCurrent && step.id === 'template' && (
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            {recommendedTemplates.length > 0 ? (
-                              recommendedTemplates.map((template) => {
-                                const previewSnippet = template.currentVersion?.display?.previewConversation?.[0]?.message;
-                                return (
-                                  <div key={template._id} className="border border-border/60 rounded-lg p-3 space-y-2">
-                                    <div>
-                                      <p className="text-sm font-semibold text-foreground">{template.name}</p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {template.currentVersion?.display?.outcome || template.description || 'Automation template'}
-                                      </p>
-                                    </div>
-                                    {previewSnippet && (
-                                      <p className="text-[11px] text-muted-foreground italic line-clamp-2">“{previewSnippet}”</p>
-                                    )}
-                                    <Button size="sm" onClick={() => handleTemplateSelect(template._id)}>
-                                      Use this template
-                                    </Button>
-                                  </div>
-                                );
-                              })
-                            ) : (
-                              <div className="col-span-full text-xs text-muted-foreground border border-dashed border-border/60 rounded-lg p-3">
-                                No templates are available yet.
-                              </div>
-                            )}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="justify-start"
-                            onClick={() => navigate('/automations')}
-                            rightIcon={<ChevronRight className="w-4 h-4" />}
-                          >
-                            Browse all templates
-                          </Button>
-                        </div>
-                      )}
-
-                      {isCurrent && step.id === 'basics' && (
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <Input
-                              value={basicsForm.businessName}
-                              onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessName: event.target.value }))}
-                              placeholder="Business name"
-                            />
-                            <Input
-                              value={basicsForm.businessHours}
-                              onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessHours: event.target.value }))}
-                              placeholder="Working hours"
-                            />
-                            <Input
-                              value={basicsForm.businessTone}
-                              onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessTone: event.target.value }))}
-                              placeholder="Tone (optional)"
-                            />
-                            <Input
-                              value={basicsForm.businessLocation}
-                              onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessLocation: event.target.value }))}
-                              placeholder="Location (optional)"
-                            />
-                          </div>
-                          <Button onClick={handleSaveBasics} disabled={savingBasics}>
-                            {savingBasics ? 'Saving...' : 'Save business basics'}
-                          </Button>
-                        </div>
-                      )}
-
-                      {isCurrent && step.id === 'publish' && (
-                        <div className="space-y-2">
-                          <div className="text-xs text-muted-foreground">
-                            {isDemoMode
-                              ? (hasInstagram
-                                ? 'Demo mode is on • Switch to live to start sending messages.'
-                                : 'Connect Instagram to go live.')
-                              : 'Safe defaults enabled • You can pause anytime'}
-                          </div>
-                          <Button
-                            onClick={
-                              isDemoMode
-                                ? (hasInstagram ? handleGoLive : handleConnectInstagram)
-                                : () => navigate('/automations')
-                            }
-                            isLoading={demoModeUpdating}
-                          >
-                            {isDemoMode
-                              ? (hasInstagram ? 'Go live' : 'Connect Instagram to go live')
-                              : 'Publish now'}
-                          </Button>
-                        </div>
-                      )}
-
-                      {isCurrent && step.id === 'simulate' && (
-                        <div className="space-y-2">
-                          <div className="text-xs text-muted-foreground">
-                            What you’ll see: captured fields, tags, and the current step as it runs.
-                          </div>
-                          {hasSimulation ? (
-                            <div className="space-y-2">
-                              <div className="text-xs text-emerald-500 font-semibold">
-                                Test complete{simulationTimestamp ? ` · ${simulationTimestamp}` : ''}
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                <Button size="sm" variant="outline" onClick={() => navigate('/inbox')}>
-                                  Open Inbox
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => navigate('/automations')}>
-                                  View automation
-                                </Button>
-                                <Button size="sm" onClick={() => navigate('/automations?section=simulate')}>
-                                  Run again
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <Button onClick={() => navigate('/automations?section=simulate')} leftIcon={<TestTube2 className="w-4 h-4" />}>
-                              Test in simulator
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          )}
-
           {isActivated && (
             <Card>
               <CardHeader>

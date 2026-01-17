@@ -536,7 +536,7 @@
 
 .onboarding-shell {
   display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   min-height: 100vh;
   border-radius: 0;
   overflow: hidden;
@@ -546,7 +546,7 @@
 .onboarding-steps-panel {
   align-items: flex-start;
   justify-content: flex-start;
-  padding: 56px 48px;
+  padding: 48px 40px;
 }
 
 .onboarding-steps-content {
@@ -555,12 +555,12 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 20px;
+  gap: 14px;
 }
 
 .onboarding-steps-title {
   font-family: var(--font-display);
-  font-size: 32px;
+  font-size: 28px;
   line-height: 1.15;
   margin: 0;
   color: rgb(var(--foreground));
@@ -574,6 +574,17 @@
 
 .dark .onboarding-steps-subtitle {
   color: rgba(226, 232, 240, 0.78);
+}
+
+.onboarding-steps-summary {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(15, 23, 42, 0.6);
+}
+
+.dark .onboarding-steps-summary {
+  color: rgba(226, 232, 240, 0.6);
 }
 
 .onboarding-progress {
@@ -602,6 +613,119 @@
 .onboarding-step-list {
   display: grid;
   gap: 12px;
+}
+
+.onboarding-stepper {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.onboarding-stepper-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.7);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.onboarding-stepper-item:hover {
+  border-color: rgba(15, 23, 42, 0.35);
+  transform: translateY(-1px);
+}
+
+.onboarding-stepper-item.is-active {
+  border-color: rgba(15, 23, 42, 0.4);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.onboarding-stepper-item.is-locked {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.dark .onboarding-stepper-item {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.dark .onboarding-stepper-item.is-active {
+  border-color: rgba(226, 232, 240, 0.35);
+  background: rgba(15, 23, 42, 0.75);
+}
+
+.onboarding-stepper-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.onboarding-stepper-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.08);
+  color: rgba(15, 23, 42, 0.65);
+}
+
+.onboarding-stepper-icon.is-active {
+  color: rgb(var(--primary));
+}
+
+.onboarding-stepper-icon.is-done {
+  color: rgb(16 185 129);
+}
+
+.onboarding-stepper-icon.is-locked {
+  color: rgba(15, 23, 42, 0.45);
+}
+
+.dark .onboarding-stepper-icon {
+  background: rgba(148, 163, 184, 0.16);
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.dark .onboarding-stepper-icon.is-locked {
+  color: rgba(226, 232, 240, 0.45);
+}
+
+.onboarding-stepper-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--foreground));
+  margin: 0;
+}
+
+.onboarding-stepper-subtitle {
+  font-size: 11px;
+  color: rgba(15, 23, 42, 0.6);
+  margin: 2px 0 0 0;
+}
+
+.dark .onboarding-stepper-subtitle {
+  color: rgba(226, 232, 240, 0.6);
+}
+
+.onboarding-stepper-status {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(15, 23, 42, 0.5);
+}
+
+.dark .onboarding-stepper-status {
+  color: rgba(226, 232, 240, 0.55);
 }
 
 .onboarding-step-card {
@@ -666,9 +790,9 @@
 
 .onboarding-main-panel {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 64px 48px;
+  padding: 48px 48px;
   background: linear-gradient(135deg, rgba(248, 250, 252, 0.9), rgba(255, 255, 255, 0.95));
 }
 
@@ -677,7 +801,7 @@
 }
 
 .onboarding-main-card {
-  width: min(540px, 100%);
+  width: min(620px, 100%);
   border-radius: 24px;
   border: 1px solid rgb(var(--border));
   padding: 40px;
@@ -722,6 +846,132 @@
 
 .dark .onboarding-step-subtitle {
   color: rgba(226, 232, 240, 0.75);
+}
+
+.onboarding-workspace {
+  display: grid;
+  gap: 18px;
+}
+
+.onboarding-template-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.onboarding-template-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.onboarding-template-card {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.75);
+  text-align: left;
+  display: grid;
+  gap: 6px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.onboarding-template-card:hover {
+  border-color: rgba(15, 23, 42, 0.35);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+}
+
+.onboarding-template-card.is-selected {
+  border-color: rgb(var(--primary));
+}
+
+.dark .onboarding-template-card {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.onboarding-template-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--foreground));
+}
+
+.onboarding-template-subtitle {
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.6);
+}
+
+.dark .onboarding-template-subtitle {
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.onboarding-cta-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.onboarding-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--primary));
+  cursor: pointer;
+}
+
+.onboarding-link:hover {
+  text-decoration: underline;
+}
+
+.onboarding-trust-line {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.6);
+}
+
+.dark .onboarding-trust-line {
+  color: rgba(226, 232, 240, 0.65);
+}
+
+.onboarding-next-steps {
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+  padding-top: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.dark .onboarding-next-steps {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.onboarding-next-title {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 600;
+  color: rgba(15, 23, 42, 0.55);
+}
+
+.dark .onboarding-next-title {
+  color: rgba(226, 232, 240, 0.6);
+}
+
+.onboarding-next-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: rgba(15, 23, 42, 0.7);
+  display: grid;
+  gap: 6px;
+}
+
+.dark .onboarding-next-list {
+  color: rgba(226, 232, 240, 0.72);
 }
 
 @media (max-width: 1024px) {
