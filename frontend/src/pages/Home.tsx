@@ -172,6 +172,7 @@ const Home: React.FC = () => {
   const [demoModeUpdating, setDemoModeUpdating] = useState(false);
   const [selectedStepId, setSelectedStepId] = useState<SetupStep['id'] | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [creatingTemplate, setCreatingTemplate] = useState(false);
 
   useEffect(() => {
     if (homeQuery.error) {
@@ -324,8 +325,25 @@ const Home: React.FC = () => {
     }
   };
 
-  const handleTemplateSelect = (templateId: string) => {
-    navigate(`/automations?templateId=${templateId}&source=onboarding`);
+  const handleTemplateSelect = async (templateId: string) => {
+    if (!currentWorkspace) return;
+    const selectedTemplate = recommendedTemplates.find((template) => template._id === templateId);
+    if (!selectedTemplate) return;
+    setCreatingTemplate(true);
+    try {
+      await automationAPI.create({
+        name: selectedTemplate.name,
+        description: selectedTemplate.description || 'Automation template',
+        workspaceId: currentWorkspace._id,
+        templateId: selectedTemplate._id,
+        isActive: true,
+      });
+      queryClient.invalidateQueries({ queryKey: ['home', currentWorkspace._id] });
+    } catch (error) {
+      console.error('Failed to create automation from template', error);
+    } finally {
+      setCreatingTemplate(false);
+    }
   };
 
   const showSecurityPrompt = Boolean(user?.isProvisional || !user?.emailVerified);
@@ -394,7 +412,7 @@ const Home: React.FC = () => {
         label: 'Connect Instagram',
         onClick: handleConnectInstagram,
       }
-      : displayStepId === 'template'
+          : displayStepId === 'template'
         ? {
           label: selectedTemplateId ? 'Use selected template' : 'Select a template',
           onClick: () => selectedTemplateId && handleTemplateSelect(selectedTemplateId),
@@ -485,7 +503,7 @@ const Home: React.FC = () => {
           <Button
             onClick={primaryAction.onClick}
             leftIcon={displayStepId === 'connect' ? <Instagram className="w-4 h-4" /> : undefined}
-            isLoading={displayStepId === 'publish' ? demoModeUpdating : false}
+            isLoading={displayStepId === 'publish' ? demoModeUpdating : creatingTemplate}
             disabled={primaryAction.disabled}
           >
             {primaryAction.label}
