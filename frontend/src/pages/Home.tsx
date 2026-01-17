@@ -392,7 +392,7 @@ const Home: React.FC = () => {
     const primaryAction: { label: string; onClick: () => void; disabled?: boolean } = displayStepId === 'connect'
       ? {
         label: 'Connect Instagram',
-        onClick: () => navigate('/settings'),
+        onClick: handleConnectInstagram,
       }
       : displayStepId === 'template'
         ? {
