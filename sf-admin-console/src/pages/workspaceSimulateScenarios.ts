@@ -487,6 +487,144 @@ export const SIMULATION_SCENARIO_GROUPS: SimulationScenarioGroup[] = [
           handle: '@historyromanurdu',
         },
       },
+      {
+        id: 'history-blinds-consult',
+        name: 'History blinds consult',
+        messages: [
+          {
+            text: 'Hi, I need blinds for my living room. The window is 6 ft wide and 5 ft tall. Do you install?',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+          {
+            text: 'I want blackout and white. What is best for heat and privacy?',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+          {
+            text: 'Earlier I said 6 ft by 5 ft. Would roller blinds fit that?',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+          {
+            text: 'Can you give me a quote for that?',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+        ],
+        persona: {
+          name: 'Test History Blinds',
+          handle: '@historyblinds',
+        },
+      },
+      {
+        id: 'history-blinds-safety',
+        name: 'History blinds safety',
+        messages: [
+          {
+            text: 'We have kids at home. Do you offer cordless blinds?',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+          {
+            text: 'Are cordless options more expensive? I just want a ballpark.',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+          {
+            text: 'I prefer faux wood in the bedroom. Do they handle humidity?',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+          {
+            text: 'Earlier I mentioned kids. Which option is safest?',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+        ],
+        persona: {
+          name: 'Test History Safety',
+          handle: '@historysafety',
+        },
+      },
+      {
+        id: 'history-blinds-multi-room',
+        name: 'History blinds multi-room',
+        messages: [
+          {
+            text: 'I need blinds for two rooms: master and office. Office is 4 ft wide, master is 7 ft wide.',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+          {
+            text: 'Can the office be zebra and master be blackout?',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+          {
+            text: 'Do you remember the office width? Would zebra fit that size?',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+          {
+            text: 'If I decide to book an installation, what is next?',
+            expect: {
+              mode: 'info_desk',
+              maxSentences: 2,
+              maxQuestions: 1,
+              replyExcludes: ['bot', 'automation', 'workflow'],
+            },
+          },
+        ],
+        persona: {
+          name: 'Test History Multi Room',
+          handle: '@historymulti',
+        },
+      },
     ],
   },
 ]
