@@ -23,7 +23,7 @@ export default function AdminDebug() {
     openaiApiLogsEnabled: false,
     consoleLogsEnabled: false,
   })
-  const [uiTheme, setUiTheme] = useState<'legacy' | 'comic' | 'studio'>('legacy')
+  const [uiTheme, setUiTheme] = useState<'default' | 'steel' | 'comic' | 'studio'>('default')
 
   const { data: workspaces } = useQuery({
     queryKey: ['debug-workspaces'],
@@ -64,7 +64,11 @@ export default function AdminDebug() {
 
   useEffect(() => {
     const payload = unwrapData<any>(uiSettingsData)
-    if (payload?.uiTheme === 'comic' || payload?.uiTheme === 'legacy' || payload?.uiTheme === 'studio') {
+    if (payload?.uiTheme === 'legacy') {
+      setUiTheme('steel')
+      return
+    }
+    if (payload?.uiTheme === 'default' || payload?.uiTheme === 'steel' || payload?.uiTheme === 'comic' || payload?.uiTheme === 'studio') {
       setUiTheme(payload.uiTheme)
     }
   }, [uiSettingsData])
@@ -76,7 +80,7 @@ export default function AdminDebug() {
     },
   })
   const updateUiMutation = useMutation({
-    mutationFn: (payload: { uiTheme: 'legacy' | 'comic' | 'studio' }) => adminApi.updateUiSettings(payload),
+    mutationFn: (payload: { uiTheme: 'default' | 'steel' | 'comic' | 'studio' }) => adminApi.updateUiSettings(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-ui-settings'] })
     },
@@ -88,7 +92,7 @@ export default function AdminDebug() {
     updateLogsMutation.mutate({ [key]: nextValue })
   }
 
-  const handleUiThemeChange = (nextTheme: 'legacy' | 'comic' | 'studio') => {
+  const handleUiThemeChange = (nextTheme: 'default' | 'steel' | 'comic' | 'studio') => {
     setUiTheme(nextTheme)
     updateUiMutation.mutate({ uiTheme: nextTheme })
   }
@@ -243,10 +247,11 @@ export default function AdminDebug() {
             id="ui-theme-select"
             className="input-field max-w-xs bg-background"
             value={uiTheme}
-            onChange={(event) => handleUiThemeChange(event.target.value as 'legacy' | 'comic' | 'studio')}
+            onChange={(event) => handleUiThemeChange(event.target.value as 'default' | 'steel' | 'comic' | 'studio')}
             disabled={isSavingUiSettings}
           >
-            <option value="legacy">Legacy (current)</option>
+            <option value="default">Default (neutral + purple)</option>
+            <option value="steel">Legacy steel blue</option>
             <option value="studio">Studio editorial</option>
             <option value="comic">Comic pop-art</option>
           </select>
