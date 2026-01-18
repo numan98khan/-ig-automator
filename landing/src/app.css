@@ -387,16 +387,16 @@
   background: linear-gradient(180deg, rgba(14, 26, 34, 0.85), rgba(14, 26, 34, 0.35), rgba(12, 20, 28, 0.9));
 }
 
-:root:not(.dark) .finpay-hero {
-  background-image: radial-gradient(circle at 25% 20%, rgba(15, 118, 110, 0.12), transparent 45%),
-    radial-gradient(circle at 80% 15%, rgba(251, 146, 60, 0.18), transparent 45%),
-    linear-gradient(160deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.7));
+:root:not(.dark) .social-hero {
+  background-image: radial-gradient(circle at 22% 18%, rgba(56, 189, 248, 0.15), transparent 48%),
+    radial-gradient(circle at 78% 20%, rgba(99, 102, 241, 0.16), transparent 45%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(244, 247, 252, 0.8));
 }
 
-.dark .finpay-hero {
-  background-image: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.18), transparent 45%),
-    radial-gradient(circle at 80% 15%, rgba(124, 58, 237, 0.2), transparent 45%),
-    linear-gradient(160deg, rgba(17, 24, 39, 0.85), rgba(15, 23, 42, 0.65));
+.dark .social-hero {
+  background-image: radial-gradient(circle at 20% 18%, rgba(56, 189, 248, 0.18), transparent 48%),
+    radial-gradient(circle at 76% 18%, rgba(129, 140, 248, 0.22), transparent 45%),
+    linear-gradient(160deg, rgba(12, 18, 31, 0.88), rgba(15, 23, 42, 0.7));
 }
 
 :root[data-ui-theme='studio'] .ui-bg-wash {

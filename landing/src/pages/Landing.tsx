@@ -340,38 +340,38 @@ const Landing: React.FC = () => {
           <section
             id="overview"
             ref={heroRef}
-            className="grid md:grid-cols-[1.05fr,0.95fr] gap-10 md:gap-12 items-start"
+            className="grid lg:grid-cols-[1.05fr,0.95fr] gap-10 md:gap-12 items-center"
           >
             <div
-              className={`space-y-5 md:space-y-6 text-left ${isComic && isLight ? 'comic-panel-soft bg-white/70 backdrop-blur-md p-6 md:p-8' : ''}`}
+              className={`space-y-6 text-left ${isComic && isLight ? 'comic-panel-soft bg-white/70 backdrop-blur-md p-6 md:p-8' : ''}`}
             >
               <div
                 data-gsap="hero-badge"
-                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium backdrop-blur-md ${isComic ? 'comic-sticker text-foreground font-semibold' : 'bg-muted/40 border border-border text-muted-foreground'}`}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-semibold backdrop-blur-md ${isComic ? 'comic-sticker text-foreground font-semibold' : 'bg-muted/40 border border-border text-muted-foreground'}`}
               >
                 <Sparkles className="w-3 h-3 text-amber-500" />
-                <span>Fintech-grade workflows for Instagram teams</span>
+                <span>All-in-one social management platform</span>
               </div>
               <h1
                 data-gsap="hero-title"
-                className={`text-4xl sm:text-5xl md:text-5xl lg:text-6xl font-extrabold leading-[1.04] md:leading-[1.06] ${isComic ? 'text-[#ff3fd0] comic-display comic-shadow-text' : 'text-foreground tracking-tight md:tracking-tighter'}`}
+                className={`text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[1.04] md:leading-[1.06] ${isComic ? 'text-[#ff3fd0] comic-display comic-shadow-text' : 'text-foreground tracking-tight md:tracking-tighter'}`}
               >
-                A modern inbox that feels like a fintech command center.
+                Plan, schedule, and scale your social presence from one calm workspace.
               </h1>
               <p
                 data-gsap="hero-copy"
                 className="text-lg md:text-xl text-muted-foreground leading-[1.5] md:leading-[1.6]"
               >
-                Route, score, and respond to inbound DMs with the clarity of a financial dashboard. Guardrails, approvals, and handoffs stay crisp—so your team never misses a lead.
+                Bring publishing, analytics, approvals, and team collaboration together. Keep every brand on track with unified calendars, smart summaries, and proactive alerts.
               </p>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div data-gsap="hero-actions" className="flex flex-wrap items-center gap-3">
                   <Button
                     onClick={() => openAuthModal('signup')}
-                    className="group inline-flex items-center gap-3 px-6 py-3 text-base"
+                    className="group inline-flex items-center gap-3 px-7 py-3 text-base"
                   >
-                    <span>Sign up free</span>
+                    <span>Start free trial</span>
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                   </Button>
                   <Button
@@ -380,7 +380,7 @@ const Landing: React.FC = () => {
                     onClick={handleWatchDemo}
                   >
                     <PlayCircle className="w-4 h-4" />
-                    Watch demo (60s)
+                    See platform tour
                   </Button>
                 </div>
                 {error && !showEmailModal && (
@@ -393,9 +393,9 @@ const Landing: React.FC = () => {
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-muted-foreground">
                   {[
-                    { icon: CreditCard, label: 'Free plan', detail: 'No card required' },
-                    { icon: Clock, label: 'Launch in 5 min', detail: 'Templates ready' },
-                    { icon: ShieldCheck, label: 'Secure by default', detail: 'Audit trail built-in' },
+                    { icon: ShieldCheck, label: 'Trusted workflows', detail: 'Approval-ready' },
+                    { icon: Clock, label: 'Save 8 hrs/week', detail: 'Automation built-in' },
+                    { icon: CreditCard, label: 'No card needed', detail: 'Free 14-day trial' },
                   ].map(({ icon: Icon, label, detail }) => (
                     <div
                       key={label}
@@ -425,55 +425,71 @@ const Landing: React.FC = () => {
             <div className="relative h-full">
               <div
                 data-gsap="hero-card"
-                className={`relative overflow-hidden p-0 flex items-center justify-center h-full ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.04]' : 'glass-panel rounded-3xl'} finpay-hero`}
+                className={`relative overflow-hidden p-0 flex items-center justify-center h-full ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.04]' : 'glass-panel rounded-3xl'} social-hero`}
               >
                 <div
-                  className="absolute -right-12 top-6 h-56 w-56 rounded-full bg-primary/20 blur-3xl opacity-70"
+                  className="absolute -right-16 top-8 h-56 w-56 rounded-full bg-primary/25 blur-3xl opacity-70"
                   aria-hidden="true"
                 />
                 <div
                   className={`absolute bottom-5 left-1/2 h-6 w-[70%] -translate-x-1/2 rounded-full blur-2xl ${isLight ? 'bg-black/15 opacity-50' : 'bg-black/35 opacity-60'}`}
                   aria-hidden="true"
                 />
-                <div className="relative z-10 w-full h-full p-6 md:p-8 flex flex-col justify-between gap-6">
+                <div className="relative z-10 w-full h-full p-6 md:p-8 flex flex-col gap-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">SendFx Pay</p>
-                      <p className="text-lg font-semibold text-foreground">Balance overview</p>
+                      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">SendFx Studio</p>
+                      <p className="text-lg font-semibold text-foreground">Campaign overview</p>
                     </div>
                     <div className="rounded-full border border-border/70 px-3 py-1 text-xs font-semibold text-foreground bg-background/70">
-                      Sept 2024
+                      Q3 Launch
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-4xl font-extrabold text-foreground">$24,580.84</p>
-                    <p className="text-sm text-muted-foreground">Total booked revenue from Instagram.</p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { label: 'DMs', value: '1.2k' },
-                      { label: 'Approvals', value: '148' },
-                      { label: 'Leads', value: '326' },
-                    ].map((stat) => (
-                      <div key={stat.label} className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2">
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{stat.label}</p>
-                        <p className="text-lg font-semibold text-foreground">{stat.value}</p>
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Scheduled</p>
+                      <p className="text-2xl font-extrabold text-foreground mt-2">128</p>
+                      <p className="text-xs text-muted-foreground mt-1">Posts this month</p>
+                    </div>
+                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Engagement</p>
+                      <p className="text-2xl font-extrabold text-foreground mt-2">4.8%</p>
+                      <p className="text-xs text-muted-foreground mt-1">+1.2% vs last</p>
+                    </div>
                   </div>
                   <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Weekly performance</span>
-                      <span className="text-foreground font-semibold">+18%</span>
+                      <span>Weekly reach</span>
+                      <span className="text-foreground font-semibold">+24%</span>
                     </div>
-                    <div className="mt-3 grid grid-cols-6 gap-2 items-end">
-                      {[28, 36, 24, 40, 32, 46].map((height, index) => (
+                    <div className="mt-3 grid grid-cols-7 gap-2 items-end">
+                      {[22, 34, 28, 40, 30, 44, 38].map((height, index) => (
                         <div
-                          key={`bar-${height}`}
+                          key={`reach-${height}`}
                           className={`rounded-full ${index === 5 ? 'bg-primary' : 'bg-primary/30'}`}
                           style={{ height: `${height}px` }}
                         />
                       ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Approvals</p>
+                      <p className="text-lg font-semibold text-foreground mt-2">12 pending</p>
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className="h-6 w-6 rounded-full bg-primary/20" />
+                        <span className="h-6 w-6 rounded-full bg-primary/40" />
+                        <span className="h-6 w-6 rounded-full bg-primary/60" />
+                        <span className="text-xs text-muted-foreground">+3 reviewers</span>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Inbox status</p>
+                      <p className="text-lg font-semibold text-foreground mt-2">All clear</p>
+                      <p className="text-xs text-muted-foreground mt-1">4 priority chats</p>
+                      <div className="mt-3 h-2 w-full rounded-full bg-primary/10">
+                        <div className="h-full w-3/4 rounded-full bg-primary" />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -488,7 +504,7 @@ const Landing: React.FC = () => {
                       <ShieldCheck className="w-3 h-3" />
                       Approval needed
                     </Badge>
-                    <p className="mt-3 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Suggested reply</p>
+                    <p className="mt-3 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Next post</p>
                     <p
                       className="mt-1 text-[13px] text-foreground leading-snug"
                       style={{
@@ -498,7 +514,7 @@ const Landing: React.FC = () => {
                         overflow: 'hidden',
                       }}
                     >
-                      We can deliver by Friday. Want me to reserve stock?
+                      Draft carousel ready for final review. Publish at 10:00 AM?
                     </p>
                     <div className="mt-3 flex gap-2">
                       <Button size="sm" className="pointer-events-none">Approve</Button>
@@ -511,15 +527,15 @@ const Landing: React.FC = () => {
                   className="hidden sm:block absolute left-6 bottom-6 w-[240px] sm:w-[280px] md:w-[300px] lg:w-[320px] md:left-8 md:bottom-8"
                 >
                   <div className={heroOverlayClass}>
-                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Inbox performance</p>
-                    <p className="mt-2 text-base font-semibold text-foreground">AI handled: High</p>
-                    <p className="text-xs text-muted-foreground mt-1">Based on recent threads</p>
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Team checklist</p>
+                    <p className="mt-2 text-base font-semibold text-foreground">Brand assets synced</p>
+                    <p className="text-xs text-muted-foreground mt-1">3 tasks remain</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Badge variant="neutral" className="text-[10px] uppercase tracking-wide">
-                        Human alert
+                        Editorial
                       </Badge>
                       <Badge variant="neutral" className="text-[10px] uppercase tracking-wide">
-                        Pricing exception
+                        Analytics
                       </Badge>
                     </div>
                   </div>
