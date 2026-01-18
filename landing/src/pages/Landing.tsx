@@ -96,6 +96,13 @@ const Landing: React.FC = () => {
   const sectionHeadingClass = isComic ? 'comic-display' : '';
   const heroOverlayClass =
     'rounded-2xl border border-border/60 bg-background/95 p-3 text-foreground shadow-[0_18px_40px_-26px_rgba(15,23,42,0.6)] backdrop-blur-sm';
+  type GsapContext = { revert: () => void };
+  type GsapInstance = {
+    context: (callback: () => void, scope?: Element | React.RefObject<Element>) => GsapContext;
+    set: (...args: any[]) => any;
+    timeline: (...args: any[]) => any;
+  };
+  type WindowWithGsap = Window & { gsap?: GsapInstance };
 
   useEffect(() => {
     // Check for errors in URL params
@@ -161,11 +168,11 @@ const Landing: React.FC = () => {
   useLayoutEffect(() => {
     if (!heroRef.current) return;
 
-    let ctx: { revert: () => void } | null = null;
+    let ctx: GsapContext | null = null;
     let isMounted = true;
 
     const runAnimations = async () => {
-      if (!window.gsap) {
+      if (!(window as WindowWithGsap).gsap) {
         await new Promise<void>((resolve, reject) => {
           const script = document.createElement('script');
           script.src = 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js';
@@ -176,7 +183,7 @@ const Landing: React.FC = () => {
         });
       }
 
-      const gsap = window.gsap;
+      const gsap = (window as WindowWithGsap).gsap;
 
       if (!isMounted || !gsap) return;
 
