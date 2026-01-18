@@ -6,7 +6,91 @@
 
 @layer base {
   :root {
-    /* Neutral Light */
+    /* Neutral-First + Bold Purple Brand + Candy Accents */
+    --background: 218 221 224;
+    /* #DADDE0 */
+    --foreground: 52 52 52;
+    /* #343434 */
+
+    --primary: 70 11 181;
+    /* #460BB5 */
+    --primary-foreground: 255 255 255;
+
+    --secondary: 81 73 171;
+    /* #5149AB */
+    --secondary-foreground: 255 255 255;
+
+    --muted: 247 247 247;
+    /* #F7F7F7 */
+    --muted-foreground: 94 94 94;
+    /* #5E5E5E */
+
+    --accent: 114 129 226;
+    /* #7281E2 */
+    --accent-foreground: 255 255 255;
+
+    --border: 234 235 236;
+    /* #EAEBEC */
+    --input: 234 235 236;
+    /* #EAEBEC */
+    --ring: 70 11 181;
+    /* #460BB5 */
+
+    --radius: 0.75rem;
+
+    --card: 253 253 253;
+    /* #FDFDFD */
+    --card-foreground: 52 52 52;
+
+    --glass-blur: 18px;
+    --glass-opacity: 0.5;
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-display: 'Fraunces', 'Inter', serif;
+  }
+
+  .dark {
+    /* Deep neutral dark with purple brand */
+    --background: 18 22 34;
+    /* #121622 */
+    --foreground: 241 241 241;
+    /* #F1F1F1 */
+
+    --primary: 126 92 255;
+    /* #7E5CFF */
+    --primary-foreground: 12 12 20;
+    /* #0C0C14 */
+
+    --secondary: 81 73 171;
+    /* #5149AB */
+    --secondary-foreground: 241 241 241;
+    /* #F1F1F1 */
+
+    --muted: 32 35 45;
+    /* #20232D */
+    --muted-foreground: 184 188 200;
+    /* #B8BCC8 */
+
+    --accent: 114 129 226;
+    /* #7281E2 */
+    --accent-foreground: 12 12 20;
+
+    --border: 44 48 60;
+    /* #2C303C */
+    --input: 44 48 60;
+    /* #2C303C */
+    --ring: 126 92 255;
+    /* #7E5CFF */
+
+    --card: 24 28 40;
+    /* #181C28 */
+    --card-foreground: 241 241 241;
+
+    --glass-blur: 12px;
+    --glass-opacity: 0.2;
+  }
+
+  :root[data-ui-theme='steel']:not(.dark) {
+    /* Legacy Steel Blue */
     --background: 255 255 255;
     /* #FFFFFF */
     --foreground: 17 24 39;
@@ -49,8 +133,8 @@
     --font-display: 'Inter', system-ui, sans-serif;
   }
 
-  .dark {
-    /* Palantir-inspired Dark */
+  :root.dark[data-ui-theme='steel'] {
+    /* Legacy Steel Blue Dark */
     --background: 28 33 39;
     /* #1C2127 */
     --foreground: 245 248 250;

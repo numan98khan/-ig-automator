@@ -74,6 +74,7 @@ const Landing: React.FC = () => {
   const isLight = theme === 'light';
   const isComic = uiTheme === 'comic';
   const isStudio = uiTheme === 'studio';
+  const isSteel = uiTheme === 'steel';
   const surfaceMain = isLight
     ? (isComic
       ? 'comic-panel bg-white'
@@ -91,7 +92,7 @@ const Landing: React.FC = () => {
     ? 'bg-background border-border/60 focus:ring-primary/40'
     : 'bg-background border-border/60 focus:ring-primary/40';
   const pageBackground = isLight
-    ? (isComic ? 'bg-[#fffbe6]' : isStudio ? 'bg-[#fbf6ef]' : 'bg-[#f7f8fb]')
+    ? (isComic ? 'bg-[#fffbe6]' : isStudio ? 'bg-[#fbf6ef]' : isSteel ? 'bg-[#f7f8fb]' : 'bg-[#dadde0]')
     : 'bg-background';
   const sectionHeadingClass = isComic ? 'comic-display' : '';
   const heroOverlayClass =

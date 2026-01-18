@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getApiBaseUrl } from '../utils/apiBaseUrl';
 
 type Theme = 'dark' | 'light' | 'system';
-type UiTheme = 'legacy' | 'comic' | 'studio';
+type UiTheme = 'default' | 'steel' | 'comic' | 'studio';
 
 interface ThemeProviderProps {
   children: React.ReactNode;
@@ -20,7 +20,7 @@ interface ThemeProviderState {
 const initialState: ThemeProviderState = {
   theme: 'system',
   setTheme: () => null,
-  uiTheme: 'legacy',
+  uiTheme: 'default',
   setUiTheme: () => null,
 };
 
@@ -36,7 +36,7 @@ export function ThemeProvider({
   );
   const uiThemeStorageKey = 'sendfx-ui-theme';
   const [uiTheme, setUiThemeState] = useState<UiTheme>(
-    () => (localStorage.getItem(uiThemeStorageKey) as UiTheme) || 'legacy'
+    () => (localStorage.getItem(uiThemeStorageKey) as UiTheme) || 'default'
   );
 
   useEffect(() => {
@@ -72,7 +72,12 @@ export function ThemeProvider({
         if (!response.ok) return;
         const payload = await response.json();
         const nextTheme = payload?.data?.uiTheme || payload?.uiTheme;
-        if (nextTheme === 'legacy' || nextTheme === 'comic' || nextTheme === 'studio') {
+        if (nextTheme === 'legacy') {
+          localStorage.setItem(uiThemeStorageKey, 'steel');
+          setUiThemeState('steel');
+          return;
+        }
+        if (nextTheme === 'default' || nextTheme === 'steel' || nextTheme === 'comic' || nextTheme === 'studio') {
           localStorage.setItem(uiThemeStorageKey, nextTheme);
           setUiThemeState(nextTheme);
         }
