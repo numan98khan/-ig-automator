@@ -350,19 +350,19 @@ const Landing: React.FC = () => {
                 className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-semibold backdrop-blur-md ${isComic ? 'comic-sticker text-foreground font-semibold' : 'bg-muted/40 border border-border text-muted-foreground'}`}
               >
                 <Sparkles className="w-3 h-3 text-amber-500" />
-                <span>All-in-one social management platform</span>
+                <span>Instagram-first automation for SMBs</span>
               </div>
               <h1
                 data-gsap="hero-title"
                 className={`text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[1.04] md:leading-[1.06] ${isComic ? 'text-[#ff3fd0] comic-display comic-shadow-text' : 'text-foreground tracking-tight md:tracking-tighter'}`}
               >
-                Plan, schedule, and scale your social presence from one calm workspace.
+                Instagram DM automation + lightweight CRM for SMBs.
               </h1>
               <p
                 data-gsap="hero-copy"
                 className="text-lg md:text-xl text-muted-foreground leading-[1.5] md:leading-[1.6]"
               >
-                Bring publishing, analytics, approvals, and team collaboration together. Keep every brand on track with unified calendars, smart summaries, and proactive alerts.
+                Route and qualify inbound DMs, reply with guardrails and approvals, and sync leads to Google Sheets without losing the human touch.
               </p>
 
               <div className="space-y-4">
@@ -371,7 +371,7 @@ const Landing: React.FC = () => {
                     onClick={() => openAuthModal('signup')}
                     className="group inline-flex items-center gap-3 px-7 py-3 text-base"
                   >
-                    <span>Start free trial</span>
+                    <span>Sign up free</span>
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                   </Button>
                   <Button
@@ -380,7 +380,7 @@ const Landing: React.FC = () => {
                     onClick={handleWatchDemo}
                   >
                     <PlayCircle className="w-4 h-4" />
-                    See platform tour
+                    Watch demo (60s)
                   </Button>
                 </div>
                 {error && !showEmailModal && (
@@ -393,9 +393,9 @@ const Landing: React.FC = () => {
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-muted-foreground">
                   {[
-                    { icon: ShieldCheck, label: 'Trusted workflows', detail: 'Approval-ready' },
-                    { icon: Clock, label: 'Save 8 hrs/week', detail: 'Automation built-in' },
-                    { icon: CreditCard, label: 'No card needed', detail: 'Free 14-day trial' },
+                    { icon: CreditCard, label: 'Free plan', detail: 'No card required' },
+                    { icon: Clock, label: 'Setup in 5 min', detail: 'Templates ready' },
+                    { icon: ShieldCheck, label: 'Cancel anytime', detail: 'Upgrade as you grow' },
                   ].map(({ icon: Icon, label, detail }) => (
                     <div
                       key={label}
