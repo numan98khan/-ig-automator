@@ -27,6 +27,7 @@ import {
   automationAPI,
   AutomationInstance,
   AutomationSimulationSessionResponse,
+  AutomationPreviewMessage,
   dashboardAPI,
   DashboardAttentionResponse,
   DashboardSummaryResponse,
@@ -39,7 +40,9 @@ import {
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
+import { AutomationPreviewPhone, PreviewMessage } from './automations/AutomationPreviewPhone';
 
 type SetupStep = {
   id: 'connect' | 'template' | 'basics' | 'simulate' | 'publish';
@@ -169,10 +172,41 @@ const Home: React.FC = () => {
   const isSyncing = homeQuery.isFetching && !homeQuery.isLoading;
   const isAttentionLoading = attentionQuery.isLoading && !attentionQuery.data;
   const { isDemoMode, enableDemoMode, disableDemoMode } = useDemoMode(settings?.demoModeEnabled);
+  const [savingBasics, setSavingBasics] = useState(false);
   const [demoModeUpdating, setDemoModeUpdating] = useState(false);
   const [selectedStepId, setSelectedStepId] = useState<SetupStep['id'] | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [creatingTemplate, setCreatingTemplate] = useState(false);
+  const [previewMessages, setPreviewMessages] = useState<AutomationPreviewMessage[]>([]);
+  const [previewInputValue, setPreviewInputValue] = useState('');
+  const [previewSessionId, setPreviewSessionId] = useState<string | null>(null);
+  const [previewSending, setPreviewSending] = useState(false);
+  const [basicsForm, setBasicsForm] = useState({
+    businessName: '',
+    businessHours: '',
+    businessTone: '',
+    businessLocation: '',
+  });
+
+  useEffect(() => {
+    if (!settings) return;
+    setBasicsForm({
+      businessName: settings.businessName || '',
+      businessHours: settings.businessHours || '',
+      businessTone: settings.businessTone || '',
+      businessLocation: settings.businessLocation || '',
+    });
+  }, [settings]);
+
+  useEffect(() => {
+    if (!simulation) return;
+    if (simulation.messages) {
+      setPreviewMessages(simulation.messages);
+    }
+    if (simulation.sessionId) {
+      setPreviewSessionId(simulation.sessionId);
+    }
+  }, [simulation]);
 
   useEffect(() => {
     if (homeQuery.error) {
@@ -195,6 +229,20 @@ const Home: React.FC = () => {
         settings: updated,
       };
     });
+  };
+
+  const updateLayoutCache = (updated: typeof settings) => {
+    if (!workspaceId || !updated) return;
+    queryClient.setQueryData(
+      ['layout-onboarding', workspaceId],
+      (prev: { settings: WorkspaceSettings; automations: AutomationInstance[]; simulation: AutomationSimulationSessionResponse } | undefined) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          settings: updated,
+        };
+      },
+    );
   };
 
   const hasInstagram = accounts.length > 0;
@@ -267,6 +315,7 @@ const Home: React.FC = () => {
     try {
       const updated = await settingsAPI.update(currentWorkspace._id, { demoModeEnabled: nextValue });
       updateSettingsCache(updated);
+      updateLayoutCache(updated);
     } catch (error) {
       console.error('Failed to update demo mode', error);
       previousValue ? enableDemoMode() : disableDemoMode();
@@ -287,6 +336,7 @@ const Home: React.FC = () => {
         onboarding: { connectCompletedAt: new Date().toISOString() },
       });
       updateSettingsCache(updated);
+      updateLayoutCache(updated);
     } catch (error) {
       console.error('Failed to confirm demo mode onboarding', error);
     } finally {
@@ -305,6 +355,7 @@ const Home: React.FC = () => {
         onboarding: { publishCompletedAt: new Date().toISOString() },
       });
       updateSettingsCache(updated);
+      updateLayoutCache(updated);
     } catch (error) {
       console.error('Failed to switch to live mode', error);
       previousValue ? enableDemoMode() : disableDemoMode();
@@ -325,6 +376,20 @@ const Home: React.FC = () => {
     }
   };
 
+  const handleSaveBasics = async () => {
+    if (!currentWorkspace) return;
+    setSavingBasics(true);
+    try {
+      const updated = await settingsAPI.update(currentWorkspace._id, basicsForm);
+      updateSettingsCache(updated);
+      updateLayoutCache(updated);
+    } catch (error) {
+      console.error('Failed to update business basics', error);
+    } finally {
+      setSavingBasics(false);
+    }
+  };
+
   const handleTemplateSelect = async (templateId: string) => {
     if (!currentWorkspace) return;
     const selectedTemplate = recommendedTemplates.find((template) => template._id === templateId);
@@ -339,10 +404,60 @@ const Home: React.FC = () => {
         isActive: true,
       });
       queryClient.invalidateQueries({ queryKey: ['home', currentWorkspace._id] });
+      queryClient.invalidateQueries({ queryKey: ['layout-onboarding', currentWorkspace._id] });
     } catch (error) {
       console.error('Failed to create automation from template', error);
     } finally {
       setCreatingTemplate(false);
+    }
+  };
+
+  const handlePreviewSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!workspaceId) return;
+    const trimmed = previewInputValue.trim();
+    if (!trimmed) return;
+    const optimisticMessage: AutomationPreviewMessage = {
+      id: `local-${Date.now()}`,
+      from: 'customer',
+      text: trimmed,
+    };
+    setPreviewMessages((prev) => [...prev, optimisticMessage]);
+    setPreviewInputValue('');
+    setPreviewSending(true);
+    try {
+      const response = await automationAPI.simulateMessage({
+        workspaceId,
+        text: trimmed,
+        sessionId: previewSessionId || undefined,
+      });
+      if (response.sessionId) {
+        setPreviewSessionId(response.sessionId);
+      }
+      if (response.messages) {
+        setPreviewMessages(response.messages);
+      }
+    } catch (error) {
+      console.error('Failed to send simulation message', error);
+    } finally {
+      setPreviewSending(false);
+    }
+  };
+
+  const handlePreviewReset = async () => {
+    if (!workspaceId) return;
+    setPreviewSending(true);
+    try {
+      await automationAPI.resetSimulationSession({
+        workspaceId,
+        sessionId: previewSessionId || undefined,
+      });
+      setPreviewMessages([]);
+      setPreviewSessionId(null);
+    } catch (error) {
+      console.error('Failed to reset simulation session', error);
+    } finally {
+      setPreviewSending(false);
     }
   };
 
@@ -407,6 +522,7 @@ const Home: React.FC = () => {
   }, [displayStepId, selectedTemplateId]);
 
   const renderCurrentStepContent = () => {
+    const basicsIncomplete = !basicsForm.businessName || !basicsForm.businessHours;
     const primaryAction: { label: string; onClick: () => void; disabled?: boolean } = displayStepId === 'connect'
       ? {
         label: 'Connect Instagram',
@@ -420,13 +536,14 @@ const Home: React.FC = () => {
         }
         : displayStepId === 'basics'
           ? {
-            label: 'Continue',
-            onClick: () => navigate('/automations?section=business-profile'),
+            label: 'Save basics',
+            onClick: handleSaveBasics,
+            disabled: basicsIncomplete,
           }
-          : displayStepId === 'simulate'
+        : displayStepId === 'simulate'
             ? {
               label: 'Run simulator',
-              onClick: () => navigate('/automations?section=simulate'),
+              onClick: handlePreviewReset,
             }
             : {
               label: isDemoMode
@@ -446,6 +563,17 @@ const Home: React.FC = () => {
     const backStepId = displayIndex > 0 ? stepOrder[displayIndex - 1] : null;
     const canGoBack = Boolean(backStepId && (backStepId === currentStepId || stepCompletion[backStepId]));
     const isSkippable = displayStepId === 'simulate';
+    const previewAccount = accounts[0];
+    const previewHandle = previewAccount?.username ? `@${previewAccount.username}` : '@sendfx';
+    const previewDisplayName = previewAccount?.username || 'SendFx';
+    const previewInitial = (previewDisplayName[0] || 'S').toUpperCase();
+    const previewAvatarUrl = (previewAccount as { profilePictureUrl?: string; avatarUrl?: string } | undefined)?.profilePictureUrl
+      || (previewAccount as { profilePictureUrl?: string; avatarUrl?: string } | undefined)?.avatarUrl;
+    const phoneMessages: PreviewMessage[] = previewMessages.map((message) => ({
+      id: message.id,
+      from: message.from,
+      text: message.text,
+    }));
 
     return (
       <div className="onboarding-workspace">
@@ -499,11 +627,65 @@ const Home: React.FC = () => {
             )}
           </div>
         )}
+        {displayStepId === 'basics' && (
+          <div className="onboarding-basics-form">
+            <div className="onboarding-basics-grid">
+              <Input
+                value={basicsForm.businessName}
+                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessName: event.target.value }))}
+                placeholder="Business name"
+              />
+              <Input
+                value={basicsForm.businessHours}
+                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessHours: event.target.value }))}
+                placeholder="Working hours"
+              />
+              <Input
+                value={basicsForm.businessTone}
+                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessTone: event.target.value }))}
+                placeholder="Tone (optional)"
+              />
+              <Input
+                value={basicsForm.businessLocation}
+                onChange={(event) => setBasicsForm((prev) => ({ ...prev, businessLocation: event.target.value }))}
+                placeholder="Location (optional)"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              These basics show up in your assistant prompt.
+            </p>
+          </div>
+        )}
+        {displayStepId === 'simulate' && (
+          <div className="onboarding-sim-preview">
+            <AutomationPreviewPhone
+              accountDisplayName={previewDisplayName}
+              accountHandle={previewHandle}
+              accountAvatarUrl={previewAvatarUrl}
+              accountInitial={previewInitial}
+              messages={phoneMessages}
+              mode="interactive"
+              inputValue={previewInputValue}
+              onInputChange={setPreviewInputValue}
+              onSubmit={handlePreviewSubmit}
+              inputDisabled={previewSending}
+              sendDisabled={previewSending || previewInputValue.trim().length === 0}
+            />
+          </div>
+        )}
         <div className="onboarding-cta-group">
           <Button
             onClick={primaryAction.onClick}
             leftIcon={displayStepId === 'connect' ? <Instagram className="w-4 h-4" /> : undefined}
-            isLoading={displayStepId === 'publish' ? demoModeUpdating : creatingTemplate}
+            isLoading={
+              displayStepId === 'publish'
+                ? demoModeUpdating
+                : displayStepId === 'template'
+                  ? creatingTemplate
+                  : displayStepId === 'basics'
+                    ? savingBasics
+                    : false
+            }
             disabled={primaryAction.disabled}
           >
             {primaryAction.label}
@@ -591,11 +773,11 @@ const Home: React.FC = () => {
 
           <section className="onboarding-main-panel">
             <div className="onboarding-main-card">
-              <div className="onboarding-main-header">
+              {/* <div className="onboarding-main-header">
                 <span className="onboarding-step-kicker">
                   Step {displayStepIndex} of {SETUP_STEPS.length} • {completedSteps}/{SETUP_STEPS.length} completed
                 </span>
-              </div>
+              </div> */}
               {renderCurrentStepContent()}
             </div>
           </section>

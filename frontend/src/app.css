@@ -996,6 +996,27 @@
   color: rgba(226, 232, 240, 0.7);
 }
 
+.onboarding-basics-form {
+  display: grid;
+  gap: 10px;
+}
+
+.onboarding-basics-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.onboarding-sim-preview {
+  width: 100%;
+  max-width: 360px;
+  height: 520px;
+}
+
+.onboarding-sim-preview > div {
+  height: 100%;
+}
+
 .onboarding-cta-group {
   display: flex;
   flex-direction: column;
@@ -1099,6 +1120,10 @@
 
   .onboarding-main-card {
     padding: 28px;
+  }
+
+  .onboarding-sim-preview {
+    height: 440px;
   }
 }
 
