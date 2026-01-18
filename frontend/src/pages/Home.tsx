@@ -394,6 +394,11 @@ const Home: React.FC = () => {
     if (!currentWorkspace) return;
     const selectedTemplate = recommendedTemplates.find((template) => template._id === templateId);
     if (!selectedTemplate) return;
+    const templateVersionId = selectedTemplate.currentVersion?._id || selectedTemplate.currentVersionId;
+    if (!templateVersionId) {
+      console.error('Template version missing for selected template', selectedTemplate);
+      return;
+    }
     setCreatingTemplate(true);
     try {
       await automationAPI.create({
@@ -401,6 +406,7 @@ const Home: React.FC = () => {
         description: selectedTemplate.description || 'Automation template',
         workspaceId: currentWorkspace._id,
         templateId: selectedTemplate._id,
+        templateVersionId,
         isActive: true,
       });
       queryClient.invalidateQueries({ queryKey: ['home', currentWorkspace._id] });
@@ -484,7 +490,6 @@ const Home: React.FC = () => {
     publish: hasPublishedAutomation,
   }), [connectStepComplete, hasTemplateChoice, hasBusinessBasics, hasSimulation, hasPublishedAutomation]);
   const displayStepId = selectedStepId ?? currentStepId;
-  const displayStepIndex = Math.max(0, SETUP_STEPS.findIndex((step) => step.id === displayStepId)) + 1;
   const stepSubtitleMap: Record<SetupStep['id'], string> = {
     connect: 'Required for live routing. Prefer to explore first? Use demo mode.',
     template: 'Start with a proven flow so you can go live fast.',
