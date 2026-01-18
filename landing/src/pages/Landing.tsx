@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Sparkles,
@@ -33,6 +33,7 @@ const Landing: React.FC = () => {
   const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const heroRef = useRef<HTMLElement | null>(null);
   const { user, currentWorkspace } = useAuth();
   const { theme, setTheme, uiTheme } = useTheme();
   const navigate = useNavigate();
@@ -156,6 +157,46 @@ const Landing: React.FC = () => {
       window.removeEventListener('scroll', handleScroll);
     };
   }, [showAssistant]);
+
+  useLayoutEffect(() => {
+    if (!heroRef.current) return;
+
+    let ctx: { revert: () => void } | null = null;
+    let isMounted = true;
+
+    const runAnimations = async () => {
+      const gsapModule = await import(
+        /* @vite-ignore */
+        'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js'
+      );
+      const gsap = gsapModule.gsap ?? gsapModule.default ?? gsapModule;
+
+      if (!isMounted) return;
+
+      ctx = gsap.context(() => {
+        gsap.set('[data-gsap="hero-card"]', { y: 18, opacity: 0, scale: 0.98 });
+        gsap.set('[data-gsap="hero-float"]', { y: 12, opacity: 0 });
+
+        const tl = gsap.timeline({
+          defaults: { duration: 0.9, ease: 'power3.out' },
+        });
+
+        tl.from('[data-gsap="hero-badge"]', { y: 16, opacity: 0 })
+          .from('[data-gsap="hero-title"]', { y: 28, opacity: 0 }, '-=0.6')
+          .from('[data-gsap="hero-copy"]', { y: 22, opacity: 0 }, '-=0.6')
+          .from('[data-gsap="hero-actions"]', { y: 18, opacity: 0 }, '-=0.5')
+          .to('[data-gsap="hero-card"]', { y: 0, opacity: 1, scale: 1, duration: 0.8 }, '-=0.6')
+          .to('[data-gsap="hero-float"]', { y: 0, opacity: 1, stagger: 0.12, duration: 0.6 }, '-=0.4');
+      }, heroRef);
+    };
+
+    runAnimations();
+
+    return () => {
+      isMounted = false;
+      ctx?.revert();
+    };
+  }, []);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,25 +323,36 @@ const Landing: React.FC = () => {
         <div className="max-w-7xl mx-auto space-y-16 md:space-y-24">
 
           {/* Hero */}
-          <section id="overview" className="grid md:grid-cols-[1.05fr,0.95fr] gap-10 md:gap-12 items-start">
+          <section
+            id="overview"
+            ref={heroRef}
+            className="grid md:grid-cols-[1.05fr,0.95fr] gap-10 md:gap-12 items-start"
+          >
             <div
-              className={`space-y-4 md:space-y-5 text-left ${isComic && isLight ? 'comic-panel-soft bg-white/70 backdrop-blur-md p-6 md:p-8' : ''}`}
+              className={`space-y-5 md:space-y-6 text-left ${isComic && isLight ? 'comic-panel-soft bg-white/70 backdrop-blur-md p-6 md:p-8' : ''}`}
             >
               <div
+                data-gsap="hero-badge"
                 className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-medium backdrop-blur-md ${isComic ? 'comic-sticker text-foreground font-semibold' : 'bg-muted/40 border border-border text-muted-foreground'}`}
               >
                 <Sparkles className="w-3 h-3 text-amber-500" />
-                <span>Instagram-first automation for SMBs</span>
+                <span>Fintech-grade workflows for Instagram teams</span>
               </div>
-              <h1 className={`text-4xl sm:text-5xl md:text-5xl lg:text-6xl font-extrabold leading-[1.04] md:leading-[1.06] ${isComic ? 'text-[#ff3fd0] comic-display comic-shadow-text' : 'text-foreground tracking-tight md:tracking-tighter'}`}>
-                Instagram DM automation + lightweight CRM for SMBs.
+              <h1
+                data-gsap="hero-title"
+                className={`text-4xl sm:text-5xl md:text-5xl lg:text-6xl font-extrabold leading-[1.04] md:leading-[1.06] ${isComic ? 'text-[#ff3fd0] comic-display comic-shadow-text' : 'text-foreground tracking-tight md:tracking-tighter'}`}
+              >
+                A modern inbox that feels like a fintech command center.
               </h1>
-              <p className="text-lg md:text-xl text-muted-foreground leading-[1.5] md:leading-[1.6]">
-                Route and qualify inbound DMs, reply with guardrails and approvals, and sync leads to Google Sheets without losing the human touch.
+              <p
+                data-gsap="hero-copy"
+                className="text-lg md:text-xl text-muted-foreground leading-[1.5] md:leading-[1.6]"
+              >
+                Route, score, and respond to inbound DMs with the clarity of a financial dashboard. Guardrails, approvals, and handoffs stay crisp—so your team never misses a lead.
               </p>
 
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-3">
+              <div className="space-y-3">
+                <div data-gsap="hero-actions" className="flex flex-wrap items-center gap-3">
                   <Button
                     onClick={() => openAuthModal('signup')}
                     className="group inline-flex items-center gap-3 px-6 py-3 text-base"
@@ -325,19 +377,25 @@ const Landing: React.FC = () => {
                     </div>
                   </div>
                 )}
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-2.5 py-1">
-                    <CreditCard className="w-3.5 h-3.5 text-primary" />
-                    Free plan
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-2.5 py-1">
-                    <Clock className="w-3.5 h-3.5 text-primary" />
-                    Setup in 5 min
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-2.5 py-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                    Cancel anytime
-                  </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-muted-foreground">
+                  {[
+                    { icon: CreditCard, label: 'Free plan', detail: 'No card required' },
+                    { icon: Clock, label: 'Launch in 5 min', detail: 'Templates ready' },
+                    { icon: ShieldCheck, label: 'Secure by default', detail: 'Audit trail built-in' },
+                  ].map(({ icon: Icon, label, detail }) => (
+                    <div
+                      key={label}
+                      className="rounded-2xl border border-border/60 bg-background/60 px-3 py-2 flex items-center gap-2"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <Icon className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+                        <p className="text-xs text-foreground font-semibold">{detail}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 <button
                   type="button"
@@ -352,7 +410,8 @@ const Landing: React.FC = () => {
             {/* Hero Visual */}
             <div className="relative h-full">
               <div
-                className={`relative overflow-hidden p-0 flex items-center justify-center h-full ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.04]' : 'glass-panel rounded-3xl'}`}
+                data-gsap="hero-card"
+                className={`relative overflow-hidden p-0 flex items-center justify-center h-full ${surfaceMain} ${isComic && isLight ? 'md:scale-[1.04]' : 'glass-panel rounded-3xl'} finpay-hero`}
               >
                 <div
                   className="absolute -right-12 top-6 h-56 w-56 rounded-full bg-primary/20 blur-3xl opacity-70"
@@ -362,19 +421,53 @@ const Landing: React.FC = () => {
                   className={`absolute bottom-5 left-1/2 h-6 w-[70%] -translate-x-1/2 rounded-full blur-2xl ${isLight ? 'bg-black/15 opacity-50' : 'bg-black/35 opacity-60'}`}
                   aria-hidden="true"
                 />
-                <img
-                  src="/sd_phone.jpg"
-                  alt="SendFx product preview"
-                  // className="relative z-10 h-full w-full object-cover object-[35%_center]"
-                  className="relative z-10 h-full w-full object-cover object-[85%_center]"
-                  loading="eager"
-                  decoding="async"
-                />
+                <div className="relative z-10 w-full h-full p-6 md:p-8 flex flex-col justify-between gap-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">SendFx Pay</p>
+                      <p className="text-lg font-semibold text-foreground">Balance overview</p>
+                    </div>
+                    <div className="rounded-full border border-border/70 px-3 py-1 text-xs font-semibold text-foreground bg-background/70">
+                      Sept 2024
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-4xl font-extrabold text-foreground">$24,580.84</p>
+                    <p className="text-sm text-muted-foreground">Total booked revenue from Instagram.</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'DMs', value: '1.2k' },
+                      { label: 'Approvals', value: '148' },
+                      { label: 'Leads', value: '326' },
+                    ].map((stat) => (
+                      <div key={stat.label} className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2">
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{stat.label}</p>
+                        <p className="text-lg font-semibold text-foreground">{stat.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-2xl border border-border/60 bg-background/70 p-4">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Weekly performance</span>
+                      <span className="text-foreground font-semibold">+18%</span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-6 gap-2 items-end">
+                      {[28, 36, 24, 40, 32, 46].map((height, index) => (
+                        <div
+                          key={`bar-${height}`}
+                          className={`rounded-full ${index === 5 ? 'bg-primary' : 'bg-primary/30'}`}
+                          style={{ height: `${height}px` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="absolute inset-0 z-20 pointer-events-none">
-                <div 
-                // className="hidden sm:block absolute -right-4 -top-4 w-[260px] sm:w-[300px] md:w-[320px] lg:w-[340px] md:-right-6 md:-top-6"
-                className="hidden sm:block absolute -right-4 -top-4 w-[260px] sm:w-[300px] md:w-[320px] lg:w-[340px] md:-right-6 md:-top-6"
+                <div
+                  data-gsap="hero-float"
+                  className="hidden sm:block absolute -right-4 -top-4 w-[260px] sm:w-[300px] md:w-[320px] lg:w-[340px] md:-right-6 md:-top-6"
                 >
                   <div className={heroOverlayClass}>
                     <Badge variant="warning" className="gap-1">
@@ -399,7 +492,10 @@ const Landing: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="hidden sm:block absolute left-6 bottom-6 w-[240px] sm:w-[280px] md:w-[300px] lg:w-[320px] md:left-8 md:bottom-8">
+                <div
+                  data-gsap="hero-float"
+                  className="hidden sm:block absolute left-6 bottom-6 w-[240px] sm:w-[280px] md:w-[300px] lg:w-[320px] md:left-8 md:bottom-8"
+                >
                   <div className={heroOverlayClass}>
                     <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Inbox performance</p>
                     <p className="mt-2 text-base font-semibold text-foreground">AI handled: High</p>
