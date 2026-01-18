@@ -1,18 +1,8 @@
 # Railway Deployment Setup Guide
 
-## Split Frontend Services (Landing + App)
+## Frontend Service (App)
 
-The marketing site and the authenticated app now deploy separately:
-
-- `landing/` → `sendfx.ai` and `www.sendfx.ai`
-- `frontend/` → `app.sendfx.ai`
-
-### Landing service env vars
-
-```bash
-VITE_SITE_URL=https://sendfx.ai
-VITE_APP_URL=https://app.sendfx.ai
-```
+The authenticated app deploys from `frontend/`.
 
 ### App service env vars
 

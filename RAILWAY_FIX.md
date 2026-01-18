@@ -53,7 +53,7 @@ This ensures the frontend calls the correct backend API.
 3. Backend redirects to Instagram OAuth
 4. Instagram redirects back to: `https://social-interactive-production.up.railway.app/api/instagram/callback?code=...`
 5. Backend creates user, workspace, Instagram account
-6. Backend redirects to: `https://frontend-production-2fe82.up.railway.app/landing?token=...&instagram_connected=true`
+6. Backend redirects to: `https://frontend-production-2fe82.up.railway.app/login?token=...&instagram_connected=true`
 7. Frontend receives token, stores it, and logs user in
 
 ## After Making Changes

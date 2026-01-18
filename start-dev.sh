@@ -146,7 +146,6 @@ echo "MONGODB_URI=mongodb://mongo:XykBhRsSuvQBxvmekdnCkLdjpaWdZJRj@shuttle.proxy
 FRONTEND_PID=$!
 
 # Start Landing (public site)
-(cd landing && VITE_API_URL=$NGROK_URL VITE_SITE_URL=http://localhost:3002 VITE_APP_URL=http://localhost:3000 npm run dev -- --port 3002) &
 LANDING_PID=$!
 
 # Start admin-console (telling it API is on Ngrok URL)
