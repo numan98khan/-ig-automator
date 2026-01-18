@@ -165,13 +165,20 @@ const Landing: React.FC = () => {
     let isMounted = true;
 
     const runAnimations = async () => {
-      const gsapModule = await import(
-        /* @vite-ignore */
-        'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js'
-      );
-      const gsap = gsapModule.gsap ?? gsapModule.default ?? gsapModule;
+      if (!window.gsap) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js';
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Failed to load GSAP'));
+          document.head.appendChild(script);
+        });
+      }
 
-      if (!isMounted) return;
+      const gsap = window.gsap;
+
+      if (!isMounted || !gsap) return;
 
       ctx = gsap.context(() => {
         gsap.set('[data-gsap="hero-card"]', { y: 18, opacity: 0, scale: 0.98 });
