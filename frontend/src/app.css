@@ -361,13 +361,29 @@
   isolation: isolate;
   border-right: 1px solid rgb(var(--border));
   background:
+    radial-gradient(820px 520px at 18% 18%, rgba(139, 92, 246, 0.2), transparent 60%),
+    radial-gradient(900px 620px at 80% 22%, rgba(236, 72, 153, 0.18), transparent 62%),
+    radial-gradient(900px 700px at 55% 88%, rgba(96, 165, 250, 0.12), transparent 60%),
+    linear-gradient(135deg, rgba(249, 247, 255, 0.95), rgba(253, 242, 248, 0.95));
+}
+
+.dark .auth-brand-panel {
+  background:
+    radial-gradient(900px 640px at 18% 18%, rgba(139, 92, 246, 0.22), transparent 60%),
+    radial-gradient(900px 640px at 78% 20%, rgba(236, 72, 153, 0.2), transparent 62%),
+    radial-gradient(900px 720px at 55% 88%, rgba(96, 165, 250, 0.12), transparent 60%),
+    linear-gradient(140deg, rgba(0, 0, 0, 0.98), rgba(6, 6, 10, 0.98));
+}
+
+:root[data-ui-theme='studio'] .auth-brand-panel {
+  background:
     radial-gradient(800px 500px at 20% 20%, rgba(255, 122, 0, 0.14), transparent 60%),
     radial-gradient(900px 600px at 80% 25%, rgba(56, 189, 248, 0.16), transparent 62%),
     radial-gradient(900px 700px at 55% 85%, rgba(167, 139, 250, 0.12), transparent 60%),
     linear-gradient(135deg, rgba(255, 244, 236, 0.9), rgba(238, 246, 255, 0.9));
 }
 
-.dark .auth-brand-panel {
+:root.dark[data-ui-theme='studio'] .auth-brand-panel {
   border-right: 1px solid rgba(148, 163, 184, 0.12);
   background:
     radial-gradient(800px 520px at 18% 18%, rgba(56, 189, 248, 0.18), transparent 60%),
