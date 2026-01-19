@@ -6,37 +6,37 @@
 
 @layer base {
   :root {
-    /* Neutral Light */
+    /* Legacy Light (Purple/Pink) */
     --background: 255 255 255;
     /* #FFFFFF */
     --foreground: 17 24 39;
     /* #111827 */
 
-    --primary: 16 107 163;
-    /* #106BA3 */
+    --primary: 139 92 246;
+    /* #8B5CF6 */
     --primary-foreground: 255 255 255;
 
-    --secondary: 248 250 252;
-    /* #F8FAFC */
-    --secondary-foreground: 17 24 39;
-    /* #111827 */
+    --secondary: 236 72 153;
+    /* #EC4899 */
+    --secondary-foreground: 255 255 255;
+    /* #FFFFFF */
 
-    --muted: 241 245 249;
-    /* #F1F5F9 */
-    --muted-foreground: 100 116 139;
-    /* #64748B */
+    --muted: 243 244 246;
+    /* #F3F4F6 */
+    --muted-foreground: 107 114 128;
+    /* #6B7280 */
 
-    --accent: 226 232 240;
-    /* #E2E8F0 */
-    --accent-foreground: 17 24 39;
-    /* #111827 */
+    --accent: 237 233 254;
+    /* #EDE9FE */
+    --accent-foreground: 91 33 182;
+    /* #5B21B6 */
 
-    --border: 203 213 225;
-    /* #CBD5E1 */
-    --input: 203 213 225;
-    /* #CBD5E1 */
-    --ring: 16 107 163;
-    /* #106BA3 */
+    --border: 229 231 235;
+    /* #E5E7EB */
+    --input: 229 231 235;
+    /* #E5E7EB */
+    --ring: 124 58 237;
+    /* #7C3AED */
 
     --radius: 0.5rem;
 
@@ -45,47 +45,47 @@
 
     --glass-blur: 14px;
     --glass-opacity: 0.45;
-    --font-sans: 'Inter', system-ui, sans-serif;
-    --font-display: 'Inter', system-ui, sans-serif;
+    --font-sans: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+    --font-display: 'Fraunces', 'Inter', serif;
   }
 
   .dark {
-    /* Palantir-inspired Dark */
-    --background: 28 33 39;
-    /* #1C2127 */
-    --foreground: 245 248 250;
-    /* #F5F8FA */
+    /* Legacy Dark (Purple/Pink) */
+    --background: 0 0 0;
+    /* #000000 */
+    --foreground: 249 250 251;
+    /* #F9FAFB */
 
-    --primary: 72 175 240;
-    /* #48AFF0 */
-    --primary-foreground: 12 24 33;
-    /* #0C1821 */
+    --primary: 167 139 250;
+    /* #A78BFA */
+    --primary-foreground: 17 24 39;
+    /* #111827 */
 
-    --secondary: 44 52 63;
-    /* #2C343F */
-    --secondary-foreground: 221 230 238;
-    /* #DDE6EE */
+    --secondary: 244 114 182;
+    /* #F472B6 */
+    --secondary-foreground: 17 24 39;
+    /* #111827 */
 
-    --muted: 59 69 81;
-    /* #3B4551 */
-    --muted-foreground: 166 182 200;
-    /* #A6B6C8 */
+    --muted: 31 41 55;
+    /* #1F2937 */
+    --muted-foreground: 156 163 175;
+    /* #9CA3AF */
 
-    --accent: 50 65 80;
-    /* #324150 */
-    --accent-foreground: 221 230 238;
-    /* #DDE6EE */
+    --accent: 76 29 149;
+    /* #4C1D95 */
+    --accent-foreground: 237 233 254;
+    /* #EDE9FE */
 
-    --border: 74 84 96;
-    /* #4A5460 */
-    --input: 59 69 81;
-    /* #3B4551 */
-    --ring: 72 175 240;
-    /* #48AFF0 */
+    --border: 55 65 81;
+    /* #374151 */
+    --input: 55 65 81;
+    /* #374151 */
+    --ring: 167 139 250;
+    /* #A78BFA */
 
-    --card: 33 40 48;
-    /* #212830 */
-    --card-foreground: 245 248 250;
+    --card: 17 24 39;
+    /* #111827 */
+    --card-foreground: 249 250 251;
 
     --glass-blur: 12px;
     --glass-opacity: 0.14;
@@ -127,6 +127,9 @@
 
     --card: 255 255 255;
     --card-foreground: 17 24 39;
+
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-display: 'Inter', system-ui, sans-serif;
   }
 
   :root.dark[data-ui-theme='comic'] {
@@ -164,6 +167,9 @@
     --card: 30 41 59;
     /* #1E293B */
     --card-foreground: 248 250 252;
+
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-display: 'Inter', system-ui, sans-serif;
   }
 
   :root[data-ui-theme='studio']:not(.dark) {
@@ -1166,7 +1172,7 @@
 }
 
 .dark .ui-bg-wash {
-  background: linear-gradient(180deg, rgba(14, 26, 34, 0.85), rgba(14, 26, 34, 0.35), rgba(12, 20, 28, 0.9));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.98));
 }
 
 :root[data-ui-theme='studio'] .ui-bg-wash {

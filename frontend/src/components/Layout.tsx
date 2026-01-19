@@ -236,14 +236,14 @@ const Layout: React.FC = () => {
             <div className="flex items-center gap-2 min-w-0">
               <Link
                 to="/home"
-                className="flex items-center gap-2 rounded-md px-2 py-1 transition"
+                className="flex items-center gap-2 rounded-md px-2 py-1 transition "
               >
                 {uiTheme === 'studio' ? (
                   <>
                     <img
                       src="/sendfx-studio.png"
                       alt="SendFx logo"
-                      className="h-7 md:h-9 w-auto shrink-0 object-contain -translate-y-[3.5px] dark:hidden"
+                      className="h-7 md:h-9 w-auto shrink-0 object-contain -translate-y-[0px] dark:hidden"
                     />
                     <img
                       src="/sendfx-studio-dark.png"
@@ -261,7 +261,7 @@ const Layout: React.FC = () => {
                     <img
                       src="/sendfx-dark.png"
                       alt="SendFx logo"
-                      className="hidden h-9 md:h-11 w-auto shrink-0 object-contain dark:block"
+                      className="hidden h-9 md:h-11 w-auto shrink-0 object-contain dark:block bg-red"
                     />
                   </>
                 )}
