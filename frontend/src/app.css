@@ -780,20 +780,18 @@
 }
 
 .onboarding-stepper-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
   color: rgb(var(--foreground));
   margin: 0;
 }
 
 .onboarding-stepper-subtitle {
-  font-size: 11px;
-  color: rgba(15, 23, 42, 0.6);
-  margin: 2px 0 0 0;
+  display: none;
 }
 
 .dark .onboarding-stepper-subtitle {
-  color: rgba(226, 232, 240, 0.6);
+  display: none;
 }
 
 .onboarding-stepper-status {
