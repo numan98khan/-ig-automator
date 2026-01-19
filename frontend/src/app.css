@@ -7,41 +7,41 @@
 @layer base {
   :root {
     /* Legacy Light (Purple/Pink) */
-    --background: 255 255 255;
-    /* #FFFFFF */
-    --foreground: 17 24 39;
-    /* #111827 */
+    --background: 247 248 252;
+    /* #F7F8FC */
+    --foreground: 15 23 42;
+    /* #0F172A */
 
-    --primary: 139 92 246;
-    /* #8B5CF6 */
+    --primary: 109 40 217;
+    /* #6D28D9 */
     --primary-foreground: 255 255 255;
 
-    --secondary: 236 72 153;
-    /* #EC4899 */
-    --secondary-foreground: 255 255 255;
+    --secondary: 255 255 255;
     /* #FFFFFF */
+    --secondary-foreground: 15 23 42;
+    /* #0F172A */
 
-    --muted: 243 244 246;
-    /* #F3F4F6 */
-    --muted-foreground: 107 114 128;
-    /* #6B7280 */
+    --muted: 241 244 250;
+    /* #F1F4FA */
+    --muted-foreground: 71 85 105;
+    /* #475569 */
 
-    --accent: 237 233 254;
-    /* #EDE9FE */
-    --accent-foreground: 91 33 182;
-    /* #5B21B6 */
+    --accent: 245 242 255;
+    /* #F5F2FF */
+    --accent-foreground: 109 40 217;
+    /* #6D28D9 */
 
-    --border: 229 231 235;
-    /* #E5E7EB */
-    --input: 229 231 235;
-    /* #E5E7EB */
+    --border: 231 234 242;
+    /* #E7EAF2 */
+    --input: 231 234 242;
+    /* #E7EAF2 */
     --ring: 124 58 237;
     /* #7C3AED */
 
     --radius: 0.5rem;
 
     --card: 255 255 255;
-    --card-foreground: 17 24 39;
+    --card-foreground: 15 23 42;
 
     --glass-blur: 14px;
     --glass-opacity: 0.45;
@@ -1164,7 +1164,8 @@
 }
 
 .ui-bg-glow {
-  background: radial-gradient(140% 130% at 18% 18%, rgba(15, 23, 42, 0.06), transparent 60%);
+  background: radial-gradient(140% 130% at 18% 18%, rgba(124, 58, 237, 0.12), transparent 60%),
+    radial-gradient(120% 120% at 78% 22%, rgba(236, 72, 153, 0.08), transparent 58%);
 }
 
 .dark .ui-bg-glow {
@@ -1181,7 +1182,7 @@
 }
 
 .ui-bg-wash {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7), rgba(248, 250, 252, 0.9));
+  background: linear-gradient(180deg, rgba(247, 248, 252, 0.96), rgba(247, 248, 252, 0.82), rgba(247, 248, 252, 0.96));
 }
 
 .dark .ui-bg-wash {
