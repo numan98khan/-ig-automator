@@ -663,22 +663,21 @@
   gap: 12px;
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.7);
+  border: none;
+  background: transparent;
+  box-shadow: none;
   text-align: left;
   cursor: pointer;
   position: relative;
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 .onboarding-stepper-item:hover {
-  border-color: rgba(15, 23, 42, 0.35);
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .onboarding-stepper-item.is-active {
-  border-color: rgba(15, 23, 42, 0.4);
-  background: rgba(255, 255, 255, 0.9);
+  background: transparent;
 }
 
 .onboarding-stepper-item.is-active::before {
@@ -723,13 +722,12 @@
 }
 
 .dark .onboarding-stepper-item {
-  background: rgba(15, 23, 42, 0.6);
-  border-color: rgba(148, 163, 184, 0.18);
+  background: transparent;
+  border-color: transparent;
 }
 
 .dark .onboarding-stepper-item.is-active {
-  border-color: rgba(226, 232, 240, 0.35);
-  background: rgba(15, 23, 42, 0.75);
+  background: transparent;
 }
 
 .onboarding-stepper-main {
