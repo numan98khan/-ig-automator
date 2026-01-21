@@ -190,13 +190,6 @@ const Home: React.FC = () => {
   );
   const isActivated = onboardingComplete
     || (connectStepComplete && hasTemplateChoice && hasBusinessBasics && hasSimulation && hasPublishedAutomation);
-  const liveAutomation = useMemo(
-    () => (isDemoMode
-      ? null
-      : automations.find((automation) => automation.isActive && automation.template?.status !== 'archived') || null),
-    [automations, isDemoMode],
-  );
-
   const handleDemoModeUpdate = async (nextValue: boolean) => {
     if (!currentWorkspace || nextValue === isDemoMode) return;
     const previousValue = isDemoMode;
@@ -398,44 +391,6 @@ const Home: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-
-          {liveAutomation && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Live automation</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{liveAutomation.name}</p>
-                    <p className="text-xs text-muted-foreground">Active and running</p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => navigate(`/automations?automationId=${liveAutomation._id}`)}
-                  >
-                    View
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => navigate(`/automations?automationId=${liveAutomation._id}&mode=edit`)}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => navigate('/automations?section=simulate')}
-                  >
-                    Test
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           <Card>
             <CardHeader>
