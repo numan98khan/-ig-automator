@@ -73,6 +73,7 @@ export interface InstagramAccount {
   username: string;
   workspaceId: string;
   status: 'connected';
+  instagramAccountId?: string;
   name?: string;
   profilePictureUrl?: string;
   tokenExpiresAt?: string;

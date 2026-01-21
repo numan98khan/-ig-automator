@@ -50,6 +50,19 @@ const getInboxCacheKey = (workspaceId: string, accountId?: string | null) => (
   `${workspaceId}:${accountId || 'none'}`
 );
 
+const resolveAccountId = (value: unknown): string | null => {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value !== null) {
+    const maybeId = (value as { _id?: unknown })._id;
+    if (typeof maybeId === 'string') return maybeId;
+    if (maybeId && typeof (maybeId as { toString?: () => string }).toString === 'function') {
+      return (maybeId as { toString: () => string }).toString();
+    }
+  }
+  return null;
+};
+
 const InboxSkeleton: React.FC = () => (
   <div className="h-full flex flex-col">
     <div className="flex h-full min-h-0 gap-3 md:gap-4">
@@ -135,6 +148,18 @@ const Inbox: React.FC = () => {
   const [sessionAction, setSessionAction] = useState<'pause' | 'stop' | null>(null);
   const workspaceId = currentWorkspace?._id ?? null;
   const activeAccountId = activeAccount?._id ?? null;
+  const activeAccountMatchIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (activeAccountId) ids.add(activeAccountId);
+    if (activeAccount?.instagramAccountId) ids.add(activeAccount.instagramAccountId);
+    return ids;
+  }, [activeAccountId, activeAccount?.instagramAccountId]);
+  const matchesActiveAccount = (conv: Conversation) => {
+    if (activeAccountMatchIds.size === 0) return true;
+    const convAccountId = resolveAccountId(conv.instagramAccountId);
+    if (!convAccountId) return true;
+    return activeAccountMatchIds.has(convAccountId);
+  };
   const selectedConversationId = selectedConversation?._id ?? null;
   const hasConnection = useMemo(
     () => accountContextList.length > 0 || isDemoMode,
@@ -228,7 +253,7 @@ const Inbox: React.FC = () => {
       }
       loadData({ silent: Boolean(cached) });
     }
-  }, [workspaceId, activeAccountId, requestedConversationId]);
+  }, [workspaceId, activeAccountId, requestedConversationId, activeAccountMatchIds]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -240,7 +265,7 @@ const Inbox: React.FC = () => {
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [workspaceId, selectedConversationId, activeAccountId]);
+  }, [workspaceId, selectedConversationId, activeAccountId, activeAccountMatchIds]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -250,7 +275,7 @@ const Inbox: React.FC = () => {
         loadData();
       }
     }
-  }, [workspaceId, activeAccountId]);
+  }, [workspaceId, activeAccountId, activeAccountMatchIds]);
 
   const loadData = async (options?: { silent?: boolean }) => {
     if (!workspaceId) return;
@@ -271,21 +296,10 @@ const Inbox: React.FC = () => {
         workspaceTier: tierData,
       });
 
-      if (!activeAccountId) {
-        setConversations([]);
-        setSelectedConversation(null);
-        setMessages([]);
-        updateInboxCache({
-          conversations: [],
-          selectedConversationId: null,
-          messagesByConversation: {},
-        });
-        return;
-      }
-
-      const scopedConversations = (conversationsData || []).filter(
-        (conv) => conv.instagramAccountId === activeAccountId,
-      );
+      const rawConversations = conversationsData || [];
+      const matchedConversations = rawConversations.filter(matchesActiveAccount);
+      const hasAccountMatches = activeAccountMatchIds.size === 0 || matchedConversations.length > 0;
+      const scopedConversations = hasAccountMatches ? matchedConversations : rawConversations;
 
       setConversations(scopedConversations || []);
       const requested = requestedConversationId
@@ -310,17 +324,21 @@ const Inbox: React.FC = () => {
   };
 
   const loadConversations = async () => {
-    if (!workspaceId || !activeAccountId) return;
+    if (!workspaceId) return;
     try {
       const conversationsData = await conversationAPI.getByWorkspace(workspaceId);
-      const scopedConversations = (conversationsData || []).filter(
-        (conv) => conv.instagramAccountId === activeAccountId,
-      );
+      const rawConversations = conversationsData || [];
+      const matchedConversations = rawConversations.filter(matchesActiveAccount);
+      const hasAccountMatches = activeAccountMatchIds.size === 0 || matchedConversations.length > 0;
+      const scopedConversations = hasAccountMatches ? matchedConversations : rawConversations;
       setConversations(scopedConversations || []);
       updateInboxCache({ conversations: scopedConversations || [] });
-      if (selectedConversation && selectedConversation.instagramAccountId !== activeAccountId) {
-        setSelectedConversation(null);
-        updateInboxCache({ selectedConversationId: null });
+      if (selectedConversation) {
+        const selectedAccountId = resolveAccountId(selectedConversation.instagramAccountId);
+        if (hasAccountMatches && selectedAccountId && !activeAccountMatchIds.has(selectedAccountId)) {
+          setSelectedConversation(null);
+          updateInboxCache({ selectedConversationId: null });
+        }
       }
     } catch (error) {
       console.error('Error loading conversations:', error);
