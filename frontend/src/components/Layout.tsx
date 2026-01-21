@@ -108,6 +108,7 @@ const Layout: React.FC = () => {
     if (path.startsWith('/automations')) return 'Automations';
     if (path.startsWith('/settings')) return 'Settings';
     if (path.startsWith('/support')) return 'Support';
+    if (path.startsWith('/onboarding')) return 'Onboarding';
     return 'App';
   }, [location.pathname]);
 
@@ -153,7 +154,7 @@ const Layout: React.FC = () => {
   const isActivated = onboardingComplete
     || (connectStepComplete && hasTemplateChoice && hasBusinessBasics && hasSimulation && hasPublishedAutomation);
   const isOnboardingActive = Boolean(onboardingQuery.data) && !isActivated;
-  const isHomeRoute = location.pathname === '/home' || location.pathname === '/';
+  const isOnboardingRoute = location.pathname.startsWith('/onboarding');
 
   useEffect(() => {
     recordBreadcrumb({ type: 'route', label: location.pathname, meta: { path: location.pathname } });
@@ -196,7 +197,11 @@ const Layout: React.FC = () => {
     );
   }
 
-  if (isOnboardingActive && !isHomeRoute) {
+  if (isOnboardingActive && !isOnboardingRoute) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  if (!isOnboardingActive && isOnboardingRoute) {
     return <Navigate to="/home" replace />;
   }
 

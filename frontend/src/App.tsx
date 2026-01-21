@@ -15,6 +15,7 @@ import Automations from './pages/Automations';
 import CRM from './pages/CRM';
 import Home from './pages/Home';
 import Auth from './pages/Auth';
+import Onboarding from './pages/Onboarding';
 
 const LegacyAppRedirect = () => {
   const location = useLocation();
@@ -47,6 +48,7 @@ function App() {
           >
             <Route index element={<Navigate to="/home" replace />} />
             <Route path="home" element={<Home />} />
+            <Route path="onboarding" element={<Onboarding />} />
             <Route path="inbox" element={<Inbox />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="analytics" element={<Dashboard />} />
