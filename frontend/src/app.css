@@ -31,10 +31,10 @@
     --accent-foreground: 109 40 217;
     /* #6D28D9 */
 
-    --border: 231 234 242;
-    /* #E7EAF2 */
-    --input: 231 234 242;
-    /* #E7EAF2 */
+    --border: 214 219 230;
+    /* #D6DBE6 */
+    --input: 214 219 230;
+    /* #D6DBE6 */
     --ring: 124 58 237;
     /* #7C3AED */
 
@@ -292,6 +292,10 @@
     @apply border border-border/60;
     background-color: rgb(var(--card) / var(--glass-opacity));
     backdrop-filter: blur(var(--glass-blur));
+  }
+
+  :root:not(.dark) .glass-panel {
+    border-color: rgb(var(--border) / 0.85);
   }
 
   .glass-button {
