@@ -255,10 +255,18 @@ const CRM: React.FC = () => {
   const [tagFilter, setTagFilter] = useState('');
   const [inactiveDays, setInactiveDays] = useState(0);
   const [sortBy, setSortBy] = useState<SortBy>('last_activity');
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>(() => {
+    if (typeof window === 'undefined') return 'kanban';
+    const stored = window.localStorage.getItem('crm_view_mode');
+    if (stored === 'list' || stored === 'kanban') return stored;
+    return 'kanban';
+  });
   const [activityView, setActivityView] = useState<'activity' | 'task' | 'note'>('activity');
   const [quickFilters, setQuickFilters] = useState(DEFAULT_QUICK_FILTERS);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('crm_filters_open') === 'true';
+  });
   const [statsOpen, setStatsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [filterMenu, setFilterMenu] = useState<'tag' | 'activity' | 'sort' | null>(null);
@@ -394,14 +402,12 @@ const CRM: React.FC = () => {
   );
 
   useEffect(() => {
-    const stored = window.localStorage.getItem('crm_filters_open');
-    if (stored === null) return;
-    setFiltersOpen(stored === 'true');
-  }, []);
-
-  useEffect(() => {
     window.localStorage.setItem('crm_filters_open', String(filtersOpen));
   }, [filtersOpen]);
+
+  useEffect(() => {
+    window.localStorage.setItem('crm_view_mode', viewMode);
+  }, [viewMode]);
 
   useEffect(() => {
     if (!filtersOpen) setFilterMenu(null);
