@@ -132,7 +132,59 @@ type ContactForm = {
   ownerId: string;
 };
 
-const buildSummary = (items: CrmContact[]) => {
+type CrmSummary = {
+  newToday: number;
+  overdue: number;
+  waiting: number;
+  qualified: number;
+};
+
+type CrmContactsCacheEntry = {
+  contacts: CrmContact[];
+  stageCounts: Record<CrmStage, number>;
+  tagCounts: Record<string, number>;
+  summary: CrmSummary;
+  updatedAt: number;
+};
+
+type CrmContactDetailCacheEntry = {
+  contact: CrmContact;
+  notes: CrmNote[];
+  tasks: CrmTask[];
+  automationEvents: CrmAutomationEvent[];
+  messages: Message[];
+  updatedAt: number;
+};
+
+const crmContactsCache = new Map<string, CrmContactsCacheEntry>();
+const crmContactDetailCache = new Map<string, CrmContactDetailCacheEntry>();
+
+const getContactsCacheKey = (
+  workspaceId: string,
+  filters: {
+    search: string;
+    stageFilter: CrmStage | 'all';
+    tagFilter: string;
+    inactiveDays: number;
+  },
+) => {
+  const normalizedSearch = filters.search.trim();
+  return [
+    workspaceId,
+    normalizedSearch,
+    filters.stageFilter,
+    filters.tagFilter,
+    String(filters.inactiveDays || 0),
+  ]
+    .map((value) => encodeURIComponent(value || ''))
+    .join('::');
+};
+
+const getContactDetailCacheKey = (workspaceId: string, contactId: string) => (
+  `${encodeURIComponent(workspaceId)}::${encodeURIComponent(contactId)}`
+);
+
+const buildSummary = (items: CrmContact[]): CrmSummary => {
   const now = new Date();
   const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
@@ -277,7 +329,7 @@ const CRM: React.FC = () => {
   const [collapsedColumns, setCollapsedColumns] = useState<Set<CrmStage>>(
     () => new Set<CrmStage>(['won', 'lost']),
   );
-  const [summary, setSummary] = useState({
+  const [summary, setSummary] = useState<CrmSummary>({
     newToday: 0,
     overdue: 0,
     waiting: 0,
@@ -484,9 +536,18 @@ const CRM: React.FC = () => {
     }
   };
 
-  const loadContacts = async (workspaceId: string) => {
+  const loadContacts = async (workspaceId: string, options?: { silent?: boolean; cacheKey?: string }) => {
     if (crmAccessBlocked) return;
-    setLoading(true);
+    const cacheKey = options?.cacheKey || getContactsCacheKey(workspaceId, {
+      search,
+      stageFilter,
+      tagFilter,
+      inactiveDays,
+    });
+    const shouldShowLoading = !options?.silent;
+    if (shouldShowLoading) {
+      setLoading(true);
+    }
     try {
       const payload = await crmAPI.listContacts({
         workspaceId,
@@ -495,23 +556,41 @@ const CRM: React.FC = () => {
         tags: tagFilter ? [tagFilter] : undefined,
         inactiveDays: inactiveDays || undefined,
       });
+      const nextSummary = payload.summary || buildSummary(payload.contacts);
       setContacts(payload.contacts);
       setStageCounts(payload.stageCounts);
       setTagCounts(payload.tagCounts);
-      setSummary(payload.summary || buildSummary(payload.contacts));
+      setSummary(nextSummary);
+      crmContactsCache.set(cacheKey, {
+        contacts: payload.contacts,
+        stageCounts: payload.stageCounts,
+        tagCounts: payload.tagCounts,
+        summary: nextSummary,
+        updatedAt: Date.now(),
+      });
     } catch (error) {
       console.error('Failed to load CRM contacts', error);
-      setContacts([]);
-      setStageCounts({ new: 0, engaged: 0, qualified: 0, won: 0, lost: 0 });
-      setTagCounts({});
-      setSummary({ newToday: 0, overdue: 0, waiting: 0, qualified: 0 });
+      if (!options?.silent) {
+        setContacts([]);
+        setStageCounts({ new: 0, engaged: 0, qualified: 0, won: 0, lost: 0 });
+        setTagCounts({});
+        setSummary({ newToday: 0, overdue: 0, waiting: 0, qualified: 0 });
+      }
     } finally {
-      setLoading(false);
+      if (shouldShowLoading) {
+        setLoading(false);
+      }
     }
   };
 
-  const loadContactDetail = async (contactId: string) => {
-    setDetailLoading(true);
+  const loadContactDetail = async (
+    contactId: string,
+    options?: { silent?: boolean; cacheKey?: string },
+  ) => {
+    const shouldShowLoading = !options?.silent;
+    if (shouldShowLoading) {
+      setDetailLoading(true);
+    }
     try {
       const [contactPayload, notesPayload, tasksPayload, automationPayload, messagePayload] = await Promise.all([
         crmAPI.getContact(contactId),
@@ -525,16 +604,31 @@ const CRM: React.FC = () => {
       setNotes(notesPayload);
       setTasks(tasksPayload);
       setAutomationEvents(automationPayload);
-      setMessages(messagePayload.slice(-20));
+      const nextMessages = messagePayload.slice(-20);
+      setMessages(nextMessages);
+      if (options?.cacheKey) {
+        crmContactDetailCache.set(options.cacheKey, {
+          contact: contactPayload.contact,
+          notes: notesPayload,
+          tasks: tasksPayload,
+          automationEvents: automationPayload,
+          messages: nextMessages,
+          updatedAt: Date.now(),
+        });
+      }
     } catch (error) {
       console.error('Failed to load CRM contact detail', error);
-      setSelectedContact(null);
-      setNotes([]);
-      setTasks([]);
-      setAutomationEvents([]);
-      setMessages([]);
+      if (!options?.silent) {
+        setSelectedContact(null);
+        setNotes([]);
+        setTasks([]);
+        setAutomationEvents([]);
+        setMessages([]);
+      }
     } finally {
-      setDetailLoading(false);
+      if (shouldShowLoading) {
+        setDetailLoading(false);
+      }
     }
   };
 
@@ -816,7 +910,21 @@ const CRM: React.FC = () => {
 
   useEffect(() => {
     if (!currentWorkspace || crmAccessBlocked) return;
-    loadContacts(currentWorkspace._id);
+    const cacheKey = getContactsCacheKey(currentWorkspace._id, {
+      search,
+      stageFilter,
+      tagFilter,
+      inactiveDays,
+    });
+    const cached = crmContactsCache.get(cacheKey);
+    if (cached) {
+      setContacts(cached.contacts);
+      setStageCounts(cached.stageCounts);
+      setTagCounts(cached.tagCounts);
+      setSummary(cached.summary);
+      setLoading(false);
+    }
+    loadContacts(currentWorkspace._id, { silent: Boolean(cached), cacheKey });
   }, [currentWorkspace, search, stageFilter, tagFilter, inactiveDays, crmAccessBlocked]);
 
   useEffect(() => {
@@ -845,8 +953,21 @@ const CRM: React.FC = () => {
     if (crmAccessBlocked) {
       return;
     }
-    loadContactDetail(selectedContactId);
-  }, [selectedContactId, crmAccessBlocked]);
+    const workspaceId = currentWorkspace?._id;
+    const cacheKey = workspaceId
+      ? getContactDetailCacheKey(workspaceId, selectedContactId)
+      : '';
+    const cached = cacheKey ? crmContactDetailCache.get(cacheKey) : undefined;
+    if (cached) {
+      setSelectedContact(cached.contact);
+      setNotes(cached.notes);
+      setTasks(cached.tasks);
+      setAutomationEvents(cached.automationEvents);
+      setMessages(cached.messages);
+      setDetailLoading(false);
+    }
+    loadContactDetail(selectedContactId, { silent: Boolean(cached), cacheKey });
+  }, [selectedContactId, crmAccessBlocked, currentWorkspace]);
 
   useEffect(() => {
     if (!selectedContact) return;
