@@ -12,7 +12,7 @@ const Auth: React.FC = () => {
   const location = useLocation();
   const isSignup = location.pathname === '/signup';
   const { login, signup, user, loading } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, uiTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -80,8 +80,17 @@ const Auth: React.FC = () => {
         </button>
         <div className="auth-brand-panel hidden md:flex">
           <div className="auth-brand-content">
-            <img src="/sendfx-studio.png" alt="SendFx" className="auth-brand-logo block dark:hidden" />
-            <img src="/sendfx-studio-dark.png" alt="SendFx" className="auth-brand-logo hidden dark:block" />
+            {uiTheme === 'studio' ? (
+              <>
+                <img src="/sendfx-studio.png" alt="SendFx" className="auth-brand-logo block dark:hidden" />
+                <img src="/sendfx-studio-dark.png" alt="SendFx" className="auth-brand-logo hidden dark:block" />
+              </>
+            ) : (
+              <>
+                <img src="/sendfx.png" alt="SendFx" className="auth-brand-logo block dark:hidden" />
+                <img src="/sendfx-dark.png" alt="SendFx" className="auth-brand-logo hidden dark:block" />
+              </>
+            )}
             <span className="auth-brand-badge">Automation studio</span>
             <h2 className="auth-brand-title">Automate DMs. Close faster.</h2>
             <p className="auth-brand-subtitle">
